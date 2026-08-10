@@ -702,7 +702,7 @@ void MainVSPScreen::ActionCB( void * data )
         fl_message(
             "%s",
             "OpenVSP 简体中文汉化版\n\n"
-            "【显著声明】本中文本地化由 OpenAI Codex AI 生成并维护。\n"
+            "【声明】本中文本地化由 OpenAI Codex AI 生成并维护。\n"
             "汉化内容包括界面、动态标签、命令行帮助及离线帮助文档。\n\n"
             "OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，\n"
             "仍属于 NASA/OpenVSP 原作者与贡献者，并遵循 NOSA 1.3。\n"

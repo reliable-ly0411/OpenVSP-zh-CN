@@ -34,6 +34,12 @@ IF( NOT VSP_NO_GRAPHICS )
     main.h.in
     )
 
+    IF( WIN32 )
+        SET( VSP_ICON_FILE "${VSP_SOURCE_DIR}/../vspIcon.ico" )
+        CONFIGURE_FILE( vsp.rc.in ${CMAKE_CURRENT_BINARY_DIR}/vsp.rc @ONLY )
+        TARGET_SOURCES( vsp PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/vsp.rc )
+    ENDIF()
+
     set_target_properties( vsp PROPERTIES COMPILE_FLAGS "-DVSP_USE_FLTK=1")
 
     target_link_libraries( vsp Eigen3::Eigen )
