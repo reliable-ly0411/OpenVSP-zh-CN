@@ -10,3 +10,5 @@ __pycache__/
 CMakeSettings.json
 *.vs
 examples/scripts/python_scripts/*_files/*
+OpenVSP-*-Ubuntu-*.zip
+OpenVSP-*-Ubuntu-*.zip.sha256

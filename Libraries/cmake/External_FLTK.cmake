@@ -1,3 +1,14 @@
+SET( FLTK_PLATFORM_CMAKE_ARGS )
+IF( UNIX AND NOT APPLE )
+	# FLTK's Wayland backend can crash in libdecor-gtk on some Ubuntu 24.04
+	# Wayland sessions.  The X11 backend remains compatible through XWayland
+	# and is the backend used by the verified Linux release package.
+	LIST( APPEND FLTK_PLATFORM_CMAKE_ARGS
+		-DFLTK_BACKEND_WAYLAND:BOOL=OFF
+		-DFLTK_BACKEND_X11:BOOL=ON
+	)
+ENDIF()
+
 ExternalProject_Add( FLTK
 
 	URL ${CMAKE_SOURCE_DIR}/fltk-6336959306e0.zip
@@ -14,6 +25,7 @@ ExternalProject_Add( FLTK
 		-DFLTK_USE_SYSTEM_LIBPNG:BOOL=OFF
 		-DFL_ABI_VERSION:STRING=10403
 		-DFLTK_OPTION_SVG:BOOL=ON
+		${FLTK_PLATFORM_CMAKE_ARGS}
 )
 ExternalProject_Get_Property( FLTK INSTALL_DIR )
 SET( FLTK_INSTALL_DIR ${INSTALL_DIR} )

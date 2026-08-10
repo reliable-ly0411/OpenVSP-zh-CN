@@ -13,7 +13,8 @@
 - 本仓库只发布 Codex AI 生成的简体中文本地化源码与已验证构建产物。
 - 官方 `OpenVSP/OpenVSP` 仅作为只读 `upstream`，用于核对和同步后续版本。
 - 本项目不会自动向官方仓库提交分支或拉取请求，也不代表 NASA/OpenVSP 官方汉化。
-- GitHub Release 使用 `3.51.2-Codex-AI-zh-CN` 标识；每个发布资产同时提供 SHA-256。
+- Windows GitHub Release 使用 `3.51.2-Codex-AI-zh-CN` 标识；Ubuntu 24.04 x86_64
+  发布使用 `3.51.2-Codex-AI-zh-CN-Ubuntu-24.04` 标识。每个发布资产同时提供 SHA-256。
 
 中文版覆盖：
 
@@ -26,9 +27,20 @@
 文件格式、参数 ID、脚本变量、AngelScript/OpenVSP API 名称、物理单位和通用行业缩写保持不变，
 因此中文版生成的 `.vsp3` 模型及分析文件与官方英文版兼容。
 
-## 运行
+## 运行与安装
 
-构建产物位于 `build/vsp/Release/vsp.exe`。发布压缩包生成后位于 `build` 目录。
+Windows 构建产物位于 `build/vsp/Release/vsp.exe`。Ubuntu 发布包解压后无需修改系统目录，
+可直接运行：
+
+```bash
+unzip OpenVSP-3.51.2-Codex-AI-zh-CN-Ubuntu-24.04-x86_64.zip
+cd OpenVSP-3.51.2-Linux
+./vsp
+```
+
+如需让当前用户在任意目录启动，可将解压目录保留在固定位置，再把其中的 `vsp`、
+`vspaero` 等程序加入 `PATH`。Ubuntu 24.04 的图形构建固定使用 FLTK X11 后端，
+在 Wayland 桌面上由 XWayland 提供兼容运行，以避免部分系统上的 `libdecor-gtk` 崩溃。
 
 发布包内的 OpenVSP 官方案例统一位于 `Official_Examples`，其中的
 `README_zh-CN.md` 提供中文分类索引。案例保持上游目录结构，便于脚本、纹理和模型之间
@@ -40,6 +52,8 @@
 
 ## 构建
 
+### Windows
+
 本项目使用 CMake 和 Visual Studio 2022 x64 Release 配置。第三方依赖可复用英文版目录中的
 `buildlibs`：
 
@@ -48,6 +62,21 @@ cmake -S src -B build -G "Visual Studio 17 2022" -A x64 `
   -DVSP_LIBRARY_PATH=D:\codex_vibcoding\openvsp\buildlibs
 cmake --build build --target package --config Release -j 2
 ```
+
+### Ubuntu 24.04
+
+先构建第三方库，再用生成的库目录构建 OpenVSP：
+
+```bash
+cmake -S Libraries -B buildlibs -DCMAKE_BUILD_TYPE=Release
+cmake --build buildlibs -j "$(nproc)"
+cmake -S src -B build-linux-release -DCMAKE_BUILD_TYPE=Release \
+  -DVSP_LIBRARY_PATH="$PWD/buildlibs"
+cmake --build build-linux-release --target package -j "$(nproc)"
+```
+
+Linux 依赖构建会通过 `Libraries/cmake/External_FLTK.cmake` 明确启用 X11、禁用 Wayland
+后端；这是本仓库 Ubuntu 24.04 发布包所采用并完成 GUI 启动验证的配置。
 
 ## 汉化维护
 
