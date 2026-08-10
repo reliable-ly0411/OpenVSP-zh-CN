@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>高级参数链接</title>
+<link rel="stylesheet" href="github-pandoc.css">
+</head>
+<body>
+<p>高级参数链接允许用户在任意参数之间定义数学关系。</p>
+<p>创建高级链接时，先添加链接并为其设置合适的名称；再选择一个或多个输入参数，分别定义
+用作别名的变量名；随后选择输出参数并定义其别名；最后编写代码，说明输出如何依赖输入。</p>
+<p>高级链接使用 AngelScript 编写。AngelScript 是 OpenVSP 内嵌的脚本语言，也用于通用脚本和
+自定义组件，因此高级链接可以通过 AngelScript 使用完整的 OpenVSP API。</p>
+<p>一个典型高级链接如下：</p>
+<p><img src="images/AdvLink_example.png" alt="高级链接示例" title="高级链接示例"></p>
+<p>该链接根据桨盘载荷和总重计算飞行器的桨盘直径。OpenVSP 自动将输入变量
+<code>GrossWeight</code>、<code>DiskLoading</code> 和输出变量 <code>Diameter</code> 定义为双精度浮点数 <code>double</code>。</p>
+<p>多数高级链接只包含几行采用标准数学写法、并以分号结尾的代码。可将其看作 AngelScript 的
+简化子集，即“带分号的数学表达式”。示例代码如下：</p>
+<pre><code class="language-c++">double Sdisk = GrossWeight / DiskLoading;
+Diameter = 2.0 * sqrt( Sdisk / 3.1415926 );
+</code></pre>
+<h2>带分号的数学表达式</h2>
+<p>OpenVSP 会自动把输入和输出变量定义为 <code>double</code>，可用常见数学符号构造算术表达式。</p>
+<table>
+<thead>
+<tr>
+<th align="left">数学运算符</th>
+<th align="left">含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>()</code></td>
+<td align="left">表达式分组和优先级控制</td>
+</tr>
+<tr>
+<td align="left"><code>+ -</code></td>
+<td align="left">一元正号与负号</td>
+</tr>
+<tr>
+<td align="left"><code>**</code></td>
+<td align="left">幂</td>
+</tr>
+<tr>
+<td align="left"><code>* / %</code></td>
+<td align="left">乘、除和取模</td>
+</tr>
+<tr>
+<td align="left"><code>+ -</code></td>
+<td align="left">二元加与减</td>
+</tr>
+<tr>
+<td align="left"><code>=</code></td>
+<td align="left">赋值</td>
+</tr>
+</tbody></table>
+<p>还可使用一组标准数学函数：</p>
+<table>
+<thead>
+<tr>
+<th align="left">数学函数</th>
+<th align="left">说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>cos(x) sin(x) tan(x)</code></td>
+<td align="left">三角函数（弧度）</td>
+</tr>
+<tr>
+<td align="left"><code>acos(x) asin(x) atan(x) atan2(x)</code></td>
+<td align="left">反三角函数（弧度）</td>
+</tr>
+<tr>
+<td align="left"><code>cosh(x) sinh(x) tanh(x)</code></td>
+<td align="left">双曲函数</td>
+</tr>
+<tr>
+<td align="left"><code>log(x) log10(x)</code></td>
+<td align="left">对数函数</td>
+</tr>
+<tr>
+<td align="left"><code>pow(x)</code></td>
+<td align="left">幂运算</td>
+</tr>
+<tr>
+<td align="left"><code>sqrt(x)</code></td>
+<td align="left">平方根</td>
+</tr>
+<tr>
+<td align="left"><code>abs(x)</code></td>
+<td align="left">绝对值</td>
+</tr>
+<tr>
+<td align="left"><code>ceil(x)</code></td>
+<td align="left">向上取整</td>
+</tr>
+<tr>
+<td align="left"><code>floor(x)</code></td>
+<td align="left">向下取整</td>
+</tr>
+<tr>
+<td align="left"><code>fraction(x)</code></td>
+<td align="left">小数部分</td>
+</tr>
+<tr>
+<td align="left"><code>Min(x,y) Max(x,y)</code></td>
+<td align="left">两个值的最小值和最大值</td>
+</tr>
+<tr>
+<td align="left"><code>Rad2Deg(x) Deg2Rad(x)</code></td>
+<td align="left">角度单位转换</td>
+</tr>
+</tbody></table>
+<p>支持 C++ 风格的 <code>//</code> 行注释和 C 风格的 <code>/* ... */</code> 块注释。</p>
+<h2>故障排查</h2>
+<p>可以使用 <code>Print()</code> 函数（注意大写 P）向控制台输出信息。该函数由 OpenVSP API 提供，可直接
+处理多种数据类型。小写的 <code>print()</code> 是 AngelScript 原生函数，输出数值时需要额外格式化。
+调试示例脚本时，可以加入以下语句显示每一步的中间值：</p>
+<pre><code class="language-c++">double Sdisk = GrossWeight / DiskLoading;
+Print( &quot;桨盘面积：&quot;, false );
+Print( Sdisk );
+Diameter = 2.0 * sqrt( Sdisk / 3.1415926 );
+Print( &quot;桨盘直径：&quot;, false );
+Print( Diameter );
+</code></pre>
+<p><code>Print()</code> 的第二个可选参数控制是否结束当前行并开始新行。传入 <code>false</code> 后，后续 <code>Print()</code>
+会继续在同一行输出。输出会显示在 OpenVSP 主窗口后的控制台，或启动 OpenVSP 的终端中。</p>
+<h2>AngelScript 通用编程</h2>
+<p>如果“带分号的数学表达式”不能满足需求，可以使用 AngelScript 的全部语言功能。
+AngelScript 与 C++ 相似，专门设计为嵌入其他 C++ 程序。其
+<a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_script.html">官方语言文档</a>可在线查阅。</p>
+<h3>数据类型</h3>
+<p>由于 OpenVSP 自动把输入和输出定义为 <code>double</code>，简单脚本通常不必声明变量。需要中间变量时，
+可以使用常见基础类型、AngelScript 的 <code>string</code> 和 <code>array</code>，以及 OpenVSP API 提供的
+<code>vec3d</code> 和 <code>matrix4d</code>。</p>
+<table>
+<thead>
+<tr>
+<th align="left">类型</th>
+<th align="left">含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>bool</code></td>
+<td align="left">布尔值 true/false</td>
+</tr>
+<tr>
+<td align="left"><code>int</code></td>
+<td align="left">32 位有符号整数</td>
+</tr>
+<tr>
+<td align="left"><code>uint</code></td>
+<td align="left">32 位无符号整数</td>
+</tr>
+<tr>
+<td align="left"><code>float</code></td>
+<td align="left">单精度浮点数</td>
+</tr>
+<tr>
+<td align="left"><code>double</code></td>
+<td align="left">双精度浮点数</td>
+</tr>
+<tr>
+<td align="left"><code>string</code></td>
+<td align="left">字符串</td>
+</tr>
+<tr>
+<td align="left"><code>array &lt; T &gt;</code></td>
+<td align="left">T 类型数组</td>
+</tr>
+<tr>
+<td align="left"><code>vec3d</code></td>
+<td align="left">三维向量</td>
+</tr>
+<tr>
+<td align="left"><code>matrix4d</code></td>
+<td align="left">变换矩阵</td>
+</tr>
+</tbody></table>
+<h3>运算符与运算顺序</h3>
+<p>AngelScript 提供了在 C++ 基础上扩展的完整运算符集合。表达式中优先级最高的运算符先计算；
+圆括号可以对表达式分组并覆盖默认优先级。</p>
+<h4>一元运算符</h4>
+<p>一元运算符的优先级高于其他运算符；多个一元运算符中，离实际值最近者优先。
+后置运算符的优先级高于前置运算符。</p>
+<table>
+<thead>
+<tr>
+<th align="left">运算符</th>
+<th align="left">含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>::</code></td>
+<td align="left">作用域解析</td>
+</tr>
+<tr>
+<td align="left"><code>[]</code></td>
+<td align="left">下标索引</td>
+</tr>
+<tr>
+<td align="left"><code>++ --</code></td>
+<td align="left">后置自增与自减</td>
+</tr>
+<tr>
+<td align="left"><code>.</code></td>
+<td align="left">成员访问</td>
+</tr>
+<tr>
+<td align="left"><code>++ --</code></td>
+<td align="left">前置自增与自减</td>
+</tr>
+<tr>
+<td align="left"><code>not !</code></td>
+<td align="left">逻辑非</td>
+</tr>
+<tr>
+<td align="left"><code>+ -</code></td>
+<td align="left">一元正号与负号</td>
+</tr>
+<tr>
+<td align="left"><code>~</code></td>
+<td align="left">按位取反</td>
+</tr>
+<tr>
+<td align="left"><code>@</code></td>
+<td align="left">获取句柄</td>
+</tr>
+</tbody></table>
+<h4>二元和三元运算符</h4>
+<p>下表按优先级从高到低排列：</p>
+<table>
+<thead>
+<tr>
+<th align="left">运算符</th>
+<th align="left">含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>**</code></td>
+<td align="left">幂</td>
+</tr>
+<tr>
+<td align="left"><code>* / %</code></td>
+<td align="left">乘、除和取模</td>
+</tr>
+<tr>
+<td align="left"><code>+ -</code></td>
+<td align="left">加和减</td>
+</tr>
+<tr>
+<td align="left"><code>&lt;&lt; &gt;&gt; &gt;&gt;&gt;</code></td>
+<td align="left">左移、右移和算术右移</td>
+</tr>
+<tr>
+<td align="left"><code>&amp;</code></td>
+<td align="left">按位与</td>
+</tr>
+<tr>
+<td align="left"><code>^</code></td>
+<td align="left">按位异或</td>
+</tr>
+<tr>
+<td align="left"><code>|</code></td>
+<td align="left">按位或</td>
+</tr>
+<tr>
+<td align="left"><code>&lt;= &lt; &gt;= &gt;</code></td>
+<td align="left">比较</td>
+</tr>
+<tr>
+<td align="left"><code>== != is !is xor ^^</code></td>
+<td align="left">相等、同一性和逻辑异或</td>
+</tr>
+<tr>
+<td align="left"><code>and &amp;&amp;</code></td>
+<td align="left">逻辑与</td>
+</tr>
+<tr>
+<td align="left"><code>or ||</code></td>
+<td align="left">逻辑或</td>
+</tr>
+<tr>
+<td align="left"><code>?:</code></td>
+<td align="left">条件运算</td>
+</tr>
+<tr>
+<td align="left"><code>= += -= *= /= %= **= &amp;= |= ^= &lt;&lt;= &gt;&gt;= &gt;&gt;&gt;=</code></td>
+<td align="left">赋值和复合赋值</td>
+</tr>
+</tbody></table>
+<h3>控制流</h3>
+<p>AngelScript 支持 C++ 常见的循环和分支结构。使用时应避免计算开销很大的高级链接，尤其要防止
+无限循环。常用结构示例如下：</p>
+<pre><code class="language-c++">if ( condition1 )
+{
+    // condition1 为真时执行。
+}
+
+if ( condition2 )
+{
+    // condition2 为真时执行。
+}
+else if ( condition3 )
+{
+    // condition2 为假、condition3 为真时执行。
+}
+else
+{
+    // condition2 和 condition3 都为假时执行。
+}
+
+int n = 5;
+for ( int i = 0; i &lt; n; i++ )
+{
+    // 执行五次。
+}
+</code></pre>
+<h3>数组</h3>
+<p>AngelScript 的 <code>array</code> 与 C++ STL 的 <code>vector</code> 很相似，是支持随机访问的动态容器。</p>
+<table>
+<thead>
+<tr>
+<th align="left">方法</th>
+<th align="left">含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>x[i];</code></td>
+<td align="left">访问元素</td>
+</tr>
+<tr>
+<td align="left"><code>array &lt; T &gt; x;</code></td>
+<td align="left">声明</td>
+</tr>
+<tr>
+<td align="left"><code>array &lt; T &gt; x = {1.2, 2.3, 3.4};</code></td>
+<td align="left">声明并初始化</td>
+</tr>
+<tr>
+<td align="left"><code>T[] x;</code></td>
+<td align="left">简写声明</td>
+</tr>
+<tr>
+<td align="left"><code>T[] x = {1.2, 2.3, 3.4};</code></td>
+<td align="left">简写声明并初始化</td>
+</tr>
+<tr>
+<td align="left"><code>uint size();</code></td>
+<td align="left">数组大小</td>
+</tr>
+<tr>
+<td align="left"><code>bool empty();</code></td>
+<td align="left">测试数组是否为空</td>
+</tr>
+<tr>
+<td align="left"><code>void push_back( const T &amp;in );</code></td>
+<td align="left">在末尾添加值</td>
+</tr>
+<tr>
+<td align="left"><code>void pop_back();</code></td>
+<td align="left">删除末尾值</td>
+</tr>
+<tr>
+<td align="left"><code>void insert( uint index, const T &amp;in value );</code></td>
+<td align="left">在索引处插入值</td>
+</tr>
+<tr>
+<td align="left"><code>void insert( uint index, const array&lt;T&gt;&amp; arr );</code></td>
+<td align="left">在索引处插入数组</td>
+</tr>
+<tr>
+<td align="left"><code>void erase( uint index );</code></td>
+<td align="left">删除索引处的值</td>
+</tr>
+<tr>
+<td align="left"><code>void reserve( uint length );</code></td>
+<td align="left">预留存储空间</td>
+</tr>
+<tr>
+<td align="left"><code>void resize( uint length );</code></td>
+<td align="left">调整数组大小</td>
+</tr>
+<tr>
+<td align="left"><code>void reverse();</code></td>
+<td align="left">反转元素顺序</td>
+</tr>
+</tbody></table>
+<h3>OpenVSP 类型</h3>
+<p>OpenVSP API 提供的 <code>vec3d</code> 和 <code>matrix4d</code> 适合处理三维位置、方向向量和变换矩阵。
+<code>vec3d</code> 支持向量加法、标量乘法、点积、叉积和点投影等运算；请参阅
+<a href="https://openvsp.org/api_docs/latest/classvec3d.html">完整 vec3d 文档</a>。</p>
+<p><code>matrix4d</code> 是扩展的变换矩阵，用于三维旋转、平移、缩放、投影及其他变换；请参阅
+<a href="https://openvsp.org/api_docs/latest/class_matrix4d.html">完整 matrix4d 文档</a>。</p>
+<h3>OpenVSP API</h3>
+<p>高级链接可以使用完整的 OpenVSP API。请参阅
+<a href="https://openvsp.org/api_docs/latest/">OpenVSP API 文档</a>。</p>
+<h3>AngelScript API</h3>
+<p>请参阅官方 <a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_script.html">AngelScript 语言文档</a>。
+OpenVSP 安装的可选模块如下：</p>
+<table>
+<thead>
+<tr>
+<th align="left">AngelScript 模块</th>
+<th align="left">用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>stdstring</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_script_stdlib_string.html">字符串对象</a></td>
+</tr>
+<tr>
+<td align="left"><code>array</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_datatypes_arrays.html">数组模板对象</a></td>
+</tr>
+<tr>
+<td align="left"><code>any</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_addon_any.html">通用容器</a></td>
+</tr>
+<tr>
+<td align="left"><code>file</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_script_stdlib_file.html">文件输入/输出</a></td>
+</tr>
+<tr>
+<td align="left"><code>math</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_addon_math.html">数学函数</a></td>
+</tr>
+<tr>
+<td align="left"><code>builder</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_addon_build.html">脚本构建器</a></td>
+</tr>
+<tr>
+<td align="left"><code>filesystem</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_script_stdlib_filesystem.html">文件系统</a></td>
+</tr>
+<tr>
+<td align="left"><code>datetime</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_script_stdlib_datetime.html">日期与时间</a></td>
+</tr>
+<tr>
+<td align="left"><code>aswrappedcall</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_addon_autowrap.html">自动包装器</a></td>
+</tr>
+<tr>
+<td align="left"><code>stdstring_utils</code></td>
+<td align="left"><a href="https://www.angelcode.com/angelscript/sdk/docs/manual/doc_script_stdlib_string.html">字符串工具</a></td>
+</tr>
+</tbody></table>
+<p>注意：OpenVSP 编译 AngelScript 时启用了 <code>#define AS_USE_STLNAMES=1</code>，使 <code>stdstring</code> 和
+<code>array</code> 的行为更接近 C++ STL。</p>
+<p>注意：OpenVSP 注册 <code>array</code> 包时启用了 <code>defaultArray=true</code>，因此可以使用 <code>T[] arr;</code> 形式声明数组。</p>
+
+</body>
+</html>

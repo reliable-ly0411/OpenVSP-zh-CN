@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>属性浏览器</title>
+<link rel="stylesheet" href="github-pandoc.css">
+</head>
+<body>
+<p>属性浏览器用于查看和编辑“属性”（Attribute）。</p>
+<p>属性可为模型保存附加信息。OpenVSP 不限定属性服务于哪一种工作流程，因此它几乎可以
+表达任何信息，从设计意图备注，到下游工程分析工具需要的输入参数都可以。</p>
+<p>属性保存在“属性集合”或“属性组”中。OpenVSP 的大多数对象都有属性集合，例如飞行器、
+几何体、子曲面、链接、高级链接、测量、参数、截面、机翼截面，甚至属性本身。
+支持属性的对象会在其界面底部显示一个折叠的属性浏览器。属性既可在图形界面中操作，
+也可通过 API 访问，因此适合用户手动编辑和集成设计工具链的脚本化处理。</p>
+<h2>属性类型</h2>
+<p>属性可以保存多种数据类型：</p>
+<table>
+<thead>
+<tr>
+<th align="left">属性类型</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">布尔值</td>
+</tr>
+<tr>
+<td align="left">整数</td>
+</tr>
+<tr>
+<td align="left">双精度浮点数</td>
+</tr>
+<tr>
+<td align="left">字符串</td>
+</tr>
+<tr>
+<td align="left">参数</td>
+</tr>
+<tr>
+<td align="left">三维向量（Vec3D）</td>
+</tr>
+<tr>
+<td align="left">整数矩阵</td>
+</tr>
+<tr>
+<td align="left">双精度矩阵</td>
+</tr>
+<tr>
+<td align="left">属性组</td>
+</tr>
+</tbody></table>
+<p>Vec3D 和矩阵属性支持与常用电子表格软件之间复制、粘贴。还可创建名为
+<code>row_{矩阵属性名称}</code> 的字符串属性，并输入用逗号分隔的标题，为行列设置可重命名的
+表头。该名称属性必须与矩阵或 Vec3D 属性位于同一集合或属性组中。</p>
+<p>“参数”和“属性组”类型还有一些专门行为。</p>
+<p>为了统一图形界面与 API 的工作方式，参数类型属性可以引用 OpenVSP 飞行器中的任意参数值。
+属性浏览器提供带下拉菜单的参数选择器，也可将 ParmID 直接拖放到界面中快速复制。
+引用有效参数后，界面会显示与原参数相同的滑块，并可从属性浏览器直接驱动该参数。
+一个用户参数还可以链接多个参数类型属性，用来控制材料特性、设计变量等下游分析元数据。</p>
+<p>属性组支持层级嵌套，便于整洁地组织用户属性。可以按下游分析工具分类，也可借助不同
+属性组创建多个同名属性；同一集合或同一属性组中的属性名称必须唯一。</p>
+<h2>可添加属性的对象</h2>
+<table>
+<thead>
+<tr>
+<th align="left">对象</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">飞行器（Vehicle）</td>
+</tr>
+<tr>
+<td align="left">几何体（Geom）</td>
+</tr>
+<tr>
+<td align="left">子曲面（SubSurface）</td>
+</tr>
+<tr>
+<td align="left">截面（XSec）</td>
+</tr>
+<tr>
+<td align="left">机翼截面</td>
+</tr>
+<tr>
+<td align="left">翼型截面</td>
+</tr>
+<tr>
+<td align="left">参数（Parm）</td>
+</tr>
+<tr>
+<td align="left">测量对象</td>
+</tr>
+<tr>
+<td align="left">链接（Link）</td>
+</tr>
+<tr>
+<td align="left">高级链接（AdvLink）</td>
+</tr>
+<tr>
+<td align="left">模式（Mode）</td>
+</tr>
+<tr>
+<td align="left">几何体集合（GeomSet）</td>
+</tr>
+<tr>
+<td align="left">变量预设（VarPreset）</td>
+</tr>
+<tr>
+<td align="left">属性（Attribute）</td>
+</tr>
+</tbody></table>
+<h2>图形界面操作</h2>
+<p>界面提供复制、剪切和粘贴命令，可在不同集合与属性组之间移动属性；复制、剪切、粘贴和
+删除都有快捷键。大多数操作支持同时选择多个属性或集合，例如复制一个属性后，可一次
+粘贴到多个集合或属性组。</p>
+<p>一个飞行器可能包含大量可添加属性的对象，因此浏览器只显示已经包含属性的集合，或其对象
+对应的界面窗口已经打开的集合。例如添加几何体后，需要选中该几何体以打开它的窗口；窗口
+打开后，浏览器才会显示其空属性集合。为提高效率，可以一次选择多个几何体。</p>
+<p>属性浏览器还提供搜索功能，可按名称查找复杂模型中的对象，并可选择是否区分大小写。</p>
+<h2>API 用法</h2>
+<p>属性支持通过 OpenVSP API 导入和导出数据，可用于上游脚本化建模及下游分析工具链。
+完整接口说明请参阅 API 文档。</p>
+
+</body>
+</html>
