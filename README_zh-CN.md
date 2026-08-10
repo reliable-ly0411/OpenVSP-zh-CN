@@ -78,6 +78,20 @@ cmake --build build-linux-release --target package -j "$(nproc)"
 Linux 依赖构建会通过 `Libraries/cmake/External_FLTK.cmake` 明确启用 X11、禁用 Wayland
 后端；这是本仓库 Ubuntu 24.04 发布包所采用并完成 GUI 启动验证的配置。
 
+## 上游同步与自动发布
+
+仓库使用三段式 GitHub Actions 自动化，详细状态记录在 `.github/upstream.json`：
+
+1. `Watch OpenVSP Upstream` 每周检查官方 `OpenVSP/OpenVSP` 的 `main`，发现更新时只创建
+   更新计划 Issue，不直接覆盖汉化版 `main`。
+2. 人工运行 `Prepare OpenVSP Upstream Update` 后，工作流把相对已记录官方基线的汉化差异
+   三方应用到新上游，并推送 `automation/openvsp-upstream-update` 审查分支。任何冲突都会停止。
+3. 审查、补译和双平台验收完成并合并后，创建 `<版本>-Codex-AI-zh-CN` 标签；
+   `Build and Release Localized OpenVSP` 会构建 Ubuntu 24.04 与 Windows x64 包，校验中文
+   命令行和压缩包，生成 SHA-256，并发布带对应源码归档的 GitHub Release。
+
+自动化不会向官方仓库推送，也不会跳过人工汉化审查直接发布新上游版本。
+
 ## 汉化维护
 
 统一翻译表和动态短语翻译位于 `src/gui_and_draw/VSPChinese.cpp`。新增界面文字时，优先通过

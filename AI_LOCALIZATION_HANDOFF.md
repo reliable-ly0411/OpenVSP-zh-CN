@@ -110,6 +110,12 @@ cmd.exe /d /s /c $cmd
   不得向官方仓库推送汉化分支或自动创建拉取请求。
 - 发布标签：`3.51.2-Codex-AI-zh-CN`。
 - Release 资产至少包含源码 ZIP 与 Windows x64 ZIP；Linux 构建完成后追加同版本资产。
+- 自动同步基线记录在 `.github/upstream.json`。由于本汉化仓库的首个提交是完整源码导入，
+  与官方仓库没有共同 Git 祖先，不能直接自动合并；应使用
+  `Prepare OpenVSP Upstream Update` 工作流将汉化差异三方移植到新官方源码。
+- 上游检查只创建计划 Issue，移植结果只推送专用审查分支。完成新增文本翻译、GUI 验收和
+  双平台测试后，创建 `<版本>-Codex-AI-zh-CN` 标签，由发布工作流统一生成 Linux、Windows、
+  SHA-256 和 GitHub 自动源码归档。
 
 ## 7. 最低验收清单
 

@@ -1,0 +1,171 @@
+name: Build and Release Localized OpenVSP
+
+on:
+  push:
+    tags:
+      - "*.*.*-Codex-AI-zh-CN"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing localized tag, for example 3.52.0-Codex-AI-zh-CN
+        required: true
+        type: string
+      publish:
+        description: Publish or update the GitHub Release after both builds pass
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+concurrency:
+  group: localized-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux Ubuntu 24.04 x86_64
+            os: ubuntu-24.04
+            artifact: localized-linux
+          - name: Windows 2022 x64
+            os: windows-2022
+            artifact: localized-windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Verify tag and localization guard on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: python3 scripts/check_localization_release.py --expected-tag "$RELEASE_TAG"
+
+      - name: Verify tag and localization guard on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python scripts/check_localization_release.py --expected-tag "$env:RELEASE_TAG"
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential gcc-13 g++-13 git curl zip unzip \
+            python3-dev libxml2-dev libjpeg-dev libglm-dev libcminpack-dev \
+            libglew-dev libglu1-mesa-dev libfltk1.3-dev fluid xorg-dev \
+            swig doxygen graphviz pandoc
+
+      - name: Build Linux package
+        if: runner.os == 'Linux'
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S Libraries -B buildlibs -DCMAKE_BUILD_TYPE=Release \
+            -DVSP_USE_SYSTEM_LIBXML2=ON -DVSP_USE_SYSTEM_GLM=ON \
+            -DVSP_USE_SYSTEM_GLEW=ON -DVSP_USE_SYSTEM_CMINPACK=ON
+          cmake --build buildlibs --parallel 2
+          cmake -S src -B build -DCMAKE_BUILD_TYPE=Release \
+            -DVSP_CPACK_GEN=ZIP -DVSP_LIBRARY_PATH="$GITHUB_WORKSPACE/buildlibs"
+          cmake --build build --target package --parallel 2
+          build/src/vsp/vsp -help > vsp-help.txt
+          grep -q '用法' vsp-help.txt
+          package=$(find build -maxdepth 1 -type f -name 'OpenVSP-*-Linux.zip' -print -quit)
+          test -n "$package"
+          mkdir -p artifacts
+          cp "$package" "artifacts/OpenVSP-${RELEASE_TAG}-Ubuntu-24.04-x86_64.zip"
+          unzip -t "artifacts/OpenVSP-${RELEASE_TAG}-Ubuntu-24.04-x86_64.zip"
+
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install --yes swig pandoc
+
+      - name: Build Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S Libraries -B buildlibs -A x64 -DCMAKE_BUILD_TYPE=Release
+          cmake --build buildlibs --config Release --parallel 2
+          cmake -S src -B build -A x64 -DCMAKE_BUILD_TYPE=Release "-DVSP_LIBRARY_PATH=$env:GITHUB_WORKSPACE\buildlibs"
+          cmake --build build --target package --config Release --parallel 2
+          & build\src\vsp\Release\vsp.exe -help | Out-File -Encoding utf8 vsp-help.txt
+          if (-not (Select-String -Path vsp-help.txt -Pattern '用法' -Quiet)) {
+            throw 'Windows 中文命令行帮助验证失败'
+          }
+          $package = Get-ChildItem build -Filter 'OpenVSP-*-win64.zip' | Select-Object -First 1
+          if (-not $package) { throw '未找到 Windows ZIP 包' }
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Copy-Item $package.FullName "artifacts\OpenVSP-$env:RELEASE_TAG-Windows-x64.zip"
+          tar -tf "artifacts\OpenVSP-$env:RELEASE_TAG-Windows-x64.zip" | Out-Null
+
+      - name: Upload verified package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: github.event_name == 'push' || inputs.publish == true
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: localized-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate checksums and release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum -- ./*.zip | tee SHA256SUMS.txt
+          cd ..
+          cat > release-notes.md <<EOF
+          OpenVSP ${RELEASE_TAG%%-Codex-AI-zh-CN} Codex AI 简体中文汉化版。
+
+          本 Release 在 GitHub 托管的 Ubuntu 24.04 与 Windows 2022 x64 环境中完成构建、
+          中文命令行守卫和压缩包完整性检查。附件包含 Linux、Windows 构建及 SHA-256 清单；
+          页面同时自动提供与标签对应的源码 ZIP 和 tar.gz。
+
+          > 本地化由 OpenAI Codex AI 生成并维护，不改变 OpenVSP 原软件版权、作者归属及 NOSA 1.3 许可。
+          EOF
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="OpenVSP ${RELEASE_TAG%%-Codex-AI-zh-CN} Codex AI 简体中文版"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --notes-file release-notes.md --latest
+          else
+            gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --title "$title" --notes-file release-notes.md --latest
+          fi

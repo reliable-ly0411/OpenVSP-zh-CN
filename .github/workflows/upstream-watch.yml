@@ -1,0 +1,97 @@
+name: Watch OpenVSP Upstream
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: openvsp-upstream-watch
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout localized source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compare recorded baseline with official main
+        id: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository=$(jq -r .repository .github/upstream.json)
+          branch=$(jq -r .branch .github/upstream.json)
+          base_commit=$(jq -r .base_commit .github/upstream.json)
+          upstream_commit=$(git ls-remote "https://github.com/${repository}.git" "refs/heads/${branch}" | awk '{print $1}')
+          test -n "$upstream_commit"
+
+          version_file=$(curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/${repository}/${upstream_commit}/src/cmake/VSP_Version.cmake")
+          major=$(sed -nE 's/.*VSPVER_MAJOR[[:space:]]+([0-9]+).*/\1/p' <<<"$version_file")
+          minor=$(sed -nE 's/.*VSPVER_MINOR[[:space:]]+([0-9]+).*/\1/p' <<<"$version_file")
+          patch=$(sed -nE 's/.*VSPVER_PATCH[[:space:]]+([0-9]+).*/\1/p' <<<"$version_file")
+          version="${major}.${minor}.${patch}"
+          test "$version" != ".."
+
+          {
+            echo "repository=$repository"
+            echo "branch=$branch"
+            echo "base_commit=$base_commit"
+            echo "upstream_commit=$upstream_commit"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+          if [[ "$base_commit" == "$upstream_commit" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "官方 OpenVSP 无新提交（$version，${upstream_commit:0:12}）。" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update upstream update plan
+        if: steps.upstream.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          OFFICIAL_REPOSITORY: ${{ steps.upstream.outputs.repository }}
+          OFFICIAL_BRANCH: ${{ steps.upstream.outputs.branch }}
+          BASE_COMMIT: ${{ steps.upstream.outputs.base_commit }}
+          UPSTREAM_COMMIT: ${{ steps.upstream.outputs.upstream_commit }}
+          UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="[自动化] OpenVSP 上游有可用更新"
+          body_file="$RUNNER_TEMP/upstream-update.md"
+          cat > "$body_file" <<EOF
+          官方 OpenVSP \`${OFFICIAL_BRANCH}\` 已前进，需要更新汉化基线。
+
+          - 当前汉化基线：\`${BASE_COMMIT}\`
+          - 最新官方提交：\`${UPSTREAM_COMMIT}\`
+          - 官方源码版本：\`${UPSTREAM_VERSION}\`
+          - [查看官方差异](https://github.com/${OFFICIAL_REPOSITORY}/compare/${BASE_COMMIT}...${UPSTREAM_COMMIT})
+
+          安全更新计划：
+
+          1. 在 Actions 中手动运行 **Prepare OpenVSP Upstream Update**。
+          2. 自动化将现有汉化差异三方应用到最新官方源码；冲突时停止，不修改 \`main\`。
+          3. 审查生成的 \`automation/openvsp-upstream-update\` 对比分支，补译新增界面并完成 GUI 验收。
+          4. 合并后创建 \`${UPSTREAM_VERSION}-Codex-AI-zh-CN\` 标签，触发 Linux/Windows 构建与 Release。
+
+          > 此 Issue 只负责提醒和计划，不会绕过人工汉化审查直接发布。
+          EOF
+
+          issue_number=$(gh issue list --repo "$REPOSITORY" --state open \
+            --search '"[自动化] OpenVSP 上游有可用更新" in:title' \
+            --json number --jq '.[0].number // empty')
+          if [[ -n "$issue_number" ]]; then
+            gh issue edit "$issue_number" --repo "$REPOSITORY" --body-file "$body_file"
+          else
+            gh issue create --repo "$REPOSITORY" --title "$title" --body-file "$body_file"
+          fi
+          cat "$body_file" >> "$GITHUB_STEP_SUMMARY"
