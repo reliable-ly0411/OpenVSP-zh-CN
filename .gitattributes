@@ -1,2 +1,3 @@
 * text=auto
 *.vsp3 -text
+.github/workflows/build.yml -text
