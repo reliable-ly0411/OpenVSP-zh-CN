@@ -82,7 +82,7 @@ jobs:
           cmake -S src -B build -DCMAKE_BUILD_TYPE=Release \
             -DVSP_CPACK_GEN=ZIP -DVSP_LIBRARY_PATH="$GITHUB_WORKSPACE/buildlibs"
           cmake --build build --target package --parallel 2
-          build/src/vsp/vsp -help > vsp-help.txt
+          build/vsp/vsp -help > vsp-help.txt
           grep -q '用法' vsp-help.txt
           package=$(find build -maxdepth 1 -type f -name 'OpenVSP-*-Linux.zip' -print -quit)
           test -n "$package"
@@ -104,7 +104,7 @@ jobs:
           cmake --build buildlibs --config Release --parallel 2
           cmake -S src -B build -A x64 -DCMAKE_BUILD_TYPE=Release "-DVSP_LIBRARY_PATH=$env:GITHUB_WORKSPACE\buildlibs"
           cmake --build build --target package --config Release --parallel 2
-          & build\src\vsp\Release\vsp.exe -help | Out-File -Encoding utf8 vsp-help.txt
+          & build\vsp\Release\vsp.exe -help | Out-File -Encoding utf8 vsp-help.txt
           if (-not (Select-String -Path vsp-help.txt -Pattern '用法' -Quiet)) {
             throw 'Windows 中文命令行帮助验证失败'
           }
