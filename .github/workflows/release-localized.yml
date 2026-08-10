@@ -54,7 +54,7 @@ jobs:
       - name: Verify tag and localization guard on Windows
         if: runner.os == 'Windows'
         shell: pwsh
-        run: python scripts/check_localization_release.py --expected-tag "$env:RELEASE_TAG"
+        run: python -X utf8 scripts/check_localization_release.py --expected-tag "$env:RELEASE_TAG"
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
