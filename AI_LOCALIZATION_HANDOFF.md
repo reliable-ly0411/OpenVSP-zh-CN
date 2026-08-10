@@ -108,7 +108,7 @@ cmd.exe /d /s /c $cmd
 - 本地远程名：个人仓库为 `origin`，官方仓库为 `upstream`。
 - `upstream` 的推送 URL 必须保持为 `DISABLED`；同步官方更新时只能执行 fetch/merge/rebase，
   不得向官方仓库推送汉化分支或自动创建拉取请求。
-- 发布标签：`3.51.2-Codex-AI-zh-CN`。
+- 当前发布标签：`3.51.2-Codex-AI-zh-CN-r3`；同版本修复使用递增的 `-rN`，不得移动旧标签。
 - Release 资产至少包含源码 ZIP 与 Windows x64 ZIP；Linux 构建完成后追加同版本资产。
 - 自动同步基线记录在 `.github/upstream.json`。由于本汉化仓库的首个提交是完整源码导入，
   与官方仓库没有共同 Git 祖先，不能直接自动合并；应使用

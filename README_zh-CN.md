@@ -90,6 +90,9 @@ Linux 依赖构建会通过 `Libraries/cmake/External_FLTK.cmake` 明确启用 X
    `Build and Release Localized OpenVSP` 会构建 Ubuntu 24.04 与 Windows x64 包，校验中文
    命令行和压缩包，生成 SHA-256，并发布带对应源码归档的 GitHub Release。
 
+同一 OpenVSP 版本需要修复后重新发布时，使用不可变的新标签
+`<版本>-Codex-AI-zh-CN-rN`（例如 `3.51.2-Codex-AI-zh-CN-r3`），不得移动已经发布的标签。
+
 自动化不会向官方仓库推送，也不会跳过人工汉化审查直接发布新上游版本。
 
 ## 汉化维护

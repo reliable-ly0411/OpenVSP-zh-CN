@@ -3,11 +3,11 @@ name: Build and Release Localized OpenVSP
 on:
   push:
     tags:
-      - "*.*.*-Codex-AI-zh-CN"
+      - "*.*.*-Codex-AI-zh-CN*"
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing localized tag, for example 3.52.0-Codex-AI-zh-CN
+        description: Existing localized tag, for example 3.52.0-Codex-AI-zh-CN-r2
         required: true
         type: string
       publish:

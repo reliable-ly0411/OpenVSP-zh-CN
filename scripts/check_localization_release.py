@@ -11,7 +11,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "src" / "cmake" / "VSP_Version.cmake"
-TAG_RE = re.compile(r"^(?P<version>\d+\.\d+\.\d+)-Codex-AI-zh-CN$")
+TAG_RE = re.compile(
+    r"^(?P<version>\d+\.\d+\.\d+)-Codex-AI-zh-CN(?:-r[1-9]\d*)?$"
+)
 
 
 def read_version() -> str:
@@ -68,7 +70,8 @@ def main() -> None:
         match = TAG_RE.fullmatch(args.expected_tag)
         if not match:
             raise SystemExit(
-                "发布标签必须为 <版本>-Codex-AI-zh-CN，例如 3.52.0-Codex-AI-zh-CN"
+                "发布标签必须为 <版本>-Codex-AI-zh-CN 或其 -rN 重发版本，"
+                "例如 3.52.0-Codex-AI-zh-CN-r2"
             )
         if match.group("version") != version:
             raise SystemExit(f"标签版本 {match.group('version')} 与源码版本 {version} 不一致")
