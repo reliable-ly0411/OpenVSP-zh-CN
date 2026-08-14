@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -31,6 +32,30 @@ def require_text(path: str, needle: str) -> None:
     content = (ROOT / path).read_text(encoding="utf-8")
     if needle not in content:
         raise SystemExit(f"本地化守卫失败：{path} 缺少 {needle!r}")
+
+
+def verify_bundled_geometry_names() -> int:
+    translation_source = (ROOT / "src" / "gui_and_draw" / "VSPChinese.cpp").read_text(
+        encoding="utf-8"
+    )
+    translation_keys = set(
+        re.findall(r'\{\s*"((?:\\.|[^"])*)"\s*,\s*"', translation_source)
+    )
+
+    geometry_names: set[str] = set()
+    examples_dir = ROOT / "examples" / "Complete_Aircraft"
+    for model_path in sorted(examples_dir.glob("*.vsp3")):
+        root = ET.parse(model_path).getroot()
+        for node in root.findall(".//Geom/ParmContainer/Name"):
+            if node.text:
+                geometry_names.add(node.text)
+
+    missing_names = sorted(geometry_names - translation_keys)
+    if missing_names:
+        raise SystemExit(
+            "整机案例几何体名称缺少显示翻译：" + ", ".join(missing_names)
+        )
+    return len(geometry_names)
 
 
 def main() -> None:
@@ -66,6 +91,8 @@ def main() -> None:
     if "【显著声明】" in about:
         raise SystemExit("本地化守卫失败：关于窗口仍包含旧的【显著声明】")
 
+    bundled_geometry_name_count = verify_bundled_geometry_names()
+
     if args.expected_tag:
         match = TAG_RE.fullmatch(args.expected_tag)
         if not match:
@@ -79,7 +106,10 @@ def main() -> None:
     if args.print_version:
         print(version)
     else:
-        print(f"本地化发布守卫通过：OpenVSP {version}")
+        print(
+            f"本地化发布守卫通过：OpenVSP {version}，"
+            f"整机案例几何体名称 {bundled_geometry_name_count} 项"
+        )
 
 
 if __name__ == "__main__":
