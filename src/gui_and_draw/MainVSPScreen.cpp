@@ -700,16 +700,20 @@ void MainVSPScreen::ActionCB( void * data )
     }
     else if ( data == &m_LocalizationAboutMenuItem )
     {
-        fl_message_title( "关于 Codex AI 汉化" );
-        fl_message(
-            "%s",
-            "OpenVSP 简体中文汉化版\n\n"
+        const string localization_about =
+            string( "OpenVSP 简体中文汉化版\n" ) +
+            "软件版本：" + VSPVERSION4 + "\n"
+            "汉化版本：3.51.3-Codex-AI-zh-CN\n"
+            "汉化仓库：https://github.com/reliable-ly0411/OpenVSP-zh-CN\n\n"
             "【声明】本中文本地化由 OpenAI Codex AI 生成并维护。\n"
             "汉化内容包括界面、动态标签、命令行帮助及离线帮助文档。\n\n"
             "OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，\n"
             "仍属于 NASA/OpenVSP 原作者与贡献者，并遵循 NOSA 1.3。\n"
             "Codex 是本地化与代码修改工具，不是 OpenVSP 原作者。\n\n"
-            "接力维护说明：AI_LOCALIZATION_HANDOFF.md" );
+            "维护架构与规则：AGENTS.md";
+
+        fl_message_title( "关于 Codex AI 汉化" );
+        fl_message( "%s", localization_about.c_str() );
     }
     else if ( data == &m_OnlineHelpMenuItem )
     {

@@ -100,7 +100,8 @@ jobs:
           cp "$package" "artifacts/OpenVSP-${RELEASE_TAG}-Ubuntu-24.04-x86_64.zip"
           unzip -t "artifacts/OpenVSP-${RELEASE_TAG}-Ubuntu-24.04-x86_64.zip"
           unzip -Z1 "artifacts/OpenVSP-${RELEASE_TAG}-Ubuntu-24.04-x86_64.zip" > package-files.txt
-          grep -q '/LOCALIZATION_CHANGELOG.md$' package-files.txt
+          grep -q '/README_zh-CN.md$' package-files.txt
+          grep -q '/AGENTS.md$' package-files.txt
 
       - name: Install Windows build dependencies
         if: runner.os == 'Windows'
@@ -126,8 +127,11 @@ jobs:
           New-Item -ItemType Directory -Force artifacts | Out-Null
           Copy-Item $package.FullName "artifacts\OpenVSP-$env:RELEASE_TAG-Windows-x64.zip"
           $packageFiles = tar -tf "artifacts\OpenVSP-$env:RELEASE_TAG-Windows-x64.zip"
-          if (-not ($packageFiles | Select-String -Pattern '/LOCALIZATION_CHANGELOG\.md$' -Quiet)) {
+          if (-not ($packageFiles | Select-String -Pattern '/README_zh-CN\.md$' -Quiet)) {
             throw 'Windows 发布包缺少汉化版更新说明'
+          }
+          if (-not ($packageFiles | Select-String -Pattern '/AGENTS\.md$' -Quiet)) {
+            throw 'Windows 发布包缺少汉化维护规则'
           }
 
       - name: Upload verified package
@@ -167,7 +171,7 @@ jobs:
             found && /^## / { exit }
             found { print }
             END { if (!found) exit 2 }
-          ' LOCALIZATION_CHANGELOG.md > release-update.md
+          ' README_zh-CN.md > release-update.md
           test -s release-update.md
 
       - name: Generate checksums and release notes

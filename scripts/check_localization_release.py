@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "src" / "cmake" / "VSP_Version.cmake"
-RELEASE_NOTES_FILE = ROOT / "LOCALIZATION_CHANGELOG.md"
+RELEASE_NOTES_FILE = ROOT / "README_zh-CN.md"
 TAG_RE = re.compile(
     r"^(?P<version>\d+\.\d+\.\d+)-Codex-AI-zh-CN(?:-r[1-9]\d*)?$"
 )
@@ -87,8 +87,7 @@ def main() -> None:
 
     required = [
         "AGENTS.md",
-        "AI_LOCALIZATION_HANDOFF.md",
-        "LOCALIZATION_CHANGELOG.md",
+        "README.md",
         "README_zh-CN.md",
         "src/gui_and_draw/VSPChinese.cpp",
         "src/gui_and_draw/VSPChinese.h",
@@ -101,6 +100,11 @@ def main() -> None:
         raise SystemExit("本地化守卫失败，缺少文件：" + ", ".join(missing))
 
     require_text("src/gui_and_draw/MainVSPScreen.cpp", "【声明】本中文本地化")
+    require_text("src/gui_and_draw/MainVSPScreen.cpp", "VSPVERSION4")
+    require_text(
+        "src/gui_and_draw/MainVSPScreen.cpp",
+        "https://github.com/reliable-ly0411/OpenVSP-zh-CN",
+    )
     require_text("src/gui_and_draw/VSPChinese.cpp", "VSPTranslate")
     require_text("src/vsp/CMakeLists.txt", "vsp.rc.in")
     about = (ROOT / "src/gui_and_draw/MainVSPScreen.cpp").read_text(encoding="utf-8")
