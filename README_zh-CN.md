@@ -5,7 +5,7 @@
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
 - 当前软件版本：OpenVSP 3.51.3
-- 当前汉化版本：`3.51.3-Codex-AI-zh-CN`
+- 当前汉化版本：`3.51.3-Codex-AI-zh-CN-r2`
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -30,12 +30,12 @@ Ubuntu 24.04 x86_64：
 
 ```bash
 sha256sum -c SHA256SUMS.txt --ignore-missing
-unzip OpenVSP-3.51.3-Codex-AI-zh-CN-Ubuntu-24.04-x86_64.zip
+unzip OpenVSP-3.51.3-Codex-AI-zh-CN-r2-Ubuntu-24.04-x86_64.zip
 cd OpenVSP-3.51.3-Linux
 ./vsp
 ```
 
-Windows x64：解压 `OpenVSP-3.51.3-Codex-AI-zh-CN-Windows-x64.zip`，运行目录中的
+Windows x64：解压 `OpenVSP-3.51.3-Codex-AI-zh-CN-r2-Windows-x64.zip`，运行目录中的
 `vsp.exe`。如 Windows 阻止从网络下载的程序，先在 ZIP 文件属性中解除锁定再解压。
 
 Ubuntu 图形构建固定采用 FLTK X11 后端，在 Wayland 会话中通过 XWayland 运行，以规避
@@ -87,7 +87,7 @@ cmake --build build --target package --config Release --parallel 2
 
 同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
 
-## 未发布
+## 3.51.3-Codex-AI-zh-CN-r2
 
 - 将五份重复说明合并为三份：`README.md` 保留官方英文说明和汉化入口，本文统一用户说明
   与版本变化，`AGENTS.md` 统一维护架构和强制规则。
