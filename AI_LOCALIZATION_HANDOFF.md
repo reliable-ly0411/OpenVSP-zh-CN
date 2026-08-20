@@ -17,7 +17,7 @@
 - 精选整机目录：`examples/Complete_Aircraft`；包含固定翼、混合翼身、分布式电推进及
   eVTOL/VTOL 整机，每个外部模型的来源、许可和 SHA-256 记录在
   `examples/Complete_Aircraft/SOURCES_AND_LICENSES.md`。
-- 本地化状态日期：2026-08-10。
+- 本地化状态日期：2026-08-20。
 
 后续 Agent 开始工作时，应先阅读本文和 `README_zh-CN.md`，然后查看
 `src/gui_and_draw/VSPChinese.h` 与 `src/gui_and_draw/VSPChinese.cpp`。不要在英文原版
@@ -108,7 +108,7 @@ cmd.exe /d /s /c $cmd
 - 本地远程名：个人仓库为 `origin`，官方仓库为 `upstream`。
 - `upstream` 的推送 URL 必须保持为 `DISABLED`；同步官方更新时只能执行 fetch/merge/rebase，
   不得向官方仓库推送汉化分支或自动创建拉取请求。
-- 当前发布标签：`3.51.2-Codex-AI-zh-CN-r5`；同版本修复使用递增的 `-rN`，不得移动旧标签。
+- 当前发布标签：`3.51.2-Codex-AI-zh-CN-r7`；同版本修复使用递增的 `-rN`，不得移动旧标签。
 - Release 资产至少包含源码 ZIP 与 Windows x64 ZIP；Linux 构建完成后追加同版本资产。
 - 自动同步基线记录在 `.github/upstream.json`。由于本汉化仓库的首个提交是完整源码导入，
   与官方仓库没有共同 Git 祖先，不能直接自动合并；应使用
@@ -116,6 +116,8 @@ cmd.exe /d /s /c $cmd
 - 上游检查只创建计划 Issue，移植结果只推送专用审查分支。完成新增文本翻译、GUI 验收和
   双平台测试后，创建 `<版本>-Codex-AI-zh-CN` 标签，由发布工作流统一生成 Linux、Windows、
   SHA-256 和 GitHub 自动源码归档。
+- 每次修改和发布必须按 `AGENTS.md` 更新 `LOCALIZATION_CHANGELOG.md`；发布工作流会把对应
+  标签章节写入 Release，并在更新说明缺失时停止发布。
 
 ## 7. 最低验收清单
 
@@ -127,13 +129,14 @@ cmd.exe /d /s /c $cmd
 - 打开 CFD 网格、FEA、VSPAERO 等专业页面抽查；
 - 对比静态审计残留，确认只剩标准技术标识；
 - `package` 目标成功，压缩包内包含 `README_zh-CN.md` 和本文。
+- 压缩包内包含与目标发布标签对应的 `LOCALIZATION_CHANGELOG.md` 更新说明。
 - 压缩包内包含 `Official_Examples\README_zh-CN.md` 及完整官方案例目录结构。
 - 压缩包内包含 `Official_Examples\Complete_Aircraft` 的整机模型及来源/许可清单；新增或
   替换社区模型时，必须先核验再分发许可、更新 SHA-256，并用目标版本实际打开验证。
 
 ## 8. 当前已知状态
 
-截至 2026-08-10：
+截至 2026-08-20：
 
 - 主菜单、窗口、常用控件、几何体类型、动态默认名称、集合与属性树已接入汉化；
 - 机翼“变换”页已针对实际截图修正并运行验收；
@@ -143,6 +146,8 @@ cmd.exe /d /s /c $cmd
 - 已禁用上游失效的首次启动 HTTP 版本检查/使用信息提交调用，避免 libxml2 输出
   `Unknown IO error`；上游实现仍保留在 `src/vsp/main.cpp` 供追踪。
 - 官方案例统一安装到发布包的 `Official_Examples` 目录，并提供中文索引。
+- Ubuntu 发布包使用仓库内置的静态 CMINPACK，并在 CI 中检查未解析动态库及意外的
+  `libcminpack.so` 依赖，确保解压后不需要额外安装 `libcminpack1`。
 
 如果后续发现新漏译，不要宣称一次性“绝对完整”。应记录具体页面、修复显示路径、重新
 构建并用真实界面验证，然后更新本节，以便下一位 Agent 从可证实的状态继续工作。
