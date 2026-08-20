@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "src" / "cmake" / "VSP_Version.cmake"
+RELEASE_NOTES_FILE = ROOT / "LOCALIZATION_CHANGELOG.md"
 TAG_RE = re.compile(
     r"^(?P<version>\d+\.\d+\.\d+)-Codex-AI-zh-CN(?:-r[1-9]\d*)?$"
 )
@@ -58,6 +59,19 @@ def verify_bundled_geometry_names() -> int:
     return len(geometry_names)
 
 
+def verify_release_notes(tag: str) -> None:
+    text = RELEASE_NOTES_FILE.read_text(encoding="utf-8")
+    section = re.search(
+        rf"^## {re.escape(tag)}\s*$\n(?P<body>.*?)(?=^## |\Z)",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if not section or not section.group("body").strip():
+        raise SystemExit(
+            f"发布更新说明缺失：请在 {RELEASE_NOTES_FILE.name} 添加“## {tag}”章节"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--expected-tag")
@@ -72,7 +86,9 @@ def main() -> None:
         )
 
     required = [
+        "AGENTS.md",
         "AI_LOCALIZATION_HANDOFF.md",
+        "LOCALIZATION_CHANGELOG.md",
         "README_zh-CN.md",
         "src/gui_and_draw/VSPChinese.cpp",
         "src/gui_and_draw/VSPChinese.h",
@@ -102,6 +118,7 @@ def main() -> None:
             )
         if match.group("version") != version:
             raise SystemExit(f"标签版本 {match.group('version')} 与源码版本 {version} 不一致")
+        verify_release_notes(args.expected_tag)
 
     if args.print_version:
         print(version)
