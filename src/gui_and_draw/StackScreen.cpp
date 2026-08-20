@@ -351,8 +351,8 @@ void StackScreen::GuiDeviceCallBack( GuiDevice* gui_device )
     }
     else if ( gui_device == &m_InitStackPreset )
     {
-        switch( fl_choice( VSPTranslate( "Clear all XSECs and init to preset?" ).c_str(),
-                           VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "OK" ).c_str(), 0 ) )
+        switch( fl_choice( "%s", VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "OK" ).c_str(), 0,
+                           VSPTranslate( "Clear all XSECs and init to preset?" ).c_str() ) )
         {
             case(0):
                 break;

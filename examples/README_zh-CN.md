@@ -1,8 +1,9 @@
 # OpenVSP 官方案例索引
 
-本目录随 OpenVSP 简体中文汉化版发布，内容来自 OpenVSP 3.51.2 上游源码中的官方
-`examples` 目录。案例本身的版权、作者归属和许可保持上游规定不变；中文索引由
-OpenAI Codex AI 生成。
+本目录随 OpenVSP 简体中文汉化版发布。除 `Complete_Aircraft` 外，内容继承自
+OpenVSP 3.51.3 上游源码中的官方 `examples` 目录；`Complete_Aircraft` 是另行收录的
+官方/社区整机模型，其来源和许可见目录内的 `SOURCES_AND_LICENSES.md`。案例本身的
+版权、作者归属和许可保持不变；中文索引由 OpenAI Codex AI 生成。
 
 ## 推荐入口
 

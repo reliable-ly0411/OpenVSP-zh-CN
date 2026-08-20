@@ -1,6 +1,6 @@
 # OpenVSP 简体中文汉化：AI 接力维护说明
 
-> **显著声明：本源码副本中的简体中文本地化由 OpenAI Codex AI 生成并维护。**
+> **声明：本源码副本中的简体中文本地化由 OpenAI Codex AI 生成并维护。**
 >
 > OpenVSP 原始软件、算法、英文源码及相关资料的版权和作者归属不变，仍属于
 > NASA/OpenVSP 原作者与贡献者，并遵循 NASA Open Source Agreement（NOSA）1.3。
@@ -8,11 +8,10 @@
 
 ## 1. 项目身份与目录
 
-- 上游版本：OpenVSP 3.51.2。
-- 英文原版副本：`D:\codex_vibcoding\openvsp`。
-- 简体中文副本：`D:\codex_vibcoding\openvsp_zh`。
-- 中文主程序：`build\vsp\Release\vsp.exe`。
-- 中文发布包：`build\OpenVSP-3.51.2-win64.zip`。
+- 上游版本：OpenVSP 3.51.3（官方提交 `51bdec01d9a50fa4bdbc960b0def21dcd6330f72`）。
+- 简体中文源码：本仓库工作树。
+- Windows 中文主程序：`build\vsp\Release\vsp.exe`。
+- Windows 构建包：`build\OpenVSP-3.51.3-win64.zip`。
 - 发布包官方/精选社区案例目录：`Official_Examples`；由 `examples` 源目录整体安装生成。
 - 精选整机目录：`examples/Complete_Aircraft`；包含固定翼、混合翼身、分布式电推进及
   eVTOL/VTOL 整机，每个外部模型的来源、许可和 SHA-256 记录在
@@ -90,7 +89,7 @@
 ```powershell
 $cmd = 'set Path=& set PATH=C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbem& ' +
        '"C:\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" ' +
-       '--build D:\codex_vibcoding\openvsp_zh\build --target package --config Release -j 2'
+       '--build D:\path\to\OpenVSP-zh-CN\build --target package --config Release -j 2'
 cmd.exe /d /s /c $cmd
 ```
 
@@ -99,7 +98,7 @@ cmd.exe /d /s /c $cmd
 
 发布包生成于：
 
-`D:\codex_vibcoding\openvsp_zh\build\OpenVSP-3.51.2-win64.zip`
+`D:\path\to\OpenVSP-zh-CN\build\OpenVSP-3.51.3-win64.zip`
 
 ### GitHub 仓库与上游约定
 
@@ -108,11 +107,13 @@ cmd.exe /d /s /c $cmd
 - 本地远程名：个人仓库为 `origin`，官方仓库为 `upstream`。
 - `upstream` 的推送 URL 必须保持为 `DISABLED`；同步官方更新时只能执行 fetch/merge/rebase，
   不得向官方仓库推送汉化分支或自动创建拉取请求。
-- 当前发布标签：`3.51.2-Codex-AI-zh-CN-r7`；同版本修复使用递增的 `-rN`，不得移动旧标签。
+- 3.51.3 候选发布标签：`3.51.3-Codex-AI-zh-CN`；只有完成双平台验证后才可创建。
+  已发布的全部 3.51.2 标签（含统一发布的 `-r3` 至 `-r7`）保持不变；同版本修复使用
+  递增的 `-rN`。
 - Release 资产至少包含源码 ZIP 与 Windows x64 ZIP；Linux 构建完成后追加同版本资产。
-- 自动同步基线记录在 `.github/upstream.json`。由于本汉化仓库的首个提交是完整源码导入，
-  与官方仓库没有共同 Git 祖先，不能直接自动合并；应使用
-  `Prepare OpenVSP Upstream Update` 工作流将汉化差异三方移植到新官方源码。
+- 自动同步基线记录在 `.github/upstream.json`。当前 3.51.3 树以官方提交为直接基线；
+  `Prepare OpenVSP Upstream Update` 工作流仅将基线之上的汉化差异移植到新官方源码，
+  并生成同时以上一汉化提交和新官方提交为父提交的审查提交。
 - 上游检查只创建计划 Issue，移植结果只推送专用审查分支。完成新增文本翻译、GUI 验收和
   双平台测试后，创建 `<版本>-Codex-AI-zh-CN` 标签，由发布工作流统一生成 Linux、Windows、
   SHA-256 和 GitHub 自动源码归档。

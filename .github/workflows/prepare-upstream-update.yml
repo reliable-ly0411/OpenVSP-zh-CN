@@ -90,14 +90,14 @@ jobs:
           PY
           python3 scripts/check_localization_release.py
 
-          git add --all
+          git add -- .github/upstream.json
           tree=$(git write-tree)
           commit=$(printf '移植汉化到 OpenVSP %s\n' "$version" | \
             GIT_AUTHOR_NAME='github-actions[bot]' \
             GIT_AUTHOR_EMAIL='41898282+github-actions[bot]@users.noreply.github.com' \
             GIT_COMMITTER_NAME='github-actions[bot]' \
             GIT_COMMITTER_EMAIL='41898282+github-actions[bot]@users.noreply.github.com' \
-            git commit-tree "$tree" -p "$localized_head")
+            git commit-tree "$tree" -p "$localized_head" -p "$upstream_commit")
 
           branch=automation/openvsp-upstream-update
           git fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}" || true

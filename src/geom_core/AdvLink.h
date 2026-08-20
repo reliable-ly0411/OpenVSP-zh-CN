@@ -65,6 +65,7 @@ public:
     void AddVar( const string & parm_id, const string & var_name, bool input_flag );
     void AddVar( const VarDef & pd, bool input_flag );
     void DeleteVar( int index, bool input_flag );
+    bool DeleteVar( const string & var_name, bool input_flag );
     void DeleteAllVars( bool input_flag );
     void UpdateInputVarName( int index, const string & var_name, bool changeincode );
     void UpdateOutputVarName( int index, const string & var_name, bool changeincode );
@@ -101,8 +102,8 @@ public:
     xmlNodePtr EncodeXml( xmlNodePtr & node );
     xmlNodePtr DecodeXml( xmlNodePtr & node );
 
-    void SaveCode( const string & file_name );
-    void ReadCode( const string & file_name );
+    bool SaveCode( const string & file_name );
+    bool ReadCode( const string & file_name );
     void SearchReplaceCode( const string & from, const string & to );
 
     void AttachAttrCollection()

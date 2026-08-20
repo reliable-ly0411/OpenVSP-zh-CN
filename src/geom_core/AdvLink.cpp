@@ -195,6 +195,28 @@ void AdvLink::DeleteVar( int index, bool input_flag )
     }
 }
 
+//==== Delete a variable by name.  Returns false when there is no such
+//==== variable, which lets the caller report a useful error. ====//
+bool AdvLink::DeleteVar( const string & var_name, bool input_flag )
+{
+    vector< VarDef > *vars = &m_OutputVars;
+    if ( input_flag )
+    {
+        vars = &m_InputVars;
+    }
+
+    for ( int i = 0; i < ( int )vars->size(); i++ )
+    {
+        if ( ( *vars )[i].m_VarName == var_name )
+        {
+            DeleteVar( i, input_flag );
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void AdvLink::DeleteAllVars( bool input_flag )
 {
     if ( input_flag )
@@ -702,16 +724,18 @@ xmlNodePtr AdvLink::DecodeXml( xmlNodePtr & adv_link_node )
     return adv_link_node;
 }
 
-void AdvLink::SaveCode( const string & file_name )
+bool AdvLink::SaveCode( const string & file_name )
 {
     std::ofstream os( file_name );
     if ( os )
     {
         os << m_ScriptCode;
+        return true;
     }
+    return false;
 }
 
-void AdvLink::ReadCode( const string & file_name )
+bool AdvLink::ReadCode( const string & file_name )
 {
     std::ifstream t(file_name.c_str());
     std::stringstream buffer;
@@ -723,7 +747,9 @@ void AdvLink::ReadCode( const string & file_name )
     {
         m_ScriptCode = buffer_string;
         BuildScript();
+        return true;
     }
+    return false;
 }
 
 void AdvLink::SearchReplaceCode( const string & from, const string & to )
@@ -731,6 +757,17 @@ void AdvLink::SearchReplaceCode( const string & from, const string & to )
 #ifdef NOREGEXP
     StringUtil::replace_all( m_ScriptCode, from, to );
 #else
-    m_ScriptCode = regex_replace( m_ScriptCode, regex( "([^\\w]|^)" + from + "([^\\w]|$)" ), "$1" + to + "$2" );
+    // Whatever is searched for gets spliced into a regular expression, so
+    // anything regex treats specially has to be escaped first.  Without this a
+    // '.' in the search string matches any character.
+    static const std::regex esc_chars( R"([.^$|()\[\]{}*+?\\])" );
+    string from_escaped = std::regex_replace( from, esc_chars, R"(\$&)" );
+
+    // The group references are written two digits wide on purpose.  Spelled
+    // "$1", a replacement that starts with a digit is swallowed into the group
+    // number: "$1" followed by "12.3" reads as group 112 then ".3", which drops
+    // the leading character of the replacement along with the captured
+    // delimiter.
+    m_ScriptCode = regex_replace( m_ScriptCode, regex( "([^\\w]|^)" + from_escaped + "([^\\w]|$)" ), "$01" + to + "$02" );
 #endif
 }

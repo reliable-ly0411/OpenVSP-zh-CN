@@ -384,8 +384,9 @@ void MainVSPScreen::SetFileLabel( const string &fname )
 
 void MainVSPScreen::NewModel()
 {
-    switch( fl_choice( VSPTranslate( "New will lose any changes.  Do you want to proceed (discarding changes) or save?" ).c_str(),
-                       VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "Discard" ).c_str(), VSPTranslate( "Save" ).c_str() ) )
+    switch( fl_choice( "%s", VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "Discard" ).c_str(),
+                       VSPTranslate( "Save" ).c_str(),
+                       VSPTranslate( "New will lose any changes.  Do you want to proceed (discarding changes) or save?" ).c_str() ) )
     {
         case(0):  // Cancel
             return;
@@ -415,8 +416,9 @@ void MainVSPScreen::NewModel()
 
 void MainVSPScreen::ExitVSP()
 {
-    switch( fl_choice( VSPTranslate( "VSP is exiting. Save or discard your changes." ).c_str(),
-                       VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "Discard" ).c_str(), VSPTranslate( "Save" ).c_str() ) )
+    switch( fl_choice( "%s", VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "Discard" ).c_str(),
+                       VSPTranslate( "Save" ).c_str(),
+                       VSPTranslate( "VSP is exiting. Save or discard your changes." ).c_str() ) )
     {
         case(0):
             return;

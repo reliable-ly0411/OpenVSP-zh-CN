@@ -160,8 +160,14 @@ private:
     void AddSelectedToCSGroup( CScriptArray* selected, int CSGroupIndex );
     void RemoveSelectedFromCSGroup( CScriptArray* selected, int CSGroupIndex );
     CScriptArray* GetUnsteadyGroupCompIDs( int group_index );
+    CScriptArray* GetXSecTanAngles( const string& xsec_id, int side );
+    CScriptArray* GetXSecTanSlews( const string& xsec_id, int side );
+    CScriptArray* GetXSecTanStrengths( const string& xsec_id, int side );
+    CScriptArray* GetXSecCurvatures( const string& xsec_id, int side );
+    CScriptArray* GetDriverGroup( const string & geom_id, int section_index );
     CScriptArray* GetUnsteadyGroupSurfIndexes( int group_index );
     CScriptArray* GetXSecParmIDs( const string & xsec_id );
+    CScriptArray* GetXSecPnts( const string& xsec_id );
     CScriptArray* ReadFileXSec( const string& xsec_id, const string& file_name );
     CScriptArray* GetAirfoilUpperPnts( const string& xsec_id );
     CScriptArray* GetAirfoilLowerPnts( const string& xsec_id );
@@ -246,6 +252,7 @@ private:
     void SetAirfoilUpperPnts( const string& xsec_id, CScriptArray* up_pnt_arr );
     void SetAirfoilLowerPnts( const string& xsec_id, CScriptArray* low_pnt_arr );
     void SetAirfoilPnts( const string& xsec_id, CScriptArray* up_pnt_arr, CScriptArray* low_pnt_arr );
+    CScriptArray* GetBORXSecPnts( const string& bor_id );
     void SetBORXSecPnts( const string& bor_id, CScriptArray* pnt_arr );
     void SetBORAirfoilUpperPnts( const string& bor_id, CScriptArray* up_pnt_arr );
     void SetBORAirfoilLowerPnts( const string& bor_id, CScriptArray* low_pnt_arr );
@@ -292,6 +299,14 @@ private:
     static void AddExcrescence(const std::string & excresName, int excresType, double excresVal);
     static void DeleteExcrescence(int index);
 
+    CScriptArray* GetFeaLayerIDVec( const string & material_id );
+    CScriptArray* GetGeomTextureIDVec( const string & geom_id );
+    CScriptArray* GetFeaTrimPartIDVec( const string & trim_id );
+    CScriptArray* GetPtCloudPnts( const string & geom_id );
+    CScriptArray* GetFeaAssemblyIDVec();
+    CScriptArray* GetFeaAssemblyStructureIDVec( const string & assembly_id );
+    CScriptArray* GetFeaMaterialIDVec();
+    CScriptArray* GetFeaPropertyIDVec();
     CScriptArray* GetFeaStructIDVec();
     CScriptArray* GetAllFeaPolySparPtIDVec( const string & pspar_id );
     CScriptArray* GetFeaPartIDVec( const std::string & fea_struct_id );
@@ -299,7 +314,10 @@ private:
     CScriptArray* GetFeaBCIDVec( const string & fea_struct_id );
 
     //=== Register Measure Functions ===//
+    CScriptArray* GetAllProtractors();
+    CScriptArray* GetAllRSTProbes();
     CScriptArray* GetAllRulers();
+    CScriptArray* GetAllBogies( const string &gear_id );
     CScriptArray* GetAllProbes();
 
     //=== Register Advanced Link Functions ===//

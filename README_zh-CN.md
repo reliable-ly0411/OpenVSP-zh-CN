@@ -5,16 +5,17 @@
 > 原作者和贡献者，并遵循 NOSA 1.3。详细架构和接力方法见
 > [`AI_LOCALIZATION_HANDOFF.md`](AI_LOCALIZATION_HANDOFF.md)。
 
-本目录是 OpenVSP 3.51.2 的简体中文版本。本地工作环境中的英文原版源码保留在相邻的
-`openvsp` 目录；GitHub 上游原版为 <https://github.com/OpenVSP/OpenVSP>。
+本目录是 OpenVSP 3.51.3 的简体中文版本；GitHub 官方上游为
+<https://github.com/OpenVSP/OpenVSP>。
 
 ## 项目关系
 
 - 本仓库只发布 Codex AI 生成的简体中文本地化源码与已验证构建产物。
-- 官方 `OpenVSP/OpenVSP` 仅作为只读 `upstream`，用于核对和同步后续版本。
+- 官方 `OpenVSP/OpenVSP` 作为只读 `upstream`；当前汉化版直接继承官方 3.51.3
+  提交，后续更新保留官方提交为 Git 父系。
 - 本项目不会自动向官方仓库提交分支或拉取请求，也不代表 NASA/OpenVSP 官方汉化。
-- Windows GitHub Release 使用 `3.51.2-Codex-AI-zh-CN` 标识；Ubuntu 24.04 x86_64
-  发布使用 `3.51.2-Codex-AI-zh-CN-Ubuntu-24.04` 标识。每个发布资产同时提供 SHA-256。
+- 同一个 `3.51.3-Codex-AI-zh-CN` 标签统一生成 Windows x64 和 Ubuntu 24.04
+  x86_64 构建，每个发布资产同时提供 SHA-256。
 
 中文版覆盖：
 
@@ -33,8 +34,8 @@ Windows 构建产物位于 `build/vsp/Release/vsp.exe`。Ubuntu 发布包解压�
 可直接运行：
 
 ```bash
-unzip OpenVSP-3.51.2-Codex-AI-zh-CN-Ubuntu-24.04-x86_64.zip
-cd OpenVSP-3.51.2-Linux
+unzip OpenVSP-3.51.3-Codex-AI-zh-CN-Ubuntu-24.04-x86_64.zip
+cd OpenVSP-3.51.3-Linux
 ./vsp
 ```
 
@@ -59,6 +60,7 @@ cd OpenVSP-3.51.2-Linux
 
 ```powershell
 cmake -S src -B build -G "Visual Studio 17 2022" -A x64 `
+  -DVSP_NO_PYDOC=ON `
   -DVSP_LIBRARY_PATH=D:\codex_vibcoding\openvsp\buildlibs
 cmake --build build --target package --config Release -j 2
 ```
@@ -71,12 +73,15 @@ cmake --build build --target package --config Release -j 2
 cmake -S Libraries -B buildlibs -DCMAKE_BUILD_TYPE=Release
 cmake --build buildlibs -j "$(nproc)"
 cmake -S src -B build-linux-release -DCMAKE_BUILD_TYPE=Release \
+  -DVSP_NO_PYDOC=ON \
   -DVSP_LIBRARY_PATH="$PWD/buildlibs"
 cmake --build build-linux-release --target package -j "$(nproc)"
 ```
 
 Linux 依赖构建会通过 `Libraries/cmake/External_FLTK.cmake` 明确启用 X11、禁用 Wayland
 后端；这是本仓库 Ubuntu 24.04 发布包所采用并完成 GUI 启动验证的配置。
+正式发布不生成未随 ZIP 分发的 Python API 开发文档，以避免构建依赖大量易波动的 PyPI
+文档工具；Python API 扩展本身仍正常构建和打包。
 
 ## 上游同步与自动发布
 
@@ -91,7 +96,7 @@ Linux 依赖构建会通过 `Libraries/cmake/External_FLTK.cmake` 明确启用 X
    命令行和压缩包，生成 SHA-256，并发布带对应源码归档的 GitHub Release。
 
 同一 OpenVSP 版本需要修复后重新发布时，使用不可变的新标签
-`<版本>-Codex-AI-zh-CN-rN`（例如 `3.51.2-Codex-AI-zh-CN-r3`），不得移动已经发布的标签。
+`<版本>-Codex-AI-zh-CN-rN`（例如 `3.51.3-Codex-AI-zh-CN-r2`），不得移动已经发布的标签。
 
 自动化不会向官方仓库推送，也不会跳过人工汉化审查直接发布新上游版本。
 

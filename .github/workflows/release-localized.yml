@@ -80,7 +80,8 @@ jobs:
             -DVSP_USE_SYSTEM_GLEW=ON
           cmake --build buildlibs --parallel 2
           cmake -S src -B build -DCMAKE_BUILD_TYPE=Release \
-            -DVSP_CPACK_GEN=ZIP -DVSP_LIBRARY_PATH="$GITHUB_WORKSPACE/buildlibs"
+            -DVSP_CPACK_GEN=ZIP -DVSP_NO_PYDOC=ON \
+            -DVSP_LIBRARY_PATH="$GITHUB_WORKSPACE/buildlibs"
           cmake --build build --target package --parallel 2
           ldd build/vsp/vsp | tee vsp-ldd.txt
           if grep -q 'not found' vsp-ldd.txt; then
@@ -113,7 +114,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           cmake -S Libraries -B buildlibs -A x64 -DCMAKE_BUILD_TYPE=Release
           cmake --build buildlibs --config Release --parallel 2
-          cmake -S src -B build -A x64 -DCMAKE_BUILD_TYPE=Release "-DVSP_LIBRARY_PATH=$env:GITHUB_WORKSPACE\buildlibs"
+          cmake -S src -B build -A x64 -DCMAKE_BUILD_TYPE=Release -DVSP_NO_PYDOC=ON `
+            "-DVSP_LIBRARY_PATH=$env:GITHUB_WORKSPACE\buildlibs"
           cmake --build build --target package --config Release --parallel 2
           & build\vsp\Release\vsp.exe -help | Out-File -Encoding utf8 vsp-help.txt
           if (-not (Select-String -Path vsp-help.txt -Pattern '用法' -Quiet)) {

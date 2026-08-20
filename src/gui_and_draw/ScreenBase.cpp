@@ -5464,8 +5464,8 @@ void SkinScreen::GuiDeviceCallBack( GuiDevice* gui_device )
     }
     else if ( gui_device == &m_ClearAllSkinningButton )
     {
-        switch ( fl_choice( VSPTranslate( "Disable and clear all skinning values from stack?" ).c_str(),
-                            VSPTranslate( "Cancel" ).c_str(), "清除蒙皮", 0 ) )
+        switch ( fl_choice( "%s", VSPTranslate( "Cancel" ).c_str(), "清除蒙皮", 0,
+                            VSPTranslate( "Disable and clear all skinning values from stack?" ).c_str() ) )
         {
             case (0):
             {

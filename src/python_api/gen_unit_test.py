@@ -16,6 +16,20 @@ from openvsp import *
 class TestOpenVSP(unittest.TestCase):
 	def setUp(self):
 		VSPRenew()
+		# Start from a clean error queue so each example is only judged on the
+		# errors it raised itself.
+		api_err_mgr = ErrorMgrSingleton.getInstance()
+		while api_err_mgr.GetNumTotalErrors() > 0:
+			api_err_mgr.PopLastError()
+	def tearDown(self):
+		# An example that leaves an API error behind has not worked, whether or
+		# not it bothered to check anything itself.  An example that raises one
+		# on purpose is expected to take it back off the queue.
+		api_err_mgr = ErrorMgrSingleton.getInstance()
+		api_err_msgs = []
+		while api_err_mgr.GetNumTotalErrors() > 0:
+			api_err_msgs.append( api_err_mgr.PopLastError().GetErrorString() )
+		assert len( api_err_msgs ) == 0, "API errors: " + "; ".join( api_err_msgs )
 '''
     with open(vsp_file, 'r') as vsp:
 
@@ -47,6 +61,7 @@ class TestOpenVSP(unittest.TestCase):
                         ':return' in curr_line or \
                         ':param' in curr_line or \
                         'See also:' in curr_line or \
+                        'Notes:' in curr_line or \
                         ('def' in curr_line and '):' in curr_line):
                         idx_python_end = idx - 1
                         check_for_python_flag = False
@@ -125,19 +140,40 @@ def generate_vspscript_unit_test(vsp_geom_api, vspscript_unittest_filepath):
     in_code_segment = False
     code_segment = ""
     function_names = []
+    # A declaration that wraps onto a second line has to be gathered up before
+    # it can be read.  Handling only single line declarations quietly dropped
+    # the examples of every function declared across two lines.
+    declaration = ""
     with open(vsp_geom_api, 'r') as header:
         for line in header:
             line = line.replace("vector", "array").replace("std::", "")
             if r"\code{.cpp}" in line:
                 in_code_segment = True
                 code_segment = ""
+                continue
 
-            elif in_code_segment:
+            if in_code_segment:
                 if r"\endcode" in line:
                     in_code_segment = False
                 else:
                     code_segment += line
-            elif "extern" in line and ");" in line:
+                continue
+
+            if declaration:
+                declaration += " " + line.strip()
+            elif "extern" in line:
+                declaration = line.rstrip()
+
+            if not declaration:
+                continue
+
+            if ");" not in declaration:
+                continue
+
+            line = declaration
+            declaration = ""
+
+            if True:
                 line_split = line.split()
                 name_index = 2
                 for index, word in enumerate(line_split):
@@ -152,15 +188,38 @@ def generate_vspscript_unit_test(vsp_geom_api, vspscript_unittest_filepath):
                 script += "\n{\n"
                 script += "    VSPRenew();\n"
                 script += "    int __failure = 0;\n"
+                # Start from a clean error queue so this example is only judged
+                # on errors it raised itself.
+                script += "    while ( GetNumTotalErrors() > 0 ) { PopLastError(); }\n"
                 script += f"    Print(\"//==== {function_name} ====//\");\n"
                 script += code_segment
+                # An example that leaves an API error behind has not worked,
+                # whether or not it bothered to check anything itself.  Nothing
+                # in the documentation raises an error on purpose.
+                script += "\n    while ( GetNumTotalErrors() > 0 )\n"
+                script += "    {\n"
+                script += "        ErrorObj err = PopLastError();\n"
+                script += "        Print( \"    API error: \" + err.GetErrorString() );\n"
+                script += "        __failure++;\n"
+                script += "    }\n"
                 script += "\n    return __failure;\n"
                 script += "}\n"
 
-                end_script += '    '
-                end_script += 'int_ret += '
-                end_script +=  function_name + "();"
-                end_script += '\n'
+                # Clear the example after using it.  It used to persist, so a
+                # function documented without a \code{.cpp} block was handed the
+                # previous function's example and the generated test exercised
+                # the wrong thing under the wrong name.
+                code_segment = ""
+
+                # Report which example failed rather than only how many.
+                end_script += f'    {{\n'
+                end_script += f'        int f = {function_name}();\n'
+                end_script += f'        if ( f > 0 )\n'
+                end_script += f'        {{\n'
+                end_script += f'            Print( "    FAILED: {function_name}" );\n'
+                end_script += f'        }}\n'
+                end_script += f'        int_ret += f;\n'
+                end_script += f'    }}\n'
     end_script += "    Print( \"\\n//==== ALL TEST SCRIPTS COMPLETED ====//\" );\n"
     end_script += "    if ( int_ret == 0 )\n"
     end_script += "    {\n"
@@ -171,7 +230,10 @@ def generate_vspscript_unit_test(vsp_geom_api, vspscript_unittest_filepath):
     end_script += "        string fail_message = \"    Number of failed scripts : \" + int_ret;\n"
     end_script += "        Print( fail_message );\n"
     end_script += "    }\n"
-    end_script += "    return 0; // success\n"
+    # Report the accumulated failures to the caller.  This used to return zero
+    # unconditionally, so the generated test could never fail no matter what the
+    # individual examples reported through __failure.
+    end_script += "    return int_ret;\n"
     end_script += "}\n"
     script += end_script
     with open(vspscript_unittest_filepath, 'w') as f:
