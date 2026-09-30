@@ -1,6 +1,8 @@
 name: Build and Release Localized OpenVSP
 
 on:
+  pull_request:
+    branches: [main]
   push:
     tags:
       - "*.*.*-Codex-AI-zh-CN*"
@@ -11,7 +13,7 @@ on:
         required: true
         type: string
       publish:
-        description: Publish or update the GitHub Release after both builds pass
+        description: Publish a new GitHub Release after both builds pass
         required: true
         default: false
         type: boolean
@@ -20,10 +22,10 @@ permissions:
   contents: read
 
 env:
-  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || github.sha }}
 
 concurrency:
-  group: localized-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: localized-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -41,20 +43,38 @@ jobs:
             artifact: localized-windows
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout release tag
+      - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
 
       - name: Verify tag and localization guard on Linux
         if: runner.os == 'Linux'
         shell: bash
-        run: python3 scripts/check_localization_release.py --expected-tag "$RELEASE_TAG"
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            python3 scripts/check_localization_release.py
+          else
+            python3 scripts/check_localization_release.py --expected-tag "$RELEASE_TAG"
+          fi
 
       - name: Verify tag and localization guard on Windows
         if: runner.os == 'Windows'
         shell: pwsh
-        run: python -X utf8 scripts/check_localization_release.py --expected-tag "$env:RELEASE_TAG"
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            python -X utf8 scripts/check_localization_release.py
+          } else {
+            python -X utf8 scripts/check_localization_release.py --expected-tag "$env:RELEASE_TAG"
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Localization guard failed' }
+
+      - name: Translation regression tests
+        shell: bash
+        run: |
+          cmake -S scripts/localization_tests -B localization-tests
+          cmake --build localization-tests --config Release --parallel 2
+          ctest --test-dir localization-tests -C Release --output-on-failure
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -63,7 +83,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes \
             build-essential gcc-13 g++-13 git curl zip unzip \
-            python3-dev libxml2-dev libjpeg-dev libglm-dev \
+            python3-dev python3-numpy libxml2-dev libjpeg-dev libglm-dev \
             libglew-dev libglu1-mesa-dev libfltk1.3-dev fluid xorg-dev \
             swig doxygen graphviz pandoc
 
@@ -83,6 +103,9 @@ jobs:
             -DVSP_CPACK_GEN=ZIP -DVSP_NO_PYDOC=ON \
             -DVSP_LIBRARY_PATH="$GITHUB_WORKSPACE/buildlibs"
           cmake --build build --target package --parallel 2
+          build/vsp/vspscript -script scripts/localization_smoke.as | tee smoke.txt
+          grep -q LOCALIZATION_SMOKE_PASS smoke.txt
+          ! grep -q LOCALIZATION_SMOKE_FAIL smoke.txt
           ldd build/vsp/vsp | tee vsp-ldd.txt
           if grep -q 'not found' vsp-ldd.txt; then
             echo 'Linux 发布包存在未解析的动态库依赖' >&2
@@ -102,11 +125,16 @@ jobs:
           unzip -Z1 "artifacts/OpenVSP-${RELEASE_TAG}-Ubuntu-24.04-x86_64.zip" > package-files.txt
           grep -q '/README_zh-CN.md$' package-files.txt
           grep -q '/AGENTS.md$' package-files.txt
+          python3 scripts/check_localized_package.py "artifacts/OpenVSP-${RELEASE_TAG}-Ubuntu-24.04-x86_64.zip"
 
       - name: Install Windows build dependencies
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install --yes swig pandoc
+        run: |
+          choco install --yes swig pandoc
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
+          python -m pip install "numpy<3"
+          if ($LASTEXITCODE -ne 0) { throw 'NumPy installation failed' }
 
       - name: Build Windows package
         if: runner.os == 'Windows'
@@ -118,6 +146,11 @@ jobs:
           cmake -S src -B build -A x64 -DCMAKE_BUILD_TYPE=Release -DVSP_NO_PYDOC=ON `
             "-DVSP_LIBRARY_PATH=$env:GITHUB_WORKSPACE\buildlibs"
           cmake --build build --target package --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package build failed' }
+          & build\vsp\Release\vspscript.exe -script scripts/localization_smoke.as | Tee-Object smoke.txt
+          if ($LASTEXITCODE -ne 0 -or -not (Select-String smoke.txt -Pattern LOCALIZATION_SMOKE_PASS -Quiet) -or (Select-String smoke.txt -Pattern LOCALIZATION_SMOKE_FAIL -Quiet)) {
+            throw 'Model compatibility smoke test failed'
+          }
           & build\vsp\Release\vsp.exe -help | Out-File -Encoding utf8 vsp-help.txt
           if (-not (Select-String -Path vsp-help.txt -Pattern '用法' -Quiet)) {
             throw 'Windows 中文命令行帮助验证失败'
@@ -134,6 +167,13 @@ jobs:
             throw 'Windows 发布包缺少汉化维护规则'
           }
 
+      - name: Verify Windows archive contents
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -X utf8 scripts/check_localized_package.py "artifacts\OpenVSP-$env:RELEASE_TAG-Windows-x64.zip"
+          if ($LASTEXITCODE -ne 0) { throw 'Archive verification failed' }
+
       - name: Upload verified package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -145,15 +185,15 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: build
-    if: github.event_name == 'push' || inputs.publish == true
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Checkout release tag
+      - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
 
       - name: Download verified packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -188,24 +228,27 @@ jobs:
             cat release-update.md
             echo
             echo '本 Release 在 GitHub 托管的 Ubuntu 24.04 与 Windows 2022 x64 环境中完成构建、'
-            echo '中文命令行守卫和压缩包完整性检查。附件包含 Linux、Windows 构建及 SHA-256 清单；'
+            echo '中文命令行、翻译回归、模型兼容性冒烟测试和压缩包内容检查。Windows GUI 未人工验收；'
+            echo 'Linux GUI 的实际抽查范围以本次更新记录为准。附件包含两平台构建及 SHA-256 清单；'
             echo '页面同时自动提供与标签对应的源码 ZIP 和 tar.gz。'
             echo
             echo '> 本地化由 OpenAI Codex AI 生成并维护，不改变 OpenVSP 原软件版权、作者归属及 NOSA 1.3 许可。'
           } > release-notes.md
 
-      - name: Create or update release
+      - name: Create a new immutable release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          title="OpenVSP ${RELEASE_TAG%%-Codex-AI-zh-CN} Codex AI 简体中文版"
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-              --title "$title" --notes-file release-notes.md --latest
-          else
-            gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" \
-              --verify-tag --title "$title" --notes-file release-notes.md --latest
+            echo 'Release already exists; refusing to replace notes or assets. Inspect and resume manually.' >&2
+            exit 1
           fi
+          title="OpenVSP ${RELEASE_TAG%%-Codex-AI-zh-CN} Codex AI 简体中文版"
+          gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "$title" --notes-file release-notes.md --draft
+          mkdir downloaded-release
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir downloaded-release
+          (cd downloaded-release && sha256sum -c SHA256SUMS.txt)
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

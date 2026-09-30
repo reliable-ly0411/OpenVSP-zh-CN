@@ -54,6 +54,15 @@ FeaMeshMgrSingleton::~FeaMeshMgrSingleton()
 }
 
 // Cleanup done between mesh generation runs.
+void FeaMeshMgrSingleton::UpdateStructure()
+{
+    FeaStructure* fea_struct = StructureMgr.GetFeaStruct( m_FeaStructID );
+    if ( fea_struct )
+    {
+        fea_struct->Update();
+    }
+}
+
 void FeaMeshMgrSingleton::CleanUp()
 {
     CfdMeshMgrSingleton::CleanUp();
@@ -373,6 +382,11 @@ void FeaMeshMgrSingleton::TransferSubSurfData()
     {
         // Identify number of FeaSubSurfaces
         GetMeshPtr()->m_NumFeaSubSurfs = m_SimpleSubSurfaceVec.size();
+        GetMeshPtr()->m_FeaSubSurfNumChainsVec.resize( GetMeshPtr()->m_NumFeaSubSurfs );
+        for ( size_t i = 0; i < GetMeshPtr()->m_NumFeaSubSurfs; i++ )
+        {
+            GetMeshPtr()->m_FeaSubSurfNumChainsVec[i] = 0;
+        }
         // Duplicate subsurface data in mesh data structure so it will be available
         // after mesh generation is complete.
         GetMeshPtr()->m_SimpleSubSurfaceVec = m_SimpleSubSurfaceVec;
@@ -475,12 +489,8 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
     addOutputText( "Init Timer\n" );
 #endif
 
-    FeaStructure* fea_struct = StructureMgr.GetFeaStruct( m_FeaStructID );
-    if ( fea_struct )
-    {
-        fea_struct->Update();
-    }
-
+    // The structure is updated by whoever starts the mesh, on the model's own thread --
+    // doing it here raced the screen, which updates the same structure on every refresh.
     addOutputText( "Transfer Mesh Settings\n" );
     TransferMeshSettings();
 
@@ -766,7 +776,18 @@ void FeaMeshMgrSingleton::MergeCoplanarParts()
 
                     if ( ( dist_pnt_2_plane( pntA, all_norm_vec[i], pntB ) <= FLT_EPSILON ) && Compare( temp_bboxA, temp_bboxB ) )
                     {
+                        // Merging L/R (etc.) symmetry copies of a coplanar part (e.g. XY tray floor).
+                        // Surf::Intersect only pairs matching FeaSymmIndex when >= 0; keep FeaSymmIndex=-1
+                        // so one merged plane still cuts both mirrored skins/webs and remains a single mesh.
+                        bool cross_symm = ( all_surf_vec[i].GetFeaSymmIndex() >= 0 &&
+                                            all_surf_vec[j].GetFeaSymmIndex() >= 0 &&
+                                            all_surf_vec[i].GetFeaSymmIndex() != all_surf_vec[j].GetFeaSymmIndex() );
+
                         VspSurf new_surf = all_surf_vec[i];
+                        if ( cross_symm )
+                        {
+                            new_surf.SetFeaSymmIndex( -1 );
+                        }
 
                         vec3d maxA = bboxA.GetMax();
                         vec3d maxB = bboxB.GetMax();
@@ -814,6 +835,10 @@ void FeaMeshMgrSingleton::MergeCoplanarParts()
                             new_surf.Offset( -1 * centerA );
                             new_surf.Scale( scale_factor );
                             new_surf.Offset( new_center );
+                            if ( cross_symm )
+                            {
+                                new_surf.SetFeaSymmIndex( -1 );
+                            }
                         }
 
                         fea_part_vec[all_feaprt_ind_vec[i]]->DeleteFeaPartSurf( feaprt_surf_ind_vec[i] );
@@ -1364,10 +1389,18 @@ void FeaMeshMgrSingleton::BuildFeaMesh()
             }
 
             int ichain = 0;
-            if ( FeaPartIndex >=0 )
+            if ( FeaPartIndex >= 0 )
             {
-                ichain = GetMeshPtr()->m_FeaPartNumChainsVec[ FeaPartIndex ];
-                GetMeshPtr()->m_FeaPartNumChainsVec[ FeaPartIndex ]++;
+                if ( ( *c )->m_SSIntersectIndex >= 0 )
+                {
+                    ichain = GetMeshPtr()->m_FeaSubSurfNumChainsVec[ ( *c )->m_SSIntersectIndex ];
+                    GetMeshPtr()->m_FeaSubSurfNumChainsVec[ ( *c )->m_SSIntersectIndex ]++;
+                }
+                else
+                {
+                    ichain = GetMeshPtr()->m_FeaPartNumChainsVec[ FeaPartIndex ];
+                    GetMeshPtr()->m_FeaPartNumChainsVec[ FeaPartIndex ]++;
+                }
             }
 
             int normsurfindx = vector_find_val( m_SurfVec, NormSurf );
@@ -1936,9 +1969,17 @@ void FeaMeshMgrSingleton::CheckFixPointIntersects()
                                     }
                                 }
                             }
-                            else if ( ( *c )->m_SurfA == ( *c )->m_SurfB && ( *c )->m_SurfA->GetSurfID() == fxpt.m_SurfInd[j][0] ) // Indicates SubSurface Edge
+                            else if ( ( *c )->m_SurfA == ( *c )->m_SurfB && ( *c )->m_SurfA == m_SurfVec[fxpt.m_SurfInd[j][0]] ) // Indicates SubSurface Edge
                             {
                                 double closest_dist = FLT_MAX;
+                                double ss_tol = tol;
+
+                                // Straight ISeg chords on curved constant-U/W subsurface lines can be far from
+                                // the true edge in 3D.  Use a looser tolerance on wing skins.
+                                if ( ( *c )->m_SurfA->GetCompID() >= 0 )
+                                {
+                                    ss_tol = 1e-1;
+                                }
 
                                 for ( size_t m = 0; m < ( *c )->m_ISegDeque.size(); m++ )
                                 {
@@ -1954,7 +1995,7 @@ void FeaMeshMgrSingleton::CheckFixPointIntersects()
                                     }
                                 }
 
-                                if ( closest_dist < tol )
+                                if ( closest_dist < ss_tol )
                                 {
                                     vec2d closest_uwA = ( *c )->m_SurfA->ClosestUW( fxpt.m_Pnt[j], fxpt.m_UW[0], fxpt.m_UW[1] );
                                     vec2d closest_uwB = ( *c )->m_SurfB->ClosestUW( fxpt.m_Pnt[j], fxpt.m_UW[0], fxpt.m_UW[1] );

@@ -10,9 +10,25 @@
 #include "FitModelMgr.h"
 #include "ParmMgr.h"
 #include "PtCloudGeom.h"
+#include "StlHelper.h"
 
 #define CMINPACK_NO_DLL
 #include <cminpack.h>
+
+// The surface a target point is matched against, or null when there is not one.  A *.fit file
+// carries Geom IDs, so one written against another model -- or against this one before a Geom was
+// deleted or swapped for a Blank or a point cloud -- names Geoms that either are not here or have
+// no surface to match against.  Geom::GetSurfPtr returns null for the latter, which was read
+// through.
+static const VspSurf * MatchSurf( Geom* matchgeom, int surfindx )
+{
+    if ( !matchgeom || surfindx < 0 || surfindx >= matchgeom->GetNumTotalSurfs() )
+    {
+        return nullptr;
+    }
+
+    return matchgeom->GetSurfPtr( surfindx );
+}
 
 vec3d TargetPt::GetMatchPt()
 {
@@ -30,10 +46,13 @@ vec3d TargetPt::GetMatchPt(Geom* matchgeom)
     {
         assert( matchgeom->GetID() == m_MatchGeom );
 
-        const VspSurf* s = matchgeom->GetSurfPtr(0);
-        vec3d ps = s->CompPnt01( m_UW.x(), m_UW.y() );
+        const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+        if ( !s )
+        {
+            return vec3d();
+        }
 
-        return ps;
+        return s->CompPnt01( m_UW.x(), m_UW.y() );
     }
     return vec3d();
 }
@@ -56,12 +75,28 @@ vec3d TargetPt::CalcDelta(Geom* matchgeom)
 
         vec3d pt = GetPt();
 
-        const VspSurf* s = matchgeom->GetSurfPtr(0);
+        const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+        if ( !s )
+        {
+            return vec3d();
+        }
+
         vec3d ps = s->CompPnt01( m_UW.x(), m_UW.y() );
 
         return (ps - pt);
     }
     return vec3d();
+}
+
+void TargetPt::UpdateDist()
+{
+    Geom* matchgeom = VehicleMgr.GetVehicle()->FindGeom( m_MatchGeom );
+    UpdateDist( matchgeom );
+}
+
+void TargetPt::UpdateDist( Geom* matchgeom )
+{
+    m_Dist = CalcDelta( matchgeom ).mag();
 }
 
 vec3d TargetPt::CalcDerivU( Geom* matchgeom )
@@ -70,7 +105,11 @@ vec3d TargetPt::CalcDerivU( Geom* matchgeom )
     {
         assert( matchgeom->GetID() == m_MatchGeom );
 
-        const VspSurf* s = matchgeom->GetSurfPtr(0);
+        const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+        if ( !s )
+        {
+            return vec3d();
+        }
 
         return s->CompTanU01( m_UW.x(), m_UW.y() );
     }
@@ -83,7 +122,11 @@ vec3d TargetPt::CalcDerivW( Geom* matchgeom )
     {
         assert( matchgeom->GetID() == m_MatchGeom );
 
-        const VspSurf* s = matchgeom->GetSurfPtr(0);
+        const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+        if ( !s )
+        {
+            return vec3d();
+        }
 
         return s->CompTanW01( m_UW.x(), m_UW.y() );
     }
@@ -97,7 +140,7 @@ void TargetPt::SearchUW( Geom* matchgeom )
         assert( matchgeom->GetID() == m_MatchGeom );
 
 
-        if( m_UType == FREE && m_WType == FREE )
+        if( m_UType == vsp::FIT_MODEL_FREE && m_WType == vsp::FIT_MODEL_FREE )
         {
             double u, w, d, u0, w0, d0;
 
@@ -108,7 +151,12 @@ void TargetPt::SearchUW( Geom* matchgeom )
 
             d0 = CalcDelta( matchgeom ).mag();
 
-            const VspSurf* s = matchgeom->GetSurfPtr(0);
+            const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+            if ( !s )
+            {
+                return;
+            }
+
             d = s->FindNearest01( u, w, pt );
 
             if ( d0 < d )
@@ -120,7 +168,7 @@ void TargetPt::SearchUW( Geom* matchgeom )
             m_UW.set_xy( u, w );
 
         }
-        else if( m_UType == FREE && m_WType == FIXED )
+        else if( m_UType == vsp::FIT_MODEL_FREE && m_WType == vsp::FIT_MODEL_FIXED )
         {
             double u, w, d, u0, w0, d0;
 
@@ -133,7 +181,12 @@ void TargetPt::SearchUW( Geom* matchgeom )
 
             w = w0;
 
-            const VspSurf* s = matchgeom->GetSurfPtr(0);
+            const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+            if ( !s )
+            {
+                return;
+            }
+
             VspCurve c;
             s->GetW01ConstCurve( c, w );
 
@@ -146,7 +199,7 @@ void TargetPt::SearchUW( Geom* matchgeom )
 
             m_UW.set_x(u);
         }
-        else if( m_UType == FIXED && m_WType == FREE )
+        else if( m_UType == vsp::FIT_MODEL_FIXED && m_WType == vsp::FIT_MODEL_FREE )
         {
             double u, w, d, u0, w0, d0;
 
@@ -159,7 +212,12 @@ void TargetPt::SearchUW( Geom* matchgeom )
 
             u = u0;
 
-            const VspSurf* s = matchgeom->GetSurfPtr(0);
+            const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+            if ( !s )
+            {
+                return;
+            }
+
             VspCurve c;
             s->GetU01ConstCurve( c, u );
 
@@ -172,7 +230,7 @@ void TargetPt::SearchUW( Geom* matchgeom )
 
             m_UW.set_y(w);
         }
-        else // m_UType == FIXED && m_WType == FIXED
+        else // m_UType == vsp::FIT_MODEL_FIXED && m_WType == vsp::FIT_MODEL_FIXED
         {
             // Do nothing.
         }
@@ -186,7 +244,7 @@ void TargetPt::RefineUW( Geom* matchgeom )
 
         assert( matchgeom->GetID() == m_MatchGeom );
 
-        if( m_UType == FREE && m_WType == FREE )
+        if( m_UType == vsp::FIT_MODEL_FREE && m_WType == vsp::FIT_MODEL_FREE )
         {
             double u, w, u0, w0;
 
@@ -195,13 +253,18 @@ void TargetPt::RefineUW( Geom* matchgeom )
             u0=m_UW.x();
             w0=m_UW.y();
 
-            const VspSurf* s = matchgeom->GetSurfPtr(0);
+            const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+            if ( !s )
+            {
+                return;
+            }
+
             s->FindNearest01( u, w, pt, u0, w0 );
 
             m_UW.set_xy( u, w );
 
         }
-        else if( m_UType == FREE && m_WType == FIXED )
+        else if( m_UType == vsp::FIT_MODEL_FREE && m_WType == vsp::FIT_MODEL_FIXED )
         {
             double u, w, u0;
 
@@ -210,7 +273,12 @@ void TargetPt::RefineUW( Geom* matchgeom )
             u0=m_UW.x();
             w=m_UW.y();
 
-            const VspSurf* s = matchgeom->GetSurfPtr(0);
+            const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+            if ( !s )
+            {
+                return;
+            }
+
             VspCurve c;
             s->GetW01ConstCurve( c, w );
 
@@ -218,7 +286,7 @@ void TargetPt::RefineUW( Geom* matchgeom )
 
             m_UW.set_x(u);
         }
-        else if( m_UType == FIXED && m_WType == FREE )
+        else if( m_UType == vsp::FIT_MODEL_FIXED && m_WType == vsp::FIT_MODEL_FREE )
         {
             double u, w, w0;
 
@@ -227,7 +295,12 @@ void TargetPt::RefineUW( Geom* matchgeom )
             u=m_UW.x();
             w0=m_UW.y();
 
-            const VspSurf* s = matchgeom->GetSurfPtr(0);
+            const VspSurf* s = MatchSurf( matchgeom, m_SurfIndx );
+            if ( !s )
+            {
+                return;
+            }
+
             VspCurve c;
             s->GetU01ConstCurve( c, u );
 
@@ -235,7 +308,7 @@ void TargetPt::RefineUW( Geom* matchgeom )
 
             m_UW.set_y(w);
         }
-        else // m_UType == FIXED && m_WType == FIXED
+        else // m_UType == vsp::FIT_MODEL_FIXED && m_WType == vsp::FIT_MODEL_FIXED
         {
             // Do nothing.
         }
@@ -245,11 +318,25 @@ void TargetPt::RefineUW( Geom* matchgeom )
 bool TargetPt::IsValid()
 {
     Geom* matchgeom = VehicleMgr.GetVehicle()->FindGeom( m_MatchGeom );
-    if ( matchgeom )
+
+    // A Geom that is not here, or that has no surface at all, cannot carry a target point.
+    // ValidateTargetPts drops the ones that answer no, which is what keeps a *.fit file written
+    // against another model from being read in and then optimized against nothing.
+    if ( !matchgeom || matchgeom->GetNumTotalSurfs() < 1 )
     {
-        return true;
+        return false;
     }
-    return false;
+
+    // The surface count moves with the model -- turning symmetry on or off, changing a blade
+    // count -- so an index that was in range when it was set can fall out of it while the model
+    // is open, not only across a file load.  The Geom is still here and the point still means
+    // something, so bring the index back rather than throw the point away.
+    if ( m_SurfIndx < 0 || m_SurfIndx >= matchgeom->GetNumTotalSurfs() )
+    {
+        m_SurfIndx = 0;
+    }
+
+    return true;
 }
 
 xmlNodePtr TargetPt::WrapXml( xmlNodePtr & node )
@@ -264,6 +351,7 @@ xmlNodePtr TargetPt::WrapXml( xmlNodePtr & node )
         XmlUtil::AddIntNode( targetpt_node, "WClosed", m_WClosed );
 
         XmlUtil::AddStringNode( targetpt_node, "MatchGeom", m_MatchGeom );
+        XmlUtil::AddIntNode( targetpt_node, "SurfIndx", m_SurfIndx );
 
         XmlUtil::AddVec2dNode( targetpt_node, "UW", m_UW );
         XmlUtil::AddVec3dNode( targetpt_node, "Pt", m_Pt );
@@ -280,6 +368,9 @@ xmlNodePtr TargetPt::UnwrapXml( xmlNodePtr & node )
     m_WClosed = (bool) XmlUtil::FindInt( node, "WClosed", m_WClosed );
 
     m_MatchGeom = XmlUtil::FindString( node, "MatchGeom", m_MatchGeom );
+
+    // Written since file version 2.  An older file has no such node and reads as surface 0.
+    m_SurfIndx = XmlUtil::FindInt( node, "SurfIndx", 0 );
 
     m_UW = XmlUtil::ExtractVec2dNode( node, "UW");
     m_Pt = XmlUtil::ExtractVec3dNode( node, "Pt");
@@ -313,6 +404,10 @@ void FitModelMgrSingleton::Init()
     m_CurrVarIndex = int();
     m_CurrTargetPtIndex = int();
     m_NumOptVars = int();
+
+    m_XPrevious.clear();
+    m_UndoSignature = string();
+    m_UndoValid = false;
 }
 
 void FitModelMgrSingleton::Wype()
@@ -590,6 +685,57 @@ void FitModelMgrSingleton::ValidateTargetPts()
     m_TargetPts = tokeep;
 }
 
+static bool DistCompare( TargetPt* a, TargetPt* b )
+{
+    return a->GetDist() > b->GetDist();
+}
+
+void FitModelMgrSingleton::SortTargetPtsByDist()
+{
+    // Sorting on a stale measurement would put the points in an order that no longer describes the
+    // model, so measure first.  This also validates the points.
+    UpdateDist();
+
+    // The current index names a slot in the vector, and sorting moves points between slots.  Hold
+    // the point itself so the selection follows it rather than staying behind on whatever lands in
+    // its old slot.
+    TargetPt* curr = GetCurrTargetPt();
+
+    // Stable, so points that are the same distance away keep the order they were added in.
+    std::stable_sort( m_TargetPts.begin(), m_TargetPts.end(), DistCompare );
+
+    m_CurrTargetPtIndex = -1;
+    for ( int i = 0 ; i < ( int )m_TargetPts.size() ; i++ )
+    {
+        if ( m_TargetPts[i] == curr )
+        {
+            m_CurrTargetPtIndex = i;
+            break;
+        }
+    }
+
+    ForgetUndoState();
+}
+
+int FitModelMgrSingleton::MoveTargetPt( int index, int reorder_type )
+{
+    if ( index < 0 || index >= ( int )m_TargetPts.size() )
+    {
+        return index;
+    }
+
+    int new_index = ReorderVectorIndex( m_TargetPts, index, reorder_type );
+
+    ForgetUndoState();
+
+    return new_index;
+}
+
+void FitModelMgrSingleton::MoveCurrTargetPt( int reorder_type )
+{
+    m_CurrTargetPtIndex = MoveTargetPt( m_CurrTargetPtIndex, reorder_type );
+}
+
 void FitModelMgrSingleton::UpdateNumOptVars()
 {
     int nvar = m_VarVec.size();
@@ -601,11 +747,11 @@ void FitModelMgrSingleton::UpdateNumOptVars()
     {
         TargetPt* tpt = m_TargetPts[i];
 
-        if ( tpt->GetUType() == TargetPt::FREE )
+        if ( tpt->GetUType() == vsp::FIT_MODEL_FREE )
         {
             m_NumOptVars++;
         }
-        if ( tpt->GetWType() == TargetPt::FREE )
+        if ( tpt->GetWType() == vsp::FIT_MODEL_FREE )
         {
             m_NumOptVars++;
         }
@@ -627,24 +773,34 @@ void FitModelMgrSingleton::BuildPtrVec()
         m_ParmPtrVec[i] = ParmMgr.FindParm( m_VarVec[i] );
     }
 
-    set<string> usedgeoms;
-    set<string>::iterator it;
+    // Whether a surface closes on itself in U or W decides how the optimizer wraps a free
+    // coordinate, and it is a property of the surface rather than of the Geom -- two surfaces of
+    // one Geom can differ.  So this is gathered per Geom and surface index, not per Geom.
+    set< pair< string, int > > usedsurfs;
+    set< pair< string, int > >::iterator it;
 
     for ( int i = 0 ; i < npt; i++ )
     {
         TargetPt* tpt = m_TargetPts[i];
-        usedgeoms.insert( tpt->GetMatchGeom() );
+        usedsurfs.insert( make_pair( tpt->GetMatchGeom(), tpt->GetSurfIndx() ) );
     }
 
-    unordered_map<string,SurfData> geomdata;
-    for ( it = usedgeoms.begin(); it != usedgeoms.end(); ++it )
+    map< pair< string, int >, SurfData > surfdata;
+    for ( it = usedsurfs.begin(); it != usedsurfs.end(); ++it )
     {
-        const string& id = *it;
         SurfData s;
-        s.m_GeomPtr = VehicleMgr.GetVehicle()->FindGeom( id );
-        s.m_UClosed = s.m_GeomPtr->GetSurfPtr(0)->IsClosedU();
-        s.m_WClosed = s.m_GeomPtr->GetSurfPtr(0)->IsClosedW();
-        geomdata[ id ] = s;
+        s.m_GeomPtr = VehicleMgr.GetVehicle()->FindGeom( it->first );
+        s.m_UClosed = false;
+        s.m_WClosed = false;
+
+        const VspSurf* surf = MatchSurf( s.m_GeomPtr, it->second );
+        if ( surf )
+        {
+            s.m_UClosed = surf->IsClosedU();
+            s.m_WClosed = surf->IsClosedW();
+        }
+
+        surfdata[ *it ] = s;
     }
 
     m_TargetGeomPtrVec.clear();
@@ -653,7 +809,7 @@ void FitModelMgrSingleton::BuildPtrVec()
     for ( int i = 0 ; i < npt; i++ )
     {
         TargetPt* tpt = m_TargetPts[i];
-        SurfData s = geomdata[ tpt->GetMatchGeom() ];
+        SurfData s = surfdata[ make_pair( tpt->GetMatchGeom(), tpt->GetSurfIndx() ) ];
 
         m_TargetGeomPtrVec[i] = s.m_GeomPtr;
         tpt->SetUClosed( s.m_UClosed );
@@ -665,6 +821,11 @@ void FitModelMgrSingleton::RefineTargetUW()
 {
     ValidateTargetPts();
 
+    // Refine only moves the free surface coordinates, but the snapshot is the whole optimization
+    // vector either way -- the Parm entries simply come back unchanged.
+    BuildPtrVec();
+    SaveUndoState();
+
     int npt = m_TargetPts.size();
 
     for ( int i = 0 ; i < npt; i++ )
@@ -673,12 +834,19 @@ void FitModelMgrSingleton::RefineTargetUW()
         Geom* g = VehicleMgr.GetVehicle()->FindGeom( tpt->GetMatchGeom() );
 
         tpt->RefineUW( g );
+        tpt->UpdateDist( g );
     }
+
+    m_ParmPtrVec.clear();
+    m_TargetGeomPtrVec.clear();
 }
 
 void FitModelMgrSingleton::SearchTargetUW()
 {
     ValidateTargetPts();
+
+    BuildPtrVec();
+    SaveUndoState();
 
     int npt = m_TargetPts.size();
 
@@ -688,7 +856,11 @@ void FitModelMgrSingleton::SearchTargetUW()
         Geom* g = VehicleMgr.GetVehicle()->FindGeom( tpt->GetMatchGeom() );
 
         tpt->SearchUW( g );
+        tpt->UpdateDist( g );
     }
+
+    m_ParmPtrVec.clear();
+    m_TargetGeomPtrVec.clear();
 }
 
 void FitModelMgrSingleton::ParmToX( double *x )
@@ -709,12 +881,12 @@ void FitModelMgrSingleton::ParmToX( double *x )
 
         vec2d uw = tpt->GetUW();
 
-        if ( tpt->GetUType() == TargetPt::FREE )
+        if ( tpt->GetUType() == vsp::FIT_MODEL_FREE )
         {
             x[xindx] = uw.x();
             xindx++;
         }
-        if ( tpt->GetWType() == TargetPt::FREE )
+        if ( tpt->GetWType() == vsp::FIT_MODEL_FREE )
         {
             x[xindx] = uw.y();
             xindx++;
@@ -740,12 +912,12 @@ void FitModelMgrSingleton::XtoParm( const double *x )
 
         vec2d uw = tpt->GetUW();
 
-        if ( tpt->GetUType() == TargetPt::FREE )
+        if ( tpt->GetUType() == vsp::FIT_MODEL_FREE )
         {
             uw.set_x( Clamp01( x[xindx], tpt->IsUClosed() ) );
             xindx++;
         }
-        if ( tpt->GetWType() == TargetPt::FREE )
+        if ( tpt->GetWType() == vsp::FIT_MODEL_FREE )
         {
             uw.set_y( Clamp01( x[xindx], tpt->IsWClosed() ) );
             xindx++;
@@ -753,6 +925,101 @@ void FitModelMgrSingleton::XtoParm( const double *x )
 
         tpt->SetUW( uw );
     }
+}
+
+string FitModelMgrSingleton::UndoSignature()
+{
+    // Everything the layout and the meaning of the optimization vector depends on: which Parms are
+    // variables, in order, and for each target point the surface it is matched to and whether each
+    // of its surface coordinates is free.
+    string sig;
+
+    for ( int i = 0 ; i < ( int )m_VarVec.size(); i++ )
+    {
+        sig += m_VarVec[i] + ";";
+    }
+
+    sig += "|";
+
+    for ( int i = 0 ; i < ( int )m_TargetPts.size(); i++ )
+    {
+        TargetPt* tpt = m_TargetPts[i];
+
+        sig += tpt->GetMatchGeom() + ",";
+        sig += std::to_string( tpt->GetSurfIndx() ) + ",";
+        sig += std::to_string( tpt->GetUType() ) + ",";
+        sig += std::to_string( tpt->GetWType() ) + ";";
+    }
+
+    return sig;
+}
+
+void FitModelMgrSingleton::SaveUndoState()
+{
+    m_XPrevious.resize( m_NumOptVars );
+
+    if ( m_NumOptVars > 0 )
+    {
+        ParmToX( m_XPrevious.data() );
+    }
+
+    m_UndoSignature = UndoSignature();
+    m_UndoValid = true;
+}
+
+void FitModelMgrSingleton::ForgetUndoState()
+{
+    m_UndoValid = false;
+}
+
+bool FitModelMgrSingleton::CanUndo()
+{
+    if ( !m_UndoValid )
+    {
+        return false;
+    }
+
+    // A snapshot taken against a different set of variables or target points cannot be put back.
+    return UndoSignature() == m_UndoSignature;
+}
+
+bool FitModelMgrSingleton::Undo()
+{
+    ValidateTargetPts();
+
+    if ( !CanUndo() )
+    {
+        // Whatever was saved no longer describes the current setup, so it is of no further use.
+        m_UndoValid = false;
+        return false;
+    }
+
+    BuildPtrVec();
+
+    if ( ( int )m_XPrevious.size() != m_NumOptVars )
+    {
+        m_UndoValid = false;
+        m_ParmPtrVec.clear();
+        m_TargetGeomPtrVec.clear();
+        return false;
+    }
+
+    if ( m_NumOptVars > 0 )
+    {
+        XtoParm( m_XPrevious.data() );
+    }
+
+    VehicleMgr.GetVehicle()->ForceUpdate( GeomBase::SURF );
+
+    m_ParmPtrVec.clear();
+    m_TargetGeomPtrVec.clear();
+
+    // One level of undo; the snapshot is spent.
+    m_UndoValid = false;
+
+    UpdateDist();
+
+    return true;
 }
 
 double FitModelMgrSingleton::Clamp01( double x, bool periodic )
@@ -781,6 +1048,14 @@ void FitModelMgrSingleton::UpdateDist()
 
     int npt = m_TargetPts.size();
 
+    // With no target points there is no distance to report.  Averaging over none of them used to
+    // divide by zero; -1 marks the absence, since zero is a real and wanted answer.
+    if ( npt == 0 )
+    {
+        m_DistMetric = -1.0;
+        return;
+    }
+
     m_DistMetric = 0;
 
     // Calculate target point distances
@@ -789,6 +1064,10 @@ void FitModelMgrSingleton::UpdateDist()
         TargetPt* tpt = m_TargetPts[i];
 
         vec3d delta = tpt->CalcDelta();
+
+        // Store what each point contributes so the browser can display it without re-evaluating
+        // the surface every time it refreshes.
+        tpt->SetDist( delta.mag() );
 
         m_DistMetric += dot( delta, delta );
     }
@@ -891,7 +1170,7 @@ void FitModelMgrSingleton::CalcMetricDeriv( const double *x, double *y, double *
         TargetPt* tpt = m_TargetPts[i];
         Geom* g = m_TargetGeomPtrVec[i];
 
-        if ( tpt->GetUType() == TargetPt::FREE )
+        if ( tpt->GetUType() == vsp::FIT_MODEL_FREE )
         {
             vec3d du = tpt->CalcDerivU( g );
 
@@ -901,7 +1180,7 @@ void FitModelMgrSingleton::CalcMetricDeriv( const double *x, double *y, double *
 
             xindx++;
         }
-        if ( tpt->GetWType() == TargetPt::FREE )
+        if ( tpt->GetWType() == vsp::FIT_MODEL_FREE )
         {
             vec3d dw = tpt->CalcDerivW( g );
 
@@ -922,6 +1201,8 @@ int FitModelMgrSingleton::Optimize()
     ValidateTargetPts();
 
     BuildPtrVec();
+
+    SaveUndoState();
 
     int nvar = m_NumOptVars;
     int npt = m_TargetPts.size();
@@ -965,6 +1246,14 @@ int FitModelMgrSingleton::Optimize()
     XtoParm( x );
     VehicleMgr.GetVehicle()->ForceUpdate( GeomBase::SURF ); // Update tesselation to ensure Geom is drawn properly
 
+    // The solution moved both the model and the surface coordinates, so every stored distance is
+    // stale.  Bring them current here, while the Geom pointers the optimizer built are still on
+    // hand, rather than leaving it to whoever calls next.
+    for ( int i = 0 ; i < npt; i++ )
+    {
+        m_TargetPts[i]->UpdateDist( m_TargetGeomPtrVec[i] );
+    }
+
     m_ParmPtrVec.clear();
     m_TargetGeomPtrVec.clear();
 
@@ -1004,6 +1293,26 @@ void FitModelMgrSingleton::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
     m_TargetLineDrawObj.m_LineColor = vec3d( 0.0, 0.0, 0.0 );
     m_TargetLineDrawObj.m_GeomChanged = true;
 
+    // A DrawObj carries one color, so the selected target point cannot be blue while it sits in
+    // the same DrawObj as the black ones.  It goes into these instead, which are otherwise the
+    // same.  They stay empty, and nothing is drawn from them, when nothing is selected.
+    m_HighlightPntDrawObj.m_PntVec.clear();
+    m_HighlightLineDrawObj.m_PntVec.clear();
+
+    m_HighlightPntDrawObj.m_GeomID = "IDFORTARGETHIGHLIGHTPNTDO";
+    m_HighlightPntDrawObj.m_Type = DrawObj::VSP_POINTS;
+    m_HighlightPntDrawObj.m_PointSize = 8.0;
+    m_HighlightPntDrawObj.m_PointColor = vec3d( 0.0, 0.0, 1.0 );
+    m_HighlightPntDrawObj.m_GeomChanged = true;
+
+    m_HighlightLineDrawObj.m_GeomID = "IDFORTARGETHIGHLIGHTLINEDO";
+    m_HighlightLineDrawObj.m_Type = DrawObj::VSP_LINES;
+    m_HighlightLineDrawObj.m_LineWidth = 1.0;
+    m_HighlightLineDrawObj.m_LineColor = vec3d( 0.0, 0.0, 1.0 );
+    m_HighlightLineDrawObj.m_GeomChanged = true;
+
+    // Can reset the current index, so it has to happen before that index is used to pick out the
+    // point to highlight.
     ValidateTargetPts();
 
     int numOfTargetPts = FitModelMgr.GetNumTargetPt();
@@ -1012,14 +1321,29 @@ void FitModelMgrSingleton::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
         TargetPt * tpnt = FitModelMgr.GetTargetPt( i );
         vec3d pt1 = tpnt->GetPt() ;
         vec3d pt2 = tpnt->GetMatchPt();
-        m_TargetPntDrawObj.m_PntVec.push_back( pt1 );
-        m_TargetPntDrawObj.m_PntVec.push_back( pt2 );
 
-        m_TargetLineDrawObj.m_PntVec.push_back( pt1 );
-        m_TargetLineDrawObj.m_PntVec.push_back( pt2 );
+        DrawObj *pntdo = &m_TargetPntDrawObj;
+        DrawObj *linedo = &m_TargetLineDrawObj;
+
+        if ( i == m_CurrTargetPtIndex )
+        {
+            pntdo = &m_HighlightPntDrawObj;
+            linedo = &m_HighlightLineDrawObj;
+        }
+
+        pntdo->m_PntVec.push_back( pt1 );
+        pntdo->m_PntVec.push_back( pt2 );
+
+        linedo->m_PntVec.push_back( pt1 );
+        linedo->m_PntVec.push_back( pt2 );
     }
     draw_obj_vec.push_back( &m_TargetPntDrawObj );
     draw_obj_vec.push_back( &m_TargetLineDrawObj );
+
+    // Pushed even when they hold nothing, so that deselecting clears what was drawn for the point
+    // that used to be selected.
+    draw_obj_vec.push_back( &m_HighlightPntDrawObj );
+    draw_obj_vec.push_back( &m_HighlightLineDrawObj );
 
 }
 
@@ -1344,12 +1668,14 @@ void FitModelMgrSingleton::AddSelectedPts( const string &tgtGeomID )
         tpt->SetPt( pt );
         tpt->SetMatchGeom( tgtGeomID );
         tpt->SetUW( uw );
+        tpt->SetSurfIndx( veh->m_SurfIndx.Get() );
         tpt->SetUType( veh->m_UType.Get() );
         tpt->SetWType( veh->m_WType.Get() );
 
         Geom* g = veh->FindGeom( tpt->GetMatchGeom() );
 
         tpt->SearchUW( g );
+        tpt->UpdateDist( g );
 
         AddTargetPt( tpt );
     }
@@ -1466,6 +1792,14 @@ int FitModelMgrSingleton::Load()
 
     //===== Free Doc =====//
     xmlFreeDoc( doc );
+
+    // The file names Geoms by ID.  Drop any target point naming a Geom this model does not have,
+    // or one without a surface, rather than carrying it into the optimizer.
+    ValidateTargetPts();
+
+    // Distance is not written to the file, so the points come back with none.  Measure them
+    // against the model as loaded.
+    UpdateDist();
 
     return 0;
 }

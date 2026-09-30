@@ -11,7 +11,6 @@
 #if !defined(GRIDDENSITY_GRIDDENSITY__INCLUDED_)
 #define GRIDDENSITY_GRIDDENSITY__INCLUDED_
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include <stdio.h>
@@ -77,6 +76,9 @@ public:
 
     virtual void ReadV2File( xmlNodePtr &root ) = 0;
 
+    // Scale this source's dimensional influence controls (length and radius) by currentScale.
+    virtual void Scale( double currentScale );
+
     Parm m_Len;
     Parm m_Rad;
 
@@ -123,6 +125,8 @@ public:
 
     Parm m_ULoc2;
     Parm m_WLoc2;
+
+    virtual void Scale( double currentScale );
 
     Parm m_Len2;
     Parm m_Rad2;
@@ -459,6 +463,9 @@ public:
 
     virtual double GetModelLen() { return 1.0; };
     virtual double GetDomainLen() { return 1.0; };
+
+    // Holds sources belonging to Geoms, which Renew deletes.
+    virtual void ResetToInitVals();
 
     BoolParm m_RigorLimit;
     Parm m_BaseLen;

@@ -140,6 +140,10 @@ void ScriptMgrSingleton::Init( )
     m_Vec3dArrayType  = se->GetTypeInfoById( se->GetTypeIdByDecl( "array<vec3d>" ) );
     assert( m_Vec3dArrayType );
 
+    RegisterVec2d( m_ScriptEngine );
+    m_Vec2dArrayType  = se->GetTypeInfoById( se->GetTypeIdByDecl( "array<vec2d>" ) );
+    assert( m_Vec2dArrayType );
+
     RegisterMatrix4d( m_ScriptEngine );
     RegisterCustomGeomMgr( m_ScriptEngine );
     RegisterAdvLinkMgr( m_ScriptEngine );
@@ -1052,6 +1056,8 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     assert( r >= 0 );
     r = se->RegisterEnumValue( "ERROR_CODE", "VSP_GUI_DEVICE_DEACTIVATED", vsp::VSP_GUI_DEVICE_DEACTIVATED );
     assert( r >= 0 );
+    r = se->RegisterEnumValue( "ERROR_CODE", "VSP_COULD_NOT_CREATE_BACKGROUND3D", vsp::VSP_COULD_NOT_CREATE_BACKGROUND3D );
+    assert( r >= 0 );
     r = se->RegisterEnumValue( "ERROR_CODE", "VSP_NUM_ERROR_CODE", vsp::VSP_NUM_ERROR_CODE );
     assert( r >= 0 );
 
@@ -1360,6 +1366,13 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     assert( r >= 0 );
 
 
+    r = se->RegisterEnum( "FIT_MODEL_TARGET_TYPE" );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "FIT_MODEL_TARGET_TYPE", "FIT_MODEL_FIXED", FIT_MODEL_FIXED );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "FIT_MODEL_TARGET_TYPE", "FIT_MODEL_FREE", FIT_MODEL_FREE );
+    assert( r >= 0 );
+
     r = se->RegisterEnum( "FF_B_EQN" );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "FF_B_EQN", "FF_B_MANUAL", FF_B_MANUAL );
@@ -1656,6 +1669,12 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "ROUTING_GEOM_SCREEN", ROUTING_GEOM_SCREEN );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "AUXILIARY_GEOM_SCREEN", AUXILIARY_GEOM_SCREEN );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "GEAR_GEOM_SCREEN", GEAR_GEOM_SCREEN );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "COBRA_GEOM_SCREEN", COBRA_GEOM_SCREEN );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "NGON_MESH_GEOM_SCREEN", NGON_MESH_GEOM_SCREEN );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "NUM_GEOM_SCREENS", NUM_GEOM_SCREENS );
     assert( r >= 0 );
@@ -3022,6 +3041,146 @@ void ScriptMgrSingleton::RegisterVec3d( asIScriptEngine* se )
 
 }
 
+//==== vec2d Constructors ====//
+static void Vec2dDefaultConstructor( vec2d *self )
+{
+    new( self ) vec2d();
+}
+static void Vec2dCopyConstructor( const vec2d &other, vec2d *self )
+{
+    new( self ) vec2d( other );
+}
+static void Vec2dInitConstructor( double x, double y, vec2d *self )
+{
+    new( self ) vec2d( x, y );
+}
+
+// vec2d has no operator== in C++, and comparing component by component is what a script means by
+// it.  The array add-on also needs the subtype to provide opEquals before array<vec2d> can be
+// compared, which is why this is registered rather than left out.
+static bool Vec2dEquals( const vec2d &a, const vec2d &b )
+{
+    return a.x() == b.x() && a.y() == b.y();
+}
+
+//==== Register Vec2d Object ====//
+void ScriptMgrSingleton::RegisterVec2d( asIScriptEngine* se )
+{
+    // Same trait flags as vec3d, and for the same reason: vec2d is trivially copyable and all of
+    // its members are double, so ARM64 returns it in the floating point registers.  AngelScript
+    // only knows to expect that when ALLFLOATS and ALIGN8 are both set.
+    int r = se->RegisterObjectType( "vec2d", sizeof( vec2d ), asOBJ_VALUE | asOBJ_POD | asGetTypeTraits< vec2d >() | asOBJ_APP_CLASS_ALLFLOATS | asOBJ_APP_CLASS_ALIGN8 );
+    assert( r >= 0 );
+
+    //==== Register the vec2d Constructors  ====//
+    r = se->RegisterObjectBehaviour( "vec2d", asBEHAVE_CONSTRUCT, "void f()", asFUNCTION( Vec2dDefaultConstructor ), asCALL_CDECL_OBJLAST );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectBehaviour( "vec2d", asBEHAVE_CONSTRUCT, "void f(double, double)", asFUNCTION( Vec2dInitConstructor ), asCALL_CDECL_OBJLAST );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectBehaviour( "vec2d", asBEHAVE_CONSTRUCT, "void f(const vec2d &in)", asFUNCTION( Vec2dCopyConstructor ), asCALL_CDECL_OBJLAST );
+    assert( r >= 0 );
+
+    //==== Register the vec2d Methods  ====//
+    r = se->RegisterObjectMethod( "vec2d", "double& opIndex(int) const", asMETHODPR( vec2d, operator[], ( int ), double& ), asCALL_THISCALL );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "double x() const", asMETHOD( vec2d, x ), asCALL_THISCALL );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "double y() const", asMETHOD( vec2d, y ), asCALL_THISCALL );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "vec2d& set_xy(double x, double y)", asMETHOD( vec2d, set_xy ), asCALL_THISCALL );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "vec2d& set_x(double x)", asMETHOD( vec2d, set_x ), asCALL_THISCALL );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "vec2d& set_y(double y)", asMETHOD( vec2d, set_y ), asCALL_THISCALL );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "double mag() const", asMETHOD( vec2d, mag ), asCALL_THISCALL );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "void normalize()", asMETHOD( vec2d, normalize ), asCALL_THISCALL );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "vec2d opAdd(const vec2d &in) const", asFUNCTIONPR( operator+, ( const vec2d&, const vec2d& ), vec2d ), asCALL_CDECL_OBJFIRST );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "vec2d opSub(const vec2d &in) const", asFUNCTIONPR( operator-, ( const vec2d&, const vec2d& ), vec2d ), asCALL_CDECL_OBJFIRST );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "vec2d opMul(double b) const", asFUNCTIONPR( operator*, ( const vec2d & a, double b ), vec2d ), asCALL_CDECL_OBJFIRST );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "vec2d opMul_r(const vec2d &in) const", asFUNCTIONPR( operator*, ( const vec2d&, const vec2d& ), vec2d ), asCALL_CDECL_OBJFIRST );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "vec2d opDiv(double b) const", asFUNCTIONPR( operator/, ( const vec2d&, double b ), vec2d ), asCALL_CDECL_OBJFIRST );
+    assert( r >= 0 );
+
+    r = se->RegisterObjectMethod( "vec2d", "bool opEquals(const vec2d &in) const", asFUNCTION( Vec2dEquals ), asCALL_CDECL_OBJFIRST );
+    assert( r >= 0 );
+
+    //==== Register the vec2d free functions ====//
+    r = se->RegisterGlobalFunction( "double dist(const vec2d& in a, const vec2d& in b)", asFUNCTIONPR( dist, ( const vec2d&, const vec2d& ), double ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double dist_squared(const vec2d& in a, const vec2d& in b)", asFUNCTIONPR( dist_squared, ( const vec2d&, const vec2d& ), double ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double dot(const vec2d& in a, const vec2d& in b)", asFUNCTIONPR( dot, ( const vec2d&, const vec2d& ), double ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    // In two dimensions the cross product is a single scalar, not a vector.
+    r = se->RegisterGlobalFunction( "double cross(const vec2d& in a, const vec2d& in b)", asFUNCTIONPR( cross, ( const vec2d&, const vec2d& ), double ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double angle(const vec2d& in a, const vec2d& in b)", asFUNCTIONPR( angle, ( const vec2d&, const vec2d& ), double ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double cos_angle(const vec2d& in a, const vec2d& in b)", asFUNCTIONPR( cos_angle, ( const vec2d&, const vec2d& ), double ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "vec2d proj_pnt_on_line_seg(const vec2d& in line_A, const vec2d& in line_B, const vec2d& in pnt)", asFUNCTIONPR( proj_pnt_on_line_seg, ( const vec2d&, const vec2d&, const vec2d& ), vec2d ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double proj_pnt_on_line_u(const vec2d& in line_A, const vec2d& in line_B, const vec2d& in pnt)", asFUNCTIONPR( proj_pnt_on_line_u, ( const vec2d&, const vec2d&, const vec2d& ), double ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double det(const vec2d& in p0, const vec2d& in p1, const vec2d& in offset)", asFUNCTIONPR( det, ( const vec2d&, const vec2d&, const vec2d& ), double ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double orient2d(const vec2d& in p0, const vec2d& in p1, const vec2d& in p)", asFUNCTIONPR( orient2d, ( const vec2d&, const vec2d&, const vec2d& ), double ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    // AngelScript passes these back through &out parameters, so unlike the Python bindings they
+    // need no typemap of their own.
+    r = se->RegisterGlobalFunction( "int seg_seg_intersect(const vec2d& in pnt_A, const vec2d& in pnt_B, const vec2d& in pnt_C, const vec2d& in pnt_D, vec2d& out int_pnt, double& out t1, double& out t2)", asFUNCTIONPR( seg_seg_intersect, ( const vec2d&, const vec2d&, const vec2d&, const vec2d&, vec2d&, double&, double& ), int ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void bi_lin_interp(const vec2d& in p0, const vec2d& in p1, const vec2d& in p2, const vec2d& in p3, double s, double t, vec2d& out p_out)", asFUNCTIONPR( bi_lin_interp, ( const vec2d&, const vec2d&, const vec2d&, const vec2d&, double, double, vec2d& ), void ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int inverse_bi_lin_interp(const vec2d& in p0, const vec2d& in p1, const vec2d& in p2, const vec2d& in p3, const vec2d& in p, double& out s, double& out t, double& out s2, double& out t2)", asFUNCTIONPR( inverse_bi_lin_interp, ( const vec2d&, const vec2d&, const vec2d&, const vec2d&, const vec2d&, double&, double&, double&, double& ), int ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    // The polygon functions take a vector<vec2d>, so they go through a thin wrapper that turns the
+    // script array into one.  PolyArea2d and PolyCentroid2d are named apart from the vec3d
+    // poly_area and poly_centroid on the C++ side only; the script sees the usual names.
+    r = se->RegisterGlobalFunction( "bool PointInPolygon(const vec2d& in R, array<vec2d>@+ pnts)", asMETHOD( ScriptMgrSingleton, PointInPolygon ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double poly_area(array<vec2d>@+ pnt_vec)", asMETHOD( ScriptMgrSingleton, PolyArea2d ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "vec2d poly_centroid(array<vec2d>@+ pnt_vec)", asMETHOD( ScriptMgrSingleton, PolyCentroid2d ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+}
+
 //==== Matrix4d Constructors ====//
 static void Matrix4dDefaultConstructor( Matrix4d *self )
 {
@@ -3868,6 +4027,9 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     r = se->RegisterGlobalFunction( "string GetComputationFileName( int file_type )", asFUNCTION( vsp::GetComputationFileName ), asCALL_CDECL );
     assert( r >= 0 );
 
+    r = se->RegisterGlobalFunction( "void RegisterCFDMeshAnalyses()", asFUNCTION( vsp::RegisterCFDMeshAnalyses ), asCALL_CDECL );
+    assert( r >= 0 );
+
     r = se->RegisterGlobalFunction( "void SetComputationFileName( int file_type, const string & in file_name )", asFUNCTION( vsp::SetComputationFileName ), asCALL_CDECL );
     assert( r >= 0 ); // TODO: FIXME for FEA Mesh
 
@@ -3904,6 +4066,13 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
 
     r = se->RegisterGlobalFunction( "void DeleteCFDSource( const string & in geom_id, int source_index )", asFUNCTION( vsp::DeleteCFDSource ), asCALL_CDECL );
     assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SetCFDFarFieldGeomID( const string & in geom_id )", asFUNCTION( vsp::SetCFDFarFieldGeomID ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string GetCFDFarFieldGeomID()", asFUNCTION( vsp::GetCFDFarFieldGeomID ), asCALL_CDECL );
+    assert( r >= 0 );
+
 
     r = se->RegisterGlobalFunction( "void DeleteAllCFDSources()", asFUNCTION( vsp::DeleteAllCFDSources ), asCALL_CDECL );
     assert( r >= 0 );
@@ -3946,7 +4115,7 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     assert( r >= 0 );
 
 
-    r = se->RegisterGlobalFunction( "string GetAnalysisInputDoc( const string & in analysis, const string & in name )", asFUNCTION( vsp::GetNumAnalysisInputData ), asCALL_CDECL );
+    r = se->RegisterGlobalFunction( "string GetAnalysisInputDoc( const string & in analysis, const string & in name )", asFUNCTION( vsp::GetAnalysisInputDoc ), asCALL_CDECL );
     assert( r >= 0 );
 
 
@@ -4100,7 +4269,7 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
 
     r = se->RegisterGlobalFunction(
             "string GetResultsEntryDoc( const string & in results_id, const string & in data_name )",
-            asFUNCTION( vsp::GetResultsSetDoc ), asCALL_CDECL );
+            asFUNCTION( vsp::GetResultsEntryDoc ), asCALL_CDECL );
     assert( r >= 0 );
 
 
@@ -4428,6 +4597,9 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     r = se->RegisterGlobalFunction( "array<string>@+ PasteGeomClipboard( const string & in parent_id = \"\" )", asMETHOD( ScriptMgrSingleton, PasteGeomClipboard ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
     assert( r >= 0 );
 
+    r = se->RegisterGlobalFunction( "string ConvertFuselageToStack( const string & in geom_id )", asFUNCTION( vsp::ConvertFuselageToStack ), asCALL_CDECL );
+    assert( r >= 0 );
+
 
     r = se->RegisterGlobalFunction( "array<string>@+ FindGeoms()", asMETHOD( ScriptMgrSingleton, FindGeoms ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
     assert( r >= 0 );
@@ -4657,6 +4829,18 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     r = se->RegisterGlobalFunction( "string FindActuatorDisk( int disk_index )", asFUNCTION( vsp::FindActuatorDisk ), asCALL_CDECL );
     assert( r >= 0 );
 
+    r = se->RegisterGlobalFunction( "int GetNumLights()", asFUNCTION( vsp::GetNumLights ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string FindLight( int index )", asFUNCTION( vsp::FindLight ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string FindControlSurfaceGroup( int group_index )", asFUNCTION( vsp::FindControlSurfaceGroup ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string GetFeaAssemblyConnectionID( const string & in assembly_id, int connection_index )", asFUNCTION( vsp::GetFeaAssemblyConnectionID ), asCALL_CDECL );
+    assert( r >= 0 );
+
 
     r = se->RegisterGlobalFunction( "int GetNumActuatorDisks()", asFUNCTION( vsp::GetNumActuatorDisks ), asCALL_CDECL );
     assert( r >= 0 );
@@ -4819,6 +5003,32 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     assert( r >= 0 );
 
 
+    r = se->RegisterGlobalFunction( "int AddSkinSpine( const string& in geom_id, double w01 )", asFUNCTION( vsp::AddSkinSpine ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void DelSkinSpine( const string& in geom_id, int index )", asFUNCTION( vsp::DelSkinSpine ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void DelAllSkinSpines( const string& in geom_id )", asFUNCTION( vsp::DelAllSkinSpines ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int GetNumSkinSpines( const string& in geom_id )", asFUNCTION( vsp::GetNumSkinSpines ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string GetSkinSpineName( const string& in geom_id, int index )", asFUNCTION( vsp::GetSkinSpineName ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SetSkinSpineName( const string& in geom_id, int index, const string& in name )", asFUNCTION( vsp::SetSkinSpineName ), asCALL_CDECL );
+    assert( r >= 0 );
+
+
+    r = se->RegisterGlobalFunction( "string GetSkinSpineID( const string& in xsec_id, int index )", asFUNCTION( vsp::GetSkinSpineID ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string GetSkinSpineParm( const string& in spine_id, const string& in name )", asFUNCTION( vsp::GetSkinSpineParm ), asCALL_CDECL );
+    assert( r >= 0 );
+
+
     r = se->RegisterGlobalFunction( "array<double>@+ GetXSecTanAngles( const string& in xsec_id, int side )", asMETHOD( ScriptMgrSingleton, GetXSecTanAngles ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
     assert( r >= 0 );
 
@@ -4878,6 +5088,9 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     r = se->RegisterGlobalFunction( "array<double>@+ GetVKTAirfoilCpDist( const double& in alpha, const double& in epsilon, const double& in kappa, const double& in tau, array<vec3d>@+ xydata )", asMETHOD( ScriptMgrSingleton, GetVKTAirfoilCpDist ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
     assert( r >= 0 );
 
+
+    r = se->RegisterGlobalFunction( "double IntegrateEllipsoidFlow( const vec3d & in abc_rad, const int & in abc_index )", asFUNCTION( vsp::IntegrateEllipsoidFlow ), asCALL_CDECL );
+    assert( r >= 0 );
 
     r = se->RegisterGlobalFunction( "array<vec3d>@+ GetEllipsoidSurfPnts( const vec3d& in center, const vec3d& in abc_rad, int u_npts = 20, int w_npts = 20 )", asMETHOD( ScriptMgrSingleton, GetEllipsoidSurfPnts ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
     assert( r >= 0 );  // TODO: Example
@@ -5417,6 +5630,199 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     r = se->RegisterGlobalFunction( "double SnapParm( const string & in parm_id, double target_min_dist, bool inc_flag, int set, bool useMode = false, const string & in modeID = string() )", asFUNCTION( vsp::SnapParm ), asCALL_CDECL );
     assert( r >= 0 );
 
+    //=== Register Point Cloud Functions ====//
+
+    r = se->RegisterGlobalFunction( "string CreatePtCloudGeomFromPts( array<vec3d>@+ pt_arr, const string & in name )", asMETHOD( ScriptMgrSingleton, CreatePtCloudGeomFromPts ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ KeepPtsInBBox( array<vec3d>@+ pt_arr, const vec3d & in min_pt, const vec3d & in max_pt )", asMETHOD( ScriptMgrSingleton, KeepPtsInBBox ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ RemovePtsInBBox( array<vec3d>@+ pt_arr, const vec3d & in min_pt, const vec3d & in max_pt )", asMETHOD( ScriptMgrSingleton, RemovePtsInBBox ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ KeepPtsInRange( array<vec3d>@+ pt_arr, int dir_index, double low, double high )", asMETHOD( ScriptMgrSingleton, KeepPtsInRange ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ RemovePtsInRange( array<vec3d>@+ pt_arr, int dir_index, double low, double high )", asMETHOD( ScriptMgrSingleton, RemovePtsInRange ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ KeepPtsAbove( array<vec3d>@+ pt_arr, int dir_index, double val )", asMETHOD( ScriptMgrSingleton, KeepPtsAbove ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ KeepPtsBelow( array<vec3d>@+ pt_arr, int dir_index, double val )", asMETHOD( ScriptMgrSingleton, KeepPtsBelow ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ KeepPtsNearPt( array<vec3d>@+ pt_arr, const vec3d & in center, double radius )", asMETHOD( ScriptMgrSingleton, KeepPtsNearPt ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ RemovePtsNearPt( array<vec3d>@+ pt_arr, const vec3d & in center, double radius )", asMETHOD( ScriptMgrSingleton, RemovePtsNearPt ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ KeepPtsNearGeom( array<vec3d>@+ pt_arr, const string & in geom_id, int surf_indx, double tol )", asMETHOD( ScriptMgrSingleton, KeepPtsNearGeom ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ RemovePtsNearGeom( array<vec3d>@+ pt_arr, const string & in geom_id, int surf_indx, double tol )", asMETHOD( ScriptMgrSingleton, RemovePtsNearGeom ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ UniquePts( array<vec3d>@+ pt_arr, double tol )", asMETHOD( ScriptMgrSingleton, UniquePts ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ UnionPts( array<vec3d>@+ pt_arr_a, array<vec3d>@+ pt_arr_b, double tol )", asMETHOD( ScriptMgrSingleton, UnionPts ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ IntersectPts( array<vec3d>@+ pt_arr_a, array<vec3d>@+ pt_arr_b, double tol )", asMETHOD( ScriptMgrSingleton, IntersectPts ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ SubtractPts( array<vec3d>@+ pt_arr_a, array<vec3d>@+ pt_arr_b, double tol )", asMETHOD( ScriptMgrSingleton, SubtractPts ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    //=== Register Fit Model Functions ====//
+
+    r = se->RegisterGlobalFunction( "void ResetFitModel()", asFUNCTION( vsp::ResetFitModel ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int AddFitModelTargetPt( const string & in geom_id, int surf_indx, const vec3d & in pt, int u_type = FIT_MODEL_FREE, int w_type = FIT_MODEL_FREE, double u = 0.0, double w = 0.0 )", asFUNCTION( vsp::AddFitModelTargetPt ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int AddFitModelTargetPtFixedU( const string & in geom_id, int surf_indx, const vec3d & in pt, double u )", asFUNCTION( vsp::AddFitModelTargetPtFixedU ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int AddFitModelTargetPtFixedW( const string & in geom_id, int surf_indx, const vec3d & in pt, double w )", asFUNCTION( vsp::AddFitModelTargetPtFixedW ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int AddFitModelTargetPtFixedUW( const string & in geom_id, int surf_indx, const vec3d & in pt, double u, double w )", asFUNCTION( vsp::AddFitModelTargetPtFixedUW ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void AddFitModelTargetPts( const string & in geom_id, int surf_indx, array<vec3d>@+ pt_arr )", asMETHOD( ScriptMgrSingleton, AddFitModelTargetPts ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void AddFitModelTargetPtsFixedU( const string & in geom_id, int surf_indx, array<vec3d>@+ pt_arr, double u )", asMETHOD( ScriptMgrSingleton, AddFitModelTargetPtsFixedU ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void AddFitModelTargetPtsFixedUs( const string & in geom_id, int surf_indx, array<vec3d>@+ pt_arr, array<double>@+ u_arr )", asMETHOD( ScriptMgrSingleton, AddFitModelTargetPtsFixedUs ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void AddFitModelTargetPtsFixedW( const string & in geom_id, int surf_indx, array<vec3d>@+ pt_arr, double w )", asMETHOD( ScriptMgrSingleton, AddFitModelTargetPtsFixedW ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void AddFitModelTargetPtsFixedWs( const string & in geom_id, int surf_indx, array<vec3d>@+ pt_arr, array<double>@+ w_arr )", asMETHOD( ScriptMgrSingleton, AddFitModelTargetPtsFixedWs ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void AddFitModelTargetPtsFixedUW( const string & in geom_id, int surf_indx, array<vec3d>@+ pt_arr, double u, double w )", asMETHOD( ScriptMgrSingleton, AddFitModelTargetPtsFixedUW ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void AddFitModelTargetPtsFixedUWs( const string & in geom_id, int surf_indx, array<vec3d>@+ pt_arr, array<double>@+ u_arr, array<double>@+ w_arr )", asMETHOD( ScriptMgrSingleton, AddFitModelTargetPtsFixedUWs ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void DelFitModelTargetPt( int index )", asFUNCTION( vsp::DelFitModelTargetPt ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void DelAllFitModelTargetPts()", asFUNCTION( vsp::DelAllFitModelTargetPts ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SortFitModelTargetPtsByDist()", asFUNCTION( vsp::SortFitModelTargetPtsByDist ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int MoveFitModelTargetPt( int index, int reorder_type )", asFUNCTION( vsp::MoveFitModelTargetPt ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int GetNumFitModelTargetPts()", asFUNCTION( vsp::GetNumFitModelTargetPts ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "vec3d GetFitModelTargetPt( int index )", asFUNCTION( vsp::GetFitModelTargetPt ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SetFitModelTargetPt( int index, const vec3d & in pt )", asFUNCTION( vsp::SetFitModelTargetPt ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string GetFitModelTargetPtGeom( int index )", asFUNCTION( vsp::GetFitModelTargetPtGeom ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SetFitModelTargetPtGeom( int index, const string & in geom_id )", asFUNCTION( vsp::SetFitModelTargetPtGeom ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int GetFitModelTargetPtSurfIndx( int index )", asFUNCTION( vsp::GetFitModelTargetPtSurfIndx ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SetFitModelTargetPtSurfIndx( int index, int surf_indx )", asFUNCTION( vsp::SetFitModelTargetPtSurfIndx ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double GetFitModelTargetPtU( int index )", asFUNCTION( vsp::GetFitModelTargetPtU ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double GetFitModelTargetPtDist( int index )", asFUNCTION( vsp::GetFitModelTargetPtDist ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double GetFitModelTargetPtW( int index )", asFUNCTION( vsp::GetFitModelTargetPtW ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SetFitModelTargetPtUW( int index, double u, double w )", asFUNCTION( vsp::SetFitModelTargetPtUW ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int GetFitModelTargetPtUType( int index )", asFUNCTION( vsp::GetFitModelTargetPtUType ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SetFitModelTargetPtUType( int index, int u_type )", asFUNCTION( vsp::SetFitModelTargetPtUType ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int GetFitModelTargetPtWType( int index )", asFUNCTION( vsp::GetFitModelTargetPtWType ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SetFitModelTargetPtWType( int index, int w_type )", asFUNCTION( vsp::SetFitModelTargetPtWType ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "vec3d GetFitModelTargetPtSurfPt( int index )", asFUNCTION( vsp::GetFitModelTargetPtSurfPt ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void AddFitModelVar( const string & in parm_id )", asFUNCTION( vsp::AddFitModelVar ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void DelFitModelVar( const string & in parm_id )", asFUNCTION( vsp::DelFitModelVar ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void DelAllFitModelVars()", asFUNCTION( vsp::DelAllFitModelVars ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int GetNumFitModelVars()", asFUNCTION( vsp::GetNumFitModelVars ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string GetFitModelVar( int index )", asFUNCTION( vsp::GetFitModelVar ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "array<string>@+ GetFitModelVarVec()", asMETHOD( ScriptMgrSingleton, GetFitModelVarVec ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SearchFitModelTargetUW()", asFUNCTION( vsp::SearchFitModelTargetUW ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void RefineFitModelTargetUW()", asFUNCTION( vsp::RefineFitModelTargetUW ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double UpdateFitModelDist()", asFUNCTION( vsp::UpdateFitModelDist ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "double GetFitModelDist()", asFUNCTION( vsp::GetFitModelDist ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int GetNumFitModelOptVars()", asFUNCTION( vsp::GetNumFitModelOptVars ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int OptimizeFitModel()", asFUNCTION( vsp::OptimizeFitModel ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "bool CanUndoFitModel()", asFUNCTION( vsp::CanUndoFitModel ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "bool UndoFitModel()", asFUNCTION( vsp::UndoFitModel ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SaveFitModelFile( const string & in file_name )", asFUNCTION( vsp::SaveFitModelFile ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "int LoadFitModelFile( const string & in file_name )", asFUNCTION( vsp::LoadFitModelFile ), asCALL_CDECL );
+    assert( r >= 0 );
+
     //=== Register Var Preset Functions ====//
 
     r = se->RegisterGlobalFunction( "string AddVarPresetGroup( const string & in group_name )", asFUNCTION( vsp::AddVarPresetGroup ), asCALL_CDECL);
@@ -5635,6 +6041,9 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     assert( r >= 0 );
 
     //=== Register Surface Query Functions ===//
+
+    r = se->RegisterGlobalFunction( "double CompareGeomSurfaces( const string & in geom_a, const string & in geom_b )", asFUNCTION( vsp::CompareGeomSurfaces ), asCALL_CDECL );
+    assert( r >= 0 );
 
     r = se->RegisterGlobalFunction( "vec3d CompPnt01( const string & in geom_id, const int & in surf_indx, const double & in u, const double & in w )", asFUNCTION(vsp::CompPnt01), asCALL_CDECL );
     assert( r >= 0 );
@@ -6079,6 +6488,12 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     r = se->RegisterGlobalFunction( "void DeleteFeaStructureFromAssembly( const string & in assembly_id, const string & in struct_id )", asFUNCTION( vsp::DeleteFeaStructureFromAssembly ), asCALL_CDECL );
     assert( r >= 0 );
 
+    r = se->RegisterGlobalFunction( "void AddFeaAssemblyStructure( const string & in assembly_id, const string & in struct_id )", asFUNCTION( vsp::AddFeaAssemblyStructure ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void DeleteFeaAssemblyStructure( const string & in assembly_id, const string & in struct_id )", asFUNCTION( vsp::DeleteFeaAssemblyStructure ), asCALL_CDECL );
+    assert( r >= 0 );
+
     r = se->RegisterGlobalFunction( "array<string>@+ GetFeaAssemblyStructureIDVec( const string & in assembly_id )", asMETHOD( ScriptMgrSingleton, GetFeaAssemblyStructureIDVec ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
     assert( r >= 0 );
 
@@ -6137,35 +6552,30 @@ void ScriptMgrSingleton::RegisterUtility( asIScriptEngine* se )
     int r;
     //==== Register Utility Functions ====//
 
-    r = se->RegisterGlobalFunction( "void Print(const string & in data, bool new_line = true )", asMETHODPR( ScriptMgrSingleton, Print, (const string &, bool), void ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    // Registered straight onto the API functions.  These used to be ScriptMgrSingleton methods, so
+    // they existed for AngelScript alone -- undocumented, and unavailable to C++ or Python callers.
+    r = se->RegisterGlobalFunction( "void Print(const string & in data, bool new_line = true )", asFUNCTIONPR( vsp::Print, ( const string &, bool ), void ), asCALL_CDECL );
     assert( r >= 0 );
 
-
-    r = se->RegisterGlobalFunction( "void Print(const vec3d & in data, bool new_line = true )", asMETHODPR( ScriptMgrSingleton, Print, (const vec3d &, bool), void ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    r = se->RegisterGlobalFunction( "void Print(const vec3d & in data, bool new_line = true )", asFUNCTIONPR( vsp::Print, ( const vec3d &, bool ), void ), asCALL_CDECL );
     assert( r >= 0 );
 
-
-    r = se->RegisterGlobalFunction( "void Print(double data, bool new_line = true )", asMETHODPR( ScriptMgrSingleton, Print, (double, bool), void ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    r = se->RegisterGlobalFunction( "void Print(double data, bool new_line = true )", asFUNCTIONPR( vsp::Print, ( double, bool ), void ), asCALL_CDECL );
     assert( r >= 0 );
 
-
-    r = se->RegisterGlobalFunction( "void Print(int data, bool new_line = true )", asMETHODPR( ScriptMgrSingleton, Print, (int, bool), void ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    r = se->RegisterGlobalFunction( "void Print(int data, bool new_line = true )", asFUNCTIONPR( vsp::Print, ( int, bool ), void ), asCALL_CDECL );
     assert( r >= 0 );
 
-
-    r = se->RegisterGlobalFunction( "double Min( double x, double y)", asMETHOD( ScriptMgrSingleton, Min ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr);
+    r = se->RegisterGlobalFunction( "double Min( double x, double y)", asFUNCTIONPR( vsp::Min, ( double, double ), double ), asCALL_CDECL );
     assert( r >= 0 );
 
-
-    r = se->RegisterGlobalFunction( "double Max( double x, double y)", asMETHOD( ScriptMgrSingleton, Max ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr);
+    r = se->RegisterGlobalFunction( "double Max( double x, double y)", asFUNCTIONPR( vsp::Max, ( double, double ), double ), asCALL_CDECL );
     assert( r >= 0 );
 
-
-    r = se->RegisterGlobalFunction( "double Rad2Deg( double r )", asMETHOD( ScriptMgrSingleton, Rad2Deg ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr);
+    r = se->RegisterGlobalFunction( "double Rad2Deg( double r )", asFUNCTIONPR( vsp::Rad2Deg, ( double ), double ), asCALL_CDECL );
     assert( r >= 0 );
 
-
-    r = se->RegisterGlobalFunction( "double Deg2Rad( double d )", asMETHOD( ScriptMgrSingleton, Deg2Rad ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr);
+    r = se->RegisterGlobalFunction( "double Deg2Rad( double d )", asFUNCTIONPR( vsp::Deg2Rad, ( double ), double ), asCALL_CDECL );
     assert( r >= 0 );
 
 
@@ -6222,8 +6632,10 @@ void ScriptMgrSingleton::RegisterUtility( asIScriptEngine* se )
 
     //====  Register Proxy Utility Functions ====//
 
-    r = se->RegisterGlobalFunction( "array<vec3d>@+ GetProxyVec3dArray()", asMETHOD( ScriptMgrSingleton, GetProxyVec3dArray ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
-    assert( r >= 0 );
+    // GetProxyVec3dArray is deliberately not registered.  The 39 wrappers that return an array of
+    // points fill m_ProxyVec3dArray and then call it to convert; called from a script it handed
+    // back whatever the last of them left in the buffer, which has no meaning.  It stays as
+    // internal plumbing.
 
 }
 
@@ -6698,6 +7110,28 @@ void ScriptMgrSingleton::SetAttributeVec3d( const string & attrID, CScriptArray*
     vector < vec3d > vec3d_vec;
     FillSTLVector( vec3dVector, vec3d_vec );
     vsp::SetAttributeVec3d( attrID, vec3d_vec );
+}
+
+//===== vec2d polygon functions, bridged from a script array =====//
+bool ScriptMgrSingleton::PointInPolygon( const vec2d & R, CScriptArray* pnts )
+{
+    vector < vec2d > pnt_vec;
+    FillSTLVector( pnts, pnt_vec );
+    return ::PointInPolygon( R, pnt_vec );
+}
+
+double ScriptMgrSingleton::PolyArea2d( CScriptArray* pnts )
+{
+    vector < vec2d > pnt_vec;
+    FillSTLVector( pnts, pnt_vec );
+    return ::poly_area( pnt_vec );
+}
+
+vec2d ScriptMgrSingleton::PolyCentroid2d( CScriptArray* pnts )
+{
+    vector < vec2d > pnt_vec;
+    FillSTLVector( pnts, pnt_vec );
+    return ::poly_centroid( pnt_vec );
 }
 
 void ScriptMgrSingleton::SetAttributeIntMatrix( const string & attrID, CScriptArray* intMatrix )
@@ -7210,6 +7644,223 @@ CScriptArray* ScriptMgrSingleton::GetFeaTrimPartIDVec( const string & trim_id )
     return GetProxyStringArray();
 }
 
+CScriptArray* ScriptMgrSingleton::GetFitModelVarVec()
+{
+    m_ProxyStringArray = vsp::GetFitModelVarVec();
+    return GetProxyStringArray();
+}
+
+void ScriptMgrSingleton::AddFitModelTargetPts( const string & geom_id, int surf_indx, CScriptArray* pt_arr )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    vsp::AddFitModelTargetPts( geom_id, surf_indx, pt_vec );
+}
+
+void ScriptMgrSingleton::AddFitModelTargetPtsFixedU( const string & geom_id, int surf_indx, CScriptArray* pt_arr, double u )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    vsp::AddFitModelTargetPtsFixedU( geom_id, surf_indx, pt_vec, u );
+}
+
+void ScriptMgrSingleton::AddFitModelTargetPtsFixedUs( const string & geom_id, int surf_indx, CScriptArray* pt_arr, CScriptArray* u_arr )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    vector < double > u_vec;
+    FillSTLVector( u_arr, u_vec );
+
+    vsp::AddFitModelTargetPtsFixedUs( geom_id, surf_indx, pt_vec, u_vec );
+}
+
+void ScriptMgrSingleton::AddFitModelTargetPtsFixedW( const string & geom_id, int surf_indx, CScriptArray* pt_arr, double w )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    vsp::AddFitModelTargetPtsFixedW( geom_id, surf_indx, pt_vec, w );
+}
+
+void ScriptMgrSingleton::AddFitModelTargetPtsFixedWs( const string & geom_id, int surf_indx, CScriptArray* pt_arr, CScriptArray* w_arr )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    vector < double > w_vec;
+    FillSTLVector( w_arr, w_vec );
+
+    vsp::AddFitModelTargetPtsFixedWs( geom_id, surf_indx, pt_vec, w_vec );
+}
+
+void ScriptMgrSingleton::AddFitModelTargetPtsFixedUW( const string & geom_id, int surf_indx, CScriptArray* pt_arr, double u, double w )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    vsp::AddFitModelTargetPtsFixedUW( geom_id, surf_indx, pt_vec, u, w );
+}
+
+void ScriptMgrSingleton::AddFitModelTargetPtsFixedUWs( const string & geom_id, int surf_indx, CScriptArray* pt_arr, CScriptArray* u_arr, CScriptArray* w_arr )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    vector < double > u_vec;
+    FillSTLVector( u_arr, u_vec );
+
+    vector < double > w_vec;
+    FillSTLVector( w_arr, w_vec );
+
+    vsp::AddFitModelTargetPtsFixedUWs( geom_id, surf_indx, pt_vec, u_vec, w_vec );
+}
+
+string ScriptMgrSingleton::CreatePtCloudGeomFromPts( CScriptArray* pt_arr, const string & name )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    return vsp::CreatePtCloudGeomFromPts( pt_vec, name );
+}
+
+CScriptArray* ScriptMgrSingleton::KeepPtsInBBox( CScriptArray* pt_arr, const vec3d & min_pt, const vec3d & max_pt )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::KeepPtsInBBox( pt_vec, min_pt, max_pt );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::RemovePtsInBBox( CScriptArray* pt_arr, const vec3d & min_pt, const vec3d & max_pt )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::RemovePtsInBBox( pt_vec, min_pt, max_pt );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::KeepPtsInRange( CScriptArray* pt_arr, int dir_index, double low, double high )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::KeepPtsInRange( pt_vec, dir_index, low, high );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::RemovePtsInRange( CScriptArray* pt_arr, int dir_index, double low, double high )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::RemovePtsInRange( pt_vec, dir_index, low, high );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::KeepPtsAbove( CScriptArray* pt_arr, int dir_index, double val )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::KeepPtsAbove( pt_vec, dir_index, val );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::KeepPtsBelow( CScriptArray* pt_arr, int dir_index, double val )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::KeepPtsBelow( pt_vec, dir_index, val );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::KeepPtsNearPt( CScriptArray* pt_arr, const vec3d & center, double radius )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::KeepPtsNearPt( pt_vec, center, radius );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::RemovePtsNearPt( CScriptArray* pt_arr, const vec3d & center, double radius )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::RemovePtsNearPt( pt_vec, center, radius );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::KeepPtsNearGeom( CScriptArray* pt_arr, const string & geom_id, int surf_indx, double tol )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::KeepPtsNearGeom( pt_vec, geom_id, surf_indx, tol );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::RemovePtsNearGeom( CScriptArray* pt_arr, const string & geom_id, int surf_indx, double tol )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::RemovePtsNearGeom( pt_vec, geom_id, surf_indx, tol );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::UniquePts( CScriptArray* pt_arr, double tol )
+{
+    vector < vec3d > pt_vec;
+    FillSTLVector( pt_arr, pt_vec );
+
+    m_ProxyVec3dArray = vsp::UniquePts( pt_vec, tol );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::UnionPts( CScriptArray* pt_arr_a, CScriptArray* pt_arr_b, double tol )
+{
+    vector < vec3d > pt_vec_a;
+    FillSTLVector( pt_arr_a, pt_vec_a );
+
+    vector < vec3d > pt_vec_b;
+    FillSTLVector( pt_arr_b, pt_vec_b );
+
+    m_ProxyVec3dArray = vsp::UnionPts( pt_vec_a, pt_vec_b, tol );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::IntersectPts( CScriptArray* pt_arr_a, CScriptArray* pt_arr_b, double tol )
+{
+    vector < vec3d > pt_vec_a;
+    FillSTLVector( pt_arr_a, pt_vec_a );
+
+    vector < vec3d > pt_vec_b;
+    FillSTLVector( pt_arr_b, pt_vec_b );
+
+    m_ProxyVec3dArray = vsp::IntersectPts( pt_vec_a, pt_vec_b, tol );
+    return GetProxyVec3dArray();
+}
+
+CScriptArray* ScriptMgrSingleton::SubtractPts( CScriptArray* pt_arr_a, CScriptArray* pt_arr_b, double tol )
+{
+    vector < vec3d > pt_vec_a;
+    FillSTLVector( pt_arr_a, pt_vec_a );
+
+    vector < vec3d > pt_vec_b;
+    FillSTLVector( pt_arr_b, pt_vec_b );
+
+    m_ProxyVec3dArray = vsp::SubtractPts( pt_vec_a, pt_vec_b, tol );
+    return GetProxyVec3dArray();
+}
+
 CScriptArray* ScriptMgrSingleton::GetPtCloudPnts( const string & geom_id )
 {
     m_ProxyVec3dArray = vsp::GetPtCloudPnts( geom_id );
@@ -7597,32 +8248,12 @@ CScriptArray* ScriptMgrSingleton::GetAllProbes()
 }
 
 //==== Console Print String Data ====//
-void ScriptMgrSingleton::Print( const string & data, bool new_line )
-{
-    printf( " %s ", data.c_str() );
-    if ( new_line ) printf( "\n" );
-}
 
 //==== Console Print Vec3d Data ====//
-void ScriptMgrSingleton::Print( const vec3d & data, bool new_line )
-{
-    printf( " %f, %f, %f ", data.x(), data.y(), data.z() );
-    if ( new_line ) printf( "\n" );
-}
 
 //==== Console Print Double Data ====//
-void ScriptMgrSingleton::Print( double data, bool new_line )
-{
-    printf( " %f ", data );
-    if ( new_line ) printf( "\n" );
-}
 
 //==== Console Print Int Data ====//
-void ScriptMgrSingleton::Print( int data, bool new_line )
-{
-    printf( " %d ", data );
-    if ( new_line ) printf( "\n" );
-}
 
 //=== Register Advanced Link Functions ===//
 CScriptArray* ScriptMgrSingleton::GetAdvLinkNames()

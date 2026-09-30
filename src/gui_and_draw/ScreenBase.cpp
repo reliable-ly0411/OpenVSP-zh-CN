@@ -638,8 +638,8 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     // init AttachLayout and AttachLayoutSub; hierarchy permits leaving none buttons active on orphaned attach geoms
     int labelw = 74;
     int buttonw = ( m_XFormLayout.GetW() - labelw ) / 6;
-    m_XFormLayout.AddSubGroupLayout( m_AttachLayout, m_XFormLayout.GetW(), 11 * m_AttachLayout.GetStdHeight() + 5 * m_AttachLayout.GetGapHeight() );
-    m_AttachLayout.AddSubGroupLayout( m_AttachLayoutSelections, m_AttachLayout.GetW(), 11 * m_AttachLayout.GetStdHeight() + 5 * m_AttachLayout.GetGapHeight() );
+    m_XFormLayout.AddSubGroupLayout( m_AttachLayout, m_XFormLayout.GetW(), 12 * m_AttachLayout.GetStdHeight() + 5 * m_AttachLayout.GetGapHeight() );
+    m_AttachLayout.AddSubGroupLayout( m_AttachLayoutSelections, m_AttachLayout.GetW(), 12 * m_AttachLayout.GetStdHeight() + 5 * m_AttachLayout.GetGapHeight() );
     m_AttachLayout.AddSubGroupLayout( m_AttachLayoutTransHeader, buttonw + labelw, m_AttachLayout.GetStdHeight() );
     m_AttachLayout.ForceNewLine();
     m_AttachLayout.AddYGap();
@@ -2153,7 +2153,7 @@ bool GeomScreen::Update()
                 Fl_Group* sstab = GetTab( m_SubSurfTab_ind );
                 if ( xsscreen && sstab && tabs && tabs->value() == sstab)
                 {
-                    xsscreen->SetXSecCurve( xsc );
+                    xsscreen->SetXSecCurve( xsc->GetID() );
                 }
 
                 empty_coll_ids.push_back( xsc->GetAttrCollection()->GetID() );
@@ -2515,7 +2515,7 @@ bool GeomScreen::Update()
 
                     if ( ceditcreen )
                     {
-                        ceditcreen->SetXSecCurve( xsc );
+                        ceditcreen->SetXSecCurve( xsc->GetID() );
                     }
 
                     m_SSXSCEditCEDITGroup.Show();
@@ -2804,6 +2804,7 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
     else if ( device == &m_NameInput )
     {
         geom_ptr->SetName( m_NameInput.GetString() );
+        geom_ptr->Update();
     }
     else if ( device == &m_AddSubSurfButton )
     {
@@ -2880,7 +2881,7 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
 
                 if ( ceditcreen && edit_xsec )
                 {
-                    ceditcreen->SetXSecCurve( edit_xsec );
+                    ceditcreen->SetXSecCurve( edit_xsec->GetID() );
                 }
 
                 m_ScreenMgr->ShowScreen( vsp::VSP_CURVE_EDIT_SCREEN );
@@ -2891,7 +2892,7 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
 
                 if ( ceditcreen )
                 {
-                    ceditcreen->SetXSecCurve( nullptr );
+                    ceditcreen->SetXSecCurve( string() );
                 }
             }
         }
@@ -2929,7 +2930,7 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
 
                 if ( ceditcreen )
                 {
-                    ceditcreen->SetXSecCurve( edit_xsec );
+                    ceditcreen->SetXSecCurve( edit_xsec->GetID() );
                 }
 
                 m_ScreenMgr->ShowScreen( vsp::VSP_CURVE_EDIT_SCREEN );
@@ -3136,7 +3137,7 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
 
                 if ( ceditcreen && edit_xsec )
                 {
-                    ceditcreen->SetXSecCurve( edit_xsec );
+                    ceditcreen->SetXSecCurve( edit_xsec->GetID() );
                 }
 
                 m_ScreenMgr->ShowScreen( vsp::VSP_CURVE_EDIT_SCREEN );
@@ -4192,7 +4193,7 @@ bool XSecScreen::Update()
 
             if ( xsscreen )
             {
-                xsscreen->SetXSecCurve( xsc );
+                xsscreen->SetXSecCurve( xsc->GetID() );
             }
 
             m_XSecCurveNameInput.Update( xsc->GetGroupAlias() );
@@ -4636,7 +4637,7 @@ bool XSecScreen::Update()
 
                 if ( ceditcreen )
                 {
-                    ceditcreen->SetXSecCurve( xsc );
+                    ceditcreen->SetXSecCurve( xsc->GetID() );
                 }
 
                 m_EditCEDITButtonGroup.Show();
@@ -4787,7 +4788,7 @@ void XSecScreen::GuiDeviceCallBack( GuiDevice* gui_device )
 
                     if ( ceditcreen && edit_xsec )
                     {
-                        ceditcreen->SetXSecCurve( edit_xsec );
+                        ceditcreen->SetXSecCurve( edit_xsec->GetID() );
                     }
                 }
             }
@@ -4800,7 +4801,7 @@ void XSecScreen::GuiDeviceCallBack( GuiDevice* gui_device )
 
             if ( ceditcreen )
             {
-                ceditcreen->SetXSecCurve( nullptr );
+                ceditcreen->SetXSecCurve( string() );
             }
         }
     }
@@ -4822,7 +4823,7 @@ void XSecScreen::GuiDeviceCallBack( GuiDevice* gui_device )
 
                 if ( ceditcreen )
                 {
-                    ceditcreen->SetXSecCurve( edit_xsec );
+                    ceditcreen->SetXSecCurve( edit_xsec->GetID() );
                 }
 
                 m_ScreenMgr->ShowScreen( vsp::VSP_CURVE_EDIT_SCREEN );
@@ -5096,6 +5097,15 @@ void XSecScreen::RebuildCSTGroup( CSTAirfoil* cst_xs )
 //=====================================================================//
 //=====================================================================//
 //=====================================================================//
+// The Fl_Color matching one of DrawObj's, so a divider can key the controls beneath it to
+// the vectors drawn in the 3D view.
+static Fl_Color SkinKeyColor( int drawobjcolor )
+{
+    vec3d c = 255 * DrawObj::Color( drawobjcolor );
+
+    return fl_rgb_color( ( uchar )c.x(), ( uchar )c.y(), ( uchar )c.z() );
+}
+
 SkinScreen::SkinScreen( ScreenMgr* mgr, int w, int h, const string & title, const string & helpfile ) :
     XSecScreen( mgr, w, h, title, helpfile, "Sect Alias", "Curve Alias" ) // do not combine xs and xsc
 {
@@ -5130,19 +5140,114 @@ SkinScreen::SkinScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SkinLayout.SetFitWidthFlag( false );
     m_SkinLayout.AddButton( m_ClearSkinningButton, "Clear Skinning For XSec" );
     m_SkinLayout.AddButton( m_ClearAllSkinningButton, "Clear Skinning For Entire Stack" );
+    m_SkinLayout.ForceNewLine();
+    m_SkinLayout.AddButton( m_CurveBasisToggle, "Angle Basis From Curve" );
+    m_SkinLayout.ForceNewLine();
+    m_SkinLayout.AddButton( m_ShowSkinningTanToggle, "Show Tangent Vectors" );
+    m_SkinLayout.AddButton( m_ShowSkinningCurveToggle, "Show Curvature Vectors" );
+    m_SkinLayout.ForceNewLine();
     m_SkinLayout.SetSameLineFlag( false );
     m_SkinLayout.SetFitWidthFlag( true );
     m_SkinLayout.SetButtonWidth( stdwidth );
-    m_SkinLayout.ForceNewLine();
+
+    m_SkinLayout.AddYGap();
+
+    // Sub tabs: the four fixed sides, and the spines the user adds between them.
+    int sborder = 5;
+
+    m_SkinTabs = new Fl_Tabs( m_SkinLayout.GetX(), m_SkinLayout.GetY(),
+                              m_SkinLayout.GetRemainX(), m_SkinLayout.GetRemainY() );
+    m_SkinTabs->labelcolor( FL_BLUE );
+
+    int sx, sy, sw, sh;
+    m_SkinTabs->client_area( sx, sy, sw, sh, TAB_H );
+
+    int sgx = sx + sborder;
+    int sgy = sy + sborder;
+    int sgw = sw - 2 * sborder;
+    int sgh = sh - 2 * sborder;
+
+    Fl_Group* sides_grp = new Vsp_Group( sx, sy, sw, sh );
+    sides_grp->copy_label( VSPTranslate( "Sides" ).c_str() );
+    sides_grp->selection_color( FL_GRAY );
+    sides_grp->labelfont( 1 );
+    sides_grp->labelcolor( FL_BLACK );
+    m_SkinTabs->add( sides_grp );
+
+    Fl_Group* sides_sub = new Fl_Group( sgx, sgy, sgw, sgh );
+    sides_grp->add( sides_sub );
+
+    Fl_Group* spine_grp = new Vsp_Group( sx, sy, sw, sh );
+    spine_grp->copy_label( VSPTranslate( "Spines" ).c_str() );
+    spine_grp->selection_color( FL_GRAY );
+    spine_grp->labelfont( 1 );
+    spine_grp->labelcolor( FL_BLACK );
+    m_SkinTabs->add( spine_grp );
+
+    Fl_Group* spine_sub = new Fl_Group( sgx, sgy, sgw, sgh );
+    spine_grp->add( spine_sub );
+
+    sides_grp->show();
+
+    m_SpineLayout.SetGroupAndScreen( spine_sub, this );
+
+    //==== Spines sub tab ====//
+    m_ActiveSpine = -1;
+
+    static int spine_widths[] = { 60, 90, 90, 0 };
+    m_SpineBrowser = m_SpineLayout.AddColResizeBrowser( spine_widths, 3, 90 );
+    m_SpineBrowser->Init( this, m_SpineLayout.GetGroup() );
+
+    m_SpineLayout.SetSameLineFlag( true );
+    m_SpineLayout.SetFitWidthFlag( false );
+    m_SpineLayout.SetButtonWidth( m_SpineLayout.GetW() / 3.0 );
+    m_SpineLayout.AddButton( m_AddSpineButton, "Add" );
+    m_SpineLayout.AddButton( m_DelSpineButton, "Delete" );
+    m_SpineLayout.AddButton( m_DelAllSpinesButton, "Delete All" );
+    m_SpineLayout.ForceNewLine();
+    m_SpineLayout.SetSameLineFlag( false );
+    m_SpineLayout.SetFitWidthFlag( true );
+
+    m_SpineLayout.AddYGap();
+    m_SpineLayout.SetButtonWidth( 75 );
+    m_SpineLayout.AddSlider( m_SpineWSlider, "W", 1.0, "%6.4f" );
+
+    m_SpineLayout.SetSameLineFlag( true );
+    m_SpineLayout.SetFitWidthFlag( false );
+    m_SpineLayout.SetButtonWidth( m_SpineLayout.GetW() / 2.0 );
+    m_SpineLayout.AddButton( m_SpineLRSymButton, "L/R Sym" );
+    m_SpineLayout.AddButton( m_SpineTBSymButton, "T/B Sym" );
+    m_SpineLayout.ForceNewLine();
+    m_SpineLayout.SetSameLineFlag( false );
+    m_SpineLayout.SetFitWidthFlag( true );
+
+    m_SpineLayout.AddYGap();
+    m_SpineLayout.AddDividerBox( "Spine Skinning", 0,
+                                 SkinKeyColor( GeomXSec::SkinDrawColor( GeomXSec::SKIN_DRAW_ACTIVE_SPINE ) ) );
+
+    m_SpineLayout.SetChoiceButtonWidth( 55 );
+    m_SpineLayout.SetInputWidth( 45 );
+    m_SpineLayout.SetSliderWidth( 50 );
+    m_SpineLayout.SetButtonWidth( 75 );
+    m_SpineLayout.AddSkinHeader( m_SpineHeader, false );
+
+    m_SpineLayout.AddSkinControl( m_SpineAngleSkinControl, "Angle", angleRng, angleFmt );
+    m_SpineLayout.AddSkinControl( m_SpineSlewSkinControl, "Slew", angleRng, angleFmt );
+    m_SpineLayout.AddSkinControl( m_SpineStrengthSkinControl, "Strength", strengthRng, strengthFmt );
+    m_SpineLayout.AddSkinControl( m_SpineCurvatureSkinControl, "Curvature", curveRng, curveFmt );
+
+    //==== Sides sub tab ====//
+    // Re-point the skin layout at the Sides group so the existing side controls below land
+    // there instead of on the bare tab.
+    m_SkinLayout.SetGroupAndScreen( sides_sub, this );
 
     m_SkinLayout.SetButtonWidth( 75 );
 
     int oldDH = m_SkinLayout.GetDividerHeight();
 
-    m_SkinLayout.AddYGap();
-
     m_SkinLayout.SetSameLineFlag( true );
-    m_SkinLayout.AddDividerBox( "Top Side", m_SkinLayout.GetButtonWidth() );
+    m_SkinLayout.AddDividerBox( "Top Side", m_SkinLayout.GetButtonWidth(),
+                                SkinKeyColor( GeomXSec::SkinDrawColor( GeomXSec::SKIN_DRAW_TOP ) ) );
     m_SkinLayout.SetFitWidthFlag( false );
     m_SkinLayout.AddButton( m_AllSymButton, "All Sym" );
     m_SkinLayout.ForceNewLine();
@@ -5160,7 +5265,8 @@ SkinScreen::SkinScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SkinLayout.AddSkinControl( m_TopCurvatureSkinControl, "Curvature", curveRng, curveFmt);
 
     m_SkinLayout.AddYGap();
-    m_SkinLayout.AddDividerBox( "Right Side" );
+    m_SkinLayout.AddDividerBox( "Right Side", 0,
+                                SkinKeyColor( GeomXSec::SkinDrawColor( GeomXSec::SKIN_DRAW_RIGHT ) ) );
 
     m_SkinLayout.AddSkinHeader( m_RightHeader );
     m_SkinLayout.AddSkinControl( m_RightAngleSkinControl, "Angle", angleRng, angleFmt);
@@ -5170,7 +5276,8 @@ SkinScreen::SkinScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
 
     m_SkinLayout.AddYGap();
     m_SkinLayout.SetSameLineFlag( true );
-    m_SkinLayout.AddDividerBox( "Bottom Side", m_SkinLayout.GetButtonWidth() );
+    m_SkinLayout.AddDividerBox( "Bottom Side", m_SkinLayout.GetButtonWidth(),
+                                SkinKeyColor( GeomXSec::SkinDrawColor( GeomXSec::SKIN_DRAW_BOTTOM ) ) );
     m_SkinLayout.SetFitWidthFlag( false );
     m_SkinLayout.AddButton( m_TBSymButton, "T/B Sym" );
     m_SkinLayout.ForceNewLine();
@@ -5185,7 +5292,8 @@ SkinScreen::SkinScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
 
     m_SkinLayout.AddYGap();
     m_SkinLayout.SetSameLineFlag( true );
-    m_SkinLayout.AddDividerBox( "Left Side", m_SkinLayout.GetButtonWidth() );
+    m_SkinLayout.AddDividerBox( "Left Side", m_SkinLayout.GetButtonWidth(),
+                                SkinKeyColor( GeomXSec::SkinDrawColor( GeomXSec::SKIN_DRAW_LEFT ) ) );
     m_SkinLayout.SetFitWidthFlag( false );
     m_SkinLayout.AddButton( m_RLSymButton, "R/L Sym" );
     m_SkinLayout.ForceNewLine();
@@ -5224,7 +5332,126 @@ bool SkinScreen::Update()
     int xsid = geomxsec_ptr->m_ActiveXSec();
     m_SkinIndexSelector.Update( geomxsec_ptr->m_ActiveXSec.GetID() );
 
-    SkinXSec* xs = ( SkinXSec* ) geomxsec_ptr->GetXSec( xsid );
+    m_ShowSkinningTanToggle.Update( geomxsec_ptr->m_ShowSkinningTanFlag.GetID() );
+    m_ShowSkinningCurveToggle.Update( geomxsec_ptr->m_ShowSkinningCurveFlag.GetID() );
+
+    SkinXSec* xs = dynamic_cast < SkinXSec* > ( geomxsec_ptr->GetXSec( xsid ) );
+
+    //==== Spines ====//
+    int nspine = 0;
+    if ( xs )
+    {
+        nspine = xs->NumSpines();
+    }
+
+    // The selection belongs to the Geom being shown, not to this screen.  Switching Geom
+    // used to carry the index across to an unrelated spine, and leave the Geom being left
+    // drawing that spine as the active one.
+    if ( geom_ptr->GetID() != m_ActiveSpineGeomID )
+    {
+        m_ActiveSpineGeomID = geom_ptr->GetID();
+        m_ActiveSpine = -1;
+    }
+
+    if ( m_ActiveSpine >= nspine )
+    {
+        m_ActiveSpine = nspine - 1;
+    }
+
+    // Every path that changes the selection -- adding, deleting, picking a row, switching
+    // Geom -- comes back through here, so this is the one place that has to say so.
+    geomxsec_ptr->SetActiveSkinSpine( m_ActiveSpine );
+
+    UpdateSpineBrowser( xs );
+
+    SkinSpine* spine = nullptr;
+    if ( xs && m_ActiveSpine >= 0 )
+    {
+        spine = xs->GetSpine( m_ActiveSpine );
+    }
+
+    // Position, symmetry and name belong to the spine as a whole rather than to one cross
+    // section, and the first cross section holds them.  Drive those controls from there, or
+    // the slider would edit a copy that the next update overwrites.  The skinning values
+    // below are per cross section and stay on the active one.
+    SkinSpine* master = nullptr;
+    SkinXSec* masterxs = dynamic_cast < SkinXSec* > ( geomxsec_ptr->GetXSec( 0 ) );
+    if ( masterxs && m_ActiveSpine >= 0 )
+    {
+        master = masterxs->GetSpine( m_ActiveSpine );
+    }
+
+    if ( spine && master )
+    {
+        m_SpineWSlider.Update( master->m_W01.GetID() );
+        m_SpineLRSymButton.Update( master->m_LRSymFlag.GetID() );
+        m_SpineTBSymButton.Update( master->m_TBSymFlag.GetID() );
+
+        // Activate first, then Update.  SkinControl::Update deactivates the halves whose Set
+        // flag is off, so anything activated after it would undo exactly that.
+        m_SpineHeader.Activate();
+        m_SpineAngleSkinControl.Activate();
+        m_SpineSlewSkinControl.Activate();
+        m_SpineStrengthSkinControl.Activate();
+        m_SpineCurvatureSkinControl.Activate();
+
+        m_SpineAngleSkinControl.Update( spine->m_LAngle.GetID(), spine->m_LAngleSet.GetID(),
+                                        spine->m_LRAngleEq.GetID(), spine->m_RAngleSet.GetID(), spine->m_RAngle.GetID() );
+        m_SpineSlewSkinControl.Update( spine->m_LSlew.GetID(), spine->m_LSlewSet.GetID(),
+                                       spine->m_LRSlewEq.GetID(), spine->m_RSlewSet.GetID(), spine->m_RSlew.GetID() );
+        m_SpineStrengthSkinControl.Update( spine->m_LStrength.GetID(), spine->m_LStrengthSet.GetID(),
+                                           spine->m_LRStrengthEq.GetID(), spine->m_RStrengthSet.GetID(), spine->m_RStrength.GetID() );
+        m_SpineCurvatureSkinControl.Update( spine->m_LCurve.GetID(), spine->m_LCurveSet.GetID(),
+                                            spine->m_LRCurveEq.GetID(), spine->m_RCurveSet.GetID(), spine->m_RCurve.GetID() );
+
+        m_DelSpineButton.Activate();
+        m_SpineWSlider.Activate();
+        m_SpineLRSymButton.Activate();
+        m_SpineTBSymButton.Activate();
+
+        // Slew and Strength follow Angle, as they do for the fixed sides.
+        m_SpineSlewSkinControl.DeactivateSet();
+        m_SpineStrengthSkinControl.DeactivateSet();
+
+        // Continuity couples the two halves, so the right hand Set and the Equal toggle
+        // stop being the user's to choose -- same rule the sides follow.
+        if ( xs->m_TopCont() >= 1 )
+        {
+            m_SpineAngleSkinControl.DeactivateRSet();
+            m_SpineAngleSkinControl.DeactivateEqual();
+            m_SpineSlewSkinControl.DeactivateRSet();
+            m_SpineSlewSkinControl.DeactivateEqual();
+            m_SpineStrengthSkinControl.DeactivateRSet();
+            m_SpineStrengthSkinControl.DeactivateEqual();
+        }
+        if ( xs->m_TopCont() >= 2 )
+        {
+            m_SpineCurvatureSkinControl.DeactivateRSet();
+            m_SpineCurvatureSkinControl.DeactivateEqual();
+        }
+    }
+    else
+    {
+        m_DelSpineButton.Deactivate();
+        m_SpineWSlider.Deactivate();
+        m_SpineLRSymButton.Deactivate();
+        m_SpineTBSymButton.Deactivate();
+        m_SpineHeader.Deactivate();
+        m_SpineAngleSkinControl.Deactivate();
+        m_SpineSlewSkinControl.Deactivate();
+        m_SpineStrengthSkinControl.Deactivate();
+        m_SpineCurvatureSkinControl.Deactivate();
+    }
+
+    if ( xs && xs->NumSpines() > 0 )
+    {
+        m_DelAllSpinesButton.Activate();
+    }
+    else
+    {
+        m_DelAllSpinesButton.Deactivate();
+    }
+
     if ( xs )
     {
         XSecCurve* xsc = xs->GetXSecCurve();
@@ -5232,6 +5459,8 @@ bool SkinScreen::Update()
         {
             m_SkinXSecCurveNameInput.Update( xsc->GetGroupAlias() );
         }
+
+        m_CurveBasisToggle.Update( xs->m_CurveBasisFlag.GetID() );
 
         //==== Skin ====//
         // Update Symmetry flags to Parms.
@@ -5393,31 +5622,78 @@ bool SkinScreen::Update()
         }
 
 
-        // Deactivate GUI for non-top curves.  Code-Eli right now requires
-        // things to be set per cross section.  This restriction may someday
-        // be lifted -- while the above Strength restriction will not.
-        m_RightAngleSkinControl.DeactivateSet();
-        m_RightSlewSkinControl.DeactivateSet();
-        m_RightStrengthSkinControl.DeactivateSet();
-        m_RightCurvatureSkinControl.DeactivateSet();
+        // Each side now enforces its own conditions over the span of the cross section
+        // centered on its station, so the Angle and Curvature Set flags are live for all
+        // four.  Slew and Strength Set remain slaved to Angle Set for every side, which
+        // the block above already handles.
 
-        m_BottomAngleSkinControl.DeactivateSet();
-        m_BottomSlewSkinControl.DeactivateSet();
-        m_BottomStrengthSkinControl.DeactivateSet();
-        m_BottomCurvatureSkinControl.DeactivateSet();
-
-        m_LeftAngleSkinControl.DeactivateSet();
-        m_LeftSlewSkinControl.DeactivateSet();
-        m_LeftStrengthSkinControl.DeactivateSet();
-        m_LeftCurvatureSkinControl.DeactivateSet();
-
-        // Deactivate GUI for non-top continuity control.  Code-Eli currently
-        // requires continuity to be enforced on per cross section basis.
+        // Continuity is still enforced per cross section rather than per side.  A C1 or
+        // C2 joint needs the left and right derivative curves to agree over the span
+        // enforcing it, but their values come from one periodic spline through all four
+        // stations, so they coincide only at a station unless all four sides agree.
         m_RightHeader.DeactiveContChoice();
         m_BottomHeader.DeactiveContChoice();
         m_LeftHeader.DeactiveContChoice();
     }
     return true;
+}
+
+// List the spines of the active XSec.  Position and symmetry are the same on every XSec,
+// so the list reads the same wherever you are along the body; the values behind it do not.
+void SkinScreen::UpdateSpineBrowser( SkinXSec* xs )
+{
+    int h_pos = m_SpineBrowser->hposition();
+    int v_pos = m_SpineBrowser->vposition();
+
+    m_SpineBrowser->clear();
+    m_SpineBrowser->column_char( ':' );
+
+    m_SpineBrowser->add( "@b@.名称:@b@.W:@b@.对称" );
+
+    int nspine = 0;
+    if ( xs )
+    {
+        nspine = xs->NumSpines();
+    }
+
+    for ( int i = 0; i < nspine; i++ )
+    {
+        SkinSpine* sp = xs->GetSpine( i );
+        if ( !sp )
+        {
+            continue;
+        }
+
+        string sym;
+        if ( sp->m_LRSymFlag() )
+        {
+            sym += "L/R";
+        }
+        if ( sp->m_TBSymFlag() )
+        {
+            if ( !sym.empty() )
+            {
+                sym += " ";
+            }
+            sym += "T/B";
+        }
+        if ( sym.empty() )
+        {
+            sym = VSPTranslate( "none" );
+        }
+
+        char str[256];
+        snprintf( str, sizeof( str ), "%s:%6.4f:%s", VSPTranslate( sp->GetName() ).c_str(), sp->m_W01(), sym.c_str() );
+        m_SpineBrowser->add( str );
+    }
+
+    if ( m_ActiveSpine >= 0 && m_ActiveSpine < nspine )
+    {
+        m_SpineBrowser->select( m_ActiveSpine + 2 );
+    }
+
+    m_SpineBrowser->hposition( h_pos );
+    m_SpineBrowser->vposition( v_pos );
 }
 
 void SkinScreen::GuiDeviceCallBack( GuiDevice* gui_device )
@@ -5431,11 +5707,36 @@ void SkinScreen::GuiDeviceCallBack( GuiDevice* gui_device )
     GeomXSec* geomxsec_ptr = dynamic_cast< GeomXSec* >( geom_ptr );
     assert( geomxsec_ptr );
 
-    if ( gui_device == m_TopHeader.m_ContChoice )
+    if ( gui_device == &m_AddSpineButton )
+    {
+        // Drop the new spine midway between the two sides the user is nearest, so it lands
+        // somewhere visible rather than on top of an existing station.
+        m_ActiveSpine = geomxsec_ptr->AddSkinSpine( geomxsec_ptr->SuggestSkinSpineW01() );
+        geomxsec_ptr->Update();
+    }
+    else if ( gui_device == &m_DelSpineButton )
+    {
+        geomxsec_ptr->DelSkinSpine( m_ActiveSpine );
+
+        // Step back only when there is nothing left at this index.  Deleting the first of
+        // three used to leave nothing selected although two remained.
+        if ( m_ActiveSpine >= geomxsec_ptr->NumSkinSpines() )
+        {
+            m_ActiveSpine = geomxsec_ptr->NumSkinSpines() - 1;
+        }
+        geomxsec_ptr->Update();
+    }
+    else if ( gui_device == &m_DelAllSpinesButton )
+    {
+        geomxsec_ptr->DelAllSkinSpines();
+        m_ActiveSpine = -1;
+        geomxsec_ptr->Update();
+    }
+    else if ( gui_device == m_TopHeader.m_ContChoice )
     {
         int t = m_TopHeader.m_ContChoice->GetVal();
         int xsid = geomxsec_ptr->m_ActiveXSec();
-        SkinXSec* xs = (SkinXSec*) geomxsec_ptr->GetXSec( xsid );
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( geomxsec_ptr->GetXSec( xsid ) );
         if ( xs )
         {
             xs->m_TopCont.Set( t );
@@ -5446,7 +5747,7 @@ void SkinScreen::GuiDeviceCallBack( GuiDevice* gui_device )
     else if ( gui_device == &m_SkinXSecCurveNameInput )
     {
         int xsid = geomxsec_ptr->m_ActiveXSec();
-        SkinXSec* xs = (SkinXSec*) geomxsec_ptr->GetXSec( xsid );
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( geomxsec_ptr->GetXSec( xsid ) );
         if ( xs )
         {
             XSecCurve* xsc = xs->GetXSecCurve();
@@ -5485,6 +5786,23 @@ void SkinScreen::GuiDeviceCallBack( GuiDevice* gui_device )
 //==== Fltk  Callbacks ====//
 void SkinScreen::CallBack( Fl_Widget *w )
 {
+    if ( w == m_SpineBrowser )
+    {
+        // Row 1 is the header, so the spine index is two less than the selection.
+        // Row 1 is the header, so the spine index is two less than the selection -- except
+        // that a click below the last row selects nothing and reports 0, which would give -2.
+        // Nothing selected is -1.
+        int sel = m_SpineBrowser->value();
+        m_ActiveSpine = sel - 2;
+        if ( m_ActiveSpine < -1 )
+        {
+            m_ActiveSpine = -1;
+        }
+
+        m_ScreenMgr->SetUpdateFlag( true );
+        return;
+    }
+
     XSecScreen::CallBack( w );
 }
 
@@ -6130,6 +6448,8 @@ BlendScreen::BlendScreen( ScreenMgr* mgr, int w, int h, const string & title, co
     m_BlendLayout.SetButtonWidth( stdwidth );
     m_BlendLayout.AddYGap();
 
+    m_BlendLayout.AddButton( m_ShowBlendingToggle, "Show Blending Vectors", m_BlendLayout.GetW() * 0.5 );
+
     m_BlendLayout.AddYGap();
 
     m_BlendLayout.AddDividerBox( "Leading Edge" );
@@ -6254,7 +6574,9 @@ bool BlendScreen::Update()
     int xsid = wing_ptr->m_ActiveXSec();
     m_BlendIndexSelector.Update( wing_ptr->m_ActiveXSec.GetID() );
 
-    BlendWingSect* xs = ( BlendWingSect* ) geomxsec_ptr->GetXSec( xsid );
+    m_ShowBlendingToggle.Update( wing_ptr->m_ShowBlendingFlag.GetID() );
+
+    BlendWingSect* xs = dynamic_cast < BlendWingSect* > ( geomxsec_ptr->GetXSec( xsid ) );
     if ( xs )
     {
         XSecCurve* xsc = xs->GetXSecCurve();
@@ -6634,7 +6956,13 @@ XSecViewScreen::XSecViewScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 310, 600, "
     m_Image.GetFlButton()->value( 0 );
     m_PreserveAspect.GetFlButton()->value( 1 );
 
-    m_XSecCurve = nullptr;
+    m_XSecCurveID = string();
+}
+
+//==== Get the Active XSec Curve ====//
+XSecCurve* XSecViewScreen::GetXSecCurve()
+{
+    return dynamic_cast< XSecCurve* >( ParmMgr.FindParmContainer( m_XSecCurveID ) );
 }
 
 bool XSecViewScreen::Update()
@@ -6645,7 +6973,7 @@ bool XSecViewScreen::Update()
 
     BasicScreen::Update();
 
-    XSecCurve* xsc = m_XSecCurve;
+    XSecCurve* xsc = GetXSecCurve();
 
     if( !xsc )
     {
@@ -6737,7 +7065,7 @@ void XSecViewScreen::GuiDeviceCallBack( GuiDevice* device )
     assert( m_ScreenMgr );
     Vehicle* veh = m_ScreenMgr->GetVehiclePtr();
 
-    XSecCurve* xsc = m_XSecCurve;
+    XSecCurve* xsc = GetXSecCurve();
 
     if( !xsc )
     {
@@ -6805,7 +7133,7 @@ void XSecViewScreen::GuiDeviceCallBack( GuiDevice* device )
 
 void XSecViewScreen::UpdateDrawObj()
 {
-    XSecCurve* xsc = m_XSecCurve;
+    XSecCurve* xsc = GetXSecCurve();
     Vehicle* veh = m_ScreenMgr->GetVehiclePtr();
 
     if( xsc && veh )

@@ -10,6 +10,7 @@
 #include "MeshCommonSettings.h"
 #include "Vehicle.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 
 /////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////
@@ -114,6 +115,15 @@ IntersectSettings::~IntersectSettings()
 {
 }
 
+void IntersectSettings::ResetToInitVals()
+{
+    MeshCommonSettings::ResetToInitVals();
+
+    // The Mode this named is gone.  The export file names are left alone: they are worked
+    // out from the model file name, and Vehicle::Init does that as it names the new model.
+    m_ModeID = string();
+}
+
 xmlNodePtr IntersectSettings::EncodeXml( xmlNodePtr & node )
 {
     xmlNodePtr structsettingnode = xmlNewChild( node, nullptr, BAD_CAST m_Name.c_str(), nullptr );
@@ -130,7 +140,7 @@ xmlNodePtr IntersectSettings::DecodeXml( xmlNodePtr & node )
     xmlNodePtr structsettingnode = XmlUtil::GetNode( node, m_Name.c_str(), 0 );
     if ( structsettingnode )
     {
-        m_ModeID = ParmMgr.RemapID( XmlUtil::FindString( structsettingnode, "ModeID", m_ModeID ) );
+        m_ModeID = IDMgr.RemapRefID( XmlUtil::FindString( structsettingnode, "ModeID", m_ModeID ) );
 
         MeshCommonSettings::DecodeXml( structsettingnode );
     }
@@ -278,6 +288,18 @@ CfdMeshSettings::~CfdMeshSettings()
 {
 }
 
+void CfdMeshSettings::ResetToInitVals()
+{
+    MeshCommonSettings::ResetToInitVals();
+
+    // The Geom standing in for the far field, and the Mode, are both gone.  Left behind,
+    // the far field ID names a Geom that no longer exists.  The export file names are left
+    // alone: they are worked out from the model file name, and Vehicle::Init does that as
+    // it names the new model.
+    m_FarGeomID = string();
+    m_ModeID = string();
+}
+
 xmlNodePtr CfdMeshSettings::EncodeXml( xmlNodePtr & node )
 {
     xmlNodePtr cfdsettingnode = xmlNewChild( node, nullptr, BAD_CAST m_Name.c_str(), nullptr );
@@ -295,8 +317,8 @@ xmlNodePtr CfdMeshSettings::DecodeXml( xmlNodePtr & node )
     xmlNodePtr cfdsettingnode = XmlUtil::GetNode( node, m_Name.c_str(), 0 );
     if ( cfdsettingnode )
     {
-        m_FarGeomID = ParmMgr.RemapID( XmlUtil::FindString( cfdsettingnode, "FarGeomID", m_FarGeomID ) );
-        m_ModeID = ParmMgr.RemapID( XmlUtil::FindString( cfdsettingnode, "ModeID", m_ModeID ) );
+        m_FarGeomID = IDMgr.RemapRefID( XmlUtil::FindString( cfdsettingnode, "FarGeomID", m_FarGeomID ) );
+        m_ModeID = IDMgr.RemapRefID( XmlUtil::FindString( cfdsettingnode, "ModeID", m_ModeID ) );
 
         MeshCommonSettings::DecodeXml( cfdsettingnode );
     }
@@ -321,7 +343,7 @@ void CfdMeshSettings::ReadV2File( xmlNodePtr &root )
     string fargeom = XmlUtil::FindString( root, "CFD_Far_Geom_PtrID", m_FarGeomID );
     if ( fargeom != "0" )
     {
-        m_FarGeomID = ParmMgr.ForceRemapID( fargeom , 10 );
+        m_FarGeomID = IDMgr.ForceRemapID( fargeom , 10 );
     }
 
     SetFileExportFlag( vsp::CFD_STL_FILE_NAME, !!XmlUtil::FindInt( root, "CFD_Stl_File_Flag", GetExportFileFlag( vsp::CFD_STL_FILE_NAME )->Get() ) );

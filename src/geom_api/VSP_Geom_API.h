@@ -100,6 +100,16 @@
     \brief This group of functions provides file input and output interfacing through the API.
     \ref index "Click here to return to the main page"
 
+    \defgroup FitModel Fit Model Functions
+    \brief This group of functions supports the Fit Model Tool, which adjusts a model until its surfaces pass through a
+    set of known points.  Each point to match is set up as a target point: a point in space paired with the surface of a
+    Geom, either pinned to a surface coordinate or free to slide along the surface.  One or more Parms are then nominated
+    as variables.  Together these define a least squares problem, which is solved with a Levenberg-Marquardt algorithm
+    where the free surface coordinates and the nominated Parms are the degrees of freedom and every target point
+    contributes three residuals.  Unlike the GUI, the API takes target points directly as coordinates rather than through
+    a point cloud Geom and mouse selection.
+    \ref index "Click here to return to the main page"
+
     \defgroup GearGeom GearGeom Functions
     \brief This group of functions is available for interacting with the Bogie list of a GearGeom through the API.
     \ref index "Click here to return to the main page"
@@ -128,6 +138,16 @@
     \brief The following group of API functions may be used to control parametric propeller blade curves (PCurves).
     \ref index "Click here to return to the main page"
 
+    \defgroup PointCloud Point Cloud Functions
+    \brief This group of functions works with clouds of points -- imported, or made from a MeshGeom such
+    as the one a planar slice produces -- and narrows them down to the points wanted.  In the GUI a cloud
+    is whittled down by selecting and hiding points with the mouse, which projects a screen rectangle into
+    three dimensions and is only as good as that projection.  Through the API the points are handed about
+    as plain vectors of coordinates and filtered by where they actually are, which is both exact and
+    repeatable.  Filters come in keep and remove pairs, so a selection is inverted by asking for the other
+    one, and there are set operations for combining the results.
+    \ref index "Click here to return to the main page"
+
     \defgroup ParasiteDrag Parasite Drag Functions
     \brief This group of API functions is supplemental to performing a Paraste Drag analysis through the Analysis Manager. They include
     functions to write out Parasite Drag Tool equations, calculate atmospheric properties, and control excrescences.
@@ -141,11 +161,6 @@
     \defgroup ParmContainer Parm Container Functions
     \brief All Parms in OpenVSP are stored in Parm Containers. The functions in this group can be used to
     work with Parm Containers through the API.
-    \ref index "Click here to return to the main page"
-
-    \defgroup ProxyUtitity API Proxy Utility Functions
-    \brief The API functions defined in this group enable conversion between AngelScript and OpenVSP C++ data types,
-    such as array and vector.
     \ref index "Click here to return to the main page"
 
     \defgroup Results Results Manager Functions
@@ -216,6 +231,12 @@
 
     \defgroup vec3d Vec3D Functions
     \brief API functions that utilize the vec3d class are grouped here. For details of the class, including member functions, see vec3d.
+    \ref index "Click here to return to the main page"
+
+    \defgroup vec2d Vec2D Functions
+    \brief API functions that utilize the vec2d class are grouped here. For details of the class, including member functions, see vec2d.
+    vec2d is used for the two dimensional problems that come up inside three dimensional ones -- parameter space
+    coordinates, projections into a plane, and polygon tests.
     \ref index "Click here to return to the main page"
 */
 
@@ -389,6 +410,23 @@ extern void Update( bool update_managers = true );
 */
 /*!
     Exit the program with a specific error code
+    \forcpponly
+    \code{.cpp}
+    Update();
+
+    // Shown rather than run: this ends the process, and would take the caller with it.
+    // VSPExit( 0 );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    Update()
+
+    # Shown rather than run: this ends the process, and would take the caller with it.
+    # VSPExit( 0 )
+
+    \endcode
+    \endPythonOnly
     \param [in] error_code int Error code
 */
 
@@ -399,6 +437,25 @@ extern void VSPExit( int error_code );
 */
 /*!
     Cause OpenVSP to crash in a variety of ways.
+    \forcpponly
+    \code{.cpp}
+    Update();
+
+    // Shown rather than run: this deliberately crashes the process, and is only for exercising
+    // the crash handler.
+    // VSPCrash( 0 );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    Update()
+
+    # Shown rather than run: this deliberately crashes the process, and is only for exercising
+    # the crash handler.
+    # VSPCrash( 0 )
+
+    \endcode
+    \endPythonOnly
     \param [in] crash_type int Type of crash to attempt.
 */
 
@@ -471,6 +528,200 @@ extern void VSPCrash( int crash_type );
 
 extern int GetAndResetUpdateCount();
 
+
+/*!
+    \ingroup APIUtilities
+*/
+/*!
+    Print a string to stdout.  Print to stdout.  Writes the value and, unless asked not to, a newline; there is nothing to
+    check in an example beyond the call itself.
+    \forcpponly
+    \code{.cpp}
+    Print( "Hello from the OpenVSP API" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    Print( "Hello from the OpenVSP API" )
+    \endcode
+    \endPythonOnly
+    \sa Min, Max, Rad2Deg, Deg2Rad
+    \param [in] data string Text to print
+    \param [in] new_line bool Follow the text with a newline
+*/
+
+extern void Print( const std::string & data, bool new_line = true );
+
+/*!
+    \ingroup APIUtilities
+*/
+/*!
+    Print a vec3d to stdout, as its three coordinates.  Print to stdout.  Writes the value and, unless asked not to, a newline; there is nothing to
+    check in an example beyond the call itself.
+    \forcpponly
+    \code{.cpp}
+    Print( vec3d( 1.0, 2.0, 3.0 ) );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    Print( vec3d( 1.0, 2.0, 3.0 ) )
+    \endcode
+    \endPythonOnly
+    \sa Print
+    \param [in] data vec3d Point to print
+    \param [in] new_line bool Follow the point with a newline
+*/
+
+extern void Print( const vec3d & data, bool new_line = true );
+
+/*!
+    \ingroup APIUtilities
+*/
+/*!
+    Print a double to stdout.  Print to stdout.  Writes the value and, unless asked not to, a newline; there is nothing to
+    check in an example beyond the call itself.
+    \forcpponly
+    \code{.cpp}
+    Print( 3.14159 );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    Print( 3.14159 )
+    \endcode
+    \endPythonOnly
+    \sa Print
+    \param [in] data double Value to print
+    \param [in] new_line bool Follow the value with a newline
+*/
+
+extern void Print( double data, bool new_line = true );
+
+/*!
+    \ingroup APIUtilities
+*/
+/*!
+    Print an integer to stdout.  Print to stdout.  Writes the value and, unless asked not to, a newline; there is nothing to
+    check in an example beyond the call itself.
+    \forcpponly
+    \code{.cpp}
+    Print( 42 );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    Print( 42 )
+    \endcode
+    \endPythonOnly
+    \sa Print
+    \param [in] data int Value to print
+    \param [in] new_line bool Follow the value with a newline
+*/
+
+extern void Print( int data, bool new_line = true );
+
+/*!
+    \ingroup APIUtilities
+*/
+/*!
+    Get the smaller of two values.
+    \forcpponly
+    \code{.cpp}
+    if ( abs( Min( 2.0, 5.0 ) - 2.0 ) > 1e-12 )          { Print( "ERROR: Min" ); __failure++; }
+
+    if ( abs( Min( 5.0, 2.0 ) - 2.0 ) > 1e-12 )          { Print( "ERROR: Min" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    assert abs( Min( 2.0, 5.0 ) - 2.0 ) < 1e-12, "Min did not return the smaller value"
+
+    assert abs( Min( 5.0, 2.0 ) - 2.0 ) < 1e-12, "Min depends on the order of its arguments"
+    \endcode
+    \endPythonOnly
+    \sa Max
+    \param [in] x double First value
+    \param [in] y double Second value
+    \return double The smaller of the two
+*/
+
+extern double Min( double x, double y );
+
+/*!
+    \ingroup APIUtilities
+*/
+/*!
+    Get the larger of two values.
+    \forcpponly
+    \code{.cpp}
+    if ( abs( Max( 2.0, 5.0 ) - 5.0 ) > 1e-12 )          { Print( "ERROR: Max" ); __failure++; }
+
+    if ( abs( Max( 5.0, 2.0 ) - 5.0 ) > 1e-12 )          { Print( "ERROR: Max" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    assert abs( Max( 2.0, 5.0 ) - 5.0 ) < 1e-12, "Max did not return the larger value"
+
+    assert abs( Max( 5.0, 2.0 ) - 5.0 ) < 1e-12, "Max depends on the order of its arguments"
+    \endcode
+    \endPythonOnly
+    \sa Min
+    \param [in] x double First value
+    \param [in] y double Second value
+    \return double The larger of the two
+*/
+
+extern double Max( double x, double y );
+
+/*!
+    \ingroup APIUtilities
+*/
+/*!
+    Convert an angle from radians to degrees.
+    \forcpponly
+    \code{.cpp}
+    if ( abs( Rad2Deg( 3.14159265358979323846 ) - 180.0 ) > 1e-9 )   { Print( "ERROR: Rad2Deg" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    import math
+
+    assert abs( Rad2Deg( math.pi ) - 180.0 ) < 1e-9, "Rad2Deg did not convert half a turn to 180 degrees"
+    \endcode
+    \endPythonOnly
+    \sa Deg2Rad
+    \param [in] r double Angle in radians
+    \return double Angle in degrees
+*/
+
+extern double Rad2Deg( double r );
+
+/*!
+    \ingroup APIUtilities
+*/
+/*!
+    Convert an angle from degrees to radians.
+    \forcpponly
+    \code{.cpp}
+    if ( abs( Deg2Rad( 180.0 ) - 3.14159265358979323846 ) > 1e-9 )   { Print( "ERROR: Deg2Rad" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    import math
+
+    assert abs( Deg2Rad( 180.0 ) - math.pi ) < 1e-9, "Deg2Rad did not convert 180 degrees to half a turn"
+    \endcode
+    \endPythonOnly
+    \sa Rad2Deg
+    \param [in] d double Angle in degrees
+    \return double Angle in radians
+*/
+
+extern double Deg2Rad( double d );
 
 /*!
     \ingroup APIUtilities
@@ -1001,9 +1252,15 @@ extern std::string GetVSPHelpPath();
 
 extern bool CheckForVSPHelp( const std::string & path );
 
+/*!
+    \internal
+    Registers the CFD Mesh analyses with the Analysis Manager.  Reaching into CFD Mesh from
+    geom_core this way is a layering violation, kept because the analyses are not registered at
+    startup with the rest.  Deliberately left out of the documentation and the generated examples.
+*/
+
 extern void RegisterCFDMeshAnalyses();
 
-extern void LimitedIntersectSurfaces( const std::vector < std::string > & geomvec, std::vector < std::vector < vec3d > > & ptchains, std::vector < std::vector < vec3d > > & uwchains );
 
 //======================== File I/O ================================//
 /*!
@@ -1433,6 +1690,33 @@ extern void ClearVSPModel();
 /*!
     Insert an external OpenVSP project into the current project. All Geoms in the external project are placed as children of the specified parent.
     If no parent or an invalid parent is given, the Geoms are inserted at the top level.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    WriteVSPFile( "TestInsert.vsp3", SET_ALL );
+
+    InsertVSPFile( "TestInsert.vsp3", "" );
+
+    if ( FindGeoms().size() != 2 )                       { Print( "ERROR: InsertVSPFile" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    WriteVSPFile( "TestInsert.vsp3" )
+
+    InsertVSPFile( "TestInsert.vsp3", "" )
+
+    assert len( FindGeoms() ) == 2, "InsertVSPFile did not bring in the Geom"
+
+    \endcode
+    \endPythonOnly
     \param [in] file_name string \\*.vsp3 filename
     \param [in] parent_geom_id string Parent geom ID (ignored with empty string)
 */
@@ -1494,6 +1778,37 @@ extern std::string ExportFile( const std::string & file_name, int thick_set, int
 /*!
     Import a file into OpenVSP. Many formats are available, such as NASCART, V2, and BEM). The imported Geom, mesh, or other object is inserted
     as a child of the specified parent. If no parent or an invalid parent is given, the import will be done at the top level.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    SetComputationFileName( COMP_GEOM_TXT_TYPE, "TestImport.txt" );
+
+    ExportFile( "TestImport.stl", SET_ALL, EXPORT_STL );
+
+    string mesh_id = ImportFile( "TestImport.stl", IMPORT_STL, "" );
+
+    if ( mesh_id.length() == 0 )                         { Print( "ERROR: ImportFile" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    SetComputationFileName( COMP_GEOM_TXT_TYPE, "TestImport.txt" )
+
+    ExportFile( "TestImport.stl", SET_ALL, EXPORT_STL )
+
+    mesh_id = ImportFile( "TestImport.stl", IMPORT_STL, "" )
+
+    assert len( mesh_id ) > 0, "ImportFile returned no ID"
+
+    \endcode
+    \endPythonOnly
     \sa IMPORT_TYPE
     \param [in] file_name string Import file name
     \param [in] file_type int File type enum (i.e. IMPORT_PTS)
@@ -1604,6 +1919,39 @@ extern std::string ImportFile( const std::string & file_name, int file_type, con
 
 extern std::string GetBEMPropID();
 
+/*!
+    \ingroup BOR
+*/
+/*!
+    Set the propeller to write when a BEM file is exported.  Without this the first propeller found
+    is used.
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    SetBEMPropID( prop_id );
+
+    if ( GetBEMPropID() != prop_id )                     { Print( "ERROR: SetBEMPropID" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    SetBEMPropID( prop_id )
+
+    assert GetBEMPropID() == prop_id, "SetBEMPropID did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetBEMPropID, ExportFile
+    \param [in] prop_id string Propeller Geom ID to write
+*/
+
 extern void SetBEMPropID( const std::string & prop_id );
 
 
@@ -1614,6 +1962,37 @@ extern void SetBEMPropID( const std::string & prop_id );
 */
 /*!
     Read in and apply a design file (\\*.des) to the current OpenVSP project
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddDesignVar( len, XDDM_VAR );
+
+    WriteDESFile( "TestDesignVars.des" );
+
+    ReadApplyDESFile( "TestDesignVars.des" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddDesignVar( length, XDDM_VAR )
+
+    WriteDESFile( "TestDesignVars.des" )
+
+    ReadApplyDESFile( "TestDesignVars.des" )
+
+    \endcode
+    \endPythonOnly
     \param [in] file_name string \\*.des input file
 */
 
@@ -1624,6 +2003,33 @@ extern void ReadApplyDESFile( const std::string & file_name );
 */
 /*!
     Write all design variables to a design file (\\*.des)
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddDesignVar( len, XDDM_VAR );
+
+    WriteDESFile( "TestDesignVars.des" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddDesignVar( length, XDDM_VAR )
+
+    WriteDESFile( "TestDesignVars.des" )
+
+    \endcode
+    \endPythonOnly
     \param [in] file_name string \\*.des output file
 */
 
@@ -1634,6 +2040,37 @@ extern void WriteDESFile( const std::string & file_name );
 */
 /*!
     Read in and apply a Cart3D XDDM file (\\*.xddm) to the current OpenVSP project
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddDesignVar( len, XDDM_VAR );
+
+    WriteXDDMFile( "TestDesignVars.xddm" );
+
+    ReadApplyXDDMFile( "TestDesignVars.xddm" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddDesignVar( length, XDDM_VAR )
+
+    WriteXDDMFile( "TestDesignVars.xddm" )
+
+    ReadApplyXDDMFile( "TestDesignVars.xddm" )
+
+    \endcode
+    \endPythonOnly
     \param [in] file_name string \\*.xddm input file
 */
 
@@ -1644,6 +2081,33 @@ extern void ReadApplyXDDMFile( const std::string & file_name );
 */
 /*!
     Write all design variables to a Cart3D XDDM file (\\*.xddm)
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddDesignVar( len, XDDM_VAR );
+
+    WriteXDDMFile( "TestDesignVars.xddm" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddDesignVar( length, XDDM_VAR )
+
+    WriteXDDMFile( "TestDesignVars.xddm" )
+
+    \endcode
+    \endPythonOnly
     \param [in] file_name string \\*.xddm output file
 */
 
@@ -1654,6 +2118,33 @@ extern void WriteXDDMFile( const std::string & file_name );
 */
 /*!
     Get the number of design variables
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddDesignVar( len, XDDM_VAR );
+
+    if ( GetNumDesignVars() != 1 )                       { Print( "ERROR: GetNumDesignVars" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddDesignVar( length, XDDM_VAR )
+
+    assert GetNumDesignVars() == 1, "GetNumDesignVars did not count the variable"
+
+    \endcode
+    \endPythonOnly
     \return int Number of design variables
 */
 
@@ -1664,6 +2155,33 @@ extern int GetNumDesignVars();
 */
 /*!
     Add a design variable
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddDesignVar( len, XDDM_VAR );
+
+    if ( GetNumDesignVars() != 1 )                       { Print( "ERROR: AddDesignVar" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddDesignVar( length, XDDM_VAR )
+
+    assert GetNumDesignVars() == 1, "AddDesignVar did not add the variable"
+
+    \endcode
+    \endPythonOnly
     \sa XDDM_QUANTITY_TYPE
     \param [in] parm_id string Parm ID
     \param [in] type int XDDM type enum (XDDM_VAR or XDDM_CONST)
@@ -1676,6 +2194,37 @@ extern void AddDesignVar( const std::string & parm_id, int type );
 */
 /*!
     Delete all design variables
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddDesignVar( len, XDDM_VAR );
+
+    DeleteAllDesignVars();
+
+    if ( GetNumDesignVars() != 0 )                       { Print( "ERROR: DeleteAllDesignVars" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddDesignVar( length, XDDM_VAR )
+
+    DeleteAllDesignVars()
+
+    assert GetNumDesignVars() == 0, "DeleteAllDesignVars left variables behind"
+
+    \endcode
+    \endPythonOnly
 */
 
 extern void DeleteAllDesignVars();
@@ -1685,6 +2234,33 @@ extern void DeleteAllDesignVars();
 */
 /*!
     Get the Parm ID of the specified design variable
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddDesignVar( len, XDDM_VAR );
+
+    if ( GetDesignVar( 0 ) != len )                      { Print( "ERROR: GetDesignVar" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddDesignVar( length, XDDM_VAR )
+
+    assert GetDesignVar( 0 ) == length, "GetDesignVar did not report the variable"
+
+    \endcode
+    \endPythonOnly
     \param [in] index int Index of design variable
     \return string Parm ID
 */
@@ -1696,6 +2272,33 @@ extern std::string GetDesignVar( int index );
 */
 /*!
     Get the XDDM type of the specified design variable
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddDesignVar( len, XDDM_VAR );
+
+    if ( GetDesignVarType( 0 ) != XDDM_VAR )             { Print( "ERROR: GetDesignVarType" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddDesignVar( length, XDDM_VAR )
+
+    assert GetDesignVarType( 0 ) == XDDM_VAR, "GetDesignVarType did not report the type"
+
+    \endcode
+    \endPythonOnly
     \sa XDDM_QUANTITY_TYPE
     \param [in] index int Index of design variable
     \return int XDDM type enum (XDDM_VAR or XDDM_CONST)
@@ -1809,6 +2412,32 @@ extern int GetDesignVarType( int index );
 */
 
 extern std::string GetComputationFileName( int file_type );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Set the file name a computation writes for one export type.  The type is one of the computation
+    file type enums, and each is remembered separately.
+    \forcpponly
+    \code{.cpp}
+    SetComputationFileName( CFD_STL_TYPE, "TestCFDMesh.stl" );
+
+    SetComputationFileName( CFD_TRI_TYPE, "TestCFDMesh.tri" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    SetComputationFileName( CFD_STL_TYPE, "TestCFDMesh.stl" )
+
+    SetComputationFileName( CFD_TRI_TYPE, "TestCFDMesh.tri" )
+
+    \endcode
+    \endPythonOnly
+    \sa COMPUTATION_FILE_TYPE, ComputeCFDMesh
+    \param [in] file_type int Computation file type enum (i.e. CFD_STL_TYPE)
+    \param [in] file_name string Name of the file to write
+*/
 
 extern void SetComputationFileName( int file_type, const std::string & file_name );
 
@@ -2070,7 +2699,7 @@ extern void ComputeDegenGeom( int set, int file_export_types );
     SetComputationFileName( CFD_FACET_TYPE, "TestCFDMeshFacet_API.facet" )
     SetComputationFileName( CFD_STL_TYPE, "TestCFDMesh_API.stl" )
 
-   print( "\tComputing CFDMesh..." )
+    print( "\tComputing CFDMesh..." )
 
     ComputeCFDMesh( SET_ALL, SET_NONE, CFD_FACET_TYPE | CFD_STL_TYPE )
 
@@ -2082,7 +2711,6 @@ extern void ComputeDegenGeom( int set, int file_export_types );
     assert GetGeomTypeName( mesh_id ) == "Mesh", "ComputeCFDMesh did not write a readable mesh"
 
     DeleteGeom( mesh_id )
-
     \endcode
     \endPythonOnly
     \sa COMPUTATION_FILE_TYPE
@@ -2206,6 +2834,32 @@ extern void ComputeCFDMesh( int set, int degenset, int file_export_types );
 
 extern double GetCFDMeshVal( int type );
 
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Set one of the CFD Mesh settings.  The type is one of the CFD mesh setting enums, and the value
+    is read as a double whatever the setting means.
+    \forcpponly
+    \code{.cpp}
+    SetCFDMeshVal( CFD_MIN_EDGE_LEN, 0.2 );
+
+    SetCFDMeshVal( CFD_MAX_EDGE_LEN, 1.0 );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    SetCFDMeshVal( CFD_MIN_EDGE_LEN, 0.2 )
+
+    SetCFDMeshVal( CFD_MAX_EDGE_LEN, 1.0 )
+
+    \endcode
+    \endPythonOnly
+    \sa CFD_CONTROL_TYPE, ComputeCFDMesh
+    \param [in] type int CFD mesh setting enum (i.e. CFD_MIN_EDGE_LEN)
+    \param [in] val double Value to set
+*/
+
 extern void SetCFDMeshVal( int type, double val );
 
 /*!
@@ -2321,7 +2975,196 @@ extern void SetCFDMeshVal( int type, double val );
 
 extern bool GetCFDWakeFlag( const std::string & geom_id );
 
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Say whether a Geom sheds a wake in CFD Mesh.  This is the Wake check box on the CFD Mesh screen.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    Update();
+
+    SetCFDWakeFlag( wid, true );
+
+    if ( GetParmVal( FindParm( wid, "Wake", "Shape" ) ) != 1.0 )    { Print( "ERROR: SetCFDWakeFlag" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    Update()
+
+    SetCFDWakeFlag( wid, True )
+
+    assert GetParmVal( FindParm( wid, "Wake", "Shape" ) ) == 1.0, "SetCFDWakeFlag did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa ComputeCFDMesh
+    \param [in] geom_id string Geom ID
+    \param [in] flag bool True to shed a wake from this Geom
+*/
+
 extern void SetCFDWakeFlag( const std::string & geom_id, bool flag );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Set the Geom that stands in for the CFD Mesh far field box. Turning the far field on and choosing to use a
+    component for it are separate settings; this one only names the component. Pass an empty string to clear it.
+    \forcpponly
+    \code{.cpp}
+    //==== Add Pod And A Sphere Around It ====//
+    string pid = AddGeom( "POD" );
+    string eid = AddGeom( "ELLIPSOID" );
+
+    SetParmVal( eid, "A_Radius", "Design", 12.0 );
+
+    SetCFDMeshVal( CFD_FAR_FIELD_FLAG, 1.0 );
+    SetParmVal( FindParm( FindContainer( "CFDMeshSettings", 0 ), "FarComp", "FarField" ), 1.0 );
+
+    SetCFDFarFieldGeomID( eid );
+
+    if ( GetCFDFarFieldGeomID() != eid )
+    {
+        Print( "ERROR: SetCFDFarFieldGeomID did not name the Geom" );
+        __failure++;
+    }
+
+    // An empty string puts the setting back the way it reads before a choice is made.
+    SetCFDFarFieldGeomID( "" );
+
+    if ( GetCFDFarFieldGeomID() != "" )
+    {
+        Print( "ERROR: SetCFDFarFieldGeomID did not clear the choice" );
+        __failure++;
+    }
+
+    // A Geom that does not exist has to be rejected.
+    SetCFDFarFieldGeomID( "NoSuchGeom" );
+
+    if ( GetNumTotalErrors() == 0 )
+    {
+        Print( "ERROR: SetCFDFarFieldGeomID accepted a Geom that does not exist" );
+        __failure++;
+    }
+
+    // That error was raised deliberately, so take it back off the queue.
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== Add Pod And A Sphere Around It ====//
+    pid = AddGeom( "POD" )
+    eid = AddGeom( "ELLIPSOID" )
+
+    SetParmVal( eid, "A_Radius", "Design", 12.0 )
+
+    SetCFDMeshVal( CFD_FAR_FIELD_FLAG, 1.0 )
+    SetParmVal( FindParm( FindContainer( "CFDMeshSettings", 0 ), "FarComp", "FarField" ), 1.0 )
+
+    SetCFDFarFieldGeomID( eid )
+
+    assert GetCFDFarFieldGeomID() == eid, "SetCFDFarFieldGeomID did not name the Geom"
+
+    # An empty string puts the setting back the way it reads before a choice is made.
+    SetCFDFarFieldGeomID( "" )
+
+    assert GetCFDFarFieldGeomID() == "", "SetCFDFarFieldGeomID did not clear the choice"
+
+    # A Geom that does not exist has to be rejected.  The error queue is reached through
+    # the error manager singleton in Python.
+    err_mgr = ErrorMgrSingleton.getInstance()
+
+    SetCFDFarFieldGeomID( "NoSuchGeom" )
+
+    assert err_mgr.GetNumTotalErrors() > 0, "SetCFDFarFieldGeomID accepted a Geom that does not exist"
+
+    # That error was raised deliberately, so take it back off the queue.
+    while err_mgr.GetNumTotalErrors() > 0 :
+        err = err_mgr.PopLastError()
+
+    \endcode
+    \endPythonOnly
+    \sa GetCFDFarFieldGeomID, SetCFDMeshVal
+    \param [in] geom_id string Geom ID, or an empty string to clear
+*/
+
+extern void SetCFDFarFieldGeomID( const std::string & geom_id );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Get the Geom that stands in for the CFD Mesh far field box. Comes back empty when none has been named.
+    \forcpponly
+    \code{.cpp}
+    //==== Add Two Geoms To Choose Between ====//
+    string pid = AddGeom( "POD" );
+    string eid = AddGeom( "ELLIPSOID" );
+
+    SetCFDFarFieldGeomID( eid );
+
+    if ( GetCFDFarFieldGeomID() != eid )
+    {
+        Print( "ERROR: GetCFDFarFieldGeomID did not report the Geom that was set" );
+        __failure++;
+    }
+
+    // It follows the setting, so naming another Geom changes what comes back.
+    SetCFDFarFieldGeomID( pid );
+
+    if ( GetCFDFarFieldGeomID() != pid )
+    {
+        Print( "ERROR: GetCFDFarFieldGeomID did not follow SetCFDFarFieldGeomID" );
+        __failure++;
+    }
+
+    // With the choice cleared it comes back empty.
+    SetCFDFarFieldGeomID( "" );
+
+    if ( GetCFDFarFieldGeomID() != "" )
+    {
+        Print( "ERROR: GetCFDFarFieldGeomID did not come back empty" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== Add Two Geoms To Choose Between ====//
+    pid = AddGeom( "POD" )
+    eid = AddGeom( "ELLIPSOID" )
+
+    SetCFDFarFieldGeomID( eid )
+
+    assert GetCFDFarFieldGeomID() == eid, "GetCFDFarFieldGeomID did not report the Geom that was set"
+
+    # It follows the setting, so naming another Geom changes what comes back.
+    SetCFDFarFieldGeomID( pid )
+
+    assert GetCFDFarFieldGeomID() == pid, "GetCFDFarFieldGeomID did not follow SetCFDFarFieldGeomID"
+
+    # With the choice cleared it comes back empty.
+    SetCFDFarFieldGeomID( "" )
+
+    assert GetCFDFarFieldGeomID() == "", "GetCFDFarFieldGeomID did not come back empty"
+
+    \endcode
+    \endPythonOnly
+    \sa SetCFDFarFieldGeomID
+    \return string Geom ID
+*/
+
+extern std::string GetCFDFarFieldGeomID();
 
 /*!
     \ingroup CFDMesh
@@ -2661,6 +3504,40 @@ extern std::string GetCFDSourceName( const std::string & geom_id, int source_ind
 
 extern void SetCFDSourceName( const std::string & geom_id, int source_index, const std::string & name );
 
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Get the type of one CFD Mesh source on a Geom.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 1.0, 0.25, 0.5 );
+
+    if ( GetCFDSourceType( pid, 0 ) != POINT_SOURCE )    { Print( "ERROR: GetCFDSourceType" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 1.0, 0.25, 0.5 )
+
+    assert GetCFDSourceType( pid, 0 ) == POINT_SOURCE, "GetCFDSourceType did not report the source type"
+
+    \endcode
+    \endPythonOnly
+    \sa CFD_MESH_SOURCE_TYPE, AddCFDSource
+    \param [in] geom_id string Geom ID
+    \param [in] source_index int Index of the source on that Geom
+    \return int CFD mesh source type enum (i.e. POINT_SOURCE)
+*/
+
 extern int GetCFDSourceType( const std::string & geom_id, int source_index );
 
 /*!
@@ -2743,6 +3620,41 @@ extern int GetCFDSourceType( const std::string & geom_id, int source_index );
 */
 
 extern void DeleteCFDSource( const std::string & geom_id, int source_index );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Delete every CFD Mesh source on every Geom.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 1.0, 0.25, 0.5 );
+
+    DeleteAllCFDSources();
+
+    if ( GetNumCFDSources( pid ) != 0 )                  { Print( "ERROR: DeleteAllCFDSources" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 1.0, 0.25, 0.5 )
+
+    DeleteAllCFDSources()
+
+    assert GetNumCFDSources( pid ) == 0, "DeleteAllCFDSources left sources behind"
+
+    \endcode
+    \endPythonOnly
+    \sa AddCFDSource, DeleteCFDSource
+*/
 
 extern void DeleteAllCFDSources();
 
@@ -3042,6 +3954,29 @@ extern void AddCFDSource( int type, const std::string & geom_id, int surf_index,
 */
 /*!
     Get ID of the current VSPAERO reference Geom
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    Update();
+
+    SetVSPAERORefWingID( wid );
+
+    if ( GetVSPAERORefWingID() != wid )                  { Print( "ERROR: GetVSPAERORefWingID" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    Update()
+
+    SetVSPAERORefWingID( wid )
+
+    assert GetVSPAERORefWingID() == wid, "GetVSPAERORefWingID did not report the wing that was set"
+
+    \endcode
+    \endPythonOnly
     \return string Reference Geom ID
 */
 
@@ -3348,6 +4283,29 @@ extern std::string GetAnalysisDoc( const std::string & analysis );
     \beginPythonOnly
 
     \endPythonOnly
+    \forcpponly
+    \code{.cpp}
+    string analysis_name = "CompGeom";
+
+    array < string > @in_array = GetAnalysisInputNames( analysis_name );
+
+    string doc = GetAnalysisInputDoc( analysis_name, in_array[0] );
+
+    if ( doc.length() == 0 )                             { Print( "ERROR: GetAnalysisInputDoc" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    analysis_name = "CompGeom"
+
+    in_array = GetAnalysisInputNames( analysis_name )
+
+    doc = GetAnalysisInputDoc( analysis_name, in_array[0] )
+
+    assert len( doc ) > 0, "GetAnalysisInputDoc returned nothing"
+
+    \endcode
+    \endPythonOnly
     \param [in] analysis string Analysis name
     \param [in] name string Input name
     \return string Documentation string
@@ -3395,6 +4353,25 @@ extern std::string ExecAnalysis( const std::string & analysis );
 */
 /*!
     Get the documentation string for the particular analysis and input
+    \forcpponly
+    \code{.cpp}
+    string analysis_name = "CompGeom";
+
+    array < string > @in_array = GetAnalysisInputNames( analysis_name );
+
+    if ( GetNumAnalysisInputData( analysis_name, in_array[0] ) < 1 )    { Print( "ERROR: GetNumAnalysisInputData" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    analysis_name = "CompGeom"
+
+    in_array = GetAnalysisInputNames( analysis_name )
+
+    assert GetNumAnalysisInputData( analysis_name, in_array[0] ) >= 1, "GetNumAnalysisInputData reported nothing"
+
+    \endcode
+    \endPythonOnly
     \param [in] analysis string Analysis name
     \param [in] name string Input name
     \return int Documentation string
@@ -4353,6 +5330,25 @@ extern void DeleteAllGeometryAnalysisAzEl( const std::string & geom_analysis_id 
 */
 /*!
     Get the number of azimuth and elevation pairs in a Geometry Analysis case
+    \forcpponly
+    \code{.cpp}
+    string id = AddGeometryAnalysis();
+
+    AddGeometryAnalysisAzEl( id, 10.0, 20.0 );
+
+    if ( GetNumGeometryAnalysisAzEl( id ) != 1 )         { Print( "ERROR: GetNumGeometryAnalysisAzEl" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    id = AddGeometryAnalysis()
+
+    AddGeometryAnalysisAzEl( id, 10.0, 20.0 )
+
+    assert GetNumGeometryAnalysisAzEl( id ) == 1, "GetNumGeometryAnalysisAzEl did not count the pair"
+
+    \endcode
+    \endPythonOnly
     \sa AddGeometryAnalysisAzEl
     \param [in] geom_analysis_id string Geometry Analysis case ID
     \return int Number of az/el pairs
@@ -4365,6 +5361,29 @@ extern int GetNumGeometryAnalysisAzEl( const std::string & geom_analysis_id );
 */
 /*!
     Get the Parm ID of the azimuth of one az/el pair, so its value can be read or changed
+    \forcpponly
+    \code{.cpp}
+    string id = AddGeometryAnalysis();
+
+    AddGeometryAnalysisAzEl( id, 10.0, 20.0 );
+
+    string azparm = GetGeometryAnalysisAzimuthParm( id, 0 );
+
+    if ( !closeTo( GetParmVal( azparm ), 10.0, 1e-6 ) )    { Print( "ERROR: GetGeometryAnalysisAzimuthParm" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    id = AddGeometryAnalysis()
+
+    AddGeometryAnalysisAzEl( id, 10.0, 20.0 )
+
+    azparm = GetGeometryAnalysisAzimuthParm( id, 0 )
+
+    assert abs( GetParmVal( azparm ) - 10.0 ) < 1e-6, "GetGeometryAnalysisAzimuthParm did not report the azimuth"
+
+    \endcode
+    \endPythonOnly
     \sa AddGeometryAnalysisAzEl, GetGeometryAnalysisElevationParm
     \param [in] geom_analysis_id string Geometry Analysis case ID
     \param [in] index int Az/El pair index
@@ -4378,6 +5397,29 @@ extern std::string GetGeometryAnalysisAzimuthParm( const std::string & geom_anal
 */
 /*!
     Get the Parm ID of the elevation of one az/el pair, so its value can be read or changed
+    \forcpponly
+    \code{.cpp}
+    string id = AddGeometryAnalysis();
+
+    AddGeometryAnalysisAzEl( id, 10.0, 20.0 );
+
+    string elparm = GetGeometryAnalysisElevationParm( id, 0 );
+
+    if ( !closeTo( GetParmVal( elparm ), 20.0, 1e-6 ) )    { Print( "ERROR: GetGeometryAnalysisElevationParm" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    id = AddGeometryAnalysis()
+
+    AddGeometryAnalysisAzEl( id, 10.0, 20.0 )
+
+    elparm = GetGeometryAnalysisElevationParm( id, 0 )
+
+    assert abs( GetParmVal( elparm ) - 20.0 ) < 1e-6, "GetGeometryAnalysisElevationParm did not report the elevation"
+
+    \endcode
+    \endPythonOnly
     \sa AddGeometryAnalysisAzEl, GetGeometryAnalysisAzimuthParm
     \param [in] geom_analysis_id string Geometry Analysis case ID
     \param [in] index int Az/El pair index
@@ -4385,6 +5427,44 @@ extern std::string GetGeometryAnalysisAzimuthParm( const std::string & geom_anal
 */
 
 extern std::string GetGeometryAnalysisElevationParm( const std::string & geom_analysis_id, int index );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Delete one geometry analysis case.
+    \forcpponly
+    \code{.cpp}
+    string id = AddGeometryAnalysis();
+
+    SetActiveGeometryAnalysis( id );
+
+    if ( GetActiveGeometryAnalysis() != id )             { Print( "ERROR: DeleteGeometryAnalysis" ); __failure++; }
+
+    DeleteGeometryAnalysis( id );
+
+    // The case that was active is gone, so nothing is active.
+    if ( GetActiveGeometryAnalysis() == id )             { Print( "ERROR: DeleteGeometryAnalysis" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    id = AddGeometryAnalysis()
+
+    SetActiveGeometryAnalysis( id )
+
+    assert GetActiveGeometryAnalysis() == id, "SetActiveGeometryAnalysis did not take"
+
+    DeleteGeometryAnalysis( id )
+
+    # The case that was active is gone, so nothing is active.
+    assert GetActiveGeometryAnalysis() != id, "DeleteGeometryAnalysis did not delete the case"
+
+    \endcode
+    \endPythonOnly
+    \sa AddGeometryAnalysis
+    \param [in] id string Geometry analysis case ID
+*/
 
 extern void DeleteGeometryAnalysis( const std::string &id );
 
@@ -7640,6 +8720,52 @@ extern std::string GetResultsName(const std::string & results_id );
 
 extern std::string GetResultsSetDoc( const std::string & results_id );
 
+/*!
+    \ingroup Results
+*/
+/*!
+    Get the documentation string for one entry of a results object.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string rid = ExecAnalysis( "CompGeom" );
+
+    array < string > @name_array = GetAllDataNames( rid );
+
+    if ( name_array.size() > 0 )
+    {
+        string doc = GetResultsEntryDoc( rid, name_array[0] );
+
+        if ( doc.length() == 0 )                         { Print( "ERROR: GetResultsEntryDoc" ); __failure++; }
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    rid = ExecAnalysis( "CompGeom" )
+
+    name_array = GetAllDataNames( rid )
+
+    if len( name_array ) > 0:
+        doc = GetResultsEntryDoc( rid, name_array[0] )
+
+        assert len( doc ) > 0, "GetResultsEntryDoc returned nothing"
+
+    \endcode
+    \endPythonOnly
+    \sa GetResultsDoc, GetAllDataNames
+    \param [in] results_id string Results ID
+    \param [in] data_name string Name of the entry in that results object
+    \return string Documentation for that entry
+*/
+
 extern std::string GetResultsEntryDoc( const std::string & results_id, const std::string & data_name );
 
 /*!
@@ -7981,6 +9107,41 @@ extern const std::vector< double > & GetDoubleResults( const std::string & id, c
 */
 /*!
     Get all matrix (vector<vector<double>>) values for a particular result, name, and index
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string rid = ExecAnalysis( "CompGeom" );
+
+    array < string > @name_array = GetAllDataNames( rid );
+
+    for ( int i = 0 ; i < int( name_array.size() ) ; i++ )
+    {
+        if ( GetResultsType( rid, name_array[i] ) == DOUBLE_MATRIX_DATA )
+        {
+            array < array < double > @ > @mat = GetDoubleMatResults( rid, name_array[i] );
+            if ( mat.size() == 0 )                       { Print( "ERROR: GetDoubleMatResults" ); __failure++; }
+        }
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    rid = ExecAnalysis( "CompGeom" )
+
+    for name in GetAllDataNames( rid ):
+        if GetResultsType( rid, name ) == DOUBLE_MATRIX_DATA:
+            mat = GetDoubleMatResults( rid, name )
+            assert len( mat ) > 0, "GetDoubleMatResults returned nothing"
+
+    \endcode
+    \endPythonOnly
     \param [in] id string Result ID
     \param [in] name string Data name
     \param [in] index int Data index
@@ -9426,6 +10587,36 @@ extern vec3d GetGeomWireColor( const std::string &geom_id );
 
 extern std::string GetGeomMaterialName( const std::string &geom_id );
 
+/*!
+    \ingroup Geom
+*/
+/*!
+    Set the material a Geom is drawn with, by name.  The name must be one of the materials in the
+    material library.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    SetGeomMaterialName( pid, "Aluminum" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    SetGeomMaterialName( pid, "Aluminum" )
+
+    \endcode
+    \endPythonOnly
+    \sa AddMaterial
+    \param [in] geom_id string Geom ID
+    \param [in] name string Material name
+*/
+
 extern void SetGeomMaterialName( const std::string &geom_id, const std::string &name );
 
 /*!
@@ -9545,6 +10736,140 @@ extern void AddMaterial( const std::string &name, const vec3d & ambient, const v
 */
 
 extern std::vector < std::string > GetMaterialNames();
+
+/*!
+    \ingroup Visualization
+*/
+/*!
+    Get the number of lights in the model.  The count is fixed: a model always has the same
+    lights, each one either active or not.
+    \forcpponly
+    \code{.cpp}
+    //==== A model always has the same number of lights ====//
+    if ( GetNumLights() <= 0 )
+    {
+        Print( "ERROR: GetNumLights did not count the lights" );
+        __failure++;
+    }
+
+    //==== Every one of them answers ====//
+    for ( int i = 0; i < GetNumLights(); i++ )
+    {
+        if ( FindLight( i ).length() == 0 )
+        {
+            Print( "ERROR: FindLight found nothing" );
+            __failure++;
+        }
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== A model always has the same number of lights ====#
+    assert GetNumLights() > 0, "GetNumLights did not count the lights"
+
+    #==== Every one of them answers ====#
+    for i in range( GetNumLights() ):
+        assert len( FindLight( i ) ) > 0, "FindLight found nothing"
+
+    \endcode
+    \endPythonOnly
+    \sa FindLight
+    \return int Number of lights
+*/
+
+extern int GetNumLights();
+
+/*!
+    \ingroup Visualization
+*/
+/*!
+    Get the ID of a light, so that its Parms can be reached the way any other container's are.
+    A light has an ActiveFlag, a position and ambient, diffuse and specular strengths, all in
+    Parm group "Light_Parm".
+    \forcpponly
+    \code{.cpp}
+    //==== Take the first light and put it somewhere of its own ====//
+    string light_id = FindLight( 0 );
+
+    if ( light_id.length() == 0 )
+    {
+        Print( "ERROR: FindLight found nothing" );
+        __failure++;
+    }
+
+    SetParmVal( FindParm( light_id, "ActiveFlag", "Light_Parm" ), 1.0 );
+    SetParmVal( FindParm( light_id, "X", "Light_Parm" ), 12.0 );
+
+    Update();
+
+    if ( abs( GetParmVal( light_id, "X", "Light_Parm" ) - 12.0 ) > 1e-6 )
+    {
+        Print( "ERROR: the light did not take the position it was given" );
+        __failure++;
+    }
+
+    //==== Asking for one that is not there is refused ====//
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj drained = PopLastError();
+    }
+
+    FindLight( GetNumLights() );
+
+    if ( GetNumTotalErrors() == 0 )
+    {
+        Print( "ERROR: FindLight answered for a light that does not exist" );
+        __failure++;
+    }
+
+    // That error was raised deliberately, so take it back off the queue.
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== Take the first light and put it somewhere of its own ====#
+    light_id = FindLight( 0 )
+
+    assert len( light_id ) > 0, "FindLight found nothing"
+
+    SetParmVal( FindParm( light_id, "ActiveFlag", "Light_Parm" ), 1.0 )
+    SetParmVal( FindParm( light_id, "X", "Light_Parm" ), 12.0 )
+
+    Update()
+
+    moved = GetParmVal( light_id, "X", "Light_Parm" )
+
+    assert abs( moved - 12.0 ) < 1e-6, "the light did not take the position it was given"
+
+    #==== Asking for one that is not there is refused.  The error queue is reached through
+    #==== the error manager singleton in Python, and is drained first so the count below is
+    #==== about that call and not about anything before it.
+    err_mgr = ErrorMgrSingleton.getInstance()
+
+    while err_mgr.GetNumTotalErrors() > 0 :
+        drained = err_mgr.PopLastError()
+
+    FindLight( GetNumLights() )
+
+    assert err_mgr.GetNumTotalErrors() > 0, "FindLight answered for a light that does not exist"
+
+    # That error was raised deliberately, so take it back off the queue.
+    while err_mgr.GetNumTotalErrors() > 0 :
+        err = err_mgr.PopLastError()
+
+    \endcode
+    \endPythonOnly
+    \sa GetNumLights
+    \param [in] index int Light index
+    \return string Light ID
+*/
+
+extern std::string FindLight( int index );
 
 /*!
     \ingroup Visualization
@@ -10123,6 +11448,98 @@ extern void CopyGeomToClipboard( const std::string & geom_id );
 */
 
 extern std::vector<std::string> PasteGeomClipboard( const std::string & parent = std::string() );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Replace a Fuselage with a Stack of the same shape.  Each cross section is placed where the
+    Fuselage put it, and its skinning is carried across, so the surface is unchanged.  The Stack
+    goes in the Fuselage's place in the model, under its name, with its children, subsurfaces,
+    structures, mesh sources, textures and attributes.
+
+    The Stack takes over the Fuselage's identity: its Geom ID, the IDs of the Parms the two have
+    in common, and the IDs of each cross section and its Parms.  A link, a design variable or an
+    advanced link on one of those Parms goes on naming the same thing, and the ID this returns is
+    the ID that was passed in.  Some Parms are paired with a counterpart that means something
+    different: a cross section's rotation, which in a Stack is relative to the section before it,
+    and its location fractions, which become the Stack's X, Y and Z deltas -- lengths, and
+    relative ones.  Only the Fuselage's length has no counterpart at all; attributes on it, or on
+    a cross section's copy of it, move to the Stack itself.  Attributes elsewhere -- on the Geom,
+    a cross section, a subsurface, a Parm -- stay with the ID they were on.
+
+    CompareGeomSurfaces measures how closely the Stack's surfaces match a copy of the Fuselage
+    kept for the purpose.
+    \forcpponly
+    \code{.cpp}
+    //==== A Fuselage rotated about a point along its length, with a Pod hung off it ====//
+    string fid = AddGeom( "FUSELAGE" );
+    SetParmVal( FindParm( fid, "Origin", "XForm" ), 0.4 );
+    SetParmVal( FindParm( fid, "Y_Rel_Rotation", "XForm" ), 8.0 );
+
+    string pid = AddGeom( "POD", fid );
+    SetParmVal( FindParm( pid, "X_Rel_Location", "XForm" ), 6.0 );
+
+    Update();
+
+    vec3d before = CompPnt01( fid, 0, 0.3, 0.2 );
+    vec3d pod_before = CompPnt01( pid, 0, 0.5, 0.5 );
+
+    //==== Convert it ====//
+    string sid = ConvertFuselageToStack( fid );
+
+    if ( GetErrorLastCallFlag() )               { Print( "---> Error: API ConvertFuselageToStack reported an error " ); __failure++; }
+
+    Update();
+
+    if ( sid != fid )                           { Print( "---> Error: API ConvertFuselageToStack did not keep the ID " ); __failure++; }
+
+    if ( GetGeomTypeName( sid ) != "Stack" )    { Print( "---> Error: API ConvertFuselageToStack did not make a Stack " ); __failure++; }
+
+    //==== The surface is where it was, and so is the Pod ====//
+    if ( dist( before, CompPnt01( sid, 0, 0.3, 0.2 ) ) > 1e-9 )      { Print( "---> Error: API ConvertFuselageToStack moved the surface " ); __failure++; }
+
+    if ( dist( pod_before, CompPnt01( pid, 0, 0.5, 0.5 ) ) > 1e-9 )  { Print( "---> Error: API ConvertFuselageToStack moved a child " ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== A Fuselage rotated about a point along its length, with a Pod hung off it ====#
+    fid = AddGeom( "FUSELAGE" )
+    SetParmVal( FindParm( fid, "Origin", "XForm" ), 0.4 )
+    SetParmVal( FindParm( fid, "Y_Rel_Rotation", "XForm" ), 8.0 )
+
+    pid = AddGeom( "POD", fid )
+    SetParmVal( FindParm( pid, "X_Rel_Location", "XForm" ), 6.0 )
+
+    Update()
+
+    before = CompPnt01( fid, 0, 0.3, 0.2 )
+    pod_before = CompPnt01( pid, 0, 0.5, 0.5 )
+
+    #==== Convert it ====#
+    sid = ConvertFuselageToStack( fid )
+
+    assert not ErrorMgrSingleton.getInstance().GetErrorLastCallFlag(), "---> Error: API ConvertFuselageToStack reported an error"
+
+    Update()
+
+    assert sid == fid, "---> Error: API ConvertFuselageToStack did not keep the ID"
+
+    assert GetGeomTypeName( sid ) == "Stack", "---> Error: API ConvertFuselageToStack did not make a Stack"
+
+    #==== The surface is where it was, and so is the Pod ====#
+    assert dist( before, CompPnt01( sid, 0, 0.3, 0.2 ) ) < 1e-9, "---> Error: API ConvertFuselageToStack moved the surface"
+
+    assert dist( pod_before, CompPnt01( pid, 0, 0.5, 0.5 ) ) < 1e-9, "---> Error: API ConvertFuselageToStack moved a child"
+
+    \endcode
+    \endPythonOnly
+    \param [in] geom_id string Fuselage Geom ID
+    \return string ID of the Stack, which is the Fuselage's own ID
+*/
+
+extern std::string ConvertFuselageToStack( const std::string & geom_id );
 
 /*!
     \ingroup Geom
@@ -11128,6 +12545,11 @@ extern int GetGeomVSPSurfCfdType( const std::string& geom_id, int main_surf_ind 
 /*!
     Get the the maximum coordinate of the bounding box of a Geom with given main surface index. The Geom bounding
     box may be specified in absolute or body reference frame.
+
+    A Geom with no surfaces -- a mesh, a point cloud, a wireframe -- answers out of its own bounding box, and
+    main_surf_ind does not apply. That box is built in absolute coordinates, so the body reference frame answer is
+    the absolute box turned back through the model matrix, which contains the geometry but is not as tight as the
+    box a surface gives.
     \forcpponly
     \code{.cpp}
     //==== Add Pod Geometry ====//
@@ -11182,6 +12604,11 @@ extern vec3d GetGeomBBoxMax( const std::string& geom_id, int main_surf_ind = 0, 
 /*!
     Get the the minimum coordinate of the bounding box of a Geom with given main surface index. The Geom bounding
     box may be specified in absolute or body reference frame.
+
+    A Geom with no surfaces -- a mesh, a point cloud, a wireframe -- answers out of its own bounding box, and
+    main_surf_ind does not apply. That box is built in absolute coordinates, so the body reference frame answer is
+    the absolute box turned back through the model matrix, which contains the geometry but is not as tight as the
+    box a surface gives.
     \forcpponly
     \code{.cpp}
     //==== Add Pod Geometry ====//
@@ -11944,6 +13371,29 @@ extern std::vector<std::string> GetSubSurfIDVec( const std::string & geom_id );
 */
 /*!
     Get a vector of all sub-surface IDs for the entire model
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    AddSubSurf( pid, SS_RECTANGLE );
+
+    Update();
+
+    if ( GetAllSubSurfIDs().size() != 1 )                { Print( "ERROR: GetAllSubSurfIDs" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    AddSubSurf( pid, SS_RECTANGLE )
+
+    Update()
+
+    assert len( GetAllSubSurfIDs() ) == 1, "GetAllSubSurfIDs did not report the sub-surface"
+
+    \endcode
+    \endPythonOnly
     \return vector\<string\> Array of sub-surface IDs
 */
 
@@ -12426,6 +13876,39 @@ extern void IntersectSubSurf( const std::string & sub_id );
 
 extern std::string GetIntersectSubSurfGeomID( const std::string & sub_id );
 
+/*!
+    \ingroup SubSurface
+*/
+/*!
+    Say which Geom a sub-surface belongs to for intersection purposes.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    string ssid = AddSubSurf( pid, SS_INTERSECT );
+
+    Update();
+
+    SetIntersectSubSurfGeomID( ssid, pid );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    ssid = AddSubSurf( pid, SS_INTERSECT )
+
+    Update()
+
+    SetIntersectSubSurfGeomID( ssid, pid )
+
+    \endcode
+    \endPythonOnly
+    \sa AddSubSurf
+    \param [in] sub_id string Sub-surface ID
+    \param [in] geom_id string Geom ID the sub-surface belongs to
+*/
+
 extern void SetIntersectSubSurfGeomID( const std::string & sub_id, const std::string & geom_id );
 
 /*!
@@ -12594,6 +14077,38 @@ extern int AddFeaStruct( const std::string & geom_id, bool init_skin = true, int
 */
 
 extern int GetFeaMeshStructIndex();
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Choose which structure the FEA Mesh tool works on, by index.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    AddFeaStruct( pid );
+
+    Update();
+
+    SetFeaMeshStructIndex( 0 );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    AddFeaStruct( pid )
+
+    Update()
+
+    SetFeaMeshStructIndex( 0 )
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaStruct, NumFeaStructures
+    \param [in] struct_index int Index of the structure to work on
+*/
 
 extern void SetFeaMeshStructIndex( int struct_index );
 
@@ -14714,6 +16229,35 @@ extern void AddFeaTrimPart( const std::string & trim_id, const std::string & par
 */
 /*!
     Remove an entry from the list a Trim part trims against
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string trim_id = AddFeaPart( pid, struct_ind, FEA_TRIM );
+
+    // Nothing has been added to trim against, so there is nothing to take out yet.
+    if ( GetFeaTrimPartIDVec( trim_id ).size() != 0 )    { Print( "ERROR: DeleteFeaTrimPart" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    trim_id = AddFeaPart( pid, struct_ind, FEA_TRIM )
+
+    # Nothing has been added to trim against, so there is nothing to take out yet.
+    assert len( GetFeaTrimPartIDVec( trim_id ) ) == 0, "GetFeaTrimPartIDVec reported trim parts on a new part"
+
+    \endcode
+    \endPythonOnly
     \sa AddFeaTrimPart, GetFeaTrimPartIDVec
     \param [in] trim_id string FEA Trim part ID
     \param [in] index int Trim entry index
@@ -14726,12 +16270,69 @@ extern void DeleteFeaTrimPart( const std::string & trim_id, int index );
 */
 /*!
     Get the FEA Parts a Trim part trims against
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string trim_id = AddFeaPart( pid, struct_ind, FEA_TRIM );
+
+    // A trim part starts with nothing to trim against.
+    if ( GetFeaTrimPartIDVec( trim_id ).size() != 0 )    { Print( "ERROR: GetFeaTrimPartIDVec" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    trim_id = AddFeaPart( pid, struct_ind, FEA_TRIM )
+
+    # A trim part starts with nothing to trim against.
+    assert len( GetFeaTrimPartIDVec( trim_id ) ) == 0, "GetFeaTrimPartIDVec reported trim parts on a new part"
+
+    \endcode
+    \endPythonOnly
     \sa AddFeaTrimPart, DeleteFeaTrimPart
     \param [in] trim_id string FEA Trim part ID
     \return vector\<string\> Array of FEA Part IDs
 */
 
 extern std::vector < std::string > GetFeaTrimPartIDVec( const std::string & trim_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Add an FEA assembly, which gathers structures together so they can be meshed as one.
+    \forcpponly
+    \code{.cpp}
+    string assembly_id = AddFeaAssembly();
+
+    if ( assembly_id.length() == 0 )                     { Print( "ERROR: AddFeaAssembly" ); __failure++; }
+
+    if ( NumFeaAssemblies() != 1 )                       { Print( "ERROR: AddFeaAssembly" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    assembly_id = AddFeaAssembly()
+
+    assert len( assembly_id ) > 0, "AddFeaAssembly returned no ID"
+
+    assert NumFeaAssemblies() == 1, "AddFeaAssembly did not add the assembly"
+
+    \endcode
+    \endPythonOnly
+    \sa NumFeaAssemblies, DeleteFeaAssembly
+    \return string FEA assembly ID
+*/
 
 extern std::string AddFeaAssembly();
 
@@ -14960,6 +16561,41 @@ extern std::string GetFeaAssemblyName( const std::string & assembly_id );
 */
 /*!
     Set the name of an FEA Assembly.  The assembly's export file names are rebuilt from the new name.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) );
+
+    SetFeaAssemblyName( assembly_id, "TestAssembly" );
+
+    if ( GetFeaAssemblyName( assembly_id ) != "TestAssembly" )    { Print( "ERROR: SetFeaAssemblyName" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) )
+
+    SetFeaAssemblyName( assembly_id, "TestAssembly" )
+
+    assert GetFeaAssemblyName( assembly_id ) == "TestAssembly", "SetFeaAssemblyName did not take"
+
+    \endcode
+    \endPythonOnly
     \sa AddFeaAssembly, GetFeaAssemblyName
     \param [in] assembly_id string FEA Assembly ID
     \param [in] name string FEA Assembly name
@@ -15149,7 +16785,144 @@ extern void DeleteFeaStructureFromAssembly( const std::string & assembly_id, con
     \ingroup FEAMesh
 */
 /*!
+    Put a structure into an FEA assembly.  An assembly starts empty; this is what fills it, so that
+    ComputeFeaAssemblyMesh has something to mesh.  Adding the same structure twice is refused.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string struct_id = GetFeaStructID( pid, struct_ind );
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaAssemblyStructure( assembly_id, struct_id );
+
+    if ( GetFeaAssemblyStructureIDVec( assembly_id ).size() != 1 )    { Print( "ERROR: AddFeaAssemblyStructure" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    struct_id = GetFeaStructID( pid, struct_ind )
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaAssemblyStructure( assembly_id, struct_id )
+
+    assert len( GetFeaAssemblyStructureIDVec( assembly_id ) ) == 1, "AddFeaAssemblyStructure did not add the structure"
+
+    \endcode
+    \endPythonOnly
+    \sa DeleteFeaAssemblyStructure, GetFeaAssemblyStructureIDVec, ComputeFeaAssemblyMesh
+    \param [in] assembly_id string FEA assembly ID
+    \param [in] struct_id string FEA structure ID to add
+*/
+
+extern void AddFeaAssemblyStructure( const std::string & assembly_id, const std::string & struct_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Take a structure back out of an FEA assembly.  The structure itself is left alone; only its
+    membership of the assembly goes.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string struct_id = GetFeaStructID( pid, struct_ind );
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaAssemblyStructure( assembly_id, struct_id );
+
+    DeleteFeaAssemblyStructure( assembly_id, struct_id );
+
+    if ( GetFeaAssemblyStructureIDVec( assembly_id ).size() != 0 )    { Print( "ERROR: DeleteFeaAssemblyStructure" ); __failure++; }
+
+    // The structure is still there; it is only out of the assembly.
+    if ( NumFeaStructures() != 1 )                       { Print( "ERROR: DeleteFeaAssemblyStructure" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    struct_id = GetFeaStructID( pid, struct_ind )
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaAssemblyStructure( assembly_id, struct_id )
+
+    DeleteFeaAssemblyStructure( assembly_id, struct_id )
+
+    assert len( GetFeaAssemblyStructureIDVec( assembly_id ) ) == 0, "DeleteFeaAssemblyStructure did not remove the structure"
+
+    # The structure is still there; it is only out of the assembly.
+    assert NumFeaStructures() == 1, "DeleteFeaAssemblyStructure deleted the structure itself"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaAssemblyStructure, GetFeaAssemblyStructureIDVec
+    \param [in] assembly_id string FEA assembly ID
+    \param [in] struct_id string FEA structure ID to remove
+*/
+
+extern void DeleteFeaAssemblyStructure( const std::string & assembly_id, const std::string & struct_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
     Get the IDs of the FEA Structures gathered by an FEA Assembly
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) );
+
+    if ( GetFeaAssemblyStructureIDVec( assembly_id ).size() != 1 )    { Print( "ERROR: GetFeaAssemblyStructureIDVec" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) )
+
+    assert len( GetFeaAssemblyStructureIDVec( assembly_id ) ) == 1, "GetFeaAssemblyStructureIDVec did not report the structure"
+
+    \endcode
+    \endPythonOnly
     \sa AddFeaStructureToAssembly, DeleteFeaStructureFromAssembly
     \param [in] assembly_id string FEA Assembly ID
     \return vector\<string\> Array of FEA Structure IDs
@@ -15279,6 +17052,39 @@ extern void AddFeaAssemblyConnection( const std::string & assembly_id,
 */
 /*!
     Delete a connection from an FEA Assembly
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) );
+
+    // A new assembly has no connections, so there is nothing to take out yet.
+    if ( NumFeaAssemblyConnections( assembly_id ) != 0 )    { Print( "ERROR: DeleteFeaAssemblyConnection" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) )
+
+    # A new assembly has no connections, so there is nothing to take out yet.
+    assert NumFeaAssemblyConnections( assembly_id ) == 0, "NumFeaAssemblyConnections miscounted a new assembly"
+
+    \endcode
+    \endPythonOnly
     \sa AddFeaAssemblyConnection, NumFeaAssemblyConnections
     \param [in] assembly_id string FEA Assembly ID
     \param [in] connection_index int Connection index
@@ -15291,12 +17097,146 @@ extern void DeleteFeaAssemblyConnection( const std::string & assembly_id, int co
 */
 /*!
     Get the number of connections in an FEA Assembly
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) );
+
+    if ( NumFeaAssemblyConnections( assembly_id ) != 0 )    { Print( "ERROR: NumFeaAssemblyConnections" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) )
+
+    assert NumFeaAssemblyConnections( assembly_id ) == 0, "NumFeaAssemblyConnections miscounted a new assembly"
+
+    \endcode
+    \endPythonOnly
     \sa AddFeaAssemblyConnection, DeleteFeaAssemblyConnection
     \param [in] assembly_id string FEA Assembly ID
     \return int Number of connections
 */
 
 extern int NumFeaAssemblyConnections( const std::string & assembly_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the ID of one of an assembly's connections, so that its Parms can be reached the way any
+    other container's are.  A connection carries the two fix point surface indices, its mode and
+    its constraints, all in Parm group "Connection".  Everything else about connections is
+    addressed by index; this is what lets a script read or set what a connection does.
+    \forcpponly
+    \code{.cpp}
+    //==== Two structures to connect ====//
+    string pod = AddGeom( "POD", "" );
+    string wing = AddGeom( "WING", "" );
+
+    int pod_struct = AddFeaStruct( pod );
+    int wing_struct = AddFeaStruct( wing );
+
+    string pod_struct_id = GetFeaStructID( pod, pod_struct );
+    string wing_struct_id = GetFeaStructID( wing, wing_struct );
+
+    //==== A fix point on each, which is what a connection joins ====//
+    string pod_pt = AddFeaPart( pod, pod_struct, FEA_FIX_POINT );
+    string wing_pt = AddFeaPart( wing, wing_struct, FEA_FIX_POINT );
+
+    string assembly_id = AddFeaAssembly();
+    AddFeaStructureToAssembly( assembly_id, pod_struct_id );
+    AddFeaStructureToAssembly( assembly_id, wing_struct_id );
+
+    AddFeaAssemblyConnection( assembly_id, pod_pt, pod_struct_id, 0, wing_pt, wing_struct_id, 0 );
+
+    if ( NumFeaAssemblyConnections( assembly_id ) != 1 )
+    {
+        Print( "ERROR: the connection was not added" );
+        __failure++;
+    }
+
+    string conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 );
+
+    if ( conn_id.length() == 0 )
+    {
+        Print( "ERROR: GetFeaAssemblyConnectionID found nothing" );
+        __failure++;
+    }
+
+    //==== And what it constrains is a Parm like any other ====//
+    SetParmVal( FindParm( conn_id, "ConMode", "Connection" ), FEA_BCM_PIN );
+
+    Update();
+
+    if ( GetParmVal( conn_id, "ConMode", "Connection" ) != FEA_BCM_PIN )
+    {
+        Print( "ERROR: the connection did not take the mode it was given" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== Two structures to connect ====#
+    pod = AddGeom( "POD", "" )
+    wing = AddGeom( "WING", "" )
+
+    pod_struct = AddFeaStruct( pod )
+    wing_struct = AddFeaStruct( wing )
+
+    pod_struct_id = GetFeaStructID( pod, pod_struct )
+    wing_struct_id = GetFeaStructID( wing, wing_struct )
+
+    #==== A fix point on each, which is what a connection joins ====#
+    pod_pt = AddFeaPart( pod, pod_struct, FEA_FIX_POINT )
+    wing_pt = AddFeaPart( wing, wing_struct, FEA_FIX_POINT )
+
+    assembly_id = AddFeaAssembly()
+    AddFeaStructureToAssembly( assembly_id, pod_struct_id )
+    AddFeaStructureToAssembly( assembly_id, wing_struct_id )
+
+    AddFeaAssemblyConnection( assembly_id, pod_pt, pod_struct_id, 0, wing_pt, wing_struct_id, 0 )
+
+    assert NumFeaAssemblyConnections( assembly_id ) == 1, "the connection was not added"
+
+    conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 )
+
+    assert len( conn_id ) > 0, "GetFeaAssemblyConnectionID found nothing"
+
+    #==== And what it constrains is a Parm like any other ====#
+    SetParmVal( FindParm( conn_id, "ConMode", "Connection" ), FEA_BCM_PIN )
+
+    Update()
+
+    mode = GetParmVal( conn_id, "ConMode", "Connection" )
+
+    assert mode == FEA_BCM_PIN, "the connection did not take the mode it was given"
+
+    \endcode
+    \endPythonOnly
+    \sa NumFeaAssemblyConnections, AddFeaAssemblyConnection
+    \param [in] assembly_id string FEA assembly ID
+    \param [in] connection_index int Connection index
+    \return string Connection ID
+*/
+
+extern std::string GetFeaAssemblyConnectionID( const std::string & assembly_id, int connection_index );
 
 /*!
     \ingroup FEAMesh
@@ -15381,6 +17321,41 @@ extern int NumFeaAssemblyConnections( const std::string & assembly_id );
 /*!
     Get the name of an FEA Assembly output file.  The names are built from the assembly name when
     it is set, so this reports where ComputeFeaAssemblyMesh will write.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) );
+
+    SetFeaAssemblyFileName( assembly_id, FEA_MASS_FILE_NAME, "TestAssemblyMass.txt" );
+
+    if ( GetFeaAssemblyFileName( assembly_id, FEA_MASS_FILE_NAME ) != "TestAssemblyMass.txt" )    { Print( "ERROR: GetFeaAssemblyFileName" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) )
+
+    SetFeaAssemblyFileName( assembly_id, FEA_MASS_FILE_NAME, "TestAssemblyMass.txt" )
+
+    assert GetFeaAssemblyFileName( assembly_id, FEA_MASS_FILE_NAME ) == "TestAssemblyMass.txt", "GetFeaAssemblyFileName did not report the name"
+
+    \endcode
+    \endPythonOnly
     \sa SetFeaAssemblyFileName, ComputeFeaAssemblyMesh, FEA_EXPORT_TYPE
     \param [in] assembly_id string FEA Assembly ID
     \param [in] file_type int FEA output file type enum (i.e. FEA_CALCULIX_FILE_NAME)
@@ -15435,7 +17410,86 @@ extern std::string GetFeaAssemblyFileName( const std::string & assembly_id, int 
 
 extern void SetFeaAssemblyFileName( const std::string & assembly_id, int file_type, const std::string & file_name );
 
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Mesh an FEA assembly, meshing every structure it holds and joining them at their connections.
+    An assembly starts empty; use AddFeaAssemblyStructure to put structures into it first.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pid );
+
+    Update();
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) );
+
+    // Meshing an assembly is not quick; keep the mesh coarse.
+    SetFeaMeshVal( pid, 0, CFD_MAX_EDGE_LEN, 1.0 );
+
+    ComputeFeaAssemblyMesh( assembly_id );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pid )
+
+    Update()
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaAssemblyStructure( assembly_id, GetFeaStructID( pid, struct_ind ) )
+
+    # Meshing an assembly is not quick; keep the mesh coarse.
+    SetFeaMeshVal( pid, 0, CFD_MAX_EDGE_LEN, 1.0 )
+
+    ComputeFeaAssemblyMesh( assembly_id )
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaAssembly, AddFeaAssemblyStructure, GetFeaAssemblyStructureIDVec
+    \param [in] assembly_id string FEA assembly ID
+*/
+
 extern void ComputeFeaAssemblyMesh( const std::string & assembly_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the number of FEA structures in the model, counting those on every Geom.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    AddFeaStruct( pid );
+
+    Update();
+
+    if ( NumFeaStructures() != 1 )                       { Print( "ERROR: NumFeaStructures" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    AddFeaStruct( pid )
+
+    Update()
+
+    assert NumFeaStructures() == 1, "NumFeaStructures did not count the structure"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaStruct
+    \return int Number of FEA structures
+*/
 
 extern int NumFeaStructures();
 
@@ -15999,6 +18053,43 @@ extern std::string AddFeaLayer( const std::string & material_id );
 */
 /*!
     Delete a layer from an FEA laminate material
+    \forcpponly
+    \code{.cpp}
+    string mat_id = AddFeaMaterial();
+
+    SetParmVal( FindParm( mat_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE );
+
+    Update();
+
+    // A laminate material starts with a layer of its own, so count before and after.
+    int n0 = NumFeaLayers( mat_id );
+
+    string layer_id = AddFeaLayer( mat_id );
+
+    DeleteFeaLayer( mat_id, layer_id );
+
+    if ( NumFeaLayers( mat_id ) != n0 )                  { Print( "ERROR: DeleteFeaLayer" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    mat_id = AddFeaMaterial()
+
+    SetParmVal( FindParm( mat_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE )
+
+    Update()
+
+    # A laminate material starts with a layer of its own, so count before and after.
+    n0 = NumFeaLayers( mat_id )
+
+    layer_id = AddFeaLayer( mat_id )
+
+    DeleteFeaLayer( mat_id, layer_id )
+
+    assert NumFeaLayers( mat_id ) == n0, "DeleteFeaLayer did not delete the layer"
+
+    \endcode
+    \endPythonOnly
     \sa AddFeaLayer, GetFeaLayerIDVec
     \param [in] material_id string FEA Material ID of a laminate
     \param [in] layer_id string FEA Layer ID
@@ -16075,6 +18166,39 @@ extern void ReorderFeaLayer( const std::string & material_id, const std::string 
 */
 /*!
     Get the number of layers in an FEA laminate material
+    \forcpponly
+    \code{.cpp}
+    string mat_id = AddFeaMaterial();
+
+    SetParmVal( FindParm( mat_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE );
+
+    Update();
+
+    // A laminate material starts with a layer of its own, so count before and after.
+    int n0 = NumFeaLayers( mat_id );
+
+    string layer_id = AddFeaLayer( mat_id );
+
+    if ( NumFeaLayers( mat_id ) != n0 + 1 )              { Print( "ERROR: NumFeaLayers" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    mat_id = AddFeaMaterial()
+
+    SetParmVal( FindParm( mat_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE )
+
+    Update()
+
+    # A laminate material starts with a layer of its own, so count before and after.
+    n0 = NumFeaLayers( mat_id )
+
+    layer_id = AddFeaLayer( mat_id )
+
+    assert NumFeaLayers( mat_id ) == n0 + 1, "NumFeaLayers did not count the layer"
+
+    \endcode
+    \endPythonOnly
     \sa AddFeaLayer, GetFeaLayerIDVec
     \param [in] material_id string FEA Material ID of a laminate
     \return int Number of layers
@@ -16087,12 +18211,83 @@ extern int NumFeaLayers( const std::string & material_id );
 */
 /*!
     Get the IDs of every layer in an FEA laminate material
+    \forcpponly
+    \code{.cpp}
+    string mat_id = AddFeaMaterial();
+
+    SetParmVal( FindParm( mat_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE );
+
+    Update();
+
+    // A laminate material starts with a layer of its own, so count before and after.
+    int n0 = NumFeaLayers( mat_id );
+
+    string layer_id = AddFeaLayer( mat_id );
+
+    array < string > @layer_array = GetFeaLayerIDVec( mat_id );
+
+    if ( int( layer_array.size() ) != n0 + 1 )           { Print( "ERROR: GetFeaLayerIDVec" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    mat_id = AddFeaMaterial()
+
+    SetParmVal( FindParm( mat_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE )
+
+    Update()
+
+    # A laminate material starts with a layer of its own, so count before and after.
+    n0 = NumFeaLayers( mat_id )
+
+    layer_id = AddFeaLayer( mat_id )
+
+    layer_array = GetFeaLayerIDVec( mat_id )
+
+    assert len( layer_array ) == n0 + 1, "GetFeaLayerIDVec did not report the layer"
+
+    \endcode
+    \endPythonOnly
     \sa AddFeaLayer, DeleteFeaLayer
     \param [in] material_id string FEA Material ID of a laminate
     \return vector\<string\> Array of FEA Layer IDs
 */
 
 extern std::vector < std::string > GetFeaLayerIDVec( const std::string & material_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the IDs of every FEA material, the built in ones as well as any added.
+    \forcpponly
+    \code{.cpp}
+    string mat_id = AddFeaMaterial();
+
+    array < string > @mat_array = GetFeaMaterialIDVec();
+
+    bool found = false;
+    for ( int i = 0 ; i < int( mat_array.size() ) ; i++ )
+    {
+        if ( mat_array[i] == mat_id ) { found = true; }
+    }
+
+    if ( !found )                                        { Print( "ERROR: GetFeaMaterialIDVec" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    mat_id = AddFeaMaterial()
+
+    mat_array = GetFeaMaterialIDVec()
+
+    assert mat_id in mat_array, "GetFeaMaterialIDVec did not report the new material"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaMaterial
+    \return vector<string> FEA material IDs
+*/
 
 extern std::vector < std::string > GetFeaMaterialIDVec();
 
@@ -16163,6 +18358,30 @@ extern std::vector < std::string > GetFeaMaterialIDVec();
 */
 
 extern void DeleteFeaMaterial( const std::string &id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Add an FEA material to the material library, with default properties.
+    \forcpponly
+    \code{.cpp}
+    string mat_id = AddFeaMaterial();
+
+    if ( mat_id.length() == 0 )                          { Print( "ERROR: AddFeaMaterial" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    mat_id = AddFeaMaterial()
+
+    assert len( mat_id ) > 0, "AddFeaMaterial returned no ID"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaMaterialIDVec, DeleteFeaMaterial
+    \return string FEA material ID
+*/
 
 extern std::string AddFeaMaterial();
 
@@ -16330,6 +18549,31 @@ extern std::vector < std::string > GetFeaPropertyIDVec();
 
 extern void DeleteFeaProperty( const std::string &id );
 
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Add an FEA property to the property library.
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddFeaProperty();
+
+    if ( prop_id.length() == 0 )                         { Print( "ERROR: AddFeaProperty" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddFeaProperty()
+
+    assert len( prop_id ) > 0, "AddFeaProperty returned no ID"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaPropertyIDVec, DeleteFeaProperty
+    \param [in] property_type int FEA property type enum (default: shell)
+    \return string FEA property ID
+*/
+
 extern std::string AddFeaProperty( int property_type = 0 );
 
 /*!
@@ -16487,6 +18731,41 @@ extern std::string AddFeaProperty( int property_type = 0 );
 
 extern double GetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, int type );
 
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set one of the FEA Mesh settings for a structure.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    AddFeaStruct( pid );
+
+    Update();
+
+    SetFeaMeshVal( pid, 0, CFD_MAX_EDGE_LEN, 0.75 );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    AddFeaStruct( pid )
+
+    Update()
+
+    SetFeaMeshVal( pid, 0, CFD_MAX_EDGE_LEN, 0.75 )
+
+    \endcode
+    \endPythonOnly
+    \sa CFD_CONTROL_TYPE, ComputeFeaMesh
+    \param [in] geom_id string Geom ID the structure is on
+    \param [in] fea_struct_ind int Index of the structure on that Geom
+    \param [in] type int CFD mesh setting enum (i.e. CFD_MAX_EDGE_LEN)
+    \param [in] val double Value to set
+*/
+
 extern void SetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, int type, double val );
 
 /*!
@@ -16641,6 +18920,41 @@ extern void SetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, int 
 */
 
 extern std::string GetFeaMeshFileName( const std::string & geom_id, int fea_struct_ind, int file_type );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the file name an FEA Mesh writes for one export type.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    AddFeaStruct( pid );
+
+    Update();
+
+    SetFeaMeshFileName( pid, 0, FEA_MASS_FILE_NAME, "TestFeaMass.txt" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    AddFeaStruct( pid )
+
+    Update()
+
+    SetFeaMeshFileName( pid, 0, FEA_MASS_FILE_NAME, "TestFeaMass.txt" )
+
+    \endcode
+    \endPythonOnly
+    \sa FEA_EXPORT_TYPE, ComputeFeaMesh
+    \param [in] geom_id string Geom ID the structure is on
+    \param [in] fea_struct_ind int Index of the structure on that Geom
+    \param [in] file_type int FEA export type enum (i.e. FEA_MASS_FILE_NAME)
+    \param [in] file_name string Name of the file to write
+*/
 
 extern void SetFeaMeshFileName( const std::string & geom_id, int fea_struct_ind, int file_type, const std::string & file_name );
 
@@ -17633,6 +19947,39 @@ extern void SplitWingXSec( const std::string & wing_id, int section_index );
 
 extern std::vector < int > GetDriverGroup( const std::string & geom_id, int section_index );
 
+/*!
+    \ingroup XSec
+*/
+/*!
+    Choose which quantities drive a wing section.  A section is defined by three of its measures and
+    the rest follow; this says which three.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING", "" );
+
+    SetDriverGroup( wid, 1, SPAN_WSECT_DRIVER, ROOTC_WSECT_DRIVER, TIPC_WSECT_DRIVER );
+
+    Update();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING", "" )
+
+    SetDriverGroup( wid, 1, SPAN_WSECT_DRIVER, ROOTC_WSECT_DRIVER, TIPC_WSECT_DRIVER )
+
+    Update()
+
+    \endcode
+    \endPythonOnly
+    \sa WING_DRIVERS
+    \param [in] geom_id string Geom ID
+    \param [in] section_index int Wing section index
+    \param [in] driver_0 int Wing driver enum (i.e. SPAN_WSECT_DRIVER)
+    \param [in] driver_1 int Second wing driver enum
+    \param [in] driver_2 int Third wing driver enum
+*/
+
 extern void SetDriverGroup( const std::string & geom_id, int section_index, int driver_0, int driver_1 = -1, int driver_2 = -1 );
 
 
@@ -17934,6 +20281,33 @@ extern void FitCSTAirfoil( const std::string & xsec_surf_id, int xsec_index, int
 */
 /*!
     Set the global surface transform matrix for given XSecSurf
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    Matrix4d mat;
+    mat.loadIdentity();
+    mat.translatef( 1.0, 2.0, 3.0 );
+
+    SetXSecSurfGlobalXForm( xsec_surf, mat );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    mat = Matrix4d()
+    mat.loadIdentity()
+    mat.translatef( 1.0, 2.0, 3.0 )
+
+    SetXSecSurfGlobalXForm( xsec_surf, mat )
+
+    \endcode
+    \endPythonOnly
     \param [in] xsec_surf_id string XSecSurf ID
     \param [in] mat Matrix4d Transformation matrix
 */
@@ -17945,6 +20319,25 @@ extern void SetXSecSurfGlobalXForm( const std::string & xsec_surf_id, const Matr
 */
 /*!
     Get the global surface transform matrix for given XSecSurf
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    Matrix4d mat = GetXSecSurfGlobalXForm( xsec_surf );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    mat = GetXSecSurfGlobalXForm( xsec_surf )
+
+    \endcode
+    \endPythonOnly
     \param [in] xsec_surf_id string XSecSurf ID
     \return Matrix4d Transformation matrix
 */
@@ -18810,6 +21203,71 @@ extern void CopyXSecCurve( const std::string & geom_id, int index );
 
 extern void PasteXSecCurve( const std::string & geom_id, int index );
 
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the points of a file XSec.  The XSec must be of type XS_FILE_FUSE; this is how a section read
+    from a file is replaced from a script.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_FILE_FUSE );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    // Take the section's own points and hand back a squashed copy of them.  Building a set from
+    // nothing has to match what a file section expects, which is a closed curve in the section's
+    // own plane.
+    array < vec3d > pnt_vec = GetXSecPnts( xsec );
+
+    for ( int i = 0 ; i < int( pnt_vec.size() ) ; i++ )
+    {
+        pnt_vec[i].set_y( 0.5 * pnt_vec[i].y() );
+    }
+
+    SetXSecPnts( xsec, pnt_vec );
+
+    Update();
+
+    if ( GetXSecPnts( xsec ).size() != pnt_vec.size() )  { Print( "ERROR: SetXSecPnts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_FILE_FUSE )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    # Take the section's own points and hand back a squashed copy of them.  Building a set from
+    # nothing has to match what a file section expects, which is a closed curve in the section's
+    # own plane.
+    pnt_vec = [ vec3d( p.x(), 0.5 * p.y(), p.z() ) for p in GetXSecPnts( xsec ) ]
+
+    SetXSecPnts( xsec, pnt_vec )
+
+    Update()
+
+    assert len( GetXSecPnts( xsec ) ) == len( pnt_vec ), "SetXSecPnts did not take the points"
+
+    \endcode
+    \endPythonOnly
+    \sa GetXSecPnts, ChangeXSecShape
+    \param [in] xsec_id string XSec ID, of type XS_FILE_FUSE
+    \param [in] pnt_vec vector<vec3d> Points defining the section: a closed curve in the XY plane, running from the right-hand point down through the bottom, round the side and over the top.  Any other set is refused with VSP_INVALID_INPUT_VAL and the section is left as it was
+*/
+
 extern void SetXSecPnts( const std::string& xsec_id, std::vector< vec3d > & pnt_vec );
 
 /*!
@@ -19191,7 +21649,386 @@ extern void ResetXSecSkinParms( const std::string& xsec_id );
 
 extern int GetXSecContinuity( const std::string& xsec_id );
 
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set how many derivatives are continuous across an XSec: 0 for position only, 1 to also match
+    slope, 2 to also match curvature.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    SetXSecContinuity( xsec, 1 );
+
+    if ( GetXSecContinuity( xsec ) != 1 )                { Print( "ERROR: SetXSecContinuity" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    SetXSecContinuity( xsec, 1 )
+
+    assert GetXSecContinuity( xsec ) == 1, "SetXSecContinuity did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetXSecContinuity
+    \param [in] xsec_id string XSec ID
+    \param [in] cx int Number of continuous derivatives, 0, 1 or 2
+*/
+
 extern void SetXSecContinuity( const std::string& xsec_id, int cx );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Add a user defined skinning spine to a Fuselage or Stack.  Skinning is otherwise
+    controlled only at the four fixed stations -- Right, Bottom, Left and Top, at W01 of 0,
+    0.25, 0.5 and 0.75.  A spine adds another anywhere in between.  It runs the length of
+    the body, so it is added to every cross section at once; its values are then set per
+    cross section.
+    \param [in] geom_id string Geom ID
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    // Add a spine between the Right and Bottom stations
+    int ispine = AddSkinSpine( sid, 0.15 );
+
+    if ( GetNumSkinSpines( sid ) != 1 )                 { Print( "---> Error: API AddSkinSpine " ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    # Add a spine between the Right and Bottom stations
+    ispine = AddSkinSpine( sid, 0.15 )
+
+    if  GetNumSkinSpines( sid ) != 1 :
+        print( "---> Error: API AddSkinSpine " )
+        assert False, "---> Error: API AddSkinSpine"
+
+    \endcode
+    \endPythonOnly
+    \param [in] w01 double Position around the cross section, on a [0, 1] basis
+    \return int Index of the new spine
+*/
+extern int AddSkinSpine( const std::string& geom_id, double w01 );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Delete a user defined skinning spine from every cross section of a Geom.
+    \param [in] geom_id string Geom ID
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    AddSkinSpine( sid, 0.15 );
+
+    DelSkinSpine( sid, 0 );
+
+    if ( GetNumSkinSpines( sid ) != 0 )                 { Print( "---> Error: API DelSkinSpine " ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    AddSkinSpine( sid, 0.15 )
+
+    DelSkinSpine( sid, 0 )
+
+    if  GetNumSkinSpines( sid ) != 0 :
+        print( "---> Error: API DelSkinSpine " )
+        assert False, "---> Error: API DelSkinSpine"
+
+    \endcode
+    \endPythonOnly
+    \param [in] index int Spine index
+*/
+extern void DelSkinSpine( const std::string& geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Delete every user defined skinning spine from a Geom.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    AddSkinSpine( sid, 0.15 );
+
+    AddSkinSpine( sid, 0.35 );
+
+    DelAllSkinSpines( sid );
+
+    if ( GetNumSkinSpines( sid ) != 0 )                 { Print( "---> Error: API DelAllSkinSpines " ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    AddSkinSpine( sid, 0.15 )
+
+    AddSkinSpine( sid, 0.35 )
+
+    DelAllSkinSpines( sid )
+
+    if  GetNumSkinSpines( sid ) != 0 :
+        print( "---> Error: API DelAllSkinSpines " )
+        assert False, "---> Error: API DelAllSkinSpines"
+
+    \endcode
+    \endPythonOnly
+    \param [in] geom_id string Geom ID
+*/
+extern void DelAllSkinSpines( const std::string& geom_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the number of user defined skinning spines on a Geom.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    AddSkinSpine( sid, 0.15 );
+
+    if ( GetNumSkinSpines( sid ) != 1 )                 { Print( "---> Error: API GetNumSkinSpines " ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    AddSkinSpine( sid, 0.15 )
+
+    if  GetNumSkinSpines( sid ) != 1 :
+        print( "---> Error: API GetNumSkinSpines " )
+        assert False, "---> Error: API GetNumSkinSpines"
+
+    \endcode
+    \endPythonOnly
+    \param [in] geom_id string Geom ID
+    \return int Number of spines
+*/
+extern int GetNumSkinSpines( const std::string& geom_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the name of a skinning spine.
+
+    The name belongs to the whole spine rather than to one cross section: it is held by the
+    first cross section and synced outwards, the same way the position and the symmetry flags
+    are.  It is also what the spine's Parms are grouped under, so it is how they are told apart
+    in the Parm Link and Design Variable pickers.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    Update();
+
+    int ispine = AddSkinSpine( sid, 0.15 );
+
+    if ( GetSkinSpineName( sid, ispine ) == "" )    { Print( "ERROR: GetSkinSpineName" ); __failure++; }
+
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    Update()
+
+    ispine = AddSkinSpine( sid, 0.15 )
+
+    assert GetSkinSpineName( sid, ispine ) != "", "a new spine was given no name"
+
+    \endcode
+    \endPythonOnly
+    \sa SetSkinSpineName, AddSkinSpine
+    \param [in] geom_id string Geom ID
+    \param [in] index int Spine index
+    \return string Spine name
+*/
+
+extern std::string GetSkinSpineName( const std::string& geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the name of a skinning spine.  See GetSkinSpineName for what the name is used for.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    Update();
+
+    int ispine = AddSkinSpine( sid, 0.15 );
+
+    SetSkinSpineName( sid, ispine, "Chine" );
+
+    if ( GetSkinSpineName( sid, ispine ) != "Chine" )    { Print( "ERROR: SetSkinSpineName" ); __failure++; }
+
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    Update()
+
+    ispine = AddSkinSpine( sid, 0.15 )
+
+    SetSkinSpineName( sid, ispine, "Chine" )
+
+    assert GetSkinSpineName( sid, ispine ) == "Chine", "SetSkinSpineName did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetSkinSpineName
+    \param [in] geom_id string Geom ID
+    \param [in] index int Spine index
+    \param [in] name string Spine name
+*/
+
+extern void SetSkinSpineName( const std::string& geom_id, int index, const std::string& name );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the Parm container ID of one cross section's copy of a skinning spine.  Position and
+    symmetry are the same on every cross section; the skinning values are not.
+
+    Note that a spine's W and symmetry flags are properties of the whole spine, and are held
+    by the first cross section.  Setting them on any other cross section is undone by the next
+    update; set them on cross section 0.  The skinning values carry no such restriction.
+
+    Use GetSkinSpineParm to reach the spine's Parms.  FindParm reaches them too, given the
+    spine's own ID returned here and the group name "SkinSpine" -- not the cross section's
+    ID, since a spine's Parms are in a container of its own.  GetSkinSpineParm does not ask
+    the caller to know either of those.
+    \param [in] xsec_id string XSec ID
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    AddSkinSpine( sid, 0.15 );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    string spine = GetSkinSpineID( xsec, 0 );
+
+    string wid = GetSkinSpineParm( spine, "W01" );
+
+    if ( !ValidParm( wid ) )                            { Print( "---> Error: API GetSkinSpineID " ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    AddSkinSpine( sid, 0.15 )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    spine = GetSkinSpineID( xsec, 0 )
+
+    wid = GetSkinSpineParm( spine, "W01" )
+
+    if  not ValidParm( wid ) :
+        print( "---> Error: API GetSkinSpineID " )
+        assert False, "---> Error: API GetSkinSpineID"
+
+    \endcode
+    \endPythonOnly
+    \param [in] index int Spine index
+    \return string Spine Parm container ID
+*/
+extern std::string GetSkinSpineID( const std::string& xsec_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get a Parm ID from a skinning spine by name.  The counterpart of GetXSecParm: FindParm
+    on the spine's own container would do the same job, but only if the caller knows the
+    group is named "SkinSpine".
+    \param [in] spine_id string Spine Parm container ID, from GetSkinSpineID
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    AddSkinSpine( sid, 0.15 );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    string spine = GetSkinSpineID( xsec, 0 );
+
+    string aid = GetSkinSpineParm( spine, "LAngle" );
+
+    if ( !ValidParm( aid ) )                            { Print( "---> Error: API GetSkinSpineParm " ); __failure++; }
+
+    SetParmVal( GetSkinSpineParm( spine, "LAngleSet" ), 1.0 );
+
+    SetParmVal( aid, 12.0 );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    AddSkinSpine( sid, 0.15 )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    spine = GetSkinSpineID( xsec, 0 )
+
+    aid = GetSkinSpineParm( spine, "LAngle" )
+
+    if  not ValidParm( aid ) :
+        print( "---> Error: API GetSkinSpineParm " )
+        assert False, "---> Error: API GetSkinSpineParm"
+
+    SetParmVal( GetSkinSpineParm( spine, "LAngleSet" ), 1.0 )
+
+    SetParmVal( aid, 12.0 )
+
+    \endcode
+    \endPythonOnly
+    \param [in] name string Parm name
+    \return string Parm ID
+*/
+extern std::string GetSkinSpineParm( const std::string& spine_id, const std::string& name );
 
 /*!
     \ingroup XSec
@@ -19375,6 +22212,57 @@ extern void SetXSecContinuity( const std::string& xsec_id, int cx );
 */
 
 extern std::vector < double > GetXSecTanAngles( const std::string& xsec_id, int side );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the tangent angles for one side of an XSec.  The four values are given in the order top, right, bottom
+    and left; a value of -1.0e12 leaves that position as it was.  XSEC_BOTH_SIDES sets both sides at
+    once.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    SetXSecTanAngles( xsec, XSEC_BOTH_SIDES, 5.0, 5.0, 5.0, 5.0 );
+
+    array< double > vals = GetXSecTanAngles( xsec, XSEC_LEFT_SIDE );
+
+    for ( int i = 0; i < int( vals.size() ); i++ )
+    {
+        if ( !closeTo( vals[i], 5.0, 1e-6 ) )            { Print( "ERROR: SetXSecTanAngles" ); __failure++; }
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    SetXSecTanAngles( xsec, XSEC_BOTH_SIDES, 5.0, 5.0, 5.0, 5.0 )
+
+    vals = GetXSecTanAngles( xsec, XSEC_LEFT_SIDE )
+
+    for v in vals:
+        assert abs( v - 5.0 ) < 1e-6, "SetXSecTanAngles did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetXSecTanAngles, XSEC_SIDES_TYPE
+    \param [in] xsec_id string XSec ID
+    \param [in] side int XSec side type enum (i.e. XSEC_BOTH_SIDES)
+    \param [in] top double Value at the top, or -1.0e12 to leave it
+    \param [in] right double Value at the right, or -1.0e12 to leave it
+    \param [in] bottom double Value at the bottom, or -1.0e12 to leave it
+    \param [in] left double Value at the left, or -1.0e12 to leave it
+*/
 
 extern void SetXSecTanAngles( const std::string& xsec_id, int side, double top, double right, double bottom, double left );
 
@@ -19560,6 +22448,57 @@ extern void SetXSecTanAngles( const std::string& xsec_id, int side, double top, 
 */
 
 extern std::vector < double > GetXSecTanSlews( const std::string& xsec_id, int side );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the tangent slews for one side of an XSec.  The four values are given in the order top, right, bottom
+    and left; a value of -1.0e12 leaves that position as it was.  XSEC_BOTH_SIDES sets both sides at
+    once.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    SetXSecTanSlews( xsec, XSEC_BOTH_SIDES, 5.0, 5.0, 5.0, 5.0 );
+
+    array< double > vals = GetXSecTanSlews( xsec, XSEC_LEFT_SIDE );
+
+    for ( int i = 0; i < int( vals.size() ); i++ )
+    {
+        if ( !closeTo( vals[i], 5.0, 1e-6 ) )            { Print( "ERROR: SetXSecTanSlews" ); __failure++; }
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    SetXSecTanSlews( xsec, XSEC_BOTH_SIDES, 5.0, 5.0, 5.0, 5.0 )
+
+    vals = GetXSecTanSlews( xsec, XSEC_LEFT_SIDE )
+
+    for v in vals:
+        assert abs( v - 5.0 ) < 1e-6, "SetXSecTanSlews did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetXSecTanSlews, XSEC_SIDES_TYPE
+    \param [in] xsec_id string XSec ID
+    \param [in] side int XSec side type enum (i.e. XSEC_BOTH_SIDES)
+    \param [in] top double Value at the top, or -1.0e12 to leave it
+    \param [in] right double Value at the right, or -1.0e12 to leave it
+    \param [in] bottom double Value at the bottom, or -1.0e12 to leave it
+    \param [in] left double Value at the left, or -1.0e12 to leave it
+*/
 
 extern void SetXSecTanSlews( const std::string& xsec_id, int side, double top, double right, double bottom, double left );
 
@@ -19748,6 +22687,57 @@ extern void SetXSecTanSlews( const std::string& xsec_id, int side, double top, d
 
 extern std::vector < double > GetXSecTanStrengths( const std::string& xsec_id, int side );
 
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the tangent strengths for one side of an XSec.  The four values are given in the order top, right, bottom
+    and left; a value of -1.0e12 leaves that position as it was.  XSEC_BOTH_SIDES sets both sides at
+    once.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    SetXSecTanStrengths( xsec, XSEC_BOTH_SIDES, 5.0, 5.0, 5.0, 5.0 );
+
+    array< double > vals = GetXSecTanStrengths( xsec, XSEC_LEFT_SIDE );
+
+    for ( int i = 0; i < int( vals.size() ); i++ )
+    {
+        if ( !closeTo( vals[i], 5.0, 1e-6 ) )            { Print( "ERROR: SetXSecTanStrengths" ); __failure++; }
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    SetXSecTanStrengths( xsec, XSEC_BOTH_SIDES, 5.0, 5.0, 5.0, 5.0 )
+
+    vals = GetXSecTanStrengths( xsec, XSEC_LEFT_SIDE )
+
+    for v in vals:
+        assert abs( v - 5.0 ) < 1e-6, "SetXSecTanStrengths did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetXSecTanStrengths, XSEC_SIDES_TYPE
+    \param [in] xsec_id string XSec ID
+    \param [in] side int XSec side type enum (i.e. XSEC_BOTH_SIDES)
+    \param [in] top double Value at the top, or -1.0e12 to leave it
+    \param [in] right double Value at the right, or -1.0e12 to leave it
+    \param [in] bottom double Value at the bottom, or -1.0e12 to leave it
+    \param [in] left double Value at the left, or -1.0e12 to leave it
+*/
+
 extern void SetXSecTanStrengths( const std::string& xsec_id, int side, double top, double right, double bottom, double left );
 
 /*!
@@ -19934,6 +22924,57 @@ extern void SetXSecTanStrengths( const std::string& xsec_id, int side, double to
 */
 
 extern std::vector < double > GetXSecCurvatures( const std::string& xsec_id, int side );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the curvatures for one side of an XSec.  The four values are given in the order top, right, bottom
+    and left; a value of -1.0e12 leaves that position as it was.  XSEC_BOTH_SIDES sets both sides at
+    once.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK", "" );
+
+    string xsec_surf = GetXSecSurf( sid, 0 );
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    SetXSecCurvatures( xsec, XSEC_BOTH_SIDES, 5.0, 5.0, 5.0, 5.0 );
+
+    array< double > vals = GetXSecCurvatures( xsec, XSEC_LEFT_SIDE );
+
+    for ( int i = 0; i < int( vals.size() ); i++ )
+    {
+        if ( !closeTo( vals[i], 5.0, 1e-6 ) )            { Print( "ERROR: SetXSecCurvatures" ); __failure++; }
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK", "" )
+
+    xsec_surf = GetXSecSurf( sid, 0 )
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    SetXSecCurvatures( xsec, XSEC_BOTH_SIDES, 5.0, 5.0, 5.0, 5.0 )
+
+    vals = GetXSecCurvatures( xsec, XSEC_LEFT_SIDE )
+
+    for v in vals:
+        assert abs( v - 5.0 ) < 1e-6, "SetXSecCurvatures did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetXSecCurvatures, XSEC_SIDES_TYPE
+    \param [in] xsec_id string XSec ID
+    \param [in] side int XSec side type enum (i.e. XSEC_BOTH_SIDES)
+    \param [in] top double Value at the top, or -1.0e12 to leave it
+    \param [in] right double Value at the right, or -1.0e12 to leave it
+    \param [in] bottom double Value at the bottom, or -1.0e12 to leave it
+    \param [in] left double Value at the left, or -1.0e12 to leave it
+*/
 
 extern void SetXSecCurvatures( const std::string& xsec_id, int side, double top, double right, double bottom, double left );
 
@@ -20623,6 +23664,21 @@ extern std::vector<double> GetVKTAirfoilCpDist( const double &alpha, const doubl
 /*!
     Generate the surface coordinate points for a ellipsoid at specified center of input radius along each axis.
     Based on the MATLAB function ellipsoid (https://in.mathworks.com/help/matlab/ref/ellipsoid.html).
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > @pnts = GetEllipsoidSurfPnts( vec3d( 0.0, 0.0, 0.0 ), vec3d( 1.0, 2.0, 3.0 ), 10, 10 );
+
+    if ( pnts.size() == 0 )                              { Print( "ERROR: GetEllipsoidSurfPnts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pnts = GetEllipsoidSurfPnts( vec3d( 0.0, 0.0, 0.0 ), vec3d( 1.0, 2.0, 3.0 ), 10, 10 )
+
+    assert len( pnts ) > 0, "GetEllipsoidSurfPnts returned nothing"
+
+    \endcode
+    \endPythonOnly
     \sa GetVKTAirfoilPnts
     \param [in] center vec3d 3D location of the ellipsoid center
     \param [in] abc_rad vec3d Radius along the A (X), B (Y), and C (Z) axes
@@ -20638,6 +23694,29 @@ extern std::vector<vec3d> GetEllipsoidSurfPnts( const vec3d &center, const vec3d
 */
 /*!
     Get the points along the feature lines of a particular Geom
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > @pnts = GetFeatureLinePnts( pid );
+
+    if ( pnts.size() == 0 )                              { Print( "ERROR: GetFeatureLinePnts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pnts = GetFeatureLinePnts( pid )
+
+    assert len( pnts ) > 0, "GetFeatureLinePnts returned nothing"
+
+    \endcode
+    \endPythonOnly
     \param [in] geom_id string Geom ID
     \return vector\<vec3d\> Array of points along the Geom's feature lines
 */
@@ -20733,6 +23812,33 @@ extern std::vector<vec3d> GetFeatureLinePnts( const std::string& geom_id );
 */
 
 extern std::vector<double> GetEllipsoidCpDist( const std::vector<vec3d> &surf_pnt_vec, const vec3d &abc_rad, const vec3d &V_inf );
+
+/*!
+    \ingroup Computations
+*/
+/*!
+    Integrate the analytic potential flow solution over an ellipsoid.  Used to check a panel or
+    surface solution against a case with a known answer.
+    \forcpponly
+    \code{.cpp}
+    double val = IntegrateEllipsoidFlow( vec3d( 1.0, 2.0, 3.0 ), 0 );
+
+    if ( val == 0.0 )                                    { Print( "ERROR: IntegrateEllipsoidFlow" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    val = IntegrateEllipsoidFlow( vec3d( 1.0, 2.0, 3.0 ), 0 )
+
+    assert val != 0.0, "IntegrateEllipsoidFlow returned zero"
+
+    \endcode
+    \endPythonOnly
+    \sa GetEllipsoidSurfPnts
+    \param [in] abc_rad vec3d Semi-axis lengths of the ellipsoid
+    \param [in] abc_index int Index of the axis the flow is along, 0, 1 or 2
+    \return double Integrated value
+*/
 
 extern double IntegrateEllipsoidFlow( const vec3d &abc_rad, const int &abc_index );
 
@@ -20843,6 +23949,41 @@ extern std::vector<vec3d> GetAirfoilLowerPnts( const std::string& xsec_id );
 */
 /*!
     Get the CST coefficients for the upper surface of an airfoil. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    array < double > @coefs = GetUpperCSTCoefs( xsec );
+
+    if ( coefs.size() == 0 )                             { Print( "ERROR: GetUpperCSTCoefs" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    coefs = GetUpperCSTCoefs( xsec )
+
+    assert len( coefs ) > 0, "GetUpperCSTCoefs returned nothing"
+
+    \endcode
+    \endPythonOnly
     \sa SetUpperCST
     \param [in] xsec_id string XSec ID
     \return vector\<double\> Vector of CST coefficients for the upper airfoil surface
@@ -20855,6 +23996,41 @@ extern std::vector<double> GetUpperCSTCoefs( const std::string& xsec_id );
 */
 /*!
     Get the CST coefficients for the lower surface of an airfoil. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    array < double > @coefs = GetLowerCSTCoefs( xsec );
+
+    if ( coefs.size() == 0 )                             { Print( "ERROR: GetLowerCSTCoefs" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    coefs = GetLowerCSTCoefs( xsec )
+
+    assert len( coefs ) > 0, "GetLowerCSTCoefs returned nothing"
+
+    \endcode
+    \endPythonOnly
     \sa SetLowerCST
     \param [in] xsec_id string XSec ID
     \return vector\<double\> Vector of CST coefficients for the lower airfoil surface
@@ -20867,6 +24043,37 @@ extern std::vector<double> GetLowerCSTCoefs( const std::string& xsec_id );
 */
 /*!
     Get the CST degree for the upper surface of an airfoil. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    if ( GetUpperCSTDegree( xsec ) < 1 )                 { Print( "ERROR: GetUpperCSTDegree" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    assert GetUpperCSTDegree( xsec ) >= 1, "GetUpperCSTDegree returned a degenerate degree"
+
+    \endcode
+    \endPythonOnly
     \sa SetUpperCST
     \param [in] xsec_id string XSec ID
     \return int CST Degree for upper airfoil surface
@@ -20879,6 +24086,37 @@ extern int GetUpperCSTDegree( const std::string& xsec_id );
 */
 /*!
     Get the CST degree for the lower surface of an airfoil. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    if ( GetLowerCSTDegree( xsec ) < 1 )                 { Print( "ERROR: GetLowerCSTDegree" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    assert GetLowerCSTDegree( xsec ) >= 1, "GetLowerCSTDegree returned a degenerate degree"
+
+    \endcode
+    \endPythonOnly
     \sa SetLowerCST
     \param [in] xsec_id string XSec ID
     \return int CST Degree for lower airfoil surface
@@ -20891,6 +24129,45 @@ extern int GetLowerCSTDegree( const std::string& xsec_id );
 */
 /*!
     Set the CST degree and coefficients for the upper surface of an airfoil. The number of coefficients should be one more than the CST degree. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    array < double > coefs = GetUpperCSTCoefs( xsec );
+
+    SetUpperCST( xsec, GetUpperCSTDegree( xsec ), coefs );
+
+    Update();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    coefs = GetUpperCSTCoefs( xsec )
+
+    SetUpperCST( xsec, GetUpperCSTDegree( xsec ), coefs )
+
+    Update()
+
+    \endcode
+    \endPythonOnly
     \sa GetUpperCSTDegree, GetUpperCSTCoefs
     \param [in] xsec_id string XSec ID
     \param [in] deg int CST degree of upper airfoil surface
@@ -20904,6 +24181,45 @@ extern void SetUpperCST( const std::string& xsec_id, int deg, const std::vector<
 */
 /*!
     Set the CST degree and coefficients for the lower surface of an airfoil. The number of coefficients should be one more than the CST degree. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    array < double > coefs = GetLowerCSTCoefs( xsec );
+
+    SetLowerCST( xsec, GetLowerCSTDegree( xsec ), coefs );
+
+    Update();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    coefs = GetLowerCSTCoefs( xsec )
+
+    SetLowerCST( xsec, GetLowerCSTDegree( xsec ), coefs )
+
+    Update()
+
+    \endcode
+    \endPythonOnly
     \sa GetLowerCSTDegree, GetLowerCSTCoefs
     \param [in] xsec_id string XSec ID
     \param [in] deg int CST degree of lower airfoil surface
@@ -20917,6 +24233,45 @@ extern void SetLowerCST( const std::string& xsec_id, int deg, const std::vector<
 */
 /*!
     Promote the CST for the upper airfoil surface. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    int deg = GetUpperCSTDegree( xsec );
+
+    PromoteCSTUpper( xsec );
+
+    if ( GetUpperCSTDegree( xsec ) != deg + 1 )          { Print( "ERROR: PromoteCSTUpper" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    deg = GetUpperCSTDegree( xsec )
+
+    PromoteCSTUpper( xsec )
+
+    assert GetUpperCSTDegree( xsec ) == deg + 1, "PromoteCSTUpper did not raise the degree"
+
+    \endcode
+    \endPythonOnly
     \sa GetUpperCSTDegree
     \param [in] xsec_id string XSec ID
 */
@@ -20928,6 +24283,45 @@ extern void PromoteCSTUpper( const std::string& xsec_id );
 */
 /*!
     Promote the CST for the lower airfoil surface. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    int deg = GetLowerCSTDegree( xsec );
+
+    PromoteCSTLower( xsec );
+
+    if ( GetLowerCSTDegree( xsec ) != deg + 1 )          { Print( "ERROR: PromoteCSTLower" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    deg = GetLowerCSTDegree( xsec )
+
+    PromoteCSTLower( xsec )
+
+    assert GetLowerCSTDegree( xsec ) == deg + 1, "PromoteCSTLower did not raise the degree"
+
+    \endcode
+    \endPythonOnly
     \sa GetLowerCSTDegree
     \param [in] xsec_id string XSec ID
 */
@@ -20939,6 +24333,49 @@ extern void PromoteCSTLower( const std::string& xsec_id );
 */
 /*!
     Demote the CST for the upper airfoil surface. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    PromoteCSTUpper( xsec );
+
+    int deg = GetUpperCSTDegree( xsec );
+
+    DemoteCSTUpper( xsec );
+
+    if ( GetUpperCSTDegree( xsec ) != deg - 1 )          { Print( "ERROR: DemoteCSTUpper" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    PromoteCSTUpper( xsec )
+
+    deg = GetUpperCSTDegree( xsec )
+
+    DemoteCSTUpper( xsec )
+
+    assert GetUpperCSTDegree( xsec ) == deg - 1, "DemoteCSTUpper did not lower the degree"
+
+    \endcode
+    \endPythonOnly
     \sa GetUpperCSTDegree
     \param [in] xsec_id string XSec ID
 */
@@ -20950,6 +24387,49 @@ extern void DemoteCSTUpper( const std::string& xsec_id );
 */
 /*!
     Demote the CST for the lower airfoil surface. The XSec must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL );
+
+    Update();
+
+    string xsec = GetXSec( xsec_surf, 1 );
+
+    PromoteCSTLower( xsec );
+
+    int deg = GetLowerCSTDegree( xsec );
+
+    DemoteCSTLower( xsec );
+
+    if ( GetLowerCSTDegree( xsec ) != deg - 1 )          { Print( "ERROR: DemoteCSTLower" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    ChangeXSecShape( xsec_surf, 1, XS_CST_AIRFOIL )
+
+    Update()
+
+    xsec = GetXSec( xsec_surf, 1 )
+
+    PromoteCSTLower( xsec )
+
+    deg = GetLowerCSTDegree( xsec )
+
+    DemoteCSTLower( xsec )
+
+    assert GetLowerCSTDegree( xsec ) == deg - 1, "DemoteCSTLower did not lower the degree"
+
+    \endcode
+    \endPythonOnly
     \sa GetLowerCSTDegree
     \param [in] xsec_id string XSec ID
 */
@@ -20961,6 +24441,33 @@ extern void DemoteCSTLower( const std::string& xsec_id );
 */
 /*!
     Fit a CST airfoil for an existing airfoil of type XS_FOUR_SERIES, XS_SIX_SERIES, XS_FOUR_DIGIT_MOD, XS_FIVE_DIGIT, XS_FIVE_DIGIT_MOD, XS_ONE_SIX_SERIES, or XS_FILE_AIRFOIL.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( wid, 0 );
+
+    Update();
+
+    FitAfCST( xsec_surf, 1, 5 );
+
+    Update();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( wid, 0 )
+
+    Update()
+
+    FitAfCST( xsec_surf, 1, 5 )
+
+    Update()
+
+    \endcode
+    \endPythonOnly
     \param [in] xsec_surf_id string XsecSurf ID
     \param [in] xsec_index int XSec index
     \param [in] deg int CST degree
@@ -21905,7 +25412,7 @@ extern std::string GetAuxiliaryGeomContactPtID( const std::string &geom_id, int 
     \ingroup AuxiliaryGeom
 */
 /*!
-    Read a composite clearance envelope (*.cce) file into an AuxiliaryGeom.  The file holds the
+    Read a composite clearance envelope (.cce) file into an AuxiliaryGeom.  The file holds the
     envelope profile as a list of X and Z coordinate pairs, one pair per line, which the
     AUX_GEOM_THREE_PT_CCE mode sweeps around the aircraft.
     \forcpponly
@@ -21947,7 +25454,7 @@ extern std::string GetAuxiliaryGeomContactPtID( const std::string &geom_id, int 
     \endcode
     \endPythonOnly
     \param [in] geom_id string AuxiliaryGeom Geom ID
-    \param [in] file_name string Name of the *.cce file to read
+    \param [in] file_name string Name of the .cce file to read
 */
 
 extern void ReadAuxiliaryGeomCCEFile( const std::string &geom_id, const std::string &file_name );
@@ -23371,6 +26878,58 @@ extern std::vector<vec3d> ReadBORFileXSec( const std::string& bor_id, const std:
 
 extern std::vector< vec3d > GetBORXSecPnts( const std::string& bor_id );
 
+/*!
+    \ingroup BOR
+*/
+/*!
+    Set the points of a body of revolution's file XSec.  The BOR's XSec must be of type XS_FILE_FUSE.
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_FILE_FUSE );
+
+    Update();
+
+    // Take the section's own points and hand back a squashed copy of them.
+    array < vec3d > pnt_vec = GetBORXSecPnts( bid );
+
+    for ( int i = 0 ; i < int( pnt_vec.size() ) ; i++ )
+    {
+        pnt_vec[i].set_y( 0.5 * pnt_vec[i].y() );
+    }
+
+    SetBORXSecPnts( bid, pnt_vec );
+
+    Update();
+
+    if ( GetBORXSecPnts( bid ).size() != pnt_vec.size() )    { Print( "ERROR: SetBORXSecPnts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_FILE_FUSE )
+
+    Update()
+
+    # Take the section's own points and hand back a squashed copy of them.
+    pnt_vec = [ vec3d( p.x(), 0.5 * p.y(), p.z() ) for p in GetBORXSecPnts( bid ) ]
+
+    SetBORXSecPnts( bid, pnt_vec )
+
+    Update()
+
+    assert len( GetBORXSecPnts( bid ) ) == len( pnt_vec ), "SetBORXSecPnts did not take the points"
+
+    \endcode
+    \endPythonOnly
+    \sa GetBORXSecPnts, ChangeBORXSecShape
+    \param [in] bor_id string Body of revolution Geom ID
+    \param [in] pnt_vec vector<vec3d> Points defining the section: a closed curve in the XY plane, running from the right-hand point down through the bottom, round the side and over the top.  Any other set is refused with VSP_INVALID_INPUT_VAL and the section is left as it was
+*/
+
 extern void SetBORXSecPnts( const std::string& bor_id, std::vector< vec3d > & pnt_vec );
 
 /*!
@@ -24001,6 +27560,33 @@ extern std::vector<vec3d> GetBORAirfoilLowerPnts( const std::string& bor_id );
 */
 /*!
     Get the CST coefficients for the upper surface of an airfoil of a BOR. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    array < double > @coefs = GetBORUpperCSTCoefs( bid );
+
+    if ( coefs.size() == 0 )                             { Print( "ERROR: GetBORUpperCSTCoefs" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    coefs = GetBORUpperCSTCoefs( bid )
+
+    assert len( coefs ) > 0, "GetBORUpperCSTCoefs returned nothing"
+
+    \endcode
+    \endPythonOnly
     \sa SetUpperCST
     \param [in] bor_id string Body of revolution Geom ID
     \return vector\<double\> Vector of CST coefficients for the upper airfoil surface
@@ -24013,6 +27599,33 @@ extern std::vector<double> GetBORUpperCSTCoefs( const std::string& bor_id );
 */
 /*!
     Get the CST coefficients for the lower surface of an airfoil of a BOR. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    array < double > @coefs = GetBORLowerCSTCoefs( bid );
+
+    if ( coefs.size() == 0 )                             { Print( "ERROR: GetBORLowerCSTCoefs" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    coefs = GetBORLowerCSTCoefs( bid )
+
+    assert len( coefs ) > 0, "GetBORLowerCSTCoefs returned nothing"
+
+    \endcode
+    \endPythonOnly
     \sa SetLowerCST
     \param [in] bor_id string Body of revolution Geom ID
     \return vector\<double\> Vector of CST coefficients for the lower airfoil surface
@@ -24025,6 +27638,29 @@ extern std::vector<double> GetBORLowerCSTCoefs( const std::string& bor_id );
 */
 /*!
     Get the CST degree for the upper surface of an airfoil of a BOR. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    if ( GetBORUpperCSTDegree( bid ) < 1 )               { Print( "ERROR: GetBORUpperCSTDegree" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    assert GetBORUpperCSTDegree( bid ) >= 1, "GetBORUpperCSTDegree returned a degenerate degree"
+
+    \endcode
+    \endPythonOnly
     \sa SetUpperCST
     \param [in] bor_id string Body of revolution Geom ID
     \return int CST Degree for upper airfoil surface
@@ -24037,6 +27673,29 @@ extern int GetBORUpperCSTDegree( const std::string& bor_id );
 */
 /*!
     Get the CST degree for the lower surface of an airfoil of a BOR. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    if ( GetBORLowerCSTDegree( bid ) < 1 )               { Print( "ERROR: GetBORLowerCSTDegree" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    assert GetBORLowerCSTDegree( bid ) >= 1, "GetBORLowerCSTDegree returned a degenerate degree"
+
+    \endcode
+    \endPythonOnly
     \sa SetLowerCST
     \param [in] bor_id string Body of revolution Geom ID
     \return int CST Degree for lower airfoil surface
@@ -24049,6 +27708,37 @@ extern int GetBORLowerCSTDegree( const std::string& bor_id );
 */
 /*!
     Set the CST degree and coefficients for the upper surface of an airfoil of a BOR. The number of coefficients should be one more than the CST degree. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    array < double > coefs = GetBORUpperCSTCoefs( bid );
+
+    SetBORUpperCST( bid, GetBORUpperCSTDegree( bid ), coefs );
+
+    Update();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    coefs = GetBORUpperCSTCoefs( bid )
+
+    SetBORUpperCST( bid, GetBORUpperCSTDegree( bid ), coefs )
+
+    Update()
+
+    \endcode
+    \endPythonOnly
     \sa GetUpperCSTDegree, GetUpperCSTCoefs
     \param [in] bor_id string Body of revolution Geom ID
     \param [in] deg int CST degree of upper airfoil surface
@@ -24062,6 +27752,37 @@ extern void SetBORUpperCST( const std::string& bor_id, int deg, const std::vecto
 */
 /*!
     Set the CST degree and coefficients for the lower surface of an airfoil of a BOR. The number of coefficients should be one more than the CST degree. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    array < double > coefs = GetBORLowerCSTCoefs( bid );
+
+    SetBORLowerCST( bid, GetBORLowerCSTDegree( bid ), coefs );
+
+    Update();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    coefs = GetBORLowerCSTCoefs( bid )
+
+    SetBORLowerCST( bid, GetBORLowerCSTDegree( bid ), coefs )
+
+    Update()
+
+    \endcode
+    \endPythonOnly
     \sa GetLowerCSTDegree, GetLowerCSTCoefs
     \param [in] bor_id string Body of revolution Geom ID
     \param [in] deg int CST degree of lower airfoil surface
@@ -24075,6 +27796,37 @@ extern void SetBORLowerCST( const std::string& bor_id, int deg, const std::vecto
 */
 /*!
     Promote the CST for the upper airfoil surface of a BOR. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    int deg = GetBORUpperCSTDegree( bid );
+
+    PromoteBORCSTUpper( bid );
+
+    if ( GetBORUpperCSTDegree( bid ) != deg + 1 )        { Print( "ERROR: PromoteBORCSTUpper" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    deg = GetBORUpperCSTDegree( bid )
+
+    PromoteBORCSTUpper( bid )
+
+    assert GetBORUpperCSTDegree( bid ) == deg + 1, "PromoteBORCSTUpper did not raise the degree"
+
+    \endcode
+    \endPythonOnly
     \sa GetUpperCSTDegree
     \param [in] bor_id string Body of revolution Geom ID
 */
@@ -24086,6 +27838,37 @@ extern void PromoteBORCSTUpper( const std::string& bor_id );
 */
 /*!
     Promote the CST for the lower airfoil surface of a BOR. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    int deg = GetBORLowerCSTDegree( bid );
+
+    PromoteBORCSTLower( bid );
+
+    if ( GetBORLowerCSTDegree( bid ) != deg + 1 )        { Print( "ERROR: PromoteBORCSTLower" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    deg = GetBORLowerCSTDegree( bid )
+
+    PromoteBORCSTLower( bid )
+
+    assert GetBORLowerCSTDegree( bid ) == deg + 1, "PromoteBORCSTLower did not raise the degree"
+
+    \endcode
+    \endPythonOnly
     \sa GetLowerCSTDegree
     \param [in] bor_id string Body of revolution Geom ID
 */
@@ -24097,6 +27880,41 @@ extern void PromoteBORCSTLower( const std::string& bor_id );
 */
 /*!
     Demote the CST for the upper airfoil surface of a BOR. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    PromoteBORCSTUpper( bid );
+
+    int deg = GetBORUpperCSTDegree( bid );
+
+    DemoteBORCSTUpper( bid );
+
+    if ( GetBORUpperCSTDegree( bid ) != deg - 1 )        { Print( "ERROR: DemoteBORCSTUpper" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    PromoteBORCSTUpper( bid )
+
+    deg = GetBORUpperCSTDegree( bid )
+
+    DemoteBORCSTUpper( bid )
+
+    assert GetBORUpperCSTDegree( bid ) == deg - 1, "DemoteBORCSTUpper did not lower the degree"
+
+    \endcode
+    \endPythonOnly
     \sa GetUpperCSTDegree
     \param [in] bor_id string Body of revolution Geom ID
 */
@@ -24108,6 +27926,41 @@ extern void DemoteBORCSTUpper( const std::string& bor_id );
 */
 /*!
     Demote the CST for the lower airfoil surface of a BOR. The XSecCurve must be of type XS_CST_AIRFOIL
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL );
+
+    Update();
+
+    PromoteBORCSTLower( bid );
+
+    int deg = GetBORLowerCSTDegree( bid );
+
+    DemoteBORCSTLower( bid );
+
+    if ( GetBORLowerCSTDegree( bid ) != deg - 1 )        { Print( "ERROR: DemoteBORCSTLower" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_CST_AIRFOIL )
+
+    Update()
+
+    PromoteBORCSTLower( bid )
+
+    deg = GetBORLowerCSTDegree( bid )
+
+    DemoteBORCSTLower( bid )
+
+    assert GetBORLowerCSTDegree( bid ) == deg - 1, "DemoteBORCSTLower did not lower the degree"
+
+    \endcode
+    \endPythonOnly
     \sa GetLowerCSTDegree
     \param [in] bor_id string Body of revolution Geom ID
 */
@@ -24119,6 +27972,33 @@ extern void DemoteBORCSTLower( const std::string& bor_id );
 */
 /*!
     Fit a CST airfoil for an existing airfoil of a BOR of type XS_FOUR_SERIES, XS_SIX_SERIES, XS_FOUR_DIGIT_MOD, XS_FIVE_DIGIT, XS_FIVE_DIGIT_MOD, XS_ONE_SIX_SERIES, or XS_FILE_AIRFOIL.
+    \forcpponly
+    \code{.cpp}
+    string bid = AddGeom( "BODYOFREVOLUTION", "" );
+
+    ChangeBORXSecShape( bid, XS_FOUR_SERIES );
+
+    Update();
+
+    FitBORAfCST( bid, 5 );
+
+    Update();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    bid = AddGeom( "BODYOFREVOLUTION", "" )
+
+    ChangeBORXSecShape( bid, XS_FOUR_SERIES )
+
+    Update()
+
+    FitBORAfCST( bid, 5 )
+
+    Update()
+
+    \endcode
+    \endPythonOnly
     \param [in] bor_id string Body of revolution Geom ID
     \param [in] deg int CST degree
 */
@@ -24246,6 +28126,29 @@ extern void WriteSeligAirfoil( const std::string & file_name, const std::string 
 */
 /*!
     Get the untwisted unit-length 2D coordinate points for the specified airfoil
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    Update();
+
+    array < vec3d > @pnts = GetAirfoilCoordinates( wid, 0.5 );
+
+    if ( pnts.size() == 0 )                              { Print( "ERROR: GetAirfoilCoordinates" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    Update()
+
+    pnts = GetAirfoilCoordinates( wid, 0.5 )
+
+    assert len( pnts ) > 0, "GetAirfoilCoordinates returned nothing"
+
+    \endcode
+    \endPythonOnly
     \sa WriteSeligAirfoil
     \param [in] geom_id string Geom ID
     \param [in] foilsurf_u double U location (range: 0 - 1) along the surface. The foil surface does not include root and tip caps (i.e. 2 section wing -> XSec0 @ u=0, XSec1 @ u=0.5, XSec2 @ u=1.0)
@@ -27329,6 +31232,39 @@ extern std::string FindContainer( const std::string & name, int index );
 
 extern void SetContainerName( const std::string & parm_container_id, const std::string & name );
 
+/*!
+    \ingroup ParmContainer
+*/
+/*!
+    Get the name of a Parm container.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    SetGeomName( pid, "TestPod" );
+
+    Update();
+
+    if ( GetContainerName( pid ) != "TestPod" )          { Print( "ERROR: GetContainerName" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    SetGeomName( pid, "TestPod" )
+
+    Update()
+
+    assert GetContainerName( pid ) == "TestPod", "GetContainerName did not report the name"
+
+    \endcode
+    \endPythonOnly
+    \sa FindContainers, GetGeomName
+    \param [in] parm_container_id string Parm container ID
+    \return string Parm container name
+*/
+
 extern std::string GetContainerName( const std::string & parm_container_id );
 
 /*!
@@ -27915,6 +31851,2842 @@ extern double ComputeMinClearanceDistance( const std::string & geom_id, int set 
 extern double SnapParm( const std::string & parm_id, double target_min_dist, bool inc_flag, int set = SET_ALL, bool useMode = false, const std::string &modeID = std::string() );
 
 
+//======================== Fit Model Functions ======================//
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Clear the Fit Model Tool, removing every target point and every variable.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, vec3d( 3.0, 0.0, 0.0 ) );
+
+    ResetFitModel();
+
+    if ( GetNumFitModelTargetPts() != 0 )                { Print( "ERROR: ResetFitModel" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, vec3d( 3.0, 0.0, 0.0 ) )
+
+    ResetFitModel()
+
+    assert GetNumFitModelTargetPts() == 0, "ResetFitModel left target points behind"
+
+    \endcode
+    \endPythonOnly
+    \sa DelAllFitModelTargetPts, DelAllFitModelVars
+*/
+
+extern void ResetFitModel();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add a target point to the Fit Model Tool.  The point is paired with the first surface of the given Geom.  Each
+    direction may be pinned to the supplied surface coordinate ( FIT_MODEL_FIXED ) or left free to slide along the
+    surface ( FIT_MODEL_FREE ).  The supplied coordinate is used for a pinned direction; a free one is searched onto the
+    nearest point of the surface as the point is added, so what is passed for it does not matter.
+
+    Called with a Geom and a point alone this leaves both directions free, matching AddFitModelTargetPts.  It is the
+    general form: use it to walk a loop of points that each want their own pinned or free directions and their own
+    coordinates.  Where every point in a group wants the same treatment, the named forms say so more plainly.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    vec3d pnt = CompPnt01( pid, 0, 0.5, 0.0 );
+
+    int index = AddFitModelTargetPt( pid, 0, pnt, FIT_MODEL_FREE, FIT_MODEL_FREE );
+
+    if ( index != 0 )                                    { Print( "ERROR: AddFitModelTargetPt" ); __failure++; }
+
+    if ( GetNumFitModelTargetPts() != 1 )                { Print( "ERROR: AddFitModelTargetPt" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pnt = CompPnt01( pid, 0, 0.5, 0.0 )
+
+    index = AddFitModelTargetPt( pid, 0, pnt, FIT_MODEL_FREE, FIT_MODEL_FREE )
+
+    assert index == 0, "AddFitModelTargetPt did not return the first index"
+
+    assert GetNumFitModelTargetPts() == 1, "AddFitModelTargetPt did not add a point"
+
+    \endcode
+    \endPythonOnly
+    \sa FIT_MODEL_TARGET_TYPE, AddFitModelTargetPtFixedU, AddFitModelTargetPtFixedW, AddFitModelTargetPtFixedUW, AddFitModelTargetPts
+    \param [in] geom_id string Geom ID of the surface the point is matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt vec3d Point to be matched, in model coordinates
+    \param [in] u_type int Fit model target type enum for the U direction (i.e. FIT_MODEL_FREE)
+    \param [in] w_type int Fit model target type enum for the W direction (i.e. FIT_MODEL_FREE)
+    \param [in] u double Starting U surface coordinate in [0, 1]
+    \param [in] w double Starting W surface coordinate in [0, 1]
+    \return int Index of the new target point
+*/
+
+extern int AddFitModelTargetPt( const std::string & geom_id, int surf_indx, const vec3d & pt, int u_type = FIT_MODEL_FREE, int w_type = FIT_MODEL_FREE, double u = 0.0, double w = 0.0 );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add one target point held at a U surface coordinate and free to slide in W.  The single point counterpart of
+    AddFitModelTargetPtsFixedU.  The W of the point is searched onto the surface as it is added.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPtFixedU( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), 0.5 );
+
+    if ( GetFitModelTargetPtUType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: AddFitModelTargetPtFixedU" ); __failure++; }
+
+    if ( abs( GetFitModelTargetPtU( 0 ) - 0.5 ) > 1e-6 ) { Print( "ERROR: AddFitModelTargetPtFixedU" ); __failure++; }
+
+    if ( UpdateFitModelDist() > 1e-4 )                   { Print( "ERROR: AddFitModelTargetPtFixedU" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPtFixedU( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), 0.5 )
+
+    assert GetFitModelTargetPtUType( 0 ) == FIT_MODEL_FIXED, "AddFitModelTargetPtFixedU did not pin U"
+
+    assert abs( GetFitModelTargetPtU( 0 ) - 0.5 ) < 1e-6, "AddFitModelTargetPtFixedU did not use the given U"
+
+    assert UpdateFitModelDist() < 1e-4, "AddFitModelTargetPtFixedU did not place the point on the surface"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedU, AddFitModelTargetPtFixedW, AddFitModelTargetPt
+    \param [in] geom_id string Geom ID of the surface the point is matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt vec3d Point to be matched, in model coordinates
+    \param [in] u double U surface coordinate in [0, 1] to hold the point at
+    \return int Index of the new target point
+*/
+
+extern int AddFitModelTargetPtFixedU( const std::string & geom_id, int surf_indx, const vec3d & pt, double u );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add one target point held at a W surface coordinate and free to slide in U.  The single point counterpart of
+    AddFitModelTargetPtsFixedW.  The U of the point is searched onto the surface as it is added.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPtFixedW( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), 0.25 );
+
+    if ( GetFitModelTargetPtWType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: AddFitModelTargetPtFixedW" ); __failure++; }
+
+    if ( abs( GetFitModelTargetPtW( 0 ) - 0.25 ) > 1e-6 )    { Print( "ERROR: AddFitModelTargetPtFixedW" ); __failure++; }
+
+    if ( UpdateFitModelDist() > 1e-4 )                   { Print( "ERROR: AddFitModelTargetPtFixedW" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPtFixedW( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), 0.25 )
+
+    assert GetFitModelTargetPtWType( 0 ) == FIT_MODEL_FIXED, "AddFitModelTargetPtFixedW did not pin W"
+
+    assert abs( GetFitModelTargetPtW( 0 ) - 0.25 ) < 1e-6, "AddFitModelTargetPtFixedW did not use the given W"
+
+    assert UpdateFitModelDist() < 1e-4, "AddFitModelTargetPtFixedW did not place the point on the surface"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedW, AddFitModelTargetPtFixedU, AddFitModelTargetPt
+    \param [in] geom_id string Geom ID of the surface the point is matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt vec3d Point to be matched, in model coordinates
+    \param [in] w double W surface coordinate in [0, 1] to hold the point at
+    \return int Index of the new target point
+*/
+
+extern int AddFitModelTargetPtFixedW( const std::string & geom_id, int surf_indx, const vec3d & pt, double w );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add one target point pinned to a surface coordinate, free in neither direction.  The single point counterpart of
+    AddFitModelTargetPtsFixedUW.  Nothing is searched; the point contributes no degrees of freedom, so the fit has only
+    the model's own Parms to work with.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPtFixedUW( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), 0.5, 0.25 );
+
+    if ( GetNumFitModelOptVars() != 0 )                  { Print( "ERROR: AddFitModelTargetPtFixedUW" ); __failure++; }
+
+    if ( UpdateFitModelDist() > 1e-6 )                   { Print( "ERROR: AddFitModelTargetPtFixedUW" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPtFixedUW( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), 0.5, 0.25 )
+
+    assert GetNumFitModelOptVars() == 0, "AddFitModelTargetPtFixedUW left a direction free"
+
+    assert UpdateFitModelDist() < 1e-6, "AddFitModelTargetPtFixedUW did not land on the given coordinate"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedUW, AddFitModelTargetPt
+    \param [in] geom_id string Geom ID of the surface the point is matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt vec3d Point to be matched, in model coordinates
+    \param [in] u double U surface coordinate in [0, 1] to hold the point at
+    \param [in] w double W surface coordinate in [0, 1] to hold the point at
+    \return int Index of the new target point
+*/
+
+extern int AddFitModelTargetPtFixedUW( const std::string & geom_id, int surf_indx, const vec3d & pt, double u, double w );
+
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add a group of target points to the Fit Model Tool, all matched to the same Geom, each free to slide anywhere on the
+    surface.  This is the API's replacement for selecting points of a point cloud with the mouse.  Every point is placed
+    on the nearest point of the surface as it is added, searching the whole surface, so no starting coordinate is asked
+    for: a caller is unlikely to have a useful guess for a free coordinate.  Where the topology does tell you where a
+    point belongs, use one of the fixed variants instead.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > pts;
+
+    pts.push_back( CompPnt01( pid, 0, 0.25, 0.0 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.50, 0.0 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.75, 0.0 ) );
+
+    AddFitModelTargetPts( pid, 0, pts );
+
+    if ( GetNumFitModelTargetPts() != 3 )                { Print( "ERROR: AddFitModelTargetPts" ); __failure++; }
+
+    if ( UpdateFitModelDist() > 1e-4 )                   { Print( "ERROR: AddFitModelTargetPts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pts = []
+
+    pts.append( CompPnt01( pid, 0, 0.25, 0.0 ) )
+    pts.append( CompPnt01( pid, 0, 0.50, 0.0 ) )
+    pts.append( CompPnt01( pid, 0, 0.75, 0.0 ) )
+
+    AddFitModelTargetPts( pid, 0, pts )
+
+    assert GetNumFitModelTargetPts() == 3, "AddFitModelTargetPts did not add three points"
+
+    assert UpdateFitModelDist() < 1e-4, "AddFitModelTargetPts did not place the points on the surface"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedU, AddFitModelTargetPtsFixedW, AddFitModelTargetPtsFixedUW, SearchFitModelTargetUW
+    \param [in] geom_id string Geom ID of the surface the points are matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt_vec vector<vec3d> Points to be matched, in model coordinates
+*/
+
+extern void AddFitModelTargetPts( const std::string & geom_id, int surf_indx, const std::vector < vec3d > & pt_vec );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add a group of target points held at one U surface coordinate and free to slide in W.  Use this where the topology
+    says which station the points belong to but not where around it, such as points measured around one fuselage frame.
+    The W of each point is searched onto the surface as it is added.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > pts;
+
+    pts.push_back( CompPnt01( pid, 0, 0.5, 0.10 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.5, 0.35 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.5, 0.60 ) );
+
+    AddFitModelTargetPtsFixedU( pid, 0, pts, 0.5 );
+
+    if ( GetFitModelTargetPtUType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: AddFitModelTargetPtsFixedU" ); __failure++; }
+
+    if ( abs( GetFitModelTargetPtU( 0 ) - 0.5 ) > 1e-6 ) { Print( "ERROR: AddFitModelTargetPtsFixedU" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pts = []
+
+    pts.append( CompPnt01( pid, 0, 0.5, 0.10 ) )
+    pts.append( CompPnt01( pid, 0, 0.5, 0.35 ) )
+    pts.append( CompPnt01( pid, 0, 0.5, 0.60 ) )
+
+    AddFitModelTargetPtsFixedU( pid, 0, pts, 0.5 )
+
+    assert GetFitModelTargetPtUType( 0 ) == FIT_MODEL_FIXED, "AddFitModelTargetPtsFixedU did not pin U"
+
+    assert abs( GetFitModelTargetPtU( 0 ) - 0.5 ) < 1e-6, "AddFitModelTargetPtsFixedU did not use the given U"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedUs, AddFitModelTargetPtsFixedW, AddFitModelTargetPts
+    \param [in] geom_id string Geom ID of the surface the points are matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt_vec vector<vec3d> Points to be matched, in model coordinates
+    \param [in] u double U surface coordinate in [0, 1] to hold every point at
+*/
+
+extern void AddFitModelTargetPtsFixedU( const std::string & geom_id, int surf_indx, const std::vector < vec3d > & pt_vec, double u );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add a group of target points, each held at its own U surface coordinate and free to slide in W.  The two vectors are
+    paired by index and must be the same length.  The W of each point is searched onto the surface as it is added.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > pts;
+    array < double > us;
+
+    pts.push_back( CompPnt01( pid, 0, 0.25, 0.1 ) );    us.push_back( 0.25 );
+    pts.push_back( CompPnt01( pid, 0, 0.50, 0.1 ) );    us.push_back( 0.50 );
+    pts.push_back( CompPnt01( pid, 0, 0.75, 0.1 ) );    us.push_back( 0.75 );
+
+    AddFitModelTargetPtsFixedUs( pid, 0, pts, us );
+
+    if ( abs( GetFitModelTargetPtU( 2 ) - 0.75 ) > 1e-6 )    { Print( "ERROR: AddFitModelTargetPtsFixedUs" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pts = []
+    us = []
+
+    for u in [ 0.25, 0.50, 0.75 ]:
+        pts.append( CompPnt01( pid, 0, u, 0.1 ) )
+        us.append( u )
+
+    AddFitModelTargetPtsFixedUs( pid, 0, pts, us )
+
+    assert abs( GetFitModelTargetPtU( 2 ) - 0.75 ) < 1e-6, "AddFitModelTargetPtsFixedUs did not use the given U values"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedU, AddFitModelTargetPtsFixedWs
+    \param [in] geom_id string Geom ID of the surface the points are matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt_vec vector<vec3d> Points to be matched, in model coordinates
+    \param [in] u_vec vector<double> U surface coordinate in [0, 1] for each point, same length as pt_vec
+*/
+
+extern void AddFitModelTargetPtsFixedUs( const std::string & geom_id, int surf_indx, const std::vector < vec3d > & pt_vec, const std::vector < double > & u_vec );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add a group of target points held at one W surface coordinate and free to slide in U.  Use this where the topology
+    says which line around the section the points belong to but not where along it, such as points measured along a
+    wing's leading edge.  The U of each point is searched onto the surface as it is added.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > pts;
+
+    pts.push_back( CompPnt01( pid, 0, 0.25, 0.5 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.50, 0.5 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.75, 0.5 ) );
+
+    AddFitModelTargetPtsFixedW( pid, 0, pts, 0.5 );
+
+    if ( GetFitModelTargetPtWType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: AddFitModelTargetPtsFixedW" ); __failure++; }
+
+    if ( abs( GetFitModelTargetPtW( 0 ) - 0.5 ) > 1e-6 ) { Print( "ERROR: AddFitModelTargetPtsFixedW" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pts = []
+
+    pts.append( CompPnt01( pid, 0, 0.25, 0.5 ) )
+    pts.append( CompPnt01( pid, 0, 0.50, 0.5 ) )
+    pts.append( CompPnt01( pid, 0, 0.75, 0.5 ) )
+
+    AddFitModelTargetPtsFixedW( pid, 0, pts, 0.5 )
+
+    assert GetFitModelTargetPtWType( 0 ) == FIT_MODEL_FIXED, "AddFitModelTargetPtsFixedW did not pin W"
+
+    assert abs( GetFitModelTargetPtW( 0 ) - 0.5 ) < 1e-6, "AddFitModelTargetPtsFixedW did not use the given W"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedWs, AddFitModelTargetPtsFixedU, AddFitModelTargetPts
+    \param [in] geom_id string Geom ID of the surface the points are matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt_vec vector<vec3d> Points to be matched, in model coordinates
+    \param [in] w double W surface coordinate in [0, 1] to hold every point at
+*/
+
+extern void AddFitModelTargetPtsFixedW( const std::string & geom_id, int surf_indx, const std::vector < vec3d > & pt_vec, double w );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add a group of target points, each held at its own W surface coordinate and free to slide in U.  The two vectors are
+    paired by index and must be the same length.  The U of each point is searched onto the surface as it is added.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > pts;
+    array < double > ws;
+
+    pts.push_back( CompPnt01( pid, 0, 0.3, 0.10 ) );    ws.push_back( 0.10 );
+    pts.push_back( CompPnt01( pid, 0, 0.3, 0.35 ) );    ws.push_back( 0.35 );
+    pts.push_back( CompPnt01( pid, 0, 0.3, 0.60 ) );    ws.push_back( 0.60 );
+
+    AddFitModelTargetPtsFixedWs( pid, 0, pts, ws );
+
+    if ( abs( GetFitModelTargetPtW( 2 ) - 0.60 ) > 1e-6 )    { Print( "ERROR: AddFitModelTargetPtsFixedWs" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pts = []
+    ws = []
+
+    for w in [ 0.10, 0.35, 0.60 ]:
+        pts.append( CompPnt01( pid, 0, 0.3, w ) )
+        ws.append( w )
+
+    AddFitModelTargetPtsFixedWs( pid, 0, pts, ws )
+
+    assert abs( GetFitModelTargetPtW( 2 ) - 0.60 ) < 1e-6, "AddFitModelTargetPtsFixedWs did not use the given W values"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedW, AddFitModelTargetPtsFixedUs
+    \param [in] geom_id string Geom ID of the surface the points are matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt_vec vector<vec3d> Points to be matched, in model coordinates
+    \param [in] w_vec vector<double> W surface coordinate in [0, 1] for each point, same length as pt_vec
+*/
+
+extern void AddFitModelTargetPtsFixedWs( const std::string & geom_id, int surf_indx, const std::vector < vec3d > & pt_vec, const std::vector < double > & w_vec );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add a group of target points all held at one surface coordinate, free in neither direction.  Every point is pinned to
+    the same place on the surface, which suits repeated measurements of one identifiable feature.  To pin each point to
+    its own coordinate, use AddFitModelTargetPtsFixedUWs.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > pts;
+
+    pts.push_back( CompPnt01( pid, 0, 0.5, 0.25 ) );
+
+    AddFitModelTargetPtsFixedUW( pid, 0, pts, 0.5, 0.25 );
+
+    if ( GetFitModelTargetPtUType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: AddFitModelTargetPtsFixedUW" ); __failure++; }
+
+    if ( GetFitModelTargetPtWType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: AddFitModelTargetPtsFixedUW" ); __failure++; }
+
+    if ( UpdateFitModelDist() > 1e-6 )                   { Print( "ERROR: AddFitModelTargetPtsFixedUW" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pts = []
+
+    pts.append( CompPnt01( pid, 0, 0.5, 0.25 ) )
+
+    AddFitModelTargetPtsFixedUW( pid, 0, pts, 0.5, 0.25 )
+
+    assert GetFitModelTargetPtUType( 0 ) == FIT_MODEL_FIXED, "AddFitModelTargetPtsFixedUW did not pin U"
+
+    assert GetFitModelTargetPtWType( 0 ) == FIT_MODEL_FIXED, "AddFitModelTargetPtsFixedUW did not pin W"
+
+    assert UpdateFitModelDist() < 1e-6, "AddFitModelTargetPtsFixedUW did not land on the given coordinate"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedUWs, AddFitModelTargetPt
+    \param [in] geom_id string Geom ID of the surface the points are matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt_vec vector<vec3d> Points to be matched, in model coordinates
+    \param [in] u double U surface coordinate in [0, 1] to hold every point at
+    \param [in] w double W surface coordinate in [0, 1] to hold every point at
+*/
+
+extern void AddFitModelTargetPtsFixedUW( const std::string & geom_id, int surf_indx, const std::vector < vec3d > & pt_vec, double u, double w );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Add a group of target points, each pinned to its own surface coordinate and free in neither direction.  The three
+    vectors are paired by index and must all be the same length.  Use this where every point has been identified on the
+    surface already, so the fit has only the model's own Parms to work with.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > pts;
+    array < double > us;
+    array < double > ws;
+
+    pts.push_back( CompPnt01( pid, 0, 0.25, 0.1 ) );    us.push_back( 0.25 );    ws.push_back( 0.1 );
+    pts.push_back( CompPnt01( pid, 0, 0.50, 0.4 ) );    us.push_back( 0.50 );    ws.push_back( 0.4 );
+    pts.push_back( CompPnt01( pid, 0, 0.75, 0.7 ) );    us.push_back( 0.75 );    ws.push_back( 0.7 );
+
+    AddFitModelTargetPtsFixedUWs( pid, 0, pts, us, ws );
+
+    if ( GetNumFitModelOptVars() != 0 )                  { Print( "ERROR: AddFitModelTargetPtsFixedUWs" ); __failure++; }
+
+    if ( UpdateFitModelDist() > 1e-6 )                   { Print( "ERROR: AddFitModelTargetPtsFixedUWs" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pts = []
+    us = []
+    ws = []
+
+    for u, w in [ ( 0.25, 0.1 ), ( 0.50, 0.4 ), ( 0.75, 0.7 ) ]:
+        pts.append( CompPnt01( pid, 0, u, w ) )
+        us.append( u )
+        ws.append( w )
+
+    AddFitModelTargetPtsFixedUWs( pid, 0, pts, us, ws )
+
+    assert GetNumFitModelOptVars() == 0, "AddFitModelTargetPtsFixedUWs left a direction free"
+
+    assert UpdateFitModelDist() < 1e-6, "AddFitModelTargetPtsFixedUWs did not land on the given coordinates"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPtsFixedUW, AddFitModelTargetPtsFixedUs, AddFitModelTargetPtsFixedWs
+    \param [in] geom_id string Geom ID of the surface the points are matched to
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] pt_vec vector<vec3d> Points to be matched, in model coordinates
+    \param [in] u_vec vector<double> U surface coordinate in [0, 1] for each point, same length as pt_vec
+    \param [in] w_vec vector<double> W surface coordinate in [0, 1] for each point, same length as pt_vec
+*/
+
+extern void AddFitModelTargetPtsFixedUWs( const std::string & geom_id, int surf_indx, const std::vector < vec3d > & pt_vec, const std::vector < double > & u_vec, const std::vector < double > & w_vec );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Delete one target point from the Fit Model Tool.  The points after it move down one index.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.25, 0.0 ) );
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.75, 0.0 ) );
+
+    DelFitModelTargetPt( 0 );
+
+    if ( GetNumFitModelTargetPts() != 1 )                { Print( "ERROR: DelFitModelTargetPt" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.25, 0.0 ) )
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.75, 0.0 ) )
+
+    DelFitModelTargetPt( 0 )
+
+    assert GetNumFitModelTargetPts() == 1, "DelFitModelTargetPt did not remove a point"
+
+    \endcode
+    \endPythonOnly
+    \sa DelAllFitModelTargetPts
+    \param [in] index int Target point index
+*/
+
+extern void DelFitModelTargetPt( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Delete every target point from the Fit Model Tool, leaving the variables alone.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) );
+
+    DelAllFitModelTargetPts();
+
+    if ( GetNumFitModelTargetPts() != 0 )                { Print( "ERROR: DelAllFitModelTargetPts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) )
+
+    DelAllFitModelTargetPts()
+
+    assert GetNumFitModelTargetPts() == 0, "DelAllFitModelTargetPts left points behind"
+
+    \endcode
+    \endPythonOnly
+    \sa DelFitModelTargetPt, ResetFitModel
+*/
+
+extern void DelAllFitModelTargetPts();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Reorder the target points worst fit first, by descending distance from each point to the surface it is matched to.
+    The distances are recomputed before sorting, so the order describes the model as it stands.  Target points are
+    addressed by index, so this renumbers them -- an index held across the call names a different point afterwards.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    vec3d near_pnt = CompPnt01( pid, 0, 0.5, 0.25 );
+    vec3d far_pnt = vec3d( near_pnt.x(), near_pnt.y(), near_pnt.z() + 1.0 );
+
+    AddFitModelTargetPtFixedUW( pid, 0, near_pnt, 0.5, 0.25 );
+    AddFitModelTargetPtFixedUW( pid, 0, far_pnt, 0.5, 0.25 );
+
+    SortFitModelTargetPtsByDist();
+
+    if ( abs( GetFitModelTargetPt( 0 ).z() - far_pnt.z() ) > 1e-6 )    { Print( "ERROR: SortFitModelTargetPtsByDist" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    near_pnt = CompPnt01( pid, 0, 0.5, 0.25 )
+    far_pnt = vec3d( near_pnt.x(), near_pnt.y(), near_pnt.z() + 1.0 )
+
+    AddFitModelTargetPtFixedUW( pid, 0, near_pnt, 0.5, 0.25 )
+    AddFitModelTargetPtFixedUW( pid, 0, far_pnt, 0.5, 0.25 )
+
+    SortFitModelTargetPtsByDist()
+
+    assert abs( GetFitModelTargetPt( 0 ).z() - far_pnt.z() ) < 1e-6, "SortFitModelTargetPtsByDist did not put the worst fit first"
+
+    \endcode
+    \endPythonOnly
+    \sa UpdateFitModelDist, GetFitModelTargetPt
+*/
+
+extern void SortFitModelTargetPtsByDist();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Move one target point within the Fit Model Tool's list, and return where it ended up.  Target points are addressed by
+    index, so this renumbers them -- an index held across the call names a different point afterwards.  Order does not
+    change the fit; it is the order the points are listed and stepped through in.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.25, 0.0 ) );
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.50, 0.0 ) );
+
+    vec3d last_pnt = CompPnt01( pid, 0, 0.75, 0.0 );
+
+    AddFitModelTargetPt( pid, 0, last_pnt );
+
+    int newindex = MoveFitModelTargetPt( 2, REORDER_MOVE_TOP );
+
+    if ( newindex != 0 )                                 { Print( "ERROR: MoveFitModelTargetPt" ); __failure++; }
+
+    if ( abs( GetFitModelTargetPt( 0 ).x() - last_pnt.x() ) > 1e-6 )    { Print( "ERROR: MoveFitModelTargetPt" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.25, 0.0 ) )
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.50, 0.0 ) )
+
+    last_pnt = CompPnt01( pid, 0, 0.75, 0.0 )
+
+    AddFitModelTargetPt( pid, 0, last_pnt )
+
+    newindex = MoveFitModelTargetPt( 2, REORDER_MOVE_TOP )
+
+    assert newindex == 0, "MoveFitModelTargetPt did not report the point at the top"
+
+    assert abs( GetFitModelTargetPt( 0 ).x() - last_pnt.x() ) < 1e-6, "MoveFitModelTargetPt did not move the point to the top"
+
+    \endcode
+    \endPythonOnly
+    \sa SortFitModelTargetPtsByDist, GetFitModelTargetPt, REORDER_TYPE
+    \param [in] index int Index of target point to move
+    \param [in] reorder_type int Enum specifying reordering type (i.e. REORDER_MOVE_UP, REORDER_MOVE_DOWN, REORDER_MOVE_TOP, REORDER_MOVE_BOTTOM)
+    \return int Index the target point ended up at
+*/
+
+extern int MoveFitModelTargetPt( int index, int reorder_type );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the number of target points held by the Fit Model Tool.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) );
+
+    if ( GetNumFitModelTargetPts() != 1 )                { Print( "ERROR: GetNumFitModelTargetPts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) )
+
+    assert GetNumFitModelTargetPts() == 1, "GetNumFitModelTargetPts did not count the point"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPt
+    \return int Number of target points
+*/
+
+extern int GetNumFitModelTargetPts();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the point a target point is trying to match.  This is the point supplied when it was added, not the point
+    currently on the surface; for that, see GetFitModelTargetPtSurfPt.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    vec3d pnt = vec3d( 3.0, 1.0, 2.0 );
+
+    AddFitModelTargetPt( pid, 0, pnt );
+
+    vec3d pnt_out = GetFitModelTargetPt( 0 );
+
+    if ( dist( pnt, pnt_out ) > 1e-6 )                   { Print( "ERROR: GetFitModelTargetPt" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pnt = vec3d( 3.0, 1.0, 2.0 )
+
+    AddFitModelTargetPt( pid, 0, pnt )
+
+    pnt_out = GetFitModelTargetPt( 0 )
+
+    assert dist( pnt, pnt_out ) < 1e-6, "GetFitModelTargetPt did not report the point that was set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFitModelTargetPt, GetFitModelTargetPtSurfPt
+    \param [in] index int Target point index
+    \return vec3d Point to be matched
+*/
+
+extern vec3d GetFitModelTargetPt( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Move the point a target point is trying to match.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, vec3d( 0.0, 0.0, 0.0 ) );
+
+    SetFitModelTargetPt( 0, vec3d( 3.0, 1.0, 2.0 ) );
+
+    if ( dist( GetFitModelTargetPt( 0 ), vec3d( 3.0, 1.0, 2.0 ) ) > 1e-6 )    { Print( "ERROR: SetFitModelTargetPt" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, vec3d( 0.0, 0.0, 0.0 ) )
+
+    SetFitModelTargetPt( 0, vec3d( 3.0, 1.0, 2.0 ) )
+
+    assert dist( GetFitModelTargetPt( 0 ), vec3d( 3.0, 1.0, 2.0 ) ) < 1e-6, "SetFitModelTargetPt did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelTargetPt
+    \param [in] index int Target point index
+    \param [in] pt vec3d Point to be matched, in model coordinates
+*/
+
+extern void SetFitModelTargetPt( int index, const vec3d & pt );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the Geom a target point is matched to.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) );
+
+    if ( GetFitModelTargetPtGeom( 0 ) != pid )           { Print( "ERROR: GetFitModelTargetPtGeom" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) )
+
+    assert GetFitModelTargetPtGeom( 0 ) == pid, "GetFitModelTargetPtGeom did not report the Geom that was set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFitModelTargetPtGeom
+    \param [in] index int Target point index
+    \return string Geom ID of the matched surface
+*/
+
+extern std::string GetFitModelTargetPtGeom( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Match a target point to a different Geom.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    string fid = AddGeom( "FUSELAGE" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) );
+
+    SetFitModelTargetPtGeom( 0, fid );
+
+    if ( GetFitModelTargetPtGeom( 0 ) != fid )           { Print( "ERROR: SetFitModelTargetPtGeom" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    fid = AddGeom( "FUSELAGE" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) )
+
+    SetFitModelTargetPtGeom( 0, fid )
+
+    assert GetFitModelTargetPtGeom( 0 ) == fid, "SetFitModelTargetPtGeom did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelTargetPtGeom
+    \param [in] index int Target point index
+    \param [in] geom_id string Geom ID of the surface the point is matched to
+*/
+
+extern void SetFitModelTargetPtGeom( int index, const std::string & geom_id );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the surface of the matched Geom a target point is paired with.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    SetParmVal( FindParm( pid, "Sym_Planar_Flag", "Sym" ), SYM_XZ );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 1, CompPnt01( pid, 1, 0.5, 0.25 ) );
+
+    if ( GetFitModelTargetPtSurfIndx( 0 ) != 1 )         { Print( "ERROR: GetFitModelTargetPtSurfIndx" ); __failure++; }
+
+    if ( UpdateFitModelDist() > 1e-4 )                   { Print( "ERROR: GetFitModelTargetPtSurfIndx" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    SetParmVal( FindParm( pid, "Sym_Planar_Flag", "Sym" ), SYM_XZ )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 1, CompPnt01( pid, 1, 0.5, 0.25 ) )
+
+    assert GetFitModelTargetPtSurfIndx( 0 ) == 1, "GetFitModelTargetPtSurfIndx did not report the surface that was set"
+
+    assert UpdateFitModelDist() < 1e-4, "target point did not land on the second surface"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFitModelTargetPtSurfIndx, GetFitModelTargetPtGeom
+    \param [in] index int Target point index
+    \return int Index of the matched surface of the Geom
+*/
+
+extern int GetFitModelTargetPtSurfIndx( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Pair a target point with a different surface of the Geom it is already matched to.  The index must be in range on that
+    Geom.  Note that surfaces are numbered by position, so turning symmetry on or off, or changing the number of copies of
+    a Geom, changes which surface an index names.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    SetParmVal( FindParm( pid, "Sym_Planar_Flag", "Sym" ), SYM_XZ );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 1, 0.5, 0.25 ) );
+
+    SetFitModelTargetPtSurfIndx( 0, 1 );
+
+    if ( GetFitModelTargetPtSurfIndx( 0 ) != 1 )         { Print( "ERROR: SetFitModelTargetPtSurfIndx" ); __failure++; }
+
+    SearchFitModelTargetUW();
+
+    if ( UpdateFitModelDist() > 1e-4 )                   { Print( "ERROR: SetFitModelTargetPtSurfIndx" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    SetParmVal( FindParm( pid, "Sym_Planar_Flag", "Sym" ), SYM_XZ )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 1, 0.5, 0.25 ) )
+
+    SetFitModelTargetPtSurfIndx( 0, 1 )
+
+    assert GetFitModelTargetPtSurfIndx( 0 ) == 1, "SetFitModelTargetPtSurfIndx did not take"
+
+    SearchFitModelTargetUW()
+
+    assert UpdateFitModelDist() < 1e-4, "target point did not land on the second surface"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelTargetPtSurfIndx, SetFitModelTargetPtGeom
+    \param [in] index int Target point index
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+*/
+
+extern void SetFitModelTargetPtSurfIndx( int index, int surf_indx );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the U surface coordinate of a target point.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 );
+
+    if ( abs( GetFitModelTargetPtU( 0 ) - 0.5 ) > 1e-6 ) { Print( "ERROR: GetFitModelTargetPtU" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 )
+
+    assert abs( GetFitModelTargetPtU( 0 ) - 0.5 ) < 1e-6, "GetFitModelTargetPtU did not report the U that was set"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelTargetPtW, SetFitModelTargetPtUW
+    \param [in] index int Target point index
+    \return double U surface coordinate in [0, 1]
+*/
+
+extern double GetFitModelTargetPtU( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the W surface coordinate of a target point.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 );
+
+    if ( abs( GetFitModelTargetPtW( 0 ) - 0.25 ) > 1e-6 )    { Print( "ERROR: GetFitModelTargetPtW" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 )
+
+    assert abs( GetFitModelTargetPtW( 0 ) - 0.25 ) < 1e-6, "GetFitModelTargetPtW did not report the W that was set"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelTargetPtU, SetFitModelTargetPtUW
+    \param [in] index int Target point index
+    \return double W surface coordinate in [0, 1]
+*/
+
+extern double GetFitModelTargetPtW( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the distance from a target point to the surface point it is matched to.
+
+    The Fit Model browser shows this in its Dist column and the API can sort the target points
+    by it, so it was the one quantity a script could order by without being able to read.
+    Meaningful after Update, which is what recomputes it.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 );
+
+    Update();
+
+    if ( GetFitModelTargetPtDist( 0 ) > 1e-6 )    { Print( "ERROR: GetFitModelTargetPtDist" ); __failure++; }
+
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 )
+
+    Update()
+
+    assert GetFitModelTargetPtDist( 0 ) < 1e-6, "a target point placed on the surface is not at zero distance"
+
+    \endcode
+    \endPythonOnly
+    \sa SortFitModelTargetPtsByDist
+    \param [in] index int Target point index
+    \return double Distance from the target point to the surface
+*/
+
+extern double GetFitModelTargetPtDist( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Set the surface coordinate of a target point.  For a fixed direction this is where the point is held; for a free
+    direction it is only where the search starts.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ) );
+
+    SetFitModelTargetPtUW( 0, 0.5, 0.25 );
+
+    if ( abs( GetFitModelTargetPtU( 0 ) - 0.5 ) > 1e-6 ) { Print( "ERROR: SetFitModelTargetPtUW" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ) )
+
+    SetFitModelTargetPtUW( 0, 0.5, 0.25 )
+
+    assert abs( GetFitModelTargetPtU( 0 ) - 0.5 ) < 1e-6, "SetFitModelTargetPtUW did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelTargetPtU, GetFitModelTargetPtW
+    \param [in] index int Target point index
+    \param [in] u double U surface coordinate in [0, 1]
+    \param [in] w double W surface coordinate in [0, 1]
+*/
+
+extern void SetFitModelTargetPtUW( int index, double u, double w );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get whether the U direction of a target point is pinned or free.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ), FIT_MODEL_FIXED, FIT_MODEL_FREE );
+
+    if ( GetFitModelTargetPtUType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: GetFitModelTargetPtUType" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ), FIT_MODEL_FIXED, FIT_MODEL_FREE )
+
+    assert GetFitModelTargetPtUType( 0 ) == FIT_MODEL_FIXED, "GetFitModelTargetPtUType did not report the type that was set"
+
+    \endcode
+    \endPythonOnly
+    \sa FIT_MODEL_TARGET_TYPE, SetFitModelTargetPtUType
+    \param [in] index int Target point index
+    \return int Fit model target type enum (i.e. FIT_MODEL_FREE)
+*/
+
+extern int GetFitModelTargetPtUType( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Pin or free the U direction of a target point.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) );
+
+    SetFitModelTargetPtUType( 0, FIT_MODEL_FIXED );
+
+    if ( GetFitModelTargetPtUType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: SetFitModelTargetPtUType" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) )
+
+    SetFitModelTargetPtUType( 0, FIT_MODEL_FIXED )
+
+    assert GetFitModelTargetPtUType( 0 ) == FIT_MODEL_FIXED, "SetFitModelTargetPtUType did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa FIT_MODEL_TARGET_TYPE, GetFitModelTargetPtUType
+    \param [in] index int Target point index
+    \param [in] u_type int Fit model target type enum (i.e. FIT_MODEL_FREE)
+*/
+
+extern void SetFitModelTargetPtUType( int index, int u_type );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get whether the W direction of a target point is pinned or free.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ), FIT_MODEL_FREE, FIT_MODEL_FIXED );
+
+    if ( GetFitModelTargetPtWType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: GetFitModelTargetPtWType" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ), FIT_MODEL_FREE, FIT_MODEL_FIXED )
+
+    assert GetFitModelTargetPtWType( 0 ) == FIT_MODEL_FIXED, "GetFitModelTargetPtWType did not report the type that was set"
+
+    \endcode
+    \endPythonOnly
+    \sa FIT_MODEL_TARGET_TYPE, SetFitModelTargetPtWType
+    \param [in] index int Target point index
+    \return int Fit model target type enum (i.e. FIT_MODEL_FREE)
+*/
+
+extern int GetFitModelTargetPtWType( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Pin or free the W direction of a target point.  W often wraps around the surface, and a free W that has wandered to
+    the seam can leave the optimizer stuck; SearchFitModelTargetUW will lift it off.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) );
+
+    SetFitModelTargetPtWType( 0, FIT_MODEL_FIXED );
+
+    if ( GetFitModelTargetPtWType( 0 ) != FIT_MODEL_FIXED )    { Print( "ERROR: SetFitModelTargetPtWType" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) )
+
+    SetFitModelTargetPtWType( 0, FIT_MODEL_FIXED )
+
+    assert GetFitModelTargetPtWType( 0 ) == FIT_MODEL_FIXED, "SetFitModelTargetPtWType did not take"
+
+    \endcode
+    \endPythonOnly
+    \sa FIT_MODEL_TARGET_TYPE, GetFitModelTargetPtWType, SearchFitModelTargetUW
+    \param [in] index int Target point index
+    \param [in] w_type int Fit model target type enum (i.e. FIT_MODEL_FREE)
+*/
+
+extern void SetFitModelTargetPtWType( int index, int w_type );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the point currently on the surface at a target point's surface coordinate.  The distance from here to the target
+    point is what the optimizer is driving to zero.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    vec3d pnt = CompPnt01( pid, 0, 0.5, 0.25 );
+
+    AddFitModelTargetPt( pid, 0, pnt, FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 );
+
+    vec3d surf_pnt = GetFitModelTargetPtSurfPt( 0 );
+
+    if ( dist( pnt, surf_pnt ) > 1e-6 )                  { Print( "ERROR: GetFitModelTargetPtSurfPt" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pnt = CompPnt01( pid, 0, 0.5, 0.25 )
+
+    AddFitModelTargetPt( pid, 0, pnt, FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 )
+
+    surf_pnt = GetFitModelTargetPtSurfPt( 0 )
+
+    assert dist( pnt, surf_pnt ) < 1e-6, "GetFitModelTargetPtSurfPt did not land on the target point"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelTargetPt, UpdateFitModelDist
+    \param [in] index int Target point index
+    \return vec3d Point on the surface at the target point's surface coordinate
+*/
+
+extern vec3d GetFitModelTargetPtSurfPt( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Nominate a Parm as a variable for the Fit Model Tool to adjust.  Choosing Parms that are not independent of one
+    another, or that have much the same effect on the surface, can leave the optimizer a very long time in converging.
+    Nominating the same Parm twice does nothing and reports an error.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddFitModelVar( len );
+
+    if ( GetNumFitModelVars() != 1 )                     { Print( "ERROR: AddFitModelVar" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddFitModelVar( length )
+
+    assert GetNumFitModelVars() == 1, "AddFitModelVar did not add the variable"
+
+    \endcode
+    \endPythonOnly
+    \sa DelFitModelVar, OptimizeFitModel
+    \param [in] parm_id string Parm ID
+*/
+
+extern void AddFitModelVar( const std::string & parm_id );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Withdraw a Parm from the Fit Model Tool's variables.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddFitModelVar( len );
+
+    DelFitModelVar( len );
+
+    if ( GetNumFitModelVars() != 0 )                     { Print( "ERROR: DelFitModelVar" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddFitModelVar( length )
+
+    DelFitModelVar( length )
+
+    assert GetNumFitModelVars() == 0, "DelFitModelVar did not remove the variable"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelVar, DelAllFitModelVars
+    \param [in] parm_id string Parm ID
+*/
+
+extern void DelFitModelVar( const std::string & parm_id );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Withdraw every Parm from the Fit Model Tool's variables, leaving the target points alone.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) );
+
+    DelAllFitModelVars();
+
+    if ( GetNumFitModelVars() != 0 )                     { Print( "ERROR: DelAllFitModelVars" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) )
+
+    DelAllFitModelVars()
+
+    assert GetNumFitModelVars() == 0, "DelAllFitModelVars left variables behind"
+
+    \endcode
+    \endPythonOnly
+    \sa DelFitModelVar, ResetFitModel
+*/
+
+extern void DelAllFitModelVars();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the number of Parms nominated as Fit Model Tool variables.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) );
+
+    if ( GetNumFitModelVars() != 1 )                     { Print( "ERROR: GetNumFitModelVars" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) )
+
+    assert GetNumFitModelVars() == 1, "GetNumFitModelVars did not count the variable"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelVar
+    \return int Number of variables
+*/
+
+extern int GetNumFitModelVars();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the Parm ID of one Fit Model Tool variable.  The variables are held sorted by name, so this index need not follow
+    the order they were added in.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    AddFitModelVar( len );
+
+    if ( GetFitModelVar( 0 ) != len )                    { Print( "ERROR: GetFitModelVar" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    AddFitModelVar( length )
+
+    assert GetFitModelVar( 0 ) == length, "GetFitModelVar did not report the variable that was added"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelVarVec
+    \param [in] index int Variable index
+    \return string Parm ID
+*/
+
+extern std::string GetFitModelVar( int index );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the Parm IDs of every Fit Model Tool variable.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) );
+
+    array < string > @var_array = GetFitModelVarVec();
+
+    if ( var_array.size() != 1 )                         { Print( "ERROR: GetFitModelVarVec" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) )
+
+    var_array = GetFitModelVarVec()
+
+    assert len( var_array ) == 1, "GetFitModelVarVec did not report the variable"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelVar
+    \return vector<string> Parm IDs of every variable
+*/
+
+extern std::vector < std::string > GetFitModelVarVec();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Move every free target point to the closest point on its surface, searching the whole surface rather than working
+    from where the point currently sits.  This is slower than RefineFitModelTargetUW but does not depend on a good
+    starting coordinate, so it is what lifts a point off a seam it has become stuck against.  Fixed directions are left
+    where they are.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    vec3d pnt = CompPnt01( pid, 0, 0.5, 0.25 );
+
+    AddFitModelTargetPt( pid, 0, pnt, FIT_MODEL_FREE, FIT_MODEL_FREE );
+
+    SearchFitModelTargetUW();
+
+    if ( UpdateFitModelDist() > 1e-4 )                   { Print( "ERROR: SearchFitModelTargetUW" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pnt = CompPnt01( pid, 0, 0.5, 0.25 )
+
+    AddFitModelTargetPt( pid, 0, pnt, FIT_MODEL_FREE, FIT_MODEL_FREE )
+
+    SearchFitModelTargetUW()
+
+    assert UpdateFitModelDist() < 1e-4, "SearchFitModelTargetUW did not find the point on the surface"
+
+    \endcode
+    \endPythonOnly
+    \sa RefineFitModelTargetUW, UpdateFitModelDist
+*/
+
+extern void SearchFitModelTargetUW();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Move every free target point to the closest point on its surface, starting from where the point currently sits.  This
+    is faster than SearchFitModelTargetUW but can settle on a nearby answer rather than the best one.  Fixed directions
+    are left where they are.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    vec3d pnt = CompPnt01( pid, 0, 0.5, 0.25 );
+
+    AddFitModelTargetPt( pid, 0, pnt, FIT_MODEL_FREE, FIT_MODEL_FREE, 0.45, 0.25 );
+
+    RefineFitModelTargetUW();
+
+    if ( UpdateFitModelDist() > 1e-4 )                   { Print( "ERROR: RefineFitModelTargetUW" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pnt = CompPnt01( pid, 0, 0.5, 0.25 )
+
+    AddFitModelTargetPt( pid, 0, pnt, FIT_MODEL_FREE, FIT_MODEL_FREE, 0.45, 0.25 )
+
+    RefineFitModelTargetUW()
+
+    assert UpdateFitModelDist() < 1e-4, "RefineFitModelTargetUW did not settle on the point"
+
+    \endcode
+    \endPythonOnly
+    \sa SearchFitModelTargetUW, UpdateFitModelDist
+*/
+
+extern void RefineFitModelTargetUW();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Recompute and return how far the model is from the target points.  The measure is the root mean square of the
+    distance from each target point to the point on its surface.  Zero is the wanted answer, so it does not also stand for
+    having nothing to measure; with no target points this reports -1.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 );
+
+    if ( UpdateFitModelDist() > 1e-6 )                   { Print( "ERROR: UpdateFitModelDist" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 )
+
+    assert UpdateFitModelDist() < 1e-6, "UpdateFitModelDist did not report a matched point as matched"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFitModelDist, OptimizeFitModel
+    \return double Root mean square distance from the target points to the surfaces, or -1 when there are no target points to measure
+*/
+
+extern double UpdateFitModelDist();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the distance measure last computed, without recomputing it.  Reports -1 if the last computation had no target
+    points to measure.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 );
+
+    UpdateFitModelDist();
+
+    if ( GetFitModelDist() > 1e-6 )                      { Print( "ERROR: GetFitModelDist" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.25 ), FIT_MODEL_FIXED, FIT_MODEL_FIXED, 0.5, 0.25 )
+
+    UpdateFitModelDist()
+
+    assert GetFitModelDist() < 1e-6, "GetFitModelDist did not report the distance last computed"
+
+    \endcode
+    \endPythonOnly
+    \sa UpdateFitModelDist
+    \return double Root mean square distance last computed
+*/
+
+extern double GetFitModelDist();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Get the number of degrees of freedom the optimization problem has: one for each variable, plus one for each free
+    direction of each target point.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ), FIT_MODEL_FREE, FIT_MODEL_FREE );
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) );
+
+    if ( GetNumFitModelOptVars() != 3 )                  { Print( "ERROR: GetNumFitModelOptVars" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ), FIT_MODEL_FREE, FIT_MODEL_FREE )
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) )
+
+    assert GetNumFitModelOptVars() == 3, "GetNumFitModelOptVars did not count one variable and two free directions"
+
+    \endcode
+    \endPythonOnly
+    \sa OptimizeFitModel
+    \return int Number of degrees of freedom
+*/
+
+extern int GetNumFitModelOptVars();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Adjust the variables, and any free target point surface coordinates, until the surfaces pass as close as they can to
+    the target points.  A Levenberg-Marquardt algorithm solves the least squares problem, with three residuals per target
+    point.  Least squares needs at least as many conditions as unknowns, so at least three target points are needed for
+    every three degrees of freedom; GetNumFitModelOptVars counts the latter.  The return value is the termination code of
+    the solver: 0 reports that the inputs were not usable, which generally means the variables chosen are not independent
+    or do not move the surface at all.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len = GetParm( pid, "Length", "Design" );
+
+    // Sample points from the pod, then stretch it away from them.
+    array < vec3d > pts;
+
+    pts.push_back( CompPnt01( pid, 0, 0.25, 0.0 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.50, 0.0 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.75, 0.0 ) );
+
+    double len0 = GetParmVal( len );
+
+    SetParmVal( len, 1.4 * len0 );
+
+    Update();
+
+    AddFitModelTargetPts( pid, 0, pts );
+
+    AddFitModelVar( len );
+
+    OptimizeFitModel();
+
+    // Fitting the points back should have recovered the original length.
+    if ( abs( GetParmVal( len ) - len0 ) > 1e-3 )        { Print( "ERROR: OptimizeFitModel" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    # Sample points from the pod, then stretch it away from them.
+    pts = []
+
+    pts.append( CompPnt01( pid, 0, 0.25, 0.0 ) )
+    pts.append( CompPnt01( pid, 0, 0.50, 0.0 ) )
+    pts.append( CompPnt01( pid, 0, 0.75, 0.0 ) )
+
+    len0 = GetParmVal( length )
+
+    SetParmVal( length, 1.4 * len0 )
+
+    Update()
+
+    AddFitModelTargetPts( pid, 0, pts )
+
+    AddFitModelVar( length )
+
+    OptimizeFitModel()
+
+    # Fitting the points back should have recovered the original length.
+    assert abs( GetParmVal( length ) - len0 ) < 1e-3, "OptimizeFitModel did not recover the original length"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFitModelTargetPts, AddFitModelVar, UpdateFitModelDist
+    \return int Termination code of the least squares solver
+*/
+
+extern int OptimizeFitModel();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Check whether the last Fit Model operation can be undone.  False before anything has been run,
+    after an undo has already been used, and when the variables or target points have changed since
+    -- a snapshot describes one arrangement of them and cannot be applied to another.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    if ( CanUndoFitModel() )                             { Print( "ERROR: CanUndoFitModel" ); __failure++; }
+
+    array< vec3d > pts;
+    pts.push_back( CompPnt01( pid, 0, 0.2, 0.3 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.5, 0.6 ) );
+
+    AddFitModelTargetPts( pid, 0, pts );
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) );
+
+    OptimizeFitModel();
+
+    if ( !CanUndoFitModel() )                            { Print( "ERROR: CanUndoFitModel" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    assert not CanUndoFitModel(), "CanUndoFitModel is true before anything has been run"
+
+    pts = [ CompPnt01( pid, 0, 0.2, 0.3 ), CompPnt01( pid, 0, 0.5, 0.6 ) ]
+
+    AddFitModelTargetPts( pid, 0, pts )
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) )
+
+    OptimizeFitModel()
+
+    assert CanUndoFitModel(), "CanUndoFitModel is false after a fit"
+
+    \endcode
+    \endPythonOnly
+    \sa UndoFitModel, OptimizeFitModel
+    \return bool True if there is something to undo
+*/
+
+extern bool CanUndoFitModel();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Undo the last Fit Model operation, putting back the Parm values and the free surface coordinates
+    of the target points as they were before OptimizeFitModel, SearchFitModelTargetUW or
+    RefineFitModelTargetUW was run.  One level deep: the snapshot is spent once it has been used.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string length = GetParm( pid, "Length", "Design" );
+
+    array< vec3d > pts;
+    pts.push_back( CompPnt01( pid, 0, 0.2, 0.3 ) );
+    pts.push_back( CompPnt01( pid, 0, 0.5, 0.6 ) );
+
+    AddFitModelTargetPts( pid, 0, pts );
+
+    AddFitModelVar( length );
+
+    SetParmVal( length, 7.0 );
+    Update();
+
+    OptimizeFitModel();
+
+    if ( !UndoFitModel() )                               { Print( "ERROR: UndoFitModel" ); __failure++; }
+
+    //==== The Parm is back where it was before the fit ====//
+    if ( abs( GetParmVal( length ) - 7.0 ) > 1e-6 )      { Print( "ERROR: UndoFitModel" ); __failure++; }
+
+    //==== And there is nothing left to undo ====//
+    if ( UndoFitModel() )                                { Print( "ERROR: UndoFitModel" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    length = GetParm( pid, "Length", "Design" )
+
+    pts = [ CompPnt01( pid, 0, 0.2, 0.3 ), CompPnt01( pid, 0, 0.5, 0.6 ) ]
+
+    AddFitModelTargetPts( pid, 0, pts )
+
+    AddFitModelVar( length )
+
+    SetParmVal( length, 7.0 )
+    Update()
+
+    OptimizeFitModel()
+
+    assert UndoFitModel(), "UndoFitModel found nothing to undo"
+
+    #==== The Parm is back where it was before the fit ====#
+    assert abs( GetParmVal( length ) - 7.0 ) < 1e-6, "UndoFitModel did not restore the Parm"
+
+    #==== And there is nothing left to undo ====#
+    assert not UndoFitModel(), "UndoFitModel is repeatable, but it should be one level deep"
+
+    \endcode
+    \endPythonOnly
+    \sa CanUndoFitModel, OptimizeFitModel, SearchFitModelTargetUW, RefineFitModelTargetUW
+    \return bool True if a previous state was restored
+*/
+
+extern bool UndoFitModel();
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Write the Fit Model Tool's target points and variables to a .fit file.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) );
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) );
+
+    SaveFitModelFile( "TestFitModel.fit" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) )
+
+    AddFitModelVar( GetParm( pid, "Length", "Design" ) )
+
+    SaveFitModelFile( "TestFitModel.fit" )
+
+    \endcode
+    \endPythonOnly
+    \sa LoadFitModelFile
+    \param [in] file_name string Name of the .fit file to write
+*/
+
+extern void SaveFitModelFile( const std::string & file_name );
+
+/*!
+    \ingroup FitModel
+*/
+/*!
+    Read target points and variables from a .fit file, adding them to whatever the Fit Model Tool already holds.  Call
+    ResetFitModel first to read into an empty tool.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) );
+
+    SaveFitModelFile( "TestFitModel.fit" );
+
+    ResetFitModel();
+
+    LoadFitModelFile( "TestFitModel.fit" );
+
+    if ( GetNumFitModelTargetPts() != 1 )                { Print( "ERROR: LoadFitModelFile" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddFitModelTargetPt( pid, 0, CompPnt01( pid, 0, 0.5, 0.0 ) )
+
+    SaveFitModelFile( "TestFitModel.fit" )
+
+    ResetFitModel()
+
+    LoadFitModelFile( "TestFitModel.fit" )
+
+    assert GetNumFitModelTargetPts() == 1, "LoadFitModelFile did not read the target point back"
+
+    \endcode
+    \endPythonOnly
+    \sa SaveFitModelFile, ResetFitModel
+    \param [in] file_name string Name of the .fit file to read
+    \return int Zero on success, or a nonzero code describing why the file could not be read
+*/
+
+extern int LoadFitModelFile( const std::string & file_name );
+
+
+
+//======================== Point Cloud Functions ======================//
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Make a Point Cloud Geom out of a set of points.  This is how a set worked out in a script is put
+    back into the model, so it can be looked at in the GUI and saved with the file.  The counterpart
+    of GetPtCloudPnts.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    string cloud_id = CreatePtCloudGeomFromPts( pts, "ScriptCloud" );
+
+    if ( GetPtCloudPnts( cloud_id ).size() != 4 )        { Print( "ERROR: CreatePtCloudGeomFromPts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    cloud_id = CreatePtCloudGeomFromPts( pts, "ScriptCloud" )
+
+    assert len( GetPtCloudPnts( cloud_id ) ) == 4, "CreatePtCloudGeomFromPts did not keep the points"
+
+    \endcode
+    \endPythonOnly
+    \sa GetPtCloudPnts, CreatePtCloudGeom
+    \param [in] pt_vec vector<vec3d> Points to place in the new Geom
+    \param [in] name string Name for the new Geom, or an empty string for the default
+    \return string Geom ID of the new Point Cloud Geom
+*/
+
+extern std::string CreatePtCloudGeomFromPts( const std::vector < vec3d > & pt_vec, const std::string & name );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Keep the points inside an axis aligned box.  This is what the GUI's rectangle selection is
+    reaching for, done in three dimensions rather than through a screen projection.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > inside = KeepPtsInBBox( pts, vec3d( 1.0, -1.0, -1.0 ), vec3d( 5.0, 1.0, 1.0 ) );
+
+    if ( inside.size() != 2 )                            { Print( "ERROR: KeepPtsInBBox" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    inside = KeepPtsInBBox( pts, vec3d( 1.0, -1.0, -1.0 ), vec3d( 5.0, 1.0, 1.0 ) )
+
+    assert len( inside ) == 2, "KeepPtsInBBox did not keep the points inside the box"
+
+    \endcode
+    \endPythonOnly
+    \sa RemovePtsInBBox, KeepPtsInRange
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] min_pt vec3d Corner of the box with the smallest coordinates
+    \param [in] max_pt vec3d Corner of the box with the largest coordinates
+    \return vector<vec3d> Points inside the box
+*/
+
+extern std::vector < vec3d > KeepPtsInBBox( const std::vector < vec3d > & pt_vec, const vec3d & min_pt, const vec3d & max_pt );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Drop the points inside an axis aligned box, keeping the rest.  The complement of KeepPtsInBBox,
+    which is how a selection is inverted.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > outside = RemovePtsInBBox( pts, vec3d( 1.0, -1.0, -1.0 ), vec3d( 5.0, 1.0, 1.0 ) );
+
+    if ( outside.size() != 2 )                           { Print( "ERROR: RemovePtsInBBox" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    outside = RemovePtsInBBox( pts, vec3d( 1.0, -1.0, -1.0 ), vec3d( 5.0, 1.0, 1.0 ) )
+
+    assert len( outside ) == 2, "RemovePtsInBBox did not drop the points inside the box"
+
+    \endcode
+    \endPythonOnly
+    \sa KeepPtsInBBox
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] min_pt vec3d Corner of the box with the smallest coordinates
+    \param [in] max_pt vec3d Corner of the box with the largest coordinates
+    \return vector<vec3d> Points outside the box
+*/
+
+extern std::vector < vec3d > RemovePtsInBBox( const std::vector < vec3d > & pt_vec, const vec3d & min_pt, const vec3d & max_pt );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Keep the points whose coordinate along one axis falls between two values, inclusive.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > mid = KeepPtsInRange( pts, X_DIR, 1.0, 5.0 );
+
+    if ( mid.size() != 2 )                               { Print( "ERROR: KeepPtsInRange" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    mid = KeepPtsInRange( pts, X_DIR, 1.0, 5.0 )
+
+    assert len( mid ) == 2, "KeepPtsInRange did not keep the points in range"
+
+    \endcode
+    \endPythonOnly
+    \sa RemovePtsInRange, KeepPtsAbove, KeepPtsBelow
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] dir_index int Direction index enum (i.e. X_DIR)
+    \param [in] low double Lowest coordinate to keep
+    \param [in] high double Highest coordinate to keep
+    \return vector<vec3d> Points within the range
+*/
+
+extern std::vector < vec3d > KeepPtsInRange( const std::vector < vec3d > & pt_vec, int dir_index, double low, double high );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Drop the points whose coordinate along one axis falls between two values, keeping the rest.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > ends = RemovePtsInRange( pts, X_DIR, 1.0, 5.0 );
+
+    if ( ends.size() != 2 )                              { Print( "ERROR: RemovePtsInRange" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    ends = RemovePtsInRange( pts, X_DIR, 1.0, 5.0 )
+
+    assert len( ends ) == 2, "RemovePtsInRange did not drop the points in range"
+
+    \endcode
+    \endPythonOnly
+    \sa KeepPtsInRange
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] dir_index int Direction index enum (i.e. X_DIR)
+    \param [in] low double Lowest coordinate to drop
+    \param [in] high double Highest coordinate to drop
+    \return vector<vec3d> Points outside the range
+*/
+
+extern std::vector < vec3d > RemovePtsInRange( const std::vector < vec3d > & pt_vec, int dir_index, double low, double high );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Keep the points whose coordinate along one axis is greater than a value.  Together with
+    KeepPtsBelow this splits a set in two: the two answers are complements, so no separate remove
+    call is wanted.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > aft = KeepPtsAbove( pts, X_DIR, 3.0 );
+
+    if ( aft.size() != 2 )                               { Print( "ERROR: KeepPtsAbove" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    aft = KeepPtsAbove( pts, X_DIR, 3.0 )
+
+    assert len( aft ) == 2, "KeepPtsAbove did not keep the points above the value"
+
+    \endcode
+    \endPythonOnly
+    \sa KeepPtsBelow, KeepPtsInRange
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] dir_index int Direction index enum (i.e. X_DIR)
+    \param [in] val double Value to compare against
+    \return vector<vec3d> Points above the value
+*/
+
+extern std::vector < vec3d > KeepPtsAbove( const std::vector < vec3d > & pt_vec, int dir_index, double val );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Keep the points whose coordinate along one axis is less than or equal to a value.  The
+    complement of KeepPtsAbove.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > fwd = KeepPtsBelow( pts, X_DIR, 3.0 );
+
+    if ( fwd.size() != 2 )                               { Print( "ERROR: KeepPtsBelow" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    fwd = KeepPtsBelow( pts, X_DIR, 3.0 )
+
+    assert len( fwd ) == 2, "KeepPtsBelow did not keep the points below the value"
+
+    \endcode
+    \endPythonOnly
+    \sa KeepPtsAbove, KeepPtsInRange
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] dir_index int Direction index enum (i.e. X_DIR)
+    \param [in] val double Value to compare against
+    \return vector<vec3d> Points at or below the value
+*/
+
+extern std::vector < vec3d > KeepPtsBelow( const std::vector < vec3d > & pt_vec, int dir_index, double val );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Keep the points within a distance of a given point.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > near = KeepPtsNearPt( pts, vec3d( 4.0, 0.0, 0.0 ), 1.0 );
+
+    if ( near.size() != 1 )                              { Print( "ERROR: KeepPtsNearPt" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    near = KeepPtsNearPt( pts, vec3d( 4.0, 0.0, 0.0 ), 1.0 )
+
+    assert len( near ) == 1, "KeepPtsNearPt did not keep the points near the point"
+
+    \endcode
+    \endPythonOnly
+    \sa RemovePtsNearPt
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] center vec3d Point to measure from
+    \param [in] radius double Distance within which to keep points
+    \return vector<vec3d> Points within the radius
+*/
+
+extern std::vector < vec3d > KeepPtsNearPt( const std::vector < vec3d > & pt_vec, const vec3d & center, double radius );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Drop the points within a distance of a given point, keeping the rest.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > far = RemovePtsNearPt( pts, vec3d( 4.0, 0.0, 0.0 ), 1.0 );
+
+    if ( far.size() != 3 )                               { Print( "ERROR: RemovePtsNearPt" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    far = RemovePtsNearPt( pts, vec3d( 4.0, 0.0, 0.0 ), 1.0 )
+
+    assert len( far ) == 3, "RemovePtsNearPt did not drop the points near the point"
+
+    \endcode
+    \endPythonOnly
+    \sa KeepPtsNearPt
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] center vec3d Point to measure from
+    \param [in] radius double Distance within which to drop points
+    \return vector<vec3d> Points outside the radius
+*/
+
+extern std::vector < vec3d > RemovePtsNearPt( const std::vector < vec3d > & pt_vec, const vec3d & center, double radius );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Keep the points lying within tol of a surface.  This narrows a cloud -- a slice through a whole
+    model, say -- down to the component being fitted.  Unlike the other filters this one costs a
+    surface projection for every point rather than a comparison, so on a large cloud it is worth
+    cutting the set down with one of the cheap filters first.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > pts;
+
+    pts.push_back( CompPnt01( pid, 0, 0.5, 0.25 ) );
+    pts.push_back( vec3d( 0.0, 100.0, 0.0 ) );
+
+    array < vec3d > on_body = KeepPtsNearGeom( pts, pid, 0, 1e-4 );
+
+    if ( on_body.size() != 1 )                           { Print( "ERROR: KeepPtsNearGeom" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pts = []
+
+    pts.append( CompPnt01( pid, 0, 0.5, 0.25 ) )
+    pts.append( vec3d( 0.0, 100.0, 0.0 ) )
+
+    on_body = KeepPtsNearGeom( pts, pid, 0, 1e-4 )
+
+    assert len( on_body ) == 1, "KeepPtsNearGeom did not keep the point on the surface"
+
+    \endcode
+    \endPythonOnly
+    \sa RemovePtsNearGeom, KeepPtsInBBox
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] geom_id string Geom ID of the surface to measure against
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] tol double Distance within which to keep points
+    \return vector<vec3d> Points lying within tol of the surface
+*/
+
+extern std::vector < vec3d > KeepPtsNearGeom( const std::vector < vec3d > & pt_vec, const std::string & geom_id, int surf_indx, double tol );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Drop the points lying within tol of a surface, keeping the rest.  Useful for taking one
+    component's points out of a cloud that covers several.  Costs a surface projection per point.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    array < vec3d > pts;
+
+    pts.push_back( CompPnt01( pid, 0, 0.5, 0.25 ) );
+    pts.push_back( vec3d( 0.0, 100.0, 0.0 ) );
+
+    array < vec3d > off_body = RemovePtsNearGeom( pts, pid, 0, 1e-4 );
+
+    if ( off_body.size() != 1 )                          { Print( "ERROR: RemovePtsNearGeom" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    pts = []
+
+    pts.append( CompPnt01( pid, 0, 0.5, 0.25 ) )
+    pts.append( vec3d( 0.0, 100.0, 0.0 ) )
+
+    off_body = RemovePtsNearGeom( pts, pid, 0, 1e-4 )
+
+    assert len( off_body ) == 1, "RemovePtsNearGeom did not drop the point on the surface"
+
+    \endcode
+    \endPythonOnly
+    \sa KeepPtsNearGeom
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] geom_id string Geom ID of the surface to measure against
+    \param [in] surf_indx int Index of the surface of that Geom, from 0 to GetNumTotalSurfs() - 1
+    \param [in] tol double Distance within which to drop points
+    \return vector<vec3d> Points lying further than tol from the surface
+*/
+
+extern std::vector < vec3d > RemovePtsNearGeom( const std::vector < vec3d > & pt_vec, const std::string & geom_id, int surf_indx, double tol );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Drop the repeated points of a set, keeping one of each group that falls within tol of one
+    another.  Answered with a spatial tree rather than by comparing every pair.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > twice;
+
+    for ( int i = 0 ; i < int( pts.size() ) ; i++ )
+    {
+        twice.push_back( pts[i] );
+        twice.push_back( pts[i] );
+    }
+
+    array < vec3d > once = UniquePts( twice, 1e-8 );
+
+    if ( once.size() != 4 )                              { Print( "ERROR: UniquePts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    twice = pts + pts
+
+    once = UniquePts( twice, 1e-8 )
+
+    assert len( once ) == 4, "UniquePts did not drop the repeats"
+
+    \endcode
+    \endPythonOnly
+    \sa UnionPts
+    \param [in] pt_vec vector<vec3d> Points to filter
+    \param [in] tol double Distance within which two points count as the same point
+    \return vector<vec3d> Points with the repeats removed
+*/
+
+extern std::vector < vec3d > UniquePts( const std::vector < vec3d > & pt_vec, double tol );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Put two sets of points together, keeping one of any that fall within tol of one another.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > fwd = KeepPtsBelow( pts, X_DIR, 3.0 );
+    array < vec3d > aft = KeepPtsAbove( pts, X_DIR, 3.0 );
+
+    array < vec3d > all = UnionPts( fwd, aft, 1e-8 );
+
+    if ( all.size() != 4 )                               { Print( "ERROR: UnionPts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    fwd = KeepPtsBelow( pts, X_DIR, 3.0 )
+    aft = KeepPtsAbove( pts, X_DIR, 3.0 )
+
+    all_pts = UnionPts( fwd, aft, 1e-8 )
+
+    assert len( all_pts ) == 4, "UnionPts did not put the two halves back together"
+
+    \endcode
+    \endPythonOnly
+    \sa SubtractPts, IntersectPts, UniquePts
+    \param [in] pt_vec_a vector<vec3d> First set of points
+    \param [in] pt_vec_b vector<vec3d> Second set of points
+    \param [in] tol double Distance within which two points count as the same point
+    \return vector<vec3d> Points of either set
+*/
+
+extern std::vector < vec3d > UnionPts( const std::vector < vec3d > & pt_vec_a, const std::vector < vec3d > & pt_vec_b, double tol );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Keep the points of the first set that also appear, within tol, in the second.  Answered with a
+    spatial tree over the second set rather than by comparing every pair.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > mid = KeepPtsInRange( pts, X_DIR, 1.0, 5.0 );
+
+    array < vec3d > both = IntersectPts( pts, mid, 1e-8 );
+
+    if ( both.size() != 2 )                              { Print( "ERROR: IntersectPts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    mid = KeepPtsInRange( pts, X_DIR, 1.0, 5.0 )
+
+    both = IntersectPts( pts, mid, 1e-8 )
+
+    assert len( both ) == 2, "IntersectPts did not keep the shared points"
+
+    \endcode
+    \endPythonOnly
+    \sa SubtractPts, UnionPts
+    \param [in] pt_vec_a vector<vec3d> Set to take points from
+    \param [in] pt_vec_b vector<vec3d> Set to test against
+    \param [in] tol double Distance within which two points count as the same point
+    \return vector<vec3d> Points of the first set that appear in the second
+*/
+
+extern std::vector < vec3d > IntersectPts( const std::vector < vec3d > & pt_vec_a, const std::vector < vec3d > & pt_vec_b, double tol );
+
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Keep the points of the first set that do not appear, within tol, in the second.  This is how a
+    group already dealt with is taken back out of a working set.
+    \forcpponly
+    \code{.cpp}
+    array < vec3d > pts;
+
+    pts.push_back( vec3d( 0.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 2.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 4.0, 0.0, 0.0 ) );
+    pts.push_back( vec3d( 6.0, 0.0, 0.0 ) );
+    array < vec3d > mid = KeepPtsInRange( pts, X_DIR, 1.0, 5.0 );
+
+    array < vec3d > rest = SubtractPts( pts, mid, 1e-8 );
+
+    if ( rest.size() != 2 )                              { Print( "ERROR: SubtractPts" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pts = []
+
+    pts.append( vec3d( 0.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 2.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 4.0, 0.0, 0.0 ) )
+    pts.append( vec3d( 6.0, 0.0, 0.0 ) )
+    mid = KeepPtsInRange( pts, X_DIR, 1.0, 5.0 )
+
+    rest = SubtractPts( pts, mid, 1e-8 )
+
+    assert len( rest ) == 2, "SubtractPts did not remove the shared points"
+
+    \endcode
+    \endPythonOnly
+    \sa IntersectPts, UnionPts
+    \param [in] pt_vec_a vector<vec3d> Set to take points from
+    \param [in] pt_vec_b vector<vec3d> Set to remove
+    \param [in] tol double Distance within which two points count as the same point
+    \return vector<vec3d> Points of the first set that do not appear in the second
+*/
+
+extern std::vector < vec3d > SubtractPts( const std::vector < vec3d > & pt_vec_a, const std::vector < vec3d > & pt_vec_b, double tol );
+
+
 //======================== Variable Preset Functions ======================//
 
 /*!
@@ -28173,6 +34945,34 @@ extern void AddVarPresetParm( const std::string &group_id, const std::string &pa
 
 extern void DeleteAllVarPresetGroups();
 
+/*!
+    \ingroup VariablePreset
+*/
+/*!
+    Delete a variable preset group and every setting in it.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddVarPresetGroup( "TestGroup" );
+
+    DeleteVarPresetGroup( gid );
+
+    if ( GetVarPresetGroups().size() != 0 )              { Print( "ERROR: DeleteVarPresetGroup" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddVarPresetGroup( "TestGroup" )
+
+    DeleteVarPresetGroup( gid )
+
+    assert len( GetVarPresetGroups() ) == 0, "DeleteVarPresetGroup did not delete the group"
+
+    \endcode
+    \endPythonOnly
+    \sa AddVarPresetGroup, GetVarPresetGroups
+    \param [in] group_id string Variable preset group ID
+*/
+
 extern void DeleteVarPresetGroup( const std::string &group_id );
 
 /*!
@@ -28289,6 +35089,39 @@ extern void DeleteVarPresetGroup( const std::string &group_id );
 */
 
 extern void DeleteAllVarPresetSettings( const std::string &group_id );
+
+/*!
+    \ingroup VariablePreset
+*/
+/*!
+    Delete one setting from a variable preset group, leaving the group.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddVarPresetGroup( "TestGroup" );
+
+    string sid = AddVarPresetSetting( gid, "TestSetting" );
+
+    DeleteVarPresetSetting( gid, sid );
+
+    if ( GetVarPresetSettings( gid ).size() != 0 )       { Print( "ERROR: DeleteVarPresetSetting" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddVarPresetGroup( "TestGroup" )
+
+    sid = AddVarPresetSetting( gid, "TestSetting" )
+
+    DeleteVarPresetSetting( gid, sid )
+
+    assert len( GetVarPresetSettings( gid ) ) == 0, "DeleteVarPresetSetting did not delete the setting"
+
+    \endcode
+    \endPythonOnly
+    \sa AddVarPresetSetting, GetVarPresetSettings
+    \param [in] group_id string Variable preset group ID
+    \param [in] setting_id string Setting ID within that group
+*/
 
 extern void DeleteVarPresetSetting( const std::string &group_id, const std::string &setting_id );
 
@@ -30209,6 +37042,30 @@ extern std::string GetModeName( const std::string &mid );
 
 extern void SetModeName( const std::string &mid, const std::string &name );
 
+/*!
+    \ingroup Mode
+*/
+/*!
+    Apply a mode's variable preset settings to the model.
+    \forcpponly
+    \code{.cpp}
+    string mid = CreateAndAddMode( "TestMode", SET_ALL, SET_NONE );
+
+    ApplyModeSettings( mid );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    mid = CreateAndAddMode( "TestMode", SET_ALL, SET_NONE )
+
+    ApplyModeSettings( mid )
+
+    \endcode
+    \endPythonOnly
+    \sa CreateAndAddMode
+    \param [in] mid string Mode ID
+*/
+
 extern void ApplyModeSettings( const std::string &mid );
 
 /*!
@@ -31676,6 +38533,39 @@ extern void RemoveAllGroupSettings( const std::string &mid );
 */
 /*!
     Set the parameters, values, and curve type of a propeller blade curve (P Curve)
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    array < double > tvec = PCurveGetTVec( prop_id, PROP_CHORD );
+    array < double > valvec = PCurveGetValVec( prop_id, PROP_CHORD );
+
+    SetPCurve( prop_id, PROP_CHORD, tvec, valvec, PCurveGetType( prop_id, PROP_CHORD ) );
+
+    Update();
+
+    if ( PCurveGetTVec( prop_id, PROP_CHORD ).size() != tvec.size() )    { Print( "ERROR: SetPCurve" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    tvec = PCurveGetTVec( prop_id, PROP_CHORD )
+    valvec = PCurveGetValVec( prop_id, PROP_CHORD )
+
+    SetPCurve( prop_id, PROP_CHORD, tvec, valvec, PCurveGetType( prop_id, PROP_CHORD ) )
+
+    Update()
+
+    assert len( PCurveGetTVec( prop_id, PROP_CHORD ) ) == len( tvec ), "SetPCurve did not take"
+
+    \endcode
+    \endPythonOnly
     \sa PCURV_TYPE
     \param [in] geom_id string Parent Geom ID
     \param [in] pcurveid int P Curve index
@@ -31692,6 +38582,33 @@ extern void SetPCurve( const std::string & geom_id, const int & pcurveid, const 
 */
 /*!
     Change the type of a propeller blade curve (P Curve)
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    PCurveConvertTo( prop_id, PROP_CHORD, LINEAR );
+
+    Update();
+
+    if ( PCurveGetType( prop_id, PROP_CHORD ) != LINEAR )    { Print( "ERROR: PCurveConvertTo" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    PCurveConvertTo( prop_id, PROP_CHORD, LINEAR )
+
+    Update()
+
+    assert PCurveGetType( prop_id, PROP_CHORD ) == LINEAR, "PCurveConvertTo did not change the type"
+
+    \endcode
+    \endPythonOnly
     \sa PCURV_TYPE
     \param [in] geom_id string Parent Geom ID
     \param [in] pcurveid int P Curve index
@@ -31705,6 +38622,29 @@ extern void PCurveConvertTo( const std::string & geom_id, const int & pcurveid, 
 */
 /*!
     Get the type of a propeller blade curve (P Curve)
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    int t = PCurveGetType( prop_id, PROP_CHORD );
+
+    if ( t < 0 )                                         { Print( "ERROR: PCurveGetType" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    t = PCurveGetType( prop_id, PROP_CHORD )
+
+    assert t >= 0, "PCurveGetType returned a bad type"
+
+    \endcode
+    \endPythonOnly
     \sa PCURV_TYPE
     \param [in] geom_id string Parent Geom ID
     \param [in] pcurveid int P Curve index
@@ -31718,6 +38658,29 @@ extern int PCurveGetType( const std::string & geom_id, const int & pcurveid );
 */
 /*!
     Get the parameters of a propeller blade curve (P Curve). Each parameter is a fraction of propeller radius.
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    array < double > @tvec = PCurveGetTVec( prop_id, PROP_CHORD );
+
+    if ( tvec.size() == 0 )                              { Print( "ERROR: PCurveGetTVec" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    tvec = PCurveGetTVec( prop_id, PROP_CHORD )
+
+    assert len( tvec ) > 0, "PCurveGetTVec returned nothing"
+
+    \endcode
+    \endPythonOnly
     \param [in] geom_id string Parent Geom ID
     \param [in] pcurveid int P Curve index
     \return vector \<double\> Array of parameters
@@ -31730,6 +38693,33 @@ extern std::vector < double > PCurveGetTVec( const std::string & geom_id, const 
 */
 /*!
     Get the values of a propeller blade curve (P Curve). What the values represent id dependent on the curve type (i.e. twist, chord, etc.).
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    array < double > @valvec = PCurveGetValVec( prop_id, PROP_CHORD );
+
+    if ( valvec.size() == 0 )                            { Print( "ERROR: PCurveGetValVec" ); __failure++; }
+
+    if ( valvec.size() != PCurveGetTVec( prop_id, PROP_CHORD ).size() )    { Print( "ERROR: PCurveGetValVec" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    valvec = PCurveGetValVec( prop_id, PROP_CHORD )
+
+    assert len( valvec ) > 0, "PCurveGetValVec returned nothing"
+
+    assert len( valvec ) == len( PCurveGetTVec( prop_id, PROP_CHORD ) ), "PCurveGetValVec disagrees with the T vector"
+
+    \endcode
+    \endPythonOnly
     \param [in] geom_id string Parent Geom ID
     \param [in] pcurveid int P Curve index
     \return vector \<double\> Array of values
@@ -31742,6 +38732,49 @@ extern std::vector < double > PCurveGetValVec( const std::string & geom_id, cons
 */
 /*!
     Delete a propeller blade curve (P Curve) point
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    // A cubic edit curve holds its points in groups and will not give one up on its own, so put
+    // the curve into a form where a single point can go.
+    PCurveConvertTo( prop_id, PROP_CHORD, LINEAR );
+
+    Update();
+
+    int n = PCurveGetTVec( prop_id, PROP_CHORD ).size();
+
+    PCurveDeletePt( prop_id, PROP_CHORD, 1 );
+
+    Update();
+
+    if ( int( PCurveGetTVec( prop_id, PROP_CHORD ).size() ) >= n )    { Print( "ERROR: PCurveDeletePt" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    # A cubic edit curve holds its points in groups and will not give one up on its own, so put
+    # the curve into a form where a single point can go.
+    PCurveConvertTo( prop_id, PROP_CHORD, LINEAR )
+
+    Update()
+
+    n = len( PCurveGetTVec( prop_id, PROP_CHORD ) )
+
+    PCurveDeletePt( prop_id, PROP_CHORD, 1 )
+
+    Update()
+
+    assert len( PCurveGetTVec( prop_id, PROP_CHORD ) ) < n, "PCurveDeletePt did not remove a point"
+
+    \endcode
+    \endPythonOnly
     \param [in] geom_id string Parent Geom ID
     \param [in] pcurveid int P Curve index
     \param [in] indx int Point index
@@ -31754,6 +38787,37 @@ extern void PCurveDeletePt( const std::string & geom_id, const int & pcurveid, c
 */
 /*!
     Split a propeller blade curve (P Curve) at the specified 1D parameter
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    int n = PCurveGetTVec( prop_id, PROP_CHORD ).size();
+
+    PCurveSplit( prop_id, PROP_CHORD, 0.55 );
+
+    Update();
+
+    if ( int( PCurveGetTVec( prop_id, PROP_CHORD ).size() ) <= n )    { Print( "ERROR: PCurveSplit" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    n = len( PCurveGetTVec( prop_id, PROP_CHORD ) )
+
+    PCurveSplit( prop_id, PROP_CHORD, 0.55 )
+
+    Update()
+
+    assert len( PCurveGetTVec( prop_id, PROP_CHORD ) ) > n, "PCurveSplit did not add a point"
+
+    \endcode
+    \endPythonOnly
     \param [in] geom_id string Parent Geom ID
     \param [in] pcurveid int P Curve index
     \param [in] tsplit double 1D parameter split location
@@ -32587,7 +39651,75 @@ extern void DelCpSlice( int slice_index );
 
 extern void DeleteAllCpSlices();
 
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Delete one VSPAERO control surface group, by index.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    Update();
+
+    CreateVSPAEROControlSurfaceGroup();
+
+    DeleteVSPAEROControlSurfaceGroup( 0 );
+
+    if ( GetNumControlSurfaceGroups() != 0 )             { Print( "ERROR: DeleteVSPAEROControlSurfaceGroup" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    Update()
+
+    CreateVSPAEROControlSurfaceGroup()
+
+    DeleteVSPAEROControlSurfaceGroup( 0 )
+
+    assert GetNumControlSurfaceGroups() == 0, "DeleteVSPAEROControlSurfaceGroup did not delete the group"
+
+    \endcode
+    \endPythonOnly
+    \sa CreateVSPAEROControlSurfaceGroup
+    \param [in] CSGroupIndex int Index of the control surface group to delete
+*/
+
 extern void DeleteVSPAEROControlSurfaceGroup( int CSGroupIndex );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Add a VSPAERO control surface group.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    Update();
+
+    int group_index = CreateVSPAEROControlSurfaceGroup();
+
+    if ( GetNumControlSurfaceGroups() != 1 )             { Print( "ERROR: CreateVSPAEROControlSurfaceGroup" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    Update()
+
+    group_index = CreateVSPAEROControlSurfaceGroup()
+
+    assert GetNumControlSurfaceGroups() == 1, "CreateVSPAEROControlSurfaceGroup did not add the group"
+
+    \endcode
+    \endPythonOnly
+    \sa DeleteVSPAEROControlSurfaceGroup, GetNumControlSurfaceGroups
+    \return int Index of the new control surface group
+*/
 
 extern int CreateVSPAEROControlSurfaceGroup();
 
@@ -33288,6 +40420,91 @@ extern void RemoveSelectedFromCSGroup( const std::vector <int> &selected, int CS
 */
 
 extern int GetNumControlSurfaceGroups();
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the ID of a VSPAERO control surface group, so that its Parms can be reached the way any
+    other container's are.  A group carries an ActiveFlag and a DeflectionAngle, both in Parm
+    group "ControlSurfaceGroup".  Everything else about these groups is addressed by index;
+    this is what lets a script set a deflection without knowing the index a group happens to
+    hold.
+    \forcpponly
+    \code{.cpp}
+    //==== A wing with a control surface on it ====//
+    string wid = AddGeom( "WING", "" );
+    string subsurf_id = AddSubSurf( wid, SS_CONTROL, 0 );
+
+    Update();
+
+    //==== Group it, the way the VSPAERO screen does ====//
+    AutoGroupVSPAEROControlSurfaces();
+
+    Update();
+
+    if ( GetNumControlSurfaceGroups() <= 0 )
+    {
+        Print( "ERROR: no control surface group was made" );
+        __failure++;
+    }
+
+    string group_id = FindControlSurfaceGroup( 0 );
+
+    if ( group_id.length() == 0 )
+    {
+        Print( "ERROR: FindControlSurfaceGroup found nothing" );
+        __failure++;
+    }
+
+    //==== And its deflection is a Parm like any other ====//
+    SetParmVal( FindParm( group_id, "DeflectionAngle", "ControlSurfaceGroup" ), 7.0 );
+
+    Update();
+
+    if ( abs( GetParmVal( group_id, "DeflectionAngle", "ControlSurfaceGroup" ) - 7.0 ) > 1e-6 )
+    {
+        Print( "ERROR: the group did not take the deflection it was given" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== A wing with a control surface on it ====#
+    wid = AddGeom( "WING", "" )
+    subsurf_id = AddSubSurf( wid, SS_CONTROL, 0 )
+
+    Update()
+
+    #==== Group it, the way the VSPAERO screen does ====#
+    AutoGroupVSPAEROControlSurfaces()
+
+    Update()
+
+    assert GetNumControlSurfaceGroups() > 0, "no control surface group was made"
+
+    group_id = FindControlSurfaceGroup( 0 )
+
+    assert len( group_id ) > 0, "FindControlSurfaceGroup found nothing"
+
+    #==== And its deflection is a Parm like any other ====#
+    SetParmVal( FindParm( group_id, "DeflectionAngle", "ControlSurfaceGroup" ), 7.0 )
+
+    Update()
+
+    deflected = GetParmVal( group_id, "DeflectionAngle", "ControlSurfaceGroup" )
+
+    assert abs( deflected - 7.0 ) < 1e-6, "the group did not take the deflection it was given"
+
+    \endcode
+    \endPythonOnly
+    \sa GetNumControlSurfaceGroups, AutoGroupVSPAEROControlSurfaces
+    \param [in] group_index int Control surface group index
+    \return string Control surface group ID
+*/
+
+extern std::string FindControlSurfaceGroup( int group_index );
 
 
 //================ VSPAERO Actuator Disk and Unsteady Functions ==============//
@@ -34073,6 +41290,34 @@ extern int GetNumExcrescences();
 
 extern void DeleteAllExcrescences();
 
+/*!
+    \ingroup ParasiteDrag
+*/
+/*!
+    Delete one excrescence from the Parasite Drag tool, by index.
+    \forcpponly
+    \code{.cpp}
+    AddExcrescence( "TestExcrescence", EXCRESCENCE_COUNT, 2.0 );
+
+    DeleteExcrescence( 0 );
+
+    if ( GetNumExcrescences() != 0 )                     { Print( "ERROR: DeleteExcrescence" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddExcrescence( "TestExcrescence", EXCRESCENCE_COUNT, 2.0 )
+
+    DeleteExcrescence( 0 )
+
+    assert GetNumExcrescences() == 0, "DeleteExcrescence did not delete the excrescence"
+
+    \endcode
+    \endPythonOnly
+    \sa AddExcrescence, GetNumExcrescences
+    \param [in] index int Index of the excrescence to delete
+*/
+
 extern void DeleteExcrescence(const int & index);
 
 /*!
@@ -34080,6 +41325,25 @@ extern void DeleteExcrescence(const int & index);
 */
 /*!
     Update any reference geometry, atmospheric properties, excressences, etc. in the Parasite Drag Tool
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    UpdateParasiteDrag();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    UpdateParasiteDrag()
+
+    \endcode
+    \endPythonOnly
 */
 
 extern void UpdateParasiteDrag();
@@ -34419,6 +41683,26 @@ extern void WriteWingFFCSVFile( const std::string & file_name );
     \param [in] file_name string Output CSV file
 */ // TODO: Improve description
 
+/*!
+    \ingroup ParasiteDrag
+*/
+/*!
+    Write a CSV file of the skin friction coefficient equations over a range of Reynolds numbers.
+    \forcpponly
+    \code{.cpp}
+    WriteCfEqnCSVFile( "TestCfEqn.csv" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    WriteCfEqnCSVFile( "TestCfEqn.csv" )
+
+    \endcode
+    \endPythonOnly
+    \sa WritePartialCfMethodCSVFile
+    \param [in] file_name string Name of the CSV file to write
+*/
+
 extern void WriteCfEqnCSVFile( const std::string & file_name );
 
 /*!
@@ -34463,10 +41747,95 @@ extern void WriteCfEqnCSVFile( const std::string & file_name );
     \param [in] file_name string Output CSV file
 */ // TODO: Improve description
 
+/*!
+    \ingroup ParasiteDrag
+*/
+/*!
+    Write a CSV file of the partial turbulence skin friction methods.
+    \forcpponly
+    \code{.cpp}
+    WritePartialCfMethodCSVFile( "TestPartialCf.csv" );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    WritePartialCfMethodCSVFile( "TestPartialCf.csv" )
+
+    \endcode
+    \endPythonOnly
+    \sa WriteCfEqnCSVFile
+    \param [in] file_name string Name of the CSV file to write
+*/
+
 extern void WritePartialCfMethodCSVFile( const std::string & file_name );
 
 
 //======================== Surface Query Functions ======================//
+/*!
+    \ingroup SurfaceQuery
+*/
+/*!
+    Bound the distance between two Geoms' surfaces.  Each surface of the first -- its main
+    surfaces and their symmetric copies -- is compared with the surface at the same index of the
+    second, at the same parameters.  The bound comes from the control points of the difference
+    between the two, so it is never less than the true distance, and equals it where one surface
+    is the other moved rigidly.  Identical surfaces give exactly zero.
+
+    Two Geoms that cannot be compared -- a different number of surfaces, or a pair spanning
+    different parameter ranges -- give -1 and an error.
+    \forcpponly
+    \code{.cpp}
+    //==== A Pod and a copy of it ====//
+    string pod = AddGeom( "POD" );
+
+    Update();
+
+    CopyGeomToClipboard( pod );
+    array< string > @pasted = PasteGeomClipboard();
+    string copy = pasted[0];
+
+    Update();
+
+    if ( CompareGeomSurfaces( pod, copy ) != 0.0 )                      { Print( "---> Error: API CompareGeomSurfaces found a copy differs " ); __failure++; }
+
+    //==== Moved, the copy differs by exactly how far it moved ====//
+    SetParmVal( FindParm( copy, "X_Rel_Location", "XForm" ), 2.5 );
+
+    Update();
+
+    if ( abs( CompareGeomSurfaces( pod, copy ) - 2.5 ) > 1e-9 )         { Print( "---> Error: API CompareGeomSurfaces missed a move " ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== A Pod and a copy of it ====#
+    pod = AddGeom( "POD" )
+
+    Update()
+
+    CopyGeomToClipboard( pod )
+    copy = PasteGeomClipboard()[0]
+
+    Update()
+
+    assert CompareGeomSurfaces( pod, copy ) == 0.0, "---> Error: API CompareGeomSurfaces found a copy differs"
+
+    #==== Moved, the copy differs by exactly how far it moved ====#
+    SetParmVal( FindParm( copy, "X_Rel_Location", "XForm" ), 2.5 )
+
+    Update()
+
+    assert abs( CompareGeomSurfaces( pod, copy ) - 2.5 ) < 1e-9, "---> Error: API CompareGeomSurfaces missed a move"
+
+    \endcode
+    \endPythonOnly
+    \param [in] geom_a string First Geom ID
+    \param [in] geom_b string Second Geom ID
+    \return double Bound on the distance between the two Geoms' surfaces, or -1 if they cannot be compared
+*/
+
+extern double CompareGeomSurfaces( const std::string & geom_a, const std::string & geom_b );
+
 /*!
     \ingroup SurfaceQuery
 */
@@ -37266,15 +44635,14 @@ extern void FindRSTVec( const std::string &geom_id, const int &surf_indx, const 
 
         ptvec[i].set_xyz(ptvec[i].x() * 0.9, ptvec[i].y() * 0.9, ptvec[i].z() * 0.9)
 
-     routv, soutv, toutv, doutv = FindRSTVecGuess( geom_id, 0, ptvec, rvec, svec, tvec )
+    routv, soutv, toutv, doutv = FindRSTVecGuess( geom_id, 0, ptvec, rvec, svec, tvec )
 
-     # The points above were scaled off the surface on purpose, so the search
-     # does not return to the original r, s, t.  What must hold is that every
-     # point got an answer and that the reported distances are real.
-     assert len( routv ) == n and len( soutv ) == n and len( toutv ) == n and len( doutv ) == n, "FindRSTVecGuess result count"
-     for i in range( len( doutv ) ):
-         assert doutv[i] >= 0.0, "FindRSTVecGuess distance"
-
+    # The points above were scaled off the surface on purpose, so the search
+    # does not return to the original r, s, t.  What must hold is that every
+    # point got an answer and that the reported distances are real.
+    assert len( routv ) == n and len( soutv ) == n and len( toutv ) == n and len( doutv ) == n, "FindRSTVecGuess result count"
+    for i in range( len( doutv ) ):
+        assert doutv[i] >= 0.0, "FindRSTVecGuess distance"
     \endcode
     \endPythonOnly
     \sa FindRSTVec,
@@ -37762,6 +45130,29 @@ extern void ShowAllRulers();
 */
 /*!
     Hide every Ruler in the Measure Tool.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddRuler( pid, 0, 0.2, 0.0, pid, 0, 0.8, 0.0, "R" );
+
+    HideAllRulers();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddRuler( pid, 0, 0.2, 0.0, pid, 0, 0.8, 0.0, "R" )
+
+    HideAllRulers()
+
+    \endcode
+    \endPythonOnly
     \sa ShowAllRulers
 */
 
@@ -37772,6 +45163,29 @@ extern void HideAllRulers();
 */
 /*!
     Show every Probe in the Measure Tool.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddProbe( pid, 0, 0.5, 0.5, "P" );
+
+    ShowAllProbes();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddProbe( pid, 0, 0.5, 0.5, "P" )
+
+    ShowAllProbes()
+
+    \endcode
+    \endPythonOnly
     \sa HideAllProbes
 */
 
@@ -37782,6 +45196,29 @@ extern void ShowAllProbes();
 */
 /*!
     Hide every Probe in the Measure Tool.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddProbe( pid, 0, 0.5, 0.5, "P" );
+
+    HideAllProbes();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddProbe( pid, 0, 0.5, 0.5, "P" )
+
+    HideAllProbes()
+
+    \endcode
+    \endPythonOnly
     \sa ShowAllProbes
 */
 
@@ -37792,6 +45229,29 @@ extern void HideAllProbes();
 */
 /*!
     Show every Protractor in the Measure Tool.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddProtractor( pid, 0, 0.2, 0.0, pid, 0, 0.5, 0.0, pid, 0, 0.8, 0.0, "P" );
+
+    ShowAllProtractors();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddProtractor( pid, 0, 0.2, 0.0, pid, 0, 0.5, 0.0, pid, 0, 0.8, 0.0, "P" )
+
+    ShowAllProtractors()
+
+    \endcode
+    \endPythonOnly
     \sa HideAllProtractors
 */
 
@@ -37802,6 +45262,29 @@ extern void ShowAllProtractors();
 */
 /*!
     Hide every Protractor in the Measure Tool.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddProtractor( pid, 0, 0.2, 0.0, pid, 0, 0.5, 0.0, pid, 0, 0.8, 0.0, "P" );
+
+    HideAllProtractors();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddProtractor( pid, 0, 0.2, 0.0, pid, 0, 0.5, 0.0, pid, 0, 0.8, 0.0, "P" )
+
+    HideAllProtractors()
+
+    \endcode
+    \endPythonOnly
     \sa ShowAllProtractors
 */
 
@@ -37812,6 +45295,29 @@ extern void HideAllProtractors();
 */
 /*!
     Show every RST Probe in the Measure Tool.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddRSTProbe( pid, 0, 0.5, 0.5, 0.5, "P" );
+
+    ShowAllRSTProbes();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddRSTProbe( pid, 0, 0.5, 0.5, 0.5, "P" )
+
+    ShowAllRSTProbes()
+
+    \endcode
+    \endPythonOnly
     \sa HideAllRSTProbes
 */
 
@@ -37822,10 +45328,83 @@ extern void ShowAllRSTProbes();
 */
 /*!
     Hide every RST Probe in the Measure Tool.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddRSTProbe( pid, 0, 0.5, 0.5, 0.5, "P" );
+
+    HideAllRSTProbes();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddRSTProbe( pid, 0, 0.5, 0.5, 0.5, "P" )
+
+    HideAllRSTProbes()
+
+    \endcode
+    \endPythonOnly
     \sa ShowAllRSTProbes
 */
 
 extern void HideAllRSTProbes();
+
+/*!
+    \ingroup Measure
+*/
+/*!
+    Add a protractor measuring the angle at a middle point between two others, each given as a
+    surface coordinate on a Geom.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string prid = AddProtractor( pid, 0, 0.2, 0.0, pid, 0, 0.5, 0.0, pid, 0, 0.8, 0.0, "TestProtractor" );
+
+    if ( prid.length() == 0 )                            { Print( "ERROR: AddProtractor" ); __failure++; }
+
+    if ( GetAllProtractors().size() != 1 )               { Print( "ERROR: AddProtractor" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    prid = AddProtractor( pid, 0, 0.2, 0.0, pid, 0, 0.5, 0.0, pid, 0, 0.8, 0.0, "TestProtractor" )
+
+    assert len( prid ) > 0, "AddProtractor returned no ID"
+
+    assert len( GetAllProtractors() ) == 1, "AddProtractor did not add the protractor"
+
+    \endcode
+    \endPythonOnly
+    \sa GetAllProtractors, DelProtractor
+    \param [in] startgeomid string Geom ID the first leg starts on
+    \param [in] startsurfindx int Surface index on that Geom
+    \param [in] startu double U coordinate of the start, in [0, 1]
+    \param [in] startw double W coordinate of the start, in [0, 1]
+    \param [in] midgeomid string Geom ID the corner sits on
+    \param [in] midsurfindx int Surface index on that Geom
+    \param [in] midu double U coordinate of the corner, in [0, 1]
+    \param [in] midw double W coordinate of the corner, in [0, 1]
+    \param [in] endgeomid string Geom ID the second leg ends on
+    \param [in] endsurfindx int Surface index on that Geom
+    \param [in] endu double U coordinate of the end, in [0, 1]
+    \param [in] endw double W coordinate of the end, in [0, 1]
+    \param [in] name string Name for the protractor
+    \return string Protractor ID
+*/
 
 extern std::string AddProtractor( const std::string & startgeomid, int startsurfindx, double startu, double startw,
                              const std::string & midgeomid, int midsurfindx, double midu, double midw,
@@ -38181,6 +45760,51 @@ extern void DelRSTProbe( const std::string &id );
 */
 
 extern void DeleteAllRSTProbes();
+
+/*!
+    \ingroup Measure
+*/
+/*!
+    Add a ruler between two points on the model, each given as a surface coordinate on a Geom.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string rid = AddRuler( pid, 0, 0.2, 0.0, pid, 0, 0.8, 0.0, "TestRuler" );
+
+    if ( rid.length() == 0 )                             { Print( "ERROR: AddRuler" ); __failure++; }
+
+    if ( GetAllRulers().size() != 1 )                    { Print( "ERROR: AddRuler" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    rid = AddRuler( pid, 0, 0.2, 0.0, pid, 0, 0.8, 0.0, "TestRuler" )
+
+    assert len( rid ) > 0, "AddRuler returned no ID"
+
+    assert len( GetAllRulers() ) == 1, "AddRuler did not add the ruler"
+
+    \endcode
+    \endPythonOnly
+    \sa GetAllRulers, DelRuler
+    \param [in] startgeomid string Geom ID the ruler starts on
+    \param [in] startsurfindx int Surface index on the starting Geom
+    \param [in] startu double U coordinate of the start, in [0, 1]
+    \param [in] startw double W coordinate of the start, in [0, 1]
+    \param [in] endgeomid string Geom ID the ruler ends on
+    \param [in] endsurfindx int Surface index on the ending Geom
+    \param [in] endu double U coordinate of the end, in [0, 1]
+    \param [in] endw double W coordinate of the end, in [0, 1]
+    \param [in] name string Name for the ruler
+    \return string Ruler ID
+*/
 
 extern std::string AddRuler( const std::string & startgeomid, int startsurfindx, double startu, double startw,
                         const std::string & endgeomid, int endsurfindx, double endu, double endw, const std::string & name );
@@ -38737,6 +46361,35 @@ extern void CopyAirfoil( const std::string & geom_id, int index );
 */
 /*!
     Paste the airfoil clipboard onto a wing section
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    Update();
+
+    CopyAirfoil( wid, 1 );
+
+    // A default wing has two sections, so there is nowhere past 1 to paste to.
+    PasteAirfoil( wid, 1 );
+
+    Update();
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    Update()
+
+    CopyAirfoil( wid, 1 )
+
+    # A default wing has two sections, so there is nowhere past 1 to paste to.
+    PasteAirfoil( wid, 1 )
+
+    Update()
+
+    \endcode
+    \endPythonOnly
     \sa CopyAirfoil, PasteXSec
     \param [in] geom_id string Wing Geom ID
     \param [in] index int Wing section index
@@ -39121,6 +46774,45 @@ extern void AcceptGeomScale( const std::string & geom_id );
 
 extern std::vector < vec3d > GetPtCloudPnts( const std::string & geom_id );
 
+/*!
+    \ingroup PointCloud
+*/
+/*!
+    Make a Point Cloud Geom out of the vertices of a MeshGeom.  This is the Mesh screen's Convert to
+    Point Cloud button, and it is the usual way into a fit: take a planar slice of a model, which
+    leaves a MeshGeom, and turn that into points to match.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string mesh_id = ComputePlaneSlice( SET_ALL, 3, vec3d( 1.0, 0.0, 0.0 ), true );
+
+    string cloud_id = CreatePtCloudGeom( mesh_id );
+
+    if ( GetPtCloudPnts( cloud_id ).size() == 0 )        { Print( "ERROR: CreatePtCloudGeom" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    mesh_id = ComputePlaneSlice( SET_ALL, 3, vec3d( 1.0, 0.0, 0.0 ), True )
+
+    cloud_id = CreatePtCloudGeom( mesh_id )
+
+    assert len( GetPtCloudPnts( cloud_id ) ) > 0, "CreatePtCloudGeom made no points"
+
+    \endcode
+    \endPythonOnly
+    \sa GetPtCloudPnts, CreatePtCloudGeomFromPts, ComputePlaneSlice
+    \param [in] geom_id string MeshGeom ID to take the vertices of
+    \return string Geom ID of the new Point Cloud Geom
+*/
+
 extern std::string CreatePtCloudGeom( const std::string & geom_id );
 
 /*!
@@ -39427,6 +47119,29 @@ extern void ShowSet( int set_index );
 */
 /*!
     Hide every Geom in a set, leaving the rest of the model as it is.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    SetSetFlag( pid, SET_FIRST_USER, true );
+
+    NoShowSet( SET_FIRST_USER );
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    SetSetFlag( pid, SET_FIRST_USER, True )
+
+    NoShowSet( SET_FIRST_USER )
+
+    \endcode
+    \endPythonOnly
     \sa ShowSet, ShowOnlySet
     \param [in] set_index int Set index
 */
@@ -39482,6 +47197,50 @@ extern void NoShowSet( int set_index );
 */
 
 extern void ShowOnlySet( int set_index );
+
+/*!
+    \ingroup ParmLink
+*/
+/*!
+    Link one Parm to another, so changing the first drives the second.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    string len_parm = GetParm( pid, "Length", "Design" );
+    string dia_parm = GetParm( pid, "FineRatio", "Design" );
+
+    string link_id = AddParmLink( len_parm, dia_parm );
+
+    if ( link_id.length() == 0 )                         { Print( "ERROR: AddParmLink" ); __failure++; }
+
+    if ( GetNumParmLinks() != 1 )                        { Print( "ERROR: AddParmLink" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    len_parm = GetParm( pid, "Length", "Design" )
+    dia_parm = GetParm( pid, "FineRatio", "Design" )
+
+    link_id = AddParmLink( len_parm, dia_parm )
+
+    assert len( link_id ) > 0, "AddParmLink returned no ID"
+
+    assert GetNumParmLinks() == 1, "AddParmLink did not add the link"
+
+    \endcode
+    \endPythonOnly
+    \sa GetNumParmLinks, DeleteParmLink
+    \param [in] parm_a_id string Parm ID that drives
+    \param [in] parm_b_id string Parm ID that follows
+    \return string Parm link ID
+*/
 
 extern std::string AddParmLink( const std::string & parm_a_id, const std::string & parm_b_id );
 
@@ -41109,6 +48868,34 @@ extern std::string GetAdvLinkName( int index );
 
 extern void SetAdvLinkName( int index, const std::string & name );
 
+/*!
+    \ingroup AdvancedLink
+*/
+/*!
+    Delete one advanced link, by index.
+    \forcpponly
+    \code{.cpp}
+    AddAdvLink( "TestLink" );
+
+    DelAdvLink( 0 );
+
+    if ( GetAdvLinkNames().size() != 0 )                 { Print( "ERROR: DelAdvLink" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddAdvLink( "TestLink" )
+
+    DelAdvLink( 0 )
+
+    assert len( GetAdvLinkNames() ) == 0, "DelAdvLink did not delete the link"
+
+    \endcode
+    \endPythonOnly
+    \sa AddAdvLink, GetAdvLinkNames
+    \param [in] index int Index of the advanced link to delete
+*/
+
 extern void DelAdvLink( int index );
 
 /*!
@@ -41686,6 +49473,51 @@ extern void DelAllAdvLinkInputs( int index );
 */
 
 extern void DelAllAdvLinkOutputs( int index );
+
+/*!
+    \ingroup AdvancedLink
+*/
+/*!
+    Remove one input variable from an advanced link.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    Update();
+
+    AddAdvLink( "TestLink" );
+
+    string len_parm = GetParm( pid, "Length", "Design" );
+
+    AddAdvLinkInput( 0, len_parm, "Len" );
+
+    DelAdvLinkInput( 0, "Len" );
+
+    if ( GetAdvLinkInputNames( 0 ).size() != 0 )         { Print( "ERROR: DelAdvLinkInput" ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    Update()
+
+    AddAdvLink( "TestLink" )
+
+    len_parm = GetParm( pid, "Length", "Design" )
+
+    AddAdvLinkInput( 0, len_parm, "Len" )
+
+    DelAdvLinkInput( 0, "Len" )
+
+    assert len( GetAdvLinkInputNames( 0 ) ) == 0, "DelAdvLinkInput did not remove the input"
+
+    \endcode
+    \endPythonOnly
+    \sa AddAdvLinkInput, GetAdvLinkInputNames
+    \param [in] index int Advanced link index
+    \param [in] var_name string Name of the input variable to remove
+*/
 
 extern void DelAdvLinkInput( int index, const std::string & var_name );
 

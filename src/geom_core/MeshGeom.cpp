@@ -13,10 +13,10 @@
 //
 //******************************************************************************
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "MeshGeom.h"
+#include "UnformattedFile.h"
 
 #include <utility>
 #include "PtCloudGeom.h"
@@ -550,53 +550,224 @@ int MeshGeom::ReadNascart( const char* file_name )
 }
 
 //==== Read Tri File ====//
-int MeshGeom::ReadTriFile( const char * file_name )
+// A CART3D triangulation, unformatted.  Four records: the two counts, the coordinates
+// interleaved, the connectivity, and a component tag per triangle.  A file may stop
+// after the connectivity, in which case there are no tags.
+//
+// The coordinates are single precision by convention, but the record's own length says
+// so for certain, and a file written double is read just as well.
+static bool ReadCart3DTriUnformatted( const char* file_name, vector< vec3d > &pnt_vec,
+                                      vector< int > &conn_vec, vector< int > &tag_vec )
 {
-    int i;
+    UnformattedIn fp;
+
+    if ( !fp.Open( file_name ) )
+    {
+        return false;
+    }
+
+    if ( !fp.BeginRecord() || fp.GetRecordBytes() != 2 * ( long )sizeof( int ) )
+    {
+        return false;
+    }
+
+    int num_nodes = 0;
+    int num_tris = 0;
+
+    fp.Read( num_nodes );
+    fp.Read( num_tris );
+
+    if ( !fp.EndRecord() || num_nodes < 3 || num_tris < 1 )
+    {
+        return false;
+    }
+
+    if ( !fp.DetectPrecision( 3 * ( long )num_nodes ) )
+    {
+        return false;
+    }
+
+    if ( !fp.BeginRecord() )
+    {
+        return false;
+    }
+
+    pnt_vec.resize( num_nodes );
+    for ( int i = 0; i < num_nodes; i++ )
+    {
+        double x, y, z;
+        fp.Read( x );
+        fp.Read( y );
+        fp.Read( z );
+        pnt_vec[i].set_xyz( x, y, z );
+    }
+
+    if ( !fp.EndRecord() )
+    {
+        return false;
+    }
+
+    if ( !fp.BeginRecord() || fp.GetRecordBytes() != 3 * ( long )num_tris * ( long )sizeof( int ) )
+    {
+        return false;
+    }
+
+    conn_vec.resize( 3 * num_tris );
+    fp.Read( conn_vec );
+
+    if ( !fp.EndRecord() || !fp.IsGood() )
+    {
+        return false;
+    }
+
+    // Tags are optional.  The file may simply end after the connectivity, and running
+    // into that while looking is not a fault in the file -- the geometry is already
+    // complete, so the read has succeeded either way.
+    if ( fp.BeginRecord() )
+    {
+        if ( fp.GetRecordBytes() == ( long )num_tris * ( long )sizeof( int ) )
+        {
+            tag_vec.resize( num_tris );
+            fp.Read( tag_vec );
+
+            if ( !fp.EndRecord() )
+            {
+                tag_vec.clear();
+            }
+        }
+        else
+        {
+            fp.EndRecord();
+        }
+    }
+
+    return true;
+}
+
+// The same file as text.
+static bool ReadCart3DTriFormatted( const char* file_name, vector< vec3d > &pnt_vec,
+                                    vector< int > &conn_vec, vector< int > &tag_vec )
+{
     FILE* file_id = fopen( file_name, "r" );
 
     if ( !file_id )
     {
-        return 0;
+        return false;
     }
 
-    TMesh*  tMesh = new TMesh();
+    unsigned int num_nodes = 0;
+    unsigned int num_tris = 0;
 
-    //==== Read Number Tris and Nodes ====//
-    float x, y, z;
-    int n0, n1, n2;
-    unsigned int num_tris, num_nodes;
-
-    fscanf( file_id, "%u", &num_nodes );
-    fscanf( file_id, "%u", &num_tris  );
-
-    vec3d p;
-    vector< vec3d > pVec;
-    pVec.resize( num_nodes );
-    for ( i = 0 ; i < num_nodes ; i++ )
+    if ( fscanf( file_id, "%u", &num_nodes ) != 1 ||
+         fscanf( file_id, "%u", &num_tris ) != 1 ||
+         num_nodes < 3 || num_tris < 1 )
     {
-        fscanf( file_id, "%f %f %f", &x, &y, &z );
-        p.set_xyz( x, y, z );
-        pVec[i] = p;
+        fclose( file_id );
+        return false;
     }
 
-    for ( i = 0 ; i < num_tris ; i++ )
+    pnt_vec.resize( num_nodes );
+    for ( unsigned int i = 0; i < num_nodes; i++ )
     {
-        fscanf( file_id, "%d %d %d", &n0, &n1, &n2 );
+        float x, y, z;
+        if ( fscanf( file_id, "%f %f %f", &x, &y, &z ) != 3 )
+        {
+            fclose( file_id );
+            return false;
+        }
+        pnt_vec[i].set_xyz( x, y, z );
+    }
+
+    conn_vec.resize( 3 * num_tris );
+    for ( unsigned int i = 0; i < num_tris; i++ )
+    {
+        if ( fscanf( file_id, "%d %d %d", &conn_vec[3 * i], &conn_vec[3 * i + 1], &conn_vec[3 * i + 2] ) != 3 )
+        {
+            fclose( file_id );
+            return false;
+        }
+    }
+
+    // Tags are optional.
+    tag_vec.resize( num_tris );
+    for ( unsigned int i = 0; i < num_tris; i++ )
+    {
+        if ( fscanf( file_id, "%d", &tag_vec[i] ) != 1 )
+        {
+            tag_vec.clear();
+            break;
+        }
+    }
+
+    fclose( file_id );
+    return true;
+}
+
+int MeshGeom::ReadTriFile( const char * file_name )
+{
+    vector< vec3d > pnt_vec;
+    vector< int > conn_vec;
+    vector< int > tag_vec;
+
+    // A file says nothing about which form it is in, so try it as unformatted -- where a
+    // wrong guess shows up straight away, in record markers that do not describe the
+    // counts they bracket -- and read it as text if that does not hold up.
+    if ( !ReadCart3DTriUnformatted( file_name, pnt_vec, conn_vec, tag_vec ) )
+    {
+        pnt_vec.clear();
+        conn_vec.clear();
+        tag_vec.clear();
+
+        if ( !ReadCart3DTriFormatted( file_name, pnt_vec, conn_vec, tag_vec ) )
+        {
+            return 0;
+        }
+    }
+
+    int num_tris = conn_vec.size() / 3;
+
+    // The file's tags are its components, and they stay tags: one mesh, with every triangle
+    // carrying the tag it came in with.  That is what tells the parts apart on screen, where
+    // a mesh split up by component would only have shown one colour.
+    //
+    // The numbers are the file's own and are left as they are.  Nothing is registered with
+    // SubSurfaceMgr: its tag maps belong to whichever meshing operation ran last, and adding
+    // to them here would move the tag count out from under a CFD mesh already on screen,
+    // which sizes its draw objects to it.
+    TMesh* tMesh = new TMesh();
+    tMesh->m_NameStr = GetName();
+
+    int ntri_added = 0;
+
+    for ( int i = 0; i < num_tris; i++ )
+    {
+        int n0 = conn_vec[3 * i] - 1;
+        int n1 = conn_vec[3 * i + 1] - 1;
+        int n2 = conn_vec[3 * i + 2] - 1;
+
+        if ( n0 < 0 || n1 < 0 || n2 < 0 ||
+             n0 >= ( int )pnt_vec.size() || n1 >= ( int )pnt_vec.size() || n2 >= ( int )pnt_vec.size() )
+        {
+            continue;
+        }
 
         //==== Compute Normal ====//
-        vec3d p10 = pVec[n1 - 1] - pVec[n0 - 1];
-        vec3d p20 = pVec[n2 - 1] - pVec[n0 - 1];
+        vec3d p10 = pnt_vec[n1] - pnt_vec[n0];
+        vec3d p20 = pnt_vec[n2] - pnt_vec[n0];
         vec3d norm = cross( p10, p20 );
         norm.normalize();
 
         //==== Add Valid Facet ====//
-        tMesh->AddTri( pVec[ n0 - 1 ], pVec[ n1 - 1 ], pVec[ n2 - 1 ], norm, -1 );
+        tMesh->AddTri( pnt_vec[n0], pnt_vec[n1], pnt_vec[n2], norm, -1 );
+        ntri_added++;
+
+        if ( i < ( int )tag_vec.size() )
+        {
+            tMesh->m_TVec.back()->m_Tags.push_back( tag_vec[i] );
+        }
     }
 
-    fclose( file_id );
-
-    if ( tMesh->m_TVec.size() == 0 )
+    if ( ntri_added == 0 )
     {
         delete tMesh;
         return 0;
@@ -605,7 +776,6 @@ int MeshGeom::ReadTriFile( const char * file_name )
     m_TMeshVec.push_back( tMesh );
 
     UpdateBBox();
-
 
     return 1;
 }
@@ -770,12 +940,36 @@ void MeshGeom::UpdateBBox()
     }
 }
 
+void MeshGeom::UpdateTagMap()
+{
+    set < vector < int > > combos;
+
+    for ( int m = 0 ; m < ( int )m_TMeshVec.size() ; m++ )
+    {
+        for ( int t = 0 ; t < ( int )m_TMeshVec[m]->m_TVec.size() ; t++ )
+        {
+            combos.insert( m_TMeshVec[m]->m_TVec[t]->m_Tags );
+        }
+    }
+
+    // The value is the index of the DrawObj that draws the combination, so the tags a mesh
+    // holds are all that decides how many there are and which is which.  Untagged triangles
+    // share the empty combination and land in one of their own.
+    m_SingleTagMap.clear();
+
+    int cnt = 0;
+    set < vector < int > >::iterator it;
+    for ( it = combos.begin() ; it != combos.end() ; ++it )
+    {
+        m_SingleTagMap[ *it ] = cnt;
+        cnt++;
+    }
+}
+
 void MeshGeom::UpdateDrawObj()
 {
     // Add in SubSurfaces to TMeshVec if m_DrawSubSurfs is true
     unsigned int num_meshes = m_TMeshVec.size();
-
-    unsigned int num_uniq_tags = SubSurfaceMgr.GetNumTags();
 
     // Update Draw type based on if the disp subsurface is true
     if ( m_GuiDraw.GetDispSubSurfFlag() )
@@ -791,6 +985,10 @@ void MeshGeom::UpdateDrawObj()
     {
         m_TMeshVec.insert( m_TMeshVec.end(), m_SubSurfVec.begin(), m_SubSurfVec.end() );
     }
+
+    // After the sub-surface meshes are in, so their tags get DrawObjs of their own.
+    UpdateTagMap();
+    unsigned int num_uniq_tags = m_SingleTagMap.size();
 
     // Mesh Should Be Flat Before Calling this Method
     int add_ind = 0;
@@ -877,17 +1075,7 @@ void MeshGeom::UpdateDrawObj()
 
         if ( m_DrawType() == MeshGeom::DRAW_TAGS && ! m_DrawSubSurfs() )
         {
-            // make map from tag to wire draw obj
-
-            unordered_map<int, DrawObj*> tag_dobj_map;
             map< std::vector<int>, int >::const_iterator mit;
-            map< std::vector<int>, int > tagMap = SubSurfaceMgr.GetSingleTagMap();
-            int cnt = 0;
-            for ( mit = tagMap.begin(); mit != tagMap.end() ; ++mit )
-            {
-                tag_dobj_map[ mit->second ] = &m_WireShadeDrawObj_vec[cnt];
-                cnt++;
-            }
 
             for ( int m = 0 ; m < ( int )m_TMeshVec.size() ; m++ )
             {
@@ -895,7 +1083,13 @@ void MeshGeom::UpdateDrawObj()
                 vector<TTri*>& tris = m_TMeshVec[m]->m_TVec;
                 for ( int t = 0 ; t < ( int ) num_tris ; t++ )
                 {
-                    DrawObj* d_obj = tag_dobj_map[ SubSurfaceMgr.GetTag( tris[t]->m_Tags ) ];
+                    mit = m_SingleTagMap.find( tris[t]->m_Tags );
+                    if ( mit == m_SingleTagMap.end() )
+                    {
+                        continue;
+                    }
+
+                    DrawObj* d_obj = &m_WireShadeDrawObj_vec[ mit->second ];
                     d_obj->m_PntVec.push_back( trans.xform( tris[t]->m_N0->m_Pnt ) );
                     d_obj->m_PntVec.push_back( trans.xform( tris[t]->m_N1->m_Pnt ) );
                     d_obj->m_PntVec.push_back( trans.xform( tris[t]->m_N2->m_Pnt ) );
@@ -994,7 +1188,8 @@ void MeshGeom::UpdateDrawObj()
 
 void MeshGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
 {
-    int num_uniq_tags = SubSurfaceMgr.GetNumTags();
+    // At least one, so a mesh with no triangles at all does not divide by zero below.
+    int num_uniq_tags = std::max( ( int )m_SingleTagMap.size(), 1 );
 
     // Calculate constants for color sequence.
     const int ncgrp = 6; // Number of basic colors
@@ -1272,14 +1467,12 @@ string MeshGeom::CreateNGonMeshGeom( bool cullfracflag, double cullfrac, int n_r
     return id;
 }
 
-void MeshGeom::Scale()
+void MeshGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
     m_ScaleFromOrig *= currentScale;
-    m_LastScale = m_Scale();
 }
 
-void MeshGeom::ApplyScale()
+void MeshGeom::ScaleTriangles()
 {
     if ( std::abs( m_LastScale() - m_Scale() ) < 0.0000001 )
     {
@@ -1288,6 +1481,12 @@ void MeshGeom::ApplyScale()
 
     ::ApplyScale( m_Scale() / m_LastScale(), m_TMeshVec );
 
+    // What scale the triangles are now at.  IntersectTrim scales them up to a working size and
+    // then back again by setting m_Scale to 1 and calling here a second time; that call works out
+    // its factor from m_LastScale, so without this it comes out as one, the guard above takes the
+    // early return, and the triangles are left at the working size.  It also keeps Geom::Update
+    // from seeing a scale factor it has not applied and folding the working scale into
+    // m_ScaleFromOrig on top of the triangles.
     m_LastScale = m_Scale();
 }
 
@@ -1299,7 +1498,7 @@ void MeshGeom::IntersectTrim( vector< DegenGeom > &degenGeom, bool degen, int in
     UpdateBBox();
     m_LastScale = 1.0;
     m_Scale = 1000.0 / m_BBox.GetLargestDist();
-    ApplyScale();
+    ScaleTriangles();
 
     MeshInfo info;
     Results *res = nullptr;
@@ -1315,7 +1514,7 @@ void MeshGeom::IntersectTrim( vector< DegenGeom > &degenGeom, bool degen, int in
 
     //===== Reset Scale =====//
     m_Scale = 1;
-    ApplyScale();
+    ScaleTriangles();
     UpdateBBox();
 
     // PostIntersectTrim needs to be after re-scaling.  Otherwise, areas off by m_Scale.
@@ -1762,10 +1961,29 @@ void MeshGeom::WaveDragSlice( int numSlices, double sliceAngle, int coneSections
             vec3d gpnorm = cross( gp[3]-gp[2], gp[1]-gp[2] );
             gpnorm.normalize();
 
-            // Build triangles
-            tm->AddTri( gp[ 2 ], gp[ 3 ], gp[ 0 ], gpnorm, iQuad );
-            tm->AddTri( gp[ 2 ], gp[ 0 ], gp[ 1 ], gpnorm, iQuad );
-            iQuad++;
+            // Build triangles.  The slice plane spans several times the model, so cut it into
+            // small quads: the octree can reject most of the model for each one, where a single
+            // quad this size has to be tested against everything.  The areas do not depend on
+            // the subdivision.  Eight to a side, matching the mass and area slicers.
+            const int ntess = 8;
+            const double dtess = 1.0 / ( double )ntess;
+            const vec3d e1 = gp[3] - gp[2];
+            const vec3d e2 = gp[1] - gp[2];
+
+            for ( int a = 0; a < ntess; a++ )
+            {
+                for ( int b = 0; b < ntess; b++ )
+                {
+                    vec3d q00 = gp[2] + e1 * ( a * dtess )       + e2 * ( b * dtess );
+                    vec3d q10 = gp[2] + e1 * ( ( a + 1 ) * dtess ) + e2 * ( b * dtess );
+                    vec3d q11 = gp[2] + e1 * ( ( a + 1 ) * dtess ) + e2 * ( ( b + 1 ) * dtess );
+                    vec3d q01 = gp[2] + e1 * ( a * dtess )       + e2 * ( ( b + 1 ) * dtess );
+
+                    tm->AddTri( q00, q10, q11, gpnorm, iQuad );
+                    tm->AddTri( q00, q11, q01, gpnorm, iQuad );
+                    iQuad++;
+                }
+            }
         }
     }
 

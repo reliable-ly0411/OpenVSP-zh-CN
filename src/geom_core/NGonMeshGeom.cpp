@@ -61,18 +61,16 @@ Matrix4d NGonMeshGeom::GetTotalTransMat() const
     return retMat;
 }
 
-void NGonMeshGeom::Scale()
+void NGonMeshGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
     m_ScaleFromOrig *= currentScale;
     m_ScaleMatrix.loadIdentity();
     m_ScaleMatrix.scale( m_ScaleFromOrig() );
-    m_LastScale = m_Scale();
 }
 
 void NGonMeshGeom::UpdateBBox()
 {
-    m_BBox.Reset();
+    BndBox new_box;
 
     PGMesh * pgm = m_PGMulti.GetActiveMesh();
     if ( pgm->m_NodeList.size() > 0 )
@@ -82,12 +80,31 @@ void NGonMeshGeom::UpdateBBox()
         list< PGNode* >::iterator n;
         for ( n = pgm->m_NodeList.begin(); n != pgm->m_NodeList.end(); ++n )
         {
-            m_BBox.Update( transMat.xform( (*n)->m_Pt->m_Pnt ) );
+            new_box.Update( transMat.xform( (*n)->m_Pt->m_Pnt ) );
         }
     }
     else
     {
-        m_BBox.Update( vec3d( 0.0, 0.0, 0.0 ) );
+        new_box.Update( vec3d( 0.0, 0.0, 0.0 ) );
+    }
+
+    // The box was built into m_BBox directly, which left the BBox report-out Parms reading
+    // zero for the life of the Geom, and left m_ScaleIndependentBBox empty -- so an
+    // NGonMeshGeom counted for nothing in the Vehicle's scale independent box, which is what
+    // sizes the gear ground plane, the auxiliary geom reference lengths and the engine
+    // extension.  Assign them the way every other UpdateBBox does.
+    if ( new_box != m_BBox )
+    {
+        m_BbXLen = new_box.GetMax( 0 ) - new_box.GetMin( 0 );
+        m_BbYLen = new_box.GetMax( 1 ) - new_box.GetMin( 1 );
+        m_BbZLen = new_box.GetMax( 2 ) - new_box.GetMin( 2 );
+
+        m_BbXMin = new_box.GetMin( 0 );
+        m_BbYMin = new_box.GetMin( 1 );
+        m_BbZMin = new_box.GetMin( 2 );
+
+        m_BBox = new_box;
+        m_ScaleIndependentBBox = m_BBox;
     }
 }
 
@@ -423,6 +440,7 @@ void NGonMeshGeom::UpdateDrawObj()
 
     //==== Bounding Box ====//
     m_HighlightDrawObj.m_PntVec = m_BBox.GetBBoxDrawLines();
+    m_HighlightDrawObj.m_GeomChanged = true;
 
     // Flag the DrawObjects as changed
     for ( int i = 0 ; i < ( int )m_WireShadeDrawObj_vec.size(); i++ )
@@ -653,7 +671,7 @@ void NGonMeshGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
     }
 }
 
-vector<TMesh*> NGonMeshGeom::CreateTMeshVec()
+vector<TMesh*> NGonMeshGeom::CreateTMeshVec( bool skipnegflipnormal, const int & n_ref ) const
 {
     PGMesh *pgm = m_PGMulti.GetActiveMesh();
     vector<TMesh*> retTMeshVec(1);
@@ -684,7 +702,7 @@ vector<TMesh*> NGonMeshGeom::CreateTMeshVec()
             vec3d v0 = nodVec[ inod ]->m_Pt->m_Pnt;
             vec3d v1 = nodVec[ inod + 1 ]->m_Pt->m_Pnt;
             vec3d v2 = nodVec[ inod + 2 ]->m_Pt->m_Pnt;
-            retTMeshVec[0]->AddTri( v0, v2, v1, (*f)->m_Nvec, (*f)->m_iQuad, (*f)->m_jref, (*f)->m_kref );
+            retTMeshVec[0]->AddTri( v0, v1, v2, (*f)->m_Nvec, (*f)->m_iQuad, (*f)->m_jref, (*f)->m_kref );
         }
     }
 

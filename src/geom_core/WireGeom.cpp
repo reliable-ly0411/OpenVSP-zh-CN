@@ -8,6 +8,7 @@
 #include "WireGeom.h"
 #include "Vehicle.h"
 #include "StringUtil.h"
+#include "UnformattedFile.h"
 #include "VspUtil.h"
 
 //==== Constructor ====//
@@ -57,9 +58,9 @@ WireGeom::WireGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
     m_JStride.Init( "JStride", "WireFrame", this, 1, 1, 1e3 );
 
     m_IStartPatchType.Init( "IStartPatchType", "WireFrame", this, vsp::PATCH_NONE, vsp::PATCH_NONE, vsp::PATCH_NUM_TYPES - 1 );
-    m_IEndPatchType.Init( "IStartPatchType", "WireFrame", this, vsp::PATCH_NONE, vsp::PATCH_NONE, vsp::PATCH_NUM_TYPES - 1 );
-    m_JStartPatchType.Init( "IStartPatchType", "WireFrame", this, vsp::PATCH_NONE, vsp::PATCH_NONE, vsp::PATCH_NUM_TYPES - 1 );
-    m_JEndPatchType.Init( "IStartPatchType", "WireFrame", this, vsp::PATCH_NONE, vsp::PATCH_NONE, vsp::PATCH_NUM_TYPES - 1 );
+    m_IEndPatchType.Init( "IEndPatchType", "WireFrame", this, vsp::PATCH_NONE, vsp::PATCH_NONE, vsp::PATCH_NUM_TYPES - 1 );
+    m_JStartPatchType.Init( "JStartPatchType", "WireFrame", this, vsp::PATCH_NONE, vsp::PATCH_NONE, vsp::PATCH_NUM_TYPES - 1 );
+    m_JEndPatchType.Init( "JEndPatchType", "WireFrame", this, vsp::PATCH_NONE, vsp::PATCH_NONE, vsp::PATCH_NUM_TYPES - 1 );
 
     m_OtherInvertFlag = false;
 
@@ -86,8 +87,7 @@ void WireGeom::UpdateSurf()
 
     if ( num_i <= 0 )
     {
-        m_XFormPts.resize(0);
-        m_XFormNorm.resize(0);
+        m_MainPts.resize(0);
         return;
     }
 
@@ -95,25 +95,13 @@ void WireGeom::UpdateSurf()
 
     if ( num_j <= 0 )
     {
-        m_XFormPts.resize(0);
-        m_XFormNorm.resize(0);
+        m_MainPts.resize(0);
         return;
     }
 
-    // Perform transformation on base points.
-    Matrix4d transMat = GetTotalTransMat();
-    m_XFormPts.resize( num_i );
-    for ( unsigned int i = 0 ; i < num_i ; i++ )
-    {
-        m_XFormPts[i].resize( num_j );
-        for ( unsigned int j = 0 ; j < num_j ; j++ )
-        {
-            m_XFormPts[i][j] = transMat.xform( m_WirePts[i][j] );
-        }
-    }
-
-    m_TransMatVec.resize( 1 );
-    m_TransMatVec[0] = transMat;
+    // Everything below rearranges points and keeps them in this Geom's own frame.  Where the
+    // Geom sits is applied afterwards, so moving it does not have to rebuild any of this.
+    m_MainPts = m_WirePts;
 
     // Handle swapping I/J.
     if ( m_SwapIJFlag() )
@@ -132,7 +120,7 @@ void WireGeom::UpdateSurf()
         {
             for ( unsigned int j = 0 ; j < num_j ; j++ )
             {
-                tmppts[j][i] = m_XFormPts[i][j];
+                tmppts[j][i] = m_MainPts[i][j];
             }
         }
 
@@ -140,7 +128,7 @@ void WireGeom::UpdateSurf()
         num_i = num_j;
         num_j = tmp;
 
-        m_XFormPts = tmppts;
+        m_MainPts = tmppts;
     }
 
     // Handle reversing I
@@ -162,11 +150,11 @@ void WireGeom::UpdateSurf()
             unsigned int k = num_i - i - 1;
             for ( unsigned int j = 0 ; j < num_j ; j++ )
             {
-                tmppts[k][j] = m_XFormPts[i][j];
+                tmppts[k][j] = m_MainPts[i][j];
             }
         }
 
-        m_XFormPts = tmppts;
+        m_MainPts = tmppts;
     }
 
     // Handle reversing J
@@ -188,11 +176,11 @@ void WireGeom::UpdateSurf()
             for ( unsigned int j = 0 ; j < num_j ; j++ )
             {
                 unsigned int k = num_j - j - 1;
-                tmppts[i][k] = m_XFormPts[i][j];
+                tmppts[i][k] = m_MainPts[i][j];
             }
         }
 
-        m_XFormPts = tmppts;
+        m_MainPts = tmppts;
     }
 
     // Handle skipping.
@@ -203,8 +191,7 @@ void WireGeom::UpdateSurf()
 
         if ( num_i <= 0 || num_j <= 0 ) // No surface left
         {
-            m_XFormPts.resize(0);
-            m_XFormNorm.resize(0);
+            m_MainPts.resize(0);
             return;
         }
 
@@ -215,10 +202,10 @@ void WireGeom::UpdateSurf()
             tmppts[i].resize( num_j );
             for ( unsigned int j = 0 ; j < num_j ; j++ )
             {
-                tmppts[i][j] =  m_XFormPts[i + m_ISkipStart()][j + m_JSkipStart()];
+                tmppts[i][j] =  m_MainPts[i + m_ISkipStart()][j + m_JSkipStart()];
             }
         }
-        m_XFormPts = tmppts;
+        m_MainPts = tmppts;
     }
 
     // Handle I Stride
@@ -229,16 +216,16 @@ void WireGeom::UpdateSurf()
         unsigned int ilast = 0;
         for ( unsigned int i = 0 ; i < num_i ; i = i + m_IStride() )
         {
-            tmppts.push_back( m_XFormPts[i] );
+            tmppts.push_back( m_MainPts[i] );
             ilast = i;
         }
         if ( ilast != num_i - 1 )
         {
-            tmppts.push_back( m_XFormPts[num_i - 1] );
+            tmppts.push_back( m_MainPts[num_i - 1] );
         }
 
-        m_XFormPts = tmppts;
-        num_i = m_XFormPts.size();
+        m_MainPts = tmppts;
+        num_i = m_MainPts.size();
     }
 
     // Handle J Stride
@@ -252,7 +239,7 @@ void WireGeom::UpdateSurf()
         {
             for ( unsigned int i = 0 ; i < num_i ; i++ )
             {
-                tmppts[i].push_back( m_XFormPts[i][j] );
+                tmppts[i].push_back( m_MainPts[i][j] );
             }
             jlast = j;
         }
@@ -260,12 +247,12 @@ void WireGeom::UpdateSurf()
         {
             for ( unsigned int i = 0 ; i < num_i ; i++ )
             {
-                tmppts[i].push_back( m_XFormPts[i][num_j - 1] );
+                tmppts[i].push_back( m_MainPts[i][num_j - 1] );
             }
         }
 
-        m_XFormPts = tmppts;
-        num_j = m_XFormPts[0].size();
+        m_MainPts = tmppts;
+        num_j = m_MainPts[0].size();
     }
 
     if ( m_IStartPatchType() != vsp::PATCH_NONE )
@@ -275,8 +262,8 @@ void WireGeom::UpdateSurf()
 
         vector < vec3d > newrow;
 
-        oldrow = m_XFormPts[0];
-        oppositerow = m_XFormPts[ m_XFormPts.size() - 1 ];
+        oldrow = m_MainPts[0];
+        oppositerow = m_MainPts[ m_MainPts.size() - 1 ];
 
         PatchRow( oldrow, oppositerow, m_IStartPatchType(), newrow );
 
@@ -285,10 +272,10 @@ void WireGeom::UpdateSurf()
         tmppts[0] = newrow;
         for ( unsigned int i = 0 ; i < num_i ; i++ )
         {
-            tmppts[i+1] = m_XFormPts[i];
+            tmppts[i+1] = m_MainPts[i];
         }
 
-        m_XFormPts = tmppts;
+        m_MainPts = tmppts;
         num_i++;
     }
 
@@ -299,12 +286,12 @@ void WireGeom::UpdateSurf()
 
         vector < vec3d > newrow;
 
-        oldrow = m_XFormPts[ m_XFormPts.size() - 1 ];
-        oppositerow = m_XFormPts[0];
+        oldrow = m_MainPts[ m_MainPts.size() - 1 ];
+        oppositerow = m_MainPts[0];
 
         PatchRow( oldrow, oppositerow, m_IEndPatchType(), newrow );
 
-        m_XFormPts.push_back( newrow );
+        m_MainPts.push_back( newrow );
         num_i++;
     }
 
@@ -320,8 +307,8 @@ void WireGeom::UpdateSurf()
 
         for ( unsigned int i = 0 ; i < num_i ; i++ )
         {
-            oldrow[i] = m_XFormPts[i][0];
-            oppositerow[i] = m_XFormPts[i][num_j - 1];
+            oldrow[i] = m_MainPts[i][0];
+            oppositerow[i] = m_MainPts[i][num_j - 1];
         }
 
         PatchRow( oldrow, oppositerow, m_JStartPatchType(), newrow );
@@ -340,11 +327,11 @@ void WireGeom::UpdateSurf()
 
             for ( unsigned int j = 0 ; j < num_j ; j++ )
             {
-                tmppts[i][j+1] = m_XFormPts[i][j];
+                tmppts[i][j+1] = m_MainPts[i][j];
             }
         }
 
-        m_XFormPts = tmppts;
+        m_MainPts = tmppts;
         num_j++;
     }
 
@@ -360,8 +347,8 @@ void WireGeom::UpdateSurf()
 
         for ( unsigned int i = 0 ; i < num_i ; i++ )
         {
-            oldrow[i] = m_XFormPts[i][num_j - 1];
-            oppositerow[i] = m_XFormPts[i][0];
+            oldrow[i] = m_MainPts[i][num_j - 1];
+            oppositerow[i] = m_MainPts[i][0];
         }
 
         PatchRow( oldrow, oppositerow, m_JEndPatchType(), newrow );
@@ -378,43 +365,34 @@ void WireGeom::UpdateSurf()
         {
             for ( unsigned int j = 0 ; j < num_j ; j++ )
             {
-                tmppts[i][j] = m_XFormPts[i][j];
+                tmppts[i][j] = m_MainPts[i][j];
             }
             tmppts[i][num_j] = newrow[i];
         }
 
-        m_XFormPts = tmppts;
+        m_MainPts = tmppts;
         num_j++;
     }
 
     // Calculate normal vectors.
-    m_XFormNorm.resize( num_i );
-    for ( int i = 0 ; i < num_i ; i++ )
+}
+
+// A lofted Geom keeps its surface in its own coordinates and is placed downstream of
+// UpdateSurf, so moving it does not mean lofting it again -- which is why Geom::Update runs
+// UpdateSurf only when the surface itself is dirty.  A wireframe has no surface to place:
+// UpdateSurf is where the transform is worked into m_XFormPts, and everything downstream --
+// the bounding box, the draw objects, the meshes handed to CompGeom and the exporters --
+// reads those points.  So moving it does mean building it again, or it stays where it was
+// last built.
+void WireGeom::UpdateXForm()
+{
+    Geom::UpdateXForm();
+
+    // Geom::Update calls UpdateSurf right after this when the surface is dirty too.
+    if ( !m_SurfDirty )
     {
-        m_XFormNorm[i].resize( num_j );
-
-        int inext = clamp( i + 1, 0, num_i - 1 );
-        int iprev = clamp( i - 1, 0, num_i - 1 );
-        for ( int j = 0 ; j < num_j ; j++ )
-        {
-            int jnext = clamp( j + 1, 0, num_j - 1 );
-            int jprev = clamp( j - 1, 0, num_j - 1 );
-
-            vec3d di = m_XFormPts[inext][j] - m_XFormPts[iprev][j];
-            vec3d dj = m_XFormPts[i][jnext] - m_XFormPts[i][jprev];
-
-            vec3d n = cross( di, dj );
-            n.normalize();
-
-            if ( m_InvertFlag() ^ m_OtherInvertFlag ) // Bitwise XOR
-            {
-                n = -1.0 * n;
-            }
-
-            m_XFormNorm[i][j] = n;
-        }
+        UpdateSurf();
     }
-
 }
 
 void WireGeom::PatchRow( const vector < vec3d > &oldrow, const vector < vec3d > &oppositerow, int type, vector < vec3d > &newrow )
@@ -458,29 +436,74 @@ void WireGeom::PatchRow( const vector < vec3d > &oldrow, const vector < vec3d > 
 
 void WireGeom::UpdateDrawObj()
 {
-    // Keep the existing DrawObj alive across updates -- assigning the meshes in place reuses
-    // their heap allocations from the previous update.
-    if ( m_WireShadeDrawObj_vec.size() != 1 )
+    UpdateXFormPts();
+
+    m_LineDO.m_PntVec.clear();
+    m_LineDO.m_GeomChanged = true;
+
+    // A wireframe that is a single row or column of points -- a Plot3D file of curves reads
+    // in that way, one block per curve with a j dimension of one -- has no quads to make a
+    // mesh out of, and drawing it as one shows nothing.  Draw the polyline instead, and
+    // leave no shaded DrawObj for Geom to make a mesh of.
+    int nrow = ( int ) m_XFormPts.size();
+    int ncol = 0;
+    if ( nrow > 0 )
+    {
+        ncol = ( int ) m_XFormPts[0].size();
+    }
+
+    if ( ( nrow == 1 && ncol > 1 ) || ( ncol == 1 && nrow > 1 ) )
     {
         m_WireShadeDrawObj_vec.clear();
-        m_WireShadeDrawObj_vec.resize( 1 );
+
+        vector < vec3d > line_pnts;
+        if ( ncol == 1 )
+        {
+            line_pnts.reserve( nrow );
+            for ( int i = 0; i < nrow; i++ )
+            {
+                line_pnts.push_back( m_XFormPts[i][0] );
+            }
+        }
+        else
+        {
+            line_pnts = m_XFormPts[0];
+        }
+
+        // VSP_LINES takes a point pair per segment.
+        m_LineDO.m_PntVec.reserve( 2 * ( line_pnts.size() - 1 ) );
+        for ( int i = 0; i < ( int ) line_pnts.size() - 1; i++ )
+        {
+            m_LineDO.m_PntVec.push_back( line_pnts[i] );
+            m_LineDO.m_PntVec.push_back( line_pnts[i + 1] );
+        }
     }
-    m_WireShadeDrawObj_vec[0].m_FlipNormals = false;
-    m_WireShadeDrawObj_vec[0].m_GeomChanged = true;
-
-    m_WireShadeDrawObj_vec[0].m_PntMesh.resize( 1 );
-    m_WireShadeDrawObj_vec[0].m_PntMesh[0] = m_XFormPts;
-    m_WireShadeDrawObj_vec[0].m_NormMesh.resize( 1 );
-    m_WireShadeDrawObj_vec[0].m_NormMesh[0] = m_XFormNorm;
-
-    // Dummy texture coordinates matching the point mesh shape.
-    m_WireShadeDrawObj_vec[0].m_uTexMesh.resize( 1 );
-    m_WireShadeDrawObj_vec[0].m_uTexMesh[0].resize( m_XFormPts.size() );
-    for ( int i = 0; i < m_XFormPts.size(); i++ )
+    else
     {
-        m_WireShadeDrawObj_vec[0].m_uTexMesh[0][i].assign( m_XFormPts[0].size(), 0.0 );
+        // Keep the existing DrawObj alive across updates -- assigning the meshes in place
+        // reuses their heap allocations from the previous update.
+        if ( m_WireShadeDrawObj_vec.size() != 1 )
+        {
+            m_WireShadeDrawObj_vec.clear();
+            m_WireShadeDrawObj_vec.resize( 1 );
+        }
+        m_WireShadeDrawObj_vec[0].m_FlipNormals = false;
+        m_WireShadeDrawObj_vec[0].m_GeomChanged = true;
+
+        m_WireShadeDrawObj_vec[0].m_PntMesh.resize( 1 );
+        m_WireShadeDrawObj_vec[0].m_PntMesh[0] = m_XFormPts;
+        m_WireShadeDrawObj_vec[0].m_NormMesh.resize( 1 );
+        m_WireShadeDrawObj_vec[0].m_NormMesh[0] = m_XFormNorm;
+
+        // Dummy texture coordinates matching the point mesh shape.
+        m_WireShadeDrawObj_vec[0].m_uTexMesh.resize( 1 );
+        m_WireShadeDrawObj_vec[0].m_uTexMesh[0].resize( m_XFormPts.size() );
+        for ( int i = 0; i < m_XFormPts.size(); i++ )
+        {
+            m_WireShadeDrawObj_vec[0].m_uTexMesh[0][i].assign( m_XFormPts[0].size(), 0.0 );
+        }
+        m_WireShadeDrawObj_vec[0].m_vTexMesh = m_WireShadeDrawObj_vec[0].m_uTexMesh;
     }
-    m_WireShadeDrawObj_vec[0].m_vTexMesh = m_WireShadeDrawObj_vec[0].m_uTexMesh;
 
     m_HighlightDrawObj.m_PntVec = m_BBox.GetBBoxDrawLines();
     m_HighlightDrawObj.m_GeomChanged = true;
@@ -541,6 +564,26 @@ void WireGeom::UpdateDrawObj()
     }
 }
 
+void WireGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
+{
+    Geom::LoadDrawObjs( draw_obj_vec );
+
+    // Empty unless the wireframe is one point wide, in which case it holds the polyline and
+    // there is no shaded DrawObj beside it.
+    m_LineDO.m_GeomID = m_ID + "Line";
+    m_LineDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    m_LineDO.m_Type = DrawObj::VSP_LINES;
+    m_LineDO.m_LineWidth = 2.0;
+    m_LineDO.m_LineColor = vec3d( m_GuiDraw.GetWireColor().x() / 255.0,
+                                  m_GuiDraw.GetWireColor().y() / 255.0,
+                                  m_GuiDraw.GetWireColor().z() / 255.0 );
+    m_LineDO.m_Visible = GetSetFlag( vsp::SET_SHOWN ) &&
+                         m_GuiDraw.GetDisplayType() == vsp::DISPLAY_TYPE::DISPLAY_BEZIER &&
+                         m_GuiDraw.GetDrawType() != vsp::DRAW_TYPE::GEOM_DRAW_NONE;
+
+    draw_obj_vec.push_back( &m_LineDO );
+}
+
 //==== Get Total Transformation Matrix from Original Points ====//
 Matrix4d WireGeom::GetTotalTransMat() const
 {
@@ -551,17 +594,127 @@ Matrix4d WireGeom::GetTotalTransMat() const
     return retMat;
 }
 
-void WireGeom::Scale()
+void WireGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
     m_ScaleFromOrig *= currentScale;
     m_ScaleMatrix.loadIdentity();
     m_ScaleMatrix.scale( m_ScaleFromOrig() );
-    m_LastScale = m_Scale();
+}
+
+
+//==== Placing the rearranged grid, and drawing it ====//
+
+void WireGeom::BuildWireXFormPts( const vector < vector < vec3d > > &main_pts, const Matrix4d &trans,
+                                      bool invert,
+                                      vector < vector < vec3d > > &xform_pts,
+                                      vector < vector < vec3d > > &xform_norm )
+{
+    unsigned int num_i = main_pts.size();
+
+    if ( num_i <= 0 )
+    {
+        xform_pts.resize( 0 );
+        xform_norm.resize( 0 );
+        return;
+    }
+
+    unsigned int num_j = main_pts[0].size();
+
+    xform_pts.resize( num_i );
+    for ( unsigned int i = 0 ; i < num_i ; i++ )
+    {
+        xform_pts[i].resize( num_j );
+        for ( unsigned int j = 0 ; j < num_j ; j++ )
+        {
+            xform_pts[i][j] = trans.xform( main_pts[i][j] );
+        }
+    }
+
+    // Worked out where the points have been placed, so a scale in the transform is accounted for.
+    xform_norm.resize( num_i );
+    for ( unsigned int i = 0 ; i < num_i ; i++ )
+    {
+        xform_norm[i].resize( num_j );
+        for ( unsigned int j = 0 ; j < num_j ; j++ )
+        {
+            int inext = clamp( (int)i + 1, 0, (int)num_i - 1 );
+            int iprev = clamp( (int)i - 1, 0, (int)num_i - 1 );
+            int jnext = clamp( (int)j + 1, 0, (int)num_j - 1 );
+            int jprev = clamp( (int)j - 1, 0, (int)num_j - 1 );
+
+            vec3d di = xform_pts[inext][j] - xform_pts[iprev][j];
+            vec3d dj = xform_pts[i][jnext] - xform_pts[i][jprev];
+
+            vec3d n = cross( di, dj );
+            n.normalize();
+
+            if ( invert )
+            {
+                n = -1.0 * n;
+            }
+
+            xform_norm[i][j] = n;
+        }
+    }
+}
+
+void WireGeom::BuildWireBndBox( const vector < vector < vec3d > > &xform_pts, BndBox &bbox )
+{
+    bbox.Reset();
+
+    for ( int i = 0 ; i < ( int )xform_pts.size() ; i++ )
+    {
+        for ( int j = 0 ; j < ( int )xform_pts[i].size() ; j++ )
+        {
+            bbox.Update( xform_pts[i][j] );
+        }
+    }
+}
+
+void WireGeom::BuildWireDrawObjs( const vector < vector < vec3d > > &xform_pts,
+                                      const vector < vector < vec3d > > &xform_norm,
+                                      vector < DrawObj > &draw_obj_vec )
+{
+    // Keep the existing DrawObj alive across updates -- assigning the meshes in place reuses
+    // their heap allocations from the previous update.
+    if ( draw_obj_vec.size() != 1 )
+    {
+        draw_obj_vec.clear();
+        draw_obj_vec.resize( 1 );
+    }
+
+    draw_obj_vec[0].m_FlipNormals = false;
+    draw_obj_vec[0].m_GeomChanged = true;
+
+    draw_obj_vec[0].m_PntMesh.resize( 1 );
+    draw_obj_vec[0].m_PntMesh[0] = xform_pts;
+    draw_obj_vec[0].m_NormMesh.resize( 1 );
+    draw_obj_vec[0].m_NormMesh[0] = xform_norm;
+
+    // Dummy texture coordinates matching the point mesh shape.
+    draw_obj_vec[0].m_uTexMesh.resize( 1 );
+    draw_obj_vec[0].m_vTexMesh.resize( 1 );
+    draw_obj_vec[0].m_uTexMesh[0].resize( xform_pts.size() );
+    draw_obj_vec[0].m_vTexMesh[0].resize( xform_pts.size() );
+    for ( int i = 0; i < ( int )xform_pts.size(); i++ )
+    {
+        draw_obj_vec[0].m_uTexMesh[0][i].resize( xform_pts[i].size(), 0.0 );
+        draw_obj_vec[0].m_vTexMesh[0][i].resize( xform_pts[i].size(), 0.0 );
+    }
+}
+
+void WireGeom::UpdateXFormPts()
+{
+    m_TransMatVec.resize( 1 );
+    m_TransMatVec[0] = GetWireTransMat();
+
+    BuildWireXFormPts( m_MainPts, GetWireTransMat(), GetWireInvert(), m_XFormPts, m_XFormNorm );
 }
 
 void WireGeom::UpdateBBox()
 {
+    UpdateXFormPts();
+
     BndBox new_box;
 
     int num_pnts, num_cross;
@@ -603,15 +756,18 @@ void WireGeom::UpdateBBox()
     }
 }
 
-void WireGeom::ReadP3D( FILE* fp, int ni, int nj, int nk )
+// nvar is how many arrays a block carries: two for a planar grid, three for x, y and z,
+// and four when an iblank tag rides along behind them.  Every array has to be read
+// whether or not it is kept, or the next block starts at the wrong place.
+void WireGeom::ReadP3D( FILE* fp, int ni, int nj, int nk, int nvar )
 {
     m_WirePts.resize( ni );
     for ( int i = 0 ; i < ni ; i++ )
     {
-        m_WirePts[i].resize(nj);
+        m_WirePts[i].resize( nj, vec3d() );
     }
 
-    for ( int ix = 0; ix < 3; ix++ )
+    for ( int ix = 0; ix < nvar; ix++ )
     {
         for ( int k = 0; k < nk; k++ )
         {
@@ -621,7 +777,7 @@ void WireGeom::ReadP3D( FILE* fp, int ni, int nj, int nk )
                 {
                     double xi;
                     fscanf( fp, "%lf ", &xi );
-                    if ( k == 0 )  // Only store k=0 surface
+                    if ( k == 0 && ix < 3 )  // Only store k=0 surface, and only coordinates
                     {
                         m_WirePts[i][j].v[ix] = xi;
                     }
@@ -629,6 +785,52 @@ void WireGeom::ReadP3D( FILE* fp, int ni, int nj, int nk )
             }
         }
     }
+
+    m_InvertFlag = CheckInverted();
+
+    SetDirtyFlag( GeomBase::SURF );
+    Update();
+}
+
+// The same block, unformatted.  A block is one record holding its arrays end to end, so the
+// whole record has to be walked whether or not everything in it is kept.  How wide the
+// reals are is the caller's to know -- the file does not say -- and is set on fp before
+// this is reached.
+void WireGeom::ReadP3D( UnformattedIn &fp, int ni, int nj, int nk, int nvar )
+{
+    m_WirePts.resize( ni );
+    for ( int i = 0 ; i < ni ; i++ )
+    {
+        m_WirePts[i].resize( nj, vec3d() );
+    }
+
+    long npt = ( long )ni * ( long )nj * ( long )nk;
+
+    fp.BeginRecord();
+
+    for ( int ix = 0; ix < nvar && ix < 3; ix++ )
+    {
+        vector < double > vals( npt );
+        fp.Read( vals );
+
+        // Only the k=0 surface is stored, and it leads the array.
+        for ( int j = 0 ; j < nj ; j++ )
+        {
+            for ( int i = 0 ; i < ni ; i++ )
+            {
+                m_WirePts[i][j].v[ix] = vals[ j * ni + i ];
+            }
+        }
+    }
+
+    // The iblank tags, where a block carries them, are read past and dropped.
+    if ( nvar > 3 )
+    {
+        vector < int > iblank( npt );
+        fp.Read( iblank );
+    }
+
+    fp.EndRecord();
 
     m_InvertFlag = CheckInverted();
 

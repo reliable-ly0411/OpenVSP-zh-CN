@@ -12,7 +12,6 @@
 #define _HAS_STD_BYTE 0
 #endif
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 #include <Eigen/SVD>
 
@@ -22,6 +21,7 @@
 #include "StlHelper.h"
 #include "Vehicle.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "SnapTo.h"
 #include "ProjectionMgr.h"
 
@@ -321,6 +321,12 @@ string GeometryAnalysisCase::GetSecondaryName() const
 
 vector< TMesh* > GeometryAnalysisCase::GetPrimaryTMeshVec()
 {
+    BndBox bbox;
+    return GetPrimaryTMeshVec( bbox );
+}
+
+vector< TMesh* > GeometryAnalysisCase::GetPrimaryTMeshVec( BndBox & bbox )
+{
     vector< TMesh* > tmv;
 
     Vehicle *veh = VehicleMgr.GetVehicle();
@@ -343,11 +349,11 @@ vector< TMesh* > GeometryAnalysisCase::GetPrimaryTMeshVec()
                 }
             }
 
-            tmv = veh->CreateTMeshVec( set );
+            tmv = veh->CreateTMeshVec( set, bbox );
         }
         else if ( m_PrimaryType() == vsp::GEOM_TARGET )
         {
-            tmv = veh->CreateTMeshVec( m_PrimaryGeomID );
+            tmv = veh->CreateTMeshVec( m_PrimaryGeomID, bbox );
         }
     }
 
@@ -977,10 +983,10 @@ xmlNodePtr GeometryAnalysisCase::EncodeXml( xmlNodePtr & node )
 
 xmlNodePtr GeometryAnalysisCase::DecodeXml( xmlNodePtr & node )
 {
-    m_PrimaryModeID = ParmMgr.RemapID( XmlUtil::FindString( node, "PrimaryModeID", m_PrimaryModeID ) );
-    m_PrimaryGeomID = ParmMgr.RemapID( XmlUtil::FindString( node, "PrimaryGeomID", m_PrimaryGeomID ) );
-    m_SecondaryGeomID = ParmMgr.RemapID( XmlUtil::FindString( node, "SecondaryGeomID", m_SecondaryGeomID ) );
-    m_DirectionGeomID = ParmMgr.RemapID( XmlUtil::FindString( node, "DirectionGeomID", m_DirectionGeomID ) );
+    m_PrimaryModeID = IDMgr.RemapRefID( XmlUtil::FindString( node, "PrimaryModeID", m_PrimaryModeID ) );
+    m_PrimaryGeomID = IDMgr.RemapRefID( XmlUtil::FindString( node, "PrimaryGeomID", m_PrimaryGeomID ) );
+    m_SecondaryGeomID = IDMgr.RemapRefID( XmlUtil::FindString( node, "SecondaryGeomID", m_SecondaryGeomID ) );
+    m_DirectionGeomID = IDMgr.RemapRefID( XmlUtil::FindString( node, "DirectionGeomID", m_DirectionGeomID ) );
 
     //==== Cutout Subsurfaces ====//
     xmlNodePtr cutoutSS_list_node = XmlUtil::GetNode( node, "CutoutSS_List", 0 );
@@ -991,7 +997,7 @@ xmlNodePtr GeometryAnalysisCase::DecodeXml( xmlNodePtr & node )
         for ( int i = 0 ; i < num_cutoutSS ; i++ )
         {
             xmlNodePtr cutoutSS_node = XmlUtil::GetNode( cutoutSS_list_node, "CutoutSS", i );
-            string new_cutoutSS = ParmMgr.RemapID( XmlUtil::FindString( cutoutSS_node, "cutoutSS_ID", string() ) );
+            string new_cutoutSS = IDMgr.RemapRefID( XmlUtil::FindString( cutoutSS_node, "cutoutSS_ID", string() ) );
             m_CutoutVec.push_back( new_cutoutSS );
         }
     }
@@ -2138,7 +2144,8 @@ string GeometryAnalysisCase::Evaluate()
             }
             case vsp::PLANAR_SLICE:
             {
-                primary_tmv = GetPrimaryTMeshVec();
+                BndBox bbox;
+                primary_tmv = GetPrimaryTMeshVec( bbox );
 
                 if ( !primary_tmv.empty() )
                 {
@@ -2148,8 +2155,6 @@ string GeometryAnalysisCase::Evaluate()
                         m_LastResult = res->GetID();
 
                         vector<TMesh*> slicevec;
-
-                        BndBox bbox = GetPrimaryScaleIndependentBBox();
 
                         vec3d norm_axis;
                         norm_axis[ m_SliceDir.Get() ] = 1;
@@ -2496,7 +2501,7 @@ string GeometryAnalysisCase::Evaluate()
                                 vector < string > meshids = meshnvd->GetStringData();
                                 if ( !meshids.empty() )
                                 {
-                                    veh->DeleteGeom( meshids[0] );
+                                    veh->DeleteGeomVec( { meshids[0] } );
                                 }
                             }
 

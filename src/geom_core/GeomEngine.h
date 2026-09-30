@@ -64,10 +64,10 @@ protected:
     virtual void ValidateParms();
     virtual void Extend( VspSurf &surf, const double & u, bool extbefore );
     virtual void UpdateEngine();
+    virtual void UpdateLCurve();
     virtual void UpdateBBox();
     virtual void UpdateXForm();
 
-    virtual void UpdateDrawObj();
     virtual void UpdateHighlightDrawObj();
 
     bool m_engine_spec[ vsp::ENGINE_LOC_NUM ];

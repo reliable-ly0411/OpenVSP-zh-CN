@@ -410,8 +410,6 @@ string AttributeMgrSingleton::FindAttributeInCollection( const string & obj_id, 
     // if object id, search its collection
 
     vector< string > attribute_ids;
-    vector< string > local_attribute_ids;
-    vector< string > local_attribute_names;
 
     string lower_str = ToLower( search_str );
     string lower_aname;
@@ -426,28 +424,26 @@ string AttributeMgrSingleton::FindAttributeInCollection( const string & obj_id, 
 
     if ( coll && coll->GetAttrDataFlag( ) )
     {
-        local_attribute_ids = coll->GetAllAttrIDs();
-        local_attribute_names = coll->GetAllAttrNames();
-        for ( int i = 0; i != local_attribute_ids.size(); ++i )
+        vector< NameValData* > local_attributes = coll->GetAllPtrs();
+        for ( int i = 0; i != local_attributes.size(); ++i )
         {
-            lower_aname = ToLower( local_attribute_names[i] );
+            lower_aname = ToLower( local_attributes[i]->GetName() );
             if ( lower_aname.find( lower_str.c_str() ) != string::npos )
             {
-                attribute_ids.push_back( local_attribute_ids[i] );
+                attribute_ids.push_back( local_attributes[i]->GetID() );
             }
         }
     }
 
     else if ( coll_from_obj && coll_from_obj->GetAttrDataFlag( ) )
     {
-        local_attribute_ids = coll_from_obj->GetAllAttrIDs();
-        local_attribute_names = coll_from_obj->GetAllAttrNames();
-        for ( int i = 0; i != local_attribute_ids.size(); ++i )
+        vector< NameValData* > local_attributes = coll_from_obj->GetAllPtrs();
+        for ( int i = 0; i != local_attributes.size(); ++i )
         {
-            lower_aname = ToLower( local_attribute_names[i] );
+            lower_aname = ToLower( local_attributes[i]->GetName() );
             if ( lower_aname.find( lower_str.c_str() ) != string::npos )
             {
-                attribute_ids.push_back( local_attribute_ids[i] );
+                attribute_ids.push_back( local_attributes[i]->GetID() );
             }
         }
     }
@@ -948,7 +944,10 @@ string AttributeMgrSingleton::AddAttributeParm( const string &collID, const stri
     NameValData* attr = new NameValData( attributeName );
     attr->SetType( vsp::PARM_REFERENCE_DATA );
     attr->SetParmIDData( { parmID } );
-    attr->ChangeID( id );
+    if ( !id.empty() )
+    {
+        attr->ChangeID( id );
+    }
     string ret_id = AddAttributeUtil( collID, attr, updateFlag );
     return ret_id;
 }
@@ -978,7 +977,10 @@ string AttributeMgrSingleton::AddAttributeGroup( const string &collID, const str
 {
     NameValData* attr = new NameValData( attributeName );
     attr->SetType( vsp::ATTR_COLLECTION_DATA );
-    attr->ChangeID( id );
+    if ( !id.empty() )
+    {
+        attr->ChangeID( id );
+    }
     string ret_id = AddAttributeUtil( collID, attr, updateFlag );
     return ret_id;
 }

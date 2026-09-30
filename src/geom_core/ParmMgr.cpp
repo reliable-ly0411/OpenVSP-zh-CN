@@ -10,6 +10,7 @@
 #include "ParmMgr.h"
 #include "VspUtil.h"
 #include "IDMgr.h"
+#include "ResultsMgr.h"
 
 using std::map;
 using std::string;
@@ -215,6 +216,15 @@ void ParmMgrSingleton::AddToUndoStack( Parm* parm_ptr, bool drag_flag )
 }
 
 //==== Add Parm To Undo Stack ====//
+void ParmMgrSingleton::ClearUndo()
+{
+    while ( !m_ParmUndoStack.empty() )
+    {
+        m_ParmUndoStack.pop();
+    }
+    m_LastUndoFlag = false;
+}
+
 void ParmMgrSingleton::UnDo()
 {
     if ( m_LastUndoFlag )
@@ -238,47 +248,57 @@ void ParmMgrSingleton::UnDo()
     }
 }
 
-//==== Remap oldID into newID avoiding collisions ====//
-
-// RemapID will map an old set of ID's to a new set of ID's.
-//
-// When an oldID is first passed to RemapID, a newID is chosen which will be returned
-// every time oldID is passed (until a reset).
-//
-// If oldID is not used by VSP (i.e. there are no collisions), then newID will match
-// oldID.  This allows seamless persistence of ID's.
-//
-// If oldID is already used by VSP (i.e. there are collisions), then newID will either
-// be set an optional suggestedID or randomly selected.
-//
-// Remapping is done in context of the last time ResetRemapID was called.  I.e. collisions
-// are when an ID already exists when Reset is called.
-//
-
-string ParmMgrSingleton::RemapID( const string & oldID, const string & suggestID )
+// Whatever the user attached to a Parm belongs to the ID, not to the object holding it.  An
+// attribute names its Parm by ID, so a note on "the leading edge radius" has to end up on
+// whichever Parm answers to that ID once the swap is done.  Each Parm owns its collection as a
+// member and ChangeID only re-points the collection's attach, so without this the attributes
+// stay with the object that a caller of SwapIDs is about to destroy -- a cross section whose
+// shape was changed, say -- and go with it, silently.
+static void SwapParmAttributes( Parm* parm_a, Parm* parm_b )
 {
-    return IDMgr.RemapID( oldID, suggestID, -1 );
-}
+    AttributeCollection* coll_a = parm_a->GetAttrCollection();
+    AttributeCollection* coll_b = parm_b->GetAttrCollection();
 
-// ForceRemapID works as above, but makes no attempt to
-string ParmMgrSingleton::ForceRemapID( const string & oldID, int size )
-{
-    string dummy;
-    return IDMgr.RemapID( oldID, dummy, size );
-}
+    if ( !coll_a || !coll_b )
+    {
+        return;
+    }
 
-string ParmMgrSingleton::RemapID( const string & oldID, const string & suggestID, int size )
-{
-    return IDMgr.RemapID( oldID, suggestID, size );
-}
+    vector< NameValData* > was_on_a = coll_a->GetAllPtrs();
+    vector< NameValData* > was_on_b = coll_b->GetAllPtrs();
 
-string ParmMgrSingleton::ResetRemapID( const string & lastReset )
-{
-    return IDMgr.ResetRemapID();
+    // Taken out of both before either is added to, so a name held on both sides cannot collide
+    // part way through.  Remove unlinks and deregisters; the attribute object itself survives.
+    for ( int i = 0 ; i < ( int )was_on_a.size() ; i++ )
+    {
+        coll_a->Remove( was_on_a[i] );
+    }
+    for ( int i = 0 ; i < ( int )was_on_b.size() ; i++ )
+    {
+        coll_b->Remove( was_on_b[i] );
+    }
+
+    // Crossed over, because the IDs have been: Add re-attaches each attribute to the collection
+    // taking it and registers it again, so it now names the Parm that holds its original ID.
+    for ( int i = 0 ; i < ( int )was_on_a.size() ; i++ )
+    {
+        coll_b->Add( was_on_a[i] );
+    }
+    for ( int i = 0 ; i < ( int )was_on_b.size() ; i++ )
+    {
+        coll_a->Add( was_on_b[i] );
+    }
+
+    // And the collections' own IDs, so a collection ID names the same attributes afterwards.
+    coll_a->SwapID( coll_b );
 }
 
 void ParmMgrSingleton::SwapIDs( const string &aID, const string &bID )
 {
+    if ( aID == bID )
+    {
+        return;
+    }
 
     Parm* parm_a = FindParm( aID );
     Parm* parm_b = FindParm( bID );
@@ -288,6 +308,19 @@ void ParmMgrSingleton::SwapIDs( const string &aID, const string &bID )
         parm_b->ChangeID( "TEMP" );
         parm_a->ChangeID( bID );
         parm_b->ChangeID( aID );
+
+        SwapParmAttributes( parm_a, parm_b );
+
+        // Each container finds its Parms by group and name through a map of IDs.
+        if ( parm_a->GetContainer() )
+        {
+            parm_a->GetContainer()->UpdateGroupParmMap();
+        }
+        if ( parm_b->GetContainer() && parm_b->GetContainer() != parm_a->GetContainer() )
+        {
+            parm_b->GetContainer()->UpdateGroupParmMap();
+        }
+        IncNumParmChanges();
     }
 }
 

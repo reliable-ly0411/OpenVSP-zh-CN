@@ -7,13 +7,13 @@
 // Michael Waddington
 //////////////////////////////////////////////////////////////////////
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "Vehicle.h"
 #include "MeshGeom.h"
 #include "WingGeom.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "wavedragEL.h"
 #include "ModeMgr.h"
 
@@ -97,8 +97,8 @@ xmlNodePtr WaveDragSingleton::DecodeXml( xmlNodePtr & node )
     if ( WaveDragnode )
     {
         ParmContainer::DecodeXml( WaveDragnode );
-        m_RefGeomID   = ParmMgr.RemapID( XmlUtil::FindString( WaveDragnode, "ReferenceGeomID", m_RefGeomID ) );
-        m_ModeID   = ParmMgr.RemapID( XmlUtil::FindString( WaveDragnode, "ModeID", m_ModeID ) );
+        m_RefGeomID   = IDMgr.RemapRefID( XmlUtil::FindString( WaveDragnode, "ReferenceGeomID", m_RefGeomID ) );
+        m_ModeID   = IDMgr.RemapRefID( XmlUtil::FindString( WaveDragnode, "ModeID", m_ModeID ) );
 
         //==== Flow-Through Subsurfaces ====//
         xmlNodePtr flowSS_list_node = XmlUtil::GetNode( WaveDragnode, "FlowSS_List", 0 );
@@ -109,13 +109,55 @@ xmlNodePtr WaveDragSingleton::DecodeXml( xmlNodePtr & node )
             for ( int i = 0 ; i < num_flowSS ; i++ )
             {
                 xmlNodePtr flowSS_node = XmlUtil::GetNode( flowSS_list_node, "FlowSS", i );
-                string new_flowSS = ParmMgr.RemapID( XmlUtil::FindString( flowSS_node, "flowSS_ID", string() ) );
+                string new_flowSS = IDMgr.RemapRefID( XmlUtil::FindString( flowSS_node, "flowSS_ID", string() ) );
                 m_SSFlow_vec.push_back( new_flowSS );
             }
         }
     }
 
     return WaveDragnode;
+}
+
+void WaveDragSingleton::Renew()
+{
+    ResetToInitVals();
+
+    // Named a Geom, and sub-surfaces, that Renew deletes.
+    m_lastmeshgeomID = string();
+    m_RefGeomID = string();
+    m_SSFlow_vec.clear();
+    m_CompIDVec.clear();
+
+    // What the last slice left behind.  Setup sizes most of this again on the next run,
+    // but until then the plot screen is drawing the model that is gone.
+    m_NTheta = 0;
+    m_NComp = 0;
+    m_NSlice = 0;
+    m_AmbigSubSurf = false;
+
+    m_CompSliceAreaDist.clear();
+    m_SliceAreaDist.clear();
+    m_SliceAreaDistFlow.clear();
+
+    m_InletArea = 0.0;
+    m_ExitArea = 0.0;
+
+    m_StartX.clear();
+    m_EndX.clear();
+    m_ThetaRad.clear();
+    m_XNorm.clear();
+
+    m_Volume.clear();
+    m_MaxArea.clear();
+    m_Length.clear();
+    m_MaxMaxArea = 0.0;
+
+    m_CompFitAreaDist.clear();
+    m_BuildupFitAreaDist.clear();
+    m_FitAreaDist.clear();
+    m_FitAreaDistFlow.clear();
+    m_BuildupAreaDist.clear();
+    m_XMaxDrag.clear();
 }
 
 void WaveDragSingleton::Update()
@@ -289,7 +331,7 @@ string WaveDragSingleton::SliceAndAnalyze( int set, int numSlices, int numRots, 
     }
 
     // Delete MeshGeom from previous wave drag tool run
-    veh->DeleteGeom( m_lastmeshgeomID );
+    veh->DeleteGeomVec( { m_lastmeshgeomID } );
 
     // Run slicing routine
     m_lastmeshgeomID = WaveDragSlice( set, numSlices, numRots, Mach, Flow_vec, Symm );
@@ -422,7 +464,7 @@ string WaveDragSingleton::WaveDragSlice( int set, int numSlices, int numRots, do
     }
     else
     {
-        veh->DeleteGeom( id );
+        veh->DeleteGeomVec( { id } );
         veh->ClearActiveGeom(); // AddMeshGeom() makes id Active.
         id = "NONE";
     }

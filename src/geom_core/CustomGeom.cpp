@@ -939,6 +939,13 @@ void CustomGeom::SkinXSecSurf( bool closed_flag )
             VspCurve crv = xs->GetCurve();
 
             //==== Load Ribs ====//
+            // GetRib answers with the Top station's conditions and applies them right around
+            // the section.  A CustomXSec is a SkinXSec, so it carries spines and per side
+            // conditions like any other, but this path does not build the per group rib sets
+            // that Fuselage and Stack blend -- so a CustomGeom whose sides disagree, or which
+            // has a spine, silently gets Top's skinning everywhere.  Wiring it to
+            // PrepSkinRibs and SkinRibsBlended is the fix; until then this is the limit, and
+            // it is a limit rather than a bug in GetRib.
             if ( j == 0 )
                 rib_vec.push_back( xs->GetRib( true, false ) );
             else if ( j == m_XSecSurfVec[i]->NumXSec() -1 )
@@ -1089,7 +1096,7 @@ void CustomGeom::ComputeCenter()
 }
 
 //==== Optional Scale - If Script Does Not Exist Nothing Happens =====//
-void CustomGeom::Scale()
+void CustomGeom::ApplyScale( double currentScale )
 {
     if ( !m_InitGeomFlag )
     {
@@ -1098,12 +1105,8 @@ void CustomGeom::Scale()
 
     CustomGeomMgr.SetCurrCustomGeom( GetID() );
 
-    double curr_scale = m_Scale()/m_LastScale();
-
     //==== Call Script ====//
-    ScriptMgr.ExecuteScript( GetScriptModuleName().c_str(), "void Scale(double s)", true, curr_scale );
-
-    m_LastScale = m_Scale();
+    ScriptMgr.ExecuteScript( GetScriptModuleName().c_str(), "void Scale(double s)", true, currentScale );
 }
 
 //==== Trigger Conformal XSec Offset =====//

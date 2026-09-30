@@ -66,8 +66,6 @@ public:
     // Destructor and copy/move operations are intentionally left implicit so vector<GeomType>
     // can move elements instead of deep-copying them.
 
-    void CopyFrom( const GeomType & t );
-
     bool GetAdoptableFlag()
     {
         return m_AdoptableFlag;
@@ -79,7 +77,6 @@ public:
 
     bool m_AdoptableFlag;
 
-    string m_GeomID;
     string m_ModuleName;
     string m_DisplayName;
 
@@ -231,18 +228,13 @@ public:
         m_ChildIDVec = vec;
     }
 
-    virtual void AddStepChildID( const string &id )
-    {
-        m_StepChildIDVec.push_back( id );
-    }
+    // Adds the ID once.  Whoever depends on this Geom re-adds itself on every update, and the
+    // list is saved with the model, so the same ID arrives many times over.
+    virtual void AddStepChildID( const string &id );
     virtual void RemoveStepChildID( const string &id );
     virtual vector< string > GetStepChildIDVec()
     {
         return m_StepChildIDVec;
-    }
-    virtual void SetStepChildIDVec( vector< string > & vec )
-    {
-        m_StepChildIDVec = vec;
     }
 
     virtual bool UpdatedParm( const string & id );
@@ -402,6 +394,15 @@ public:
     Geom( Vehicle* vehicle_ptr );
     virtual ~Geom();
 
+    // Scaling is a template method.  Scale() computes the incremental scale factor, dispatches to
+    // the per-Geom ApplyScale( double ) hook (that Geom's own dimensional Parms and geom-specific nested
+    // containers), and then always recurses into the Geom-common containers -- SubSurfaces, CFD
+    // sources, and FEA structures -- so their dimensional Parms scale too.  Derived Geoms override
+    // ApplyScale( double ), never Scale(), which guarantees the common containers are never missed.
+    virtual void Scale();
+    virtual void ApplyScale( double currentScale ) {}
+    void ScaleCommonSubComponents( double currentScale );
+
     virtual void Update( bool fullupdate = true );
     virtual void LoadMainDrawObjs( vector< DrawObj* > & draw_obj_vec );
     virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
@@ -474,8 +475,12 @@ public:
     bool GetCapUMinSuccess( int indx ) const { return m_CapUMinSuccess[indx]; }
     bool GetCapUMaxSuccess( int indx ) const { return m_CapUMaxSuccess[indx]; }
 
+    // Always writes symindexs, so an out of range imain is an empty answer rather than
+    // whatever the caller happened to have there.
     virtual void GetSymmIndexs( int imain, vector < int > & symindexs )
     {
+        symindexs.clear();
+
         if ( imain >= 0 && imain < m_SurfSymmMap.size() )
         {
             symindexs = m_SurfSymmMap[ imain ];
@@ -552,7 +557,6 @@ public:
         return nullptr;
     }
 
-    virtual void CopyFrom( Geom* geom );
 
     virtual xmlNodePtr EncodeXml( xmlNodePtr & node );
     virtual xmlNodePtr DecodeXml( xmlNodePtr & node );
@@ -578,6 +582,10 @@ public:
     virtual BndBox GetScaleIndependentBndBox() const
     {
         return m_ScaleIndependentBBox;
+    }
+    virtual bool IsBndBoxScaleDependent() const
+    {
+        return m_BBox != m_ScaleIndependentBBox;
     }
 
     virtual void WriteAirfoilFiles( FILE* meta_fid );
@@ -624,6 +632,11 @@ public:
     }
     virtual void RecolorSubSurfs( int active_ind );
 
+    // Hands every subsurface this Geom holds to another, and is left holding none.  Whatever
+    // the destination was carrying is deleted first.  Handed over rather than copied, so the
+    // subsurfaces keep their IDs and their Parm IDs.
+    virtual void HandSubSurfsTo( Geom* to );
+
     //==== FeaStructure Data =====//
     vector < FeaStructure* > GetFeaStructVec()
     {
@@ -638,6 +651,16 @@ public:
     {
         return m_FeaStructVec.size();
     }
+
+    // Hands every structure this Geom holds to another, and is left holding none.  For when one
+    // Geom takes another's place: a structure is a Geom's own work and would otherwise be freed
+    // with it.  Each is told which Geom it belongs to now.
+    virtual void HandFeaStructsTo( Geom* to );
+
+    // The same, for the CFD mesh sources.  Whatever the destination was carrying is dropped
+    // first: a Geom taking another's place wants that Geom's sources, not the ones it was
+    // copied from.
+    virtual void HandCfdSourcesTo( Geom* to );
 
     //===== Degenerate Geometry =====//
     virtual void CreateDegenGeom( vector<DegenGeom> &dgs, bool preview = false, const int & n_ref = 0 );
@@ -1002,22 +1025,96 @@ public:
 
     virtual void ClearSkinning( const int & i_xs = -1 );
 
+    //==== User defined skinning spines ====//
+    // A spine runs the length of the body, so its position and symmetry are the same on
+    // every XSec while its values are not.  Add and delete reach every XSec; SyncSkinSpines
+    // copies position and symmetry from the active XSec, which is the one the GUI edits.
+    virtual double SuggestSkinSpineW01();
+    virtual int AddSkinSpine( double w01 );
+
+    // Whether a spine placed at w01 would survive the station merge rather than vanish into
+    // a station already there.
+    virtual bool SkinSpineW01IsClear( double w01 );
+    virtual void DelSkinSpine( int index );
+    virtual void DelAllSkinSpines();
+    virtual int NumSkinSpines();
+
+    // The name belongs to the whole spine, so it is read and written on cross section 0 and
+    // synced outwards from there, the same way the position and the symmetry flags are.
+    virtual string GetSkinSpineName( int index );
+    virtual void SetSkinSpineName( int index, const string & name );
+    virtual void SyncSkinSpines();
+
+    // Which spine the Skinning tab is editing, so its vectors can be drawn apart from the
+    // rest.  Nothing about the surface depends on it, so it only dirties the highlight.
+    virtual void SetActiveSkinSpine( int index );
+
+    // One draw object per colour, since a DrawObj carries a single colour and the point of
+    // this is to tell the stations apart.  The side entries are indexed by
+    // SkinXSec::SKIN_SIDE_*, so a side's station number is its own draw object.
+    enum { SKIN_DRAW_RIGHT = 0,
+           SKIN_DRAW_BOTTOM,
+           SKIN_DRAW_LEFT,
+           SKIN_DRAW_TOP,
+           SKIN_DRAW_SPINE,
+           SKIN_DRAW_ACTIVE_SPINE,
+           NUM_SKIN_DRAW };
+
+    // The DrawObj colour each of those is drawn in.  Shared with the Skinning tab, which keys
+    // its dividers with the same answer -- a key that can drift from what it keys is worse
+    // than no key at all.
+    static int SkinDrawColor( int k );
+
     IntParm m_ActiveXSec;
 
+    // The tangent term is what the loft is usually shaped by, so it is drawn by default.
+    // The curvature term is off by default: it doubles the count of vectors meeting at a
+    // cross section, and most models never enforce it.
+    BoolParm m_ShowSkinningTanFlag;
+    BoolParm m_ShowSkinningCurveFlag;
+
 protected:
-    void UpdateDrawObjUtil();
-    void UpdateHighlightDrawObjUtil( int bbox_index );
-    void LoadDrawObjsUtil( vector< DrawObj* > & draw_obj_vec );
 
     virtual void UpdateDrawObj();
     virtual void UpdateHighlightDrawObj();
+
+    // Build lines showing the skinning derivatives at the station of XSec index.  Does
+    // nothing unless the XSec is a SkinXSec.
+    void UpdateSkinDrawObj( const Matrix4d &relTrans, int index );
+
+    // Settle every XSec's skinning flags before anything reads them.  The grouping below
+    // keys on those flags, so it has to run after they have stopped changing.
+    void PrepSkinRibs( int nxsec );
+
+    // Fill every pass's rib set from the cross sections.
+    void StageSkinRibSets( int nxsec, vector< vector< rib_data_type > > &rib_sets,
+                           const vector< vector< bool > > &insets,
+                           const vector< int > &stationmap, bool closed );
+
+    bool BuildSkinRibSets( int nxsec, vector< vector< rib_data_type > > &rib_sets,
+                           vector< double > &ws, vector< vector< bool > > &insets,
+                           vector< int > &stationmap );
 
     virtual void NormalizeFlaps();
 
     XSecSurf m_XSecSurf;
     vector<DrawObj> m_XSecDrawObj_vec;
     DrawObj m_HighlightXSecDrawObj;
-    DrawObj m_HighlightXSecLoftDrawObj;
+    // Skinning derivative vectors at the active XSec, one draw object per colour.  The
+    // vectors shaping the section before the XSec are kept apart from the ones shaping the
+    // section after it so they can be drawn dashed -- the stipple is a property of the draw
+    // object, so the two cannot share one.
+    vector < DrawObj > m_SkinDrawObj_vec;
+    vector < DrawObj > m_SkinBeforeDrawObj_vec;
+
+    // Arrowheads capping both.  They are shaded triangles rather than lines, so one set
+    // serves both sides.
+    vector < DrawObj > m_SkinArrowDrawObj_vec;
+
+    // The spine whose controls the Skinning tab is showing, or -1.  This is view state and
+    // not a Parm: it belongs to what the user is looking at, not to the model, so it is
+    // neither written to the file nor linkable.
+    int m_ActiveSpine;
 };
 
 #endif // !defined(VSPGEOM__INCLUDED_)

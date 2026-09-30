@@ -69,6 +69,18 @@ public:
     void SkinRibs( const vector<rib_data_type> &ribs, const vector < int > &degree, bool closed_flag );
     void SkinRibs( const vector<rib_data_type> &ribs, bool closed_flag );
 
+    // Skin once per condition set and blend, so different parts of a cross section can
+    // enforce different conditions without tearing the surface.
+    // ws gives the station parameters around the cross section; insets[k] says which of
+    // those stations the k'th rib set covers.  Stations sharing a set share its skin.
+    // Let go of a previous blend's rib sets, station parameters and group membership.
+    void ClearBlendData();
+
+    void SkinRibsBlended( const vector< vector<rib_data_type> > &ribsets, const vector < double > &ws,
+                          const vector < vector < bool > > &insets, const vector < double > & param, bool closed_flag );
+    void SkinRibsBlended( const vector< vector<rib_data_type> > &ribsets, const vector < double > &ws,
+                          const vector < vector < bool > > &insets, bool closed_flag );
+
     // As SkinRibs, but solved with the uniform structure skinning creator -- valid when
     // every control point strip shares one constraint structure, which holds for all ribs
     // built through the current rib API.  Substantially faster; falls short only if ribs
@@ -112,6 +124,12 @@ public:
     void SwapUWDirections();
     void Transform( const Matrix4d & mat );
     void GetBoundingBox( BndBox &bb ) const;
+
+    // Whether this surface and another share one structure -- the same patches, at the same
+    // parameters, of the same degrees -- and in bound, a bound on the distance between them at
+    // the same parameters.  Surfaces over different parameter ranges cannot be compared; they
+    // answer false, with a negative bound.
+    bool Compare( const VspSurf & other, double & bound ) const;
     void GetLimitedBoundingBox( BndBox &bb, const double &U0, const double &Uf, const double &W0, const double &Wf );
     bool IsClosedU() const;
     bool IsClosedW() const;
@@ -149,6 +167,10 @@ public:
 
     double FindNearest01( double &u, double &w, const vec3d &pt ) const;
     double FindNearest01( double &u, double &w, const vec3d &pt, const double &u0, const double &w0 ) const;
+
+    // Step away from a parameter where the normal degenerates, in the direction given, until the
+    // surface has one.  False if it never does.
+    bool FindNearbyNorm( double u, double v, double du, double dv, vec3d &norm ) const;
 
     void FindDistanceAngle( double &u, double &w, const vec3d &pt, const vec3d &dir, const double &d, const double &theta, const double &u0, const double &w0 ) const;
     void GuessDistanceAngle( double &du, double &dw, const vec3d &udir, const vec3d & wdir, const double &d, const double &theta ) const;
@@ -299,6 +321,13 @@ public:
     void GetBodyRevCurve( VspCurve & crv )                 const { crv = m_BodyRevCurve; }
     int  GetSkinClosedFlag()                               const { return m_SkinClosedFlag; }
     void GetSkinRibVec( vector< rib_data_type > & ribvec ) const { ribvec = m_SkinRibVec; }
+
+    // A blended skin is one solve per group of stations enforcing alike, summed with weights.
+    // One rib set cannot describe it, so anything meaning to rebuild the surface -- Conformal,
+    // for one -- needs all of them and the weights they were combined with.
+    bool GetSkinBlendedFlag()                              const { return m_SkinBlendedFlag; }
+    void GetSkinRibSets( vector< vector< rib_data_type > > & sets ) const { sets = m_SkinRibSets; }
+    void ReSkinBlended( const vector< vector< rib_data_type > > & sets );
     void GetSkinDegreeVec( vector< int > & degvec )        const { degvec = m_SkinDegreeVec; }
     void GetSkinParmVec( vector< double > & parmvec )      const { parmvec = m_SkinParmVec; }
 
@@ -422,6 +451,10 @@ protected:
     int m_SkinType;
     VspCurve m_BodyRevCurve;
     vector< rib_data_type > m_SkinRibVec;
+    bool m_SkinBlendedFlag;
+    vector< vector< rib_data_type > > m_SkinRibSets;
+    vector< double > m_SkinWs;
+    vector< vector< bool > > m_SkinInsets;
     vector< int > m_SkinDegreeVec;
     vector< double > m_SkinParmVec;
     int m_SkinClosedFlag;

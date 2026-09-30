@@ -6,7 +6,7 @@ on:
       upstream_ref:
         description: Official OpenVSP branch, tag, or commit
         required: true
-        default: main
+        default: OpenVSP_3.53.0
         type: string
 
 permissions:

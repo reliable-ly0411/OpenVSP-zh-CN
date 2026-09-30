@@ -8,7 +8,6 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include <cstdio>
@@ -35,6 +34,11 @@
 
 typedef piecewise_surface_type::index_type surface_index_type;
 typedef piecewise_surface_type::point_type surface_point_type;
+
+// Scalar valued surface, used to carry blend weights.
+typedef eli::geom::surface::piecewise<eli::geom::surface::bezier, double, 1> oned_piecewise_surface_type;
+typedef eli::geom::surface::bezier<double, 1> oned_surface_patch_type;
+typedef oned_piecewise_surface_type::point_type oned_surface_point_type;
 typedef piecewise_surface_type::rotation_matrix_type surface_rotation_matrix_type;
 typedef piecewise_surface_type::bounding_box_type surface_bounding_box_type;
 
@@ -42,6 +46,14 @@ typedef eli::geom::surface::piecewise_general_skinning_surface_creator<double, 3
 typedef eli::geom::surface::piecewise_uniform_skinning_surface_creator<double, 3, surface_tolerance_type> uniform_creator_type;
 typedef eli::geom::surface::piecewise_multicap_surface_creator<double, 3, surface_tolerance_type> multicap_creator_type;
 typedef eli::geom::surface::piecewise_cubic_spline_skinning_surface_creator<double, 3, surface_tolerance_type> spline_creator_type;
+
+// Tolerant ordering for merging skinning joint parameters: joints closer together than
+// the tolerance are the same joint.
+static bool JointLess( const double &a, const double &b )
+{
+    surface_tolerance_type tol;
+    return tol.approximately_less_than( a, b );
+}
 
 typedef piecewise_curve_type::index_type curve_index_type;
 typedef piecewise_curve_type::point_type curve_point_type;
@@ -62,6 +74,7 @@ VspSurf::VspSurf()
     m_ThickSurf = true;
     m_PlateNum = -1;
     m_SkinType = SKIN_NONE;
+    m_SkinBlendedFlag = false;
 
     m_FeaOrientationType = vsp::FEA_ORIENT_OML_U;
     m_FeaOrientation = vec3d();
@@ -114,6 +127,10 @@ void VspSurf::CopyNonSurfaceData( const VspSurf & s )
 
     //==== Store Skinning Inputs =====//
     m_SkinType = s.m_SkinType;
+    m_SkinBlendedFlag = s.m_SkinBlendedFlag;
+    m_SkinRibSets = s.m_SkinRibSets;
+    m_SkinWs = s.m_SkinWs;
+    m_SkinInsets = s.m_SkinInsets;
     m_BodyRevCurve = s.m_BodyRevCurve;
     m_SkinRibVec = s.m_SkinRibVec;
     m_SkinDegreeVec = s.m_SkinDegreeVec;
@@ -251,6 +268,75 @@ void VspSurf::GetBoundingBox( BndBox &bb ) const
     bb.Update( v3max );
 }
 
+// The bound comes from the control points of the difference between the two, which enclose it.
+// Both are first split and raised to a common structure, so it is found whether or not they
+// shared one to begin with.
+bool VspSurf::Compare( const VspSurf & other, double & bound ) const
+{
+    piecewise_surface_type a( m_Surface );
+    piecewise_surface_type b( other.m_Surface );
+
+    vector< double > au, aw, bu, bw;
+    a.get_pmap_uv( au, aw );
+    b.get_pmap_uv( bu, bw );
+
+    // A surface with no patches matches only another with none.
+    if ( au.empty() || aw.empty() || bu.empty() || bw.empty() )
+    {
+        if ( au.empty() == bu.empty() && aw.empty() == bw.empty() )
+        {
+            bound = 0.0;
+            return true;
+        }
+        bound = -1.0;
+        return false;
+    }
+
+    double utol = 1e-12 * std::max( 1.0, std::abs( au.back() - au.front() ) );
+    double wtol = 1e-12 * std::max( 1.0, std::abs( aw.back() - aw.front() ) );
+
+    if ( std::abs( au.front() - bu.front() ) > utol || std::abs( au.back() - bu.back() ) > utol ||
+         std::abs( aw.front() - bw.front() ) > wtol || std::abs( aw.back() - bw.back() ) > wtol )
+    {
+        bound = -1.0;
+        return false;
+    }
+
+    vector< piecewise_surface_type::index_type > adu, adw, bdu, bdw;
+    a.degree_u( adu );
+    a.degree_v( adw );
+    b.degree_u( bdu );
+    b.degree_v( bdw );
+
+    bool same = au.size() == bu.size() && aw.size() == bw.size() && adu == bdu && adw == bdw;
+    for ( int i = 0; same && i < ( int )au.size(); i++ )
+    {
+        same = std::abs( au[i] - bu[i] ) <= utol;
+    }
+    for ( int i = 0; same && i < ( int )aw.size(); i++ )
+    {
+        same = std::abs( aw[i] - bw[i] ) <= wtol;
+    }
+
+    piecewise_surface_type::parm_match_u( a, b );
+    piecewise_surface_type::parm_match_v( a, b );
+    piecewise_surface_type::order_match_u( a, b );
+    piecewise_surface_type::order_match_v( a, b );
+
+    piecewise_surface_type diff;
+    diff.scaledsum( 1.0, a, -1.0, b );
+
+    // No point of the difference lies farther from the origin than its box's farthest corner.
+    surface_bounding_box_type bb;
+    diff.get_bounding_box( bb );
+    double x = std::max( std::abs( bb.get_min().x() ), std::abs( bb.get_max().x() ) );
+    double y = std::max( std::abs( bb.get_min().y() ), std::abs( bb.get_max().y() ) );
+    double z = std::max( std::abs( bb.get_min().z() ), std::abs( bb.get_max().z() ) );
+    bound = sqrt( x * x + y * y + z * z );
+
+    return same;
+}
+
 void VspSurf::GetLimitedBoundingBox( BndBox &bb, const double &U0, const double &Uf, const double &W0, const double &Wf )
 {
     surface_bounding_box_type bbx;
@@ -314,6 +400,101 @@ double VspSurf::FindNearest01( double &u, double &w, const vec3d &pt ) const
     return dist;
 }
 
+// Find a normal near a parameter where the surface has none.
+//
+// A zero normal means the patch at that parameter has no area of its own.  OpenVSP builds such
+// patches deliberately -- zero width strips at a leading or trailing edge, so those edges have an
+// exact parameter value, and collapsed pieces of an end cap -- and on one of them Su is parallel
+// to Sv everywhere, not merely at a point.  The cross product vanishes across the whole region, so
+// no expansion about the point can recover anything and the answer has to come from off it.
+//
+// The nearest surface that has a normal is usually the one to take, and searching outwards and
+// stopping at the first hit says that.  What it does not say is that some of those neighbours are
+// across a crease.  A zero width strip at a sharp leading edge has a different surface either
+// side, so a search that steps through it comes back with a normal from the wrong side -- and at
+// a leading edge that is very nearly the negative of the right one.
+//
+// So the direction the caller asks for is tried, and both directions along the other parameter,
+// but stepping the other way along the caller's parameter is a last resort, taken only when
+// nothing else has a normal at any distance.  That is the one step that can cross the strip the
+// point is sitting on the edge of.
+//
+// Traced on NormalVecTest2, whose extended trailing edge rounded tip cap is degenerate over
+// u in [2.0, 2.4] along v = 1.996: the surface either side in u has the normal (-0.866, 0.5, 0),
+// the leading edge strip is 0.008 of V away while the live surface is 0.1 of U away, and taking
+// the nearer one returned (0.866, -0.5, 0) -- inverted.
+bool VspSurf::FindNearbyNorm( double u, double v, double du, double dv, vec3d &norm ) const
+{
+    double umax = GetUMax();
+    double wmax = GetWMax();
+
+    // Two passes.  The second holds the one direction that can cross a crease.
+    for ( int pass = 0; pass < 2; pass++ )
+    {
+        // Start far finer than any strip OpenVSP builds and grow until the surface turns up, out
+        // to the whole parameter range.  A quarter of it is not enough: a wing tip cap whose
+        // leading edge has been closed off has S_u zero over a two dimensional region, not a
+        // strip.  Doubling rather than quadrupling, so that among the directions tried together
+        // the one that turns up first is really the nearer.
+        for ( double s = 1.0e-6; s <= 1.0; s *= 2.0 )
+        {
+            double try_du[3], try_dv[3];
+            int ntry;
+
+            if ( pass == 0 )
+            {
+                try_du[0] = 0.0;  try_dv[0] = dv;
+                try_du[1] = du;   try_dv[1] = 0.0;
+                try_du[2] = -du;  try_dv[2] = 0.0;
+                ntry = 3;
+            }
+            else
+            {
+                try_du[0] = 0.0;  try_dv[0] = -dv;
+                ntry = 1;
+            }
+
+            for ( int k = 0; k < ntry; k++ )
+            {
+                double un = u + s * try_du[k] * umax;
+                double vn = v + s * try_dv[k] * wmax;
+
+                if ( un < 0.0 )
+                {
+                    un = 0.0;
+                }
+                if ( un > umax )
+                {
+                    un = umax;
+                }
+                if ( vn < 0.0 )
+                {
+                    vn = 0.0;
+                }
+                if ( vn > wmax )
+                {
+                    vn = wmax;
+                }
+
+                // The raw surface normal, not CompNorm.  CompNorm applies m_FlipNormal, and so
+                // does Tesselate to whatever this returns -- flipping it twice leaves it pointing
+                // exactly backwards on any surface that is flipped.  The grid this stands in for
+                // is unflipped too, so this has to match it.
+                surface_point_type sp( m_Surface.normal( un, vn ) );
+                vec3d n( sp.x(), sp.y(), sp.z() );
+
+                if ( n.mag() > 1.0e-6 )
+                {
+                    n.normalize();
+                    norm = n;
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
 double VspSurf::FindNearest01( double &u, double &w, const vec3d &pt, const double &u0, const double &w0 ) const
 {
     double dist;
@@ -684,6 +865,19 @@ Matrix4d VspSurf::CompTransCoordSysLMN( const double &l, const double &m, const 
     return CompTransCoordSysRST( r, s, t );
 }
 
+// Let go of what a previous blend left here.  CopyNonSurfaceData copies these to every
+// symmetry image on every update, so a body that was briefly blended would otherwise carry
+// and re-copy its old rib sets for the rest of the session -- unread, because the flag
+// guards every use, which is the sort of thing that stays true until it does not.  Every
+// routine that gives this surface a shape some other way calls it.
+void VspSurf::ClearBlendData()
+{
+    m_SkinBlendedFlag = false;
+    m_SkinRibSets.clear();
+    m_SkinWs.clear();
+    m_SkinInsets.clear();
+}
+
 void VspSurf::CreateBodyRevolution( const VspCurve &input_crv, bool match_uparm, int iaxis )
 {
     eli::geom::surface::create_body_of_revolution( m_Surface, input_crv.GetCurve(), iaxis, true, match_uparm );
@@ -692,6 +886,7 @@ void VspSurf::CreateBodyRevolution( const VspCurve &input_crv, bool match_uparm,
     ResetUSkip();
 
     //==== Store Skinning Data ====//
+    ClearBlendData();
     m_SkinType = SKIN_BODY_REV;
     m_BodyRevCurve = input_crv;
 }
@@ -885,6 +1080,9 @@ void VspSurf::SkinRibs( const vector<rib_data_type> &ribs, const vector < int > 
 
     //==== Store Skinning Data ====//
     m_SkinType = SKIN_RIBS;
+
+    ClearBlendData();
+
     m_SkinRibVec = ribs;
     m_SkinDegreeVec = degree;
     m_SkinParmVec = param;
@@ -919,6 +1117,396 @@ void VspSurf::SkinRibs( const vector<rib_data_type> &ribs, bool closed_flag )
     nrib = ribs.size();
     vector< int > degree( nrib - 1, 0 );
     SkinRibs( ribs, degree, closed_flag );
+}
+
+// The one weight shape there is: degree zero in u, cubic in v, control points [1,1,0,0]
+// ramping down across the span or [0,0,1,1] ramping up.  Only where it sits changes.
+static void BuildSpanWeight( double u0, double umax, double v0, double vmax, bool down,
+                             oned_piecewise_surface_type &w )
+{
+    vector< double > upmap, vpmap;
+    upmap.push_back( u0 );
+    upmap.push_back( umax );
+    vpmap.push_back( v0 );
+    vpmap.push_back( vmax );
+
+    w.init_uv( upmap, vpmap );
+
+    double cp[4] = { 0.0, 0.0, 1.0, 1.0 };
+    if ( down )
+    {
+        cp[0] = 1.0; cp[1] = 1.0; cp[2] = 0.0; cp[3] = 0.0;
+    }
+
+    oned_surface_patch_type wp;
+    wp.resize( 0, 3 );
+
+    for ( int j = 0; j <= 3; j++ )
+    {
+        oned_surface_point_type pt;
+        pt << cp[j];
+        wp.set_control_point( pt, 0, j );
+    }
+
+    w.set( wp, 0, 0 );
+}
+
+// Raise both patches to the degree of the higher, so their control points can be added.
+static void MatchDegree( surface_patch_type &a, surface_patch_type &b )
+{
+    if ( a.degree_u() < b.degree_u() ) { a.promote_u_to( b.degree_u() ); }
+    if ( b.degree_u() < a.degree_u() ) { b.promote_u_to( a.degree_u() ); }
+    if ( a.degree_v() < b.degree_v() ) { a.promote_v_to( b.degree_v() ); }
+    if ( b.degree_v() < a.degree_v() ) { b.promote_v_to( a.degree_v() ); }
+}
+
+// Skin one surface per condition set and blend the results.
+//
+// A single skin cannot enforce different conditions on different parts of a cross section
+// without tearing: adjacent control point strips share their end control points, so if two
+// neighboring strips are solved under different constraints their shared patch edge is
+// computed twice and the two answers disagree.  Solving the whole surface once per set and
+// blending is continuous by construction -- every input surface is continuous, the weights
+// are continuous, and control points shared between patches receive identical weights.
+//
+// Each set enforces its conditions exactly at its own station, where its weight is one and
+// the others are zero, and blends in between.  That is the same compromise the condition
+// values already make: they come from one periodic spline through all four stations.
+void VspSurf::SkinRibsBlended( const vector< vector< rib_data_type > > &ribsets, const vector < double > &ws,
+                               const vector < vector < bool > > &insets, const vector < double > & param, bool closed_flag )
+{
+    int nset = ribsets.size();
+
+    if ( nset <= 0 )
+    {
+        return;
+    }
+
+    // Nothing to blend -- take the ordinary path so the common case costs one solve.
+    if ( nset == 1 )
+    {
+        SkinRibs( ribsets[0], param, closed_flag );
+        return;
+    }
+
+    surface_index_type nrib = ribsets[0].size();
+
+    // Every set skins the same cross sections, and param says where each one sits.  A caller
+    // that disagrees would be read past the end of one of these rather than told.
+    if ( ( int )param.size() < nrib )
+    {
+        printf( "SkinRibsBlended: %d parameters for %d ribs\n", ( int )param.size(), ( int )nrib );
+        return;
+    }
+
+    for ( int s = 1; s < nset; s++ )
+    {
+        if ( ( surface_index_type )ribsets[s].size() != nrib )
+        {
+            printf( "SkinRibsBlended: set %d has %d ribs against %d\n",
+                    s, ( int )ribsets[s].size(), ( int )nrib );
+            return;
+        }
+    }
+
+    int nst = ws.size();
+
+    // Where each set is wanted.
+    //
+    // A set's weight is one at its own stations and zero at every other, ramping across the
+    // spans between, so it is nonzero only on the spans touching a station it owns.  Every
+    // other span multiplies that set's solution by zero.  Since a span has two ends, no span
+    // ever needs more than two of the sets, however many there are -- so solving every set
+    // over the whole cross section costs N skins where the answer only ever uses two.
+    vector< vector< double > > vlo( nset ), vhi( nset );
+
+    for ( int s = 0; s < nset; s++ )
+    {
+        for ( int k = 0; k < nst; k++ )
+        {
+            double a = ws[k];
+
+            // The last span closes onto the seam, whose parameter is not known until the
+            // surface exists.  Leave its far end open.
+            double b = 1.0e30;
+            if ( k + 1 < nst )
+            {
+                b = ws[k + 1];
+            }
+
+            if ( insets[s][k] || insets[s][( k + 1 ) % nst] )
+            {
+                vlo[s].push_back( a );
+                vhi[s].push_back( b );
+            }
+        }
+    }
+
+    // Bring the sets onto one patch grid.  Each set is skinned on its own, and the creator
+    // takes a surface's v joints from that set's own rib joints and condition breaks, so two
+    // sets need not agree.  The blend below indexes every set by a single grid, so collect
+    // the joints every set asks for and split every set's ribs to the union.  set_conditions
+    // then reaches the same v-parameterization for each set, since the union already holds
+    // everything it would add, and patch (u,v) is the same span in every set.
+    vector< double > vjoints;
+
+    for ( int s = 0; s < nset; s++ )
+    {
+        general_creator_type gc;
+        std::vector< typename general_creator_type::index_type > max_degree( nrib - 1, 0 );
+
+        if ( !gc.set_conditions( ribsets[s], max_degree, closed_flag ) )
+        {
+            printf( "Failure in SkinRibsBlended set_conditions\n" );
+            return;
+        }
+
+        vector< double > sjoints( 1, gc.get_v0() );
+        for ( surface_index_type j = 0; j < gc.get_number_v_segments(); j++ )
+        {
+            sjoints.push_back( sjoints[j] + gc.get_segment_dv( j ) );
+        }
+
+        vector< double > merged;
+        std::set_union( vjoints.begin(), vjoints.end(), sjoints.begin(), sjoints.end(),
+                        std::back_inserter( merged ), JointLess );
+        vjoints.swap( merged );
+    }
+
+    vector< piecewise_surface_type > surfvec( nset );
+
+    for ( int s = 0; s < nset; s++ )
+    {
+        general_creator_type gc;
+        std::vector< typename general_creator_type::index_type > max_degree( nrib - 1, 0 );
+
+        vector< rib_data_type > ribs( ribsets[s] );
+        for ( surface_index_type i = 0; i < nrib; i++ )
+        {
+            vector< typename general_creator_type::index_type > jdegs;
+            ribs[i].split( vjoints.begin(), vjoints.end(), std::back_inserter( jdegs ) );
+        }
+
+        if ( !gc.set_conditions( ribs, max_degree, closed_flag ) )
+        {
+            printf( "Failure in SkinRibsBlended set_conditions\n" );
+            return;
+        }
+
+        gc.set_u0( param[0] );
+        for ( surface_index_type i = 0; i < gc.get_number_u_segments(); ++i )
+        {
+            gc.set_segment_du( param[i + 1] - param[i], i );
+        }
+
+        if ( !gc.create( surfvec[s], vlo[s], vhi[s] ) )
+        {
+            printf( "Failure in SkinRibsBlended create\n" );
+            return;
+        }
+    }
+
+    // Multiply each solution by its weight surface and sum the products.  Every term is an
+    // exact Bernstein product, so the result is exactly sum_s w_s * S_s: it inherits the
+    // continuity of the surfaces and of the weights rather than approximating it.
+    double u0 = surfvec[0].get_u0();
+    double umax = surfvec[0].get_umax();
+    double vmax = surfvec[0].get_vmax();
+
+    // Assemble the blend a span at a time.
+    //
+    // Between two stations there are only ever two cases.  If both ends belong to the
+    // same set, that set's weight is identically one across the span and every other
+    // set's is identically zero, so the answer is that set's patches -- copied, with no
+    // arithmetic at all.  If the ends belong to different sets, exactly those two
+    // contribute, one ramping down and the other up, and they are the only spans that
+    // cost a product and a sum.
+    //
+    // So the only weight patches that exist are [1,1,0,0] and [0,0,1,1], degree zero in
+    // u and cubic in v.  Where a span sits is a matter of v0 and dv, not of shape, and
+    // nothing has to be built per set or carried across the whole cross section.
+    vector< double > upmap, vpmap;
+    surfvec[0].get_pmap_uv( upmap, vpmap );
+
+    m_Surface.init_uv( upmap, vpmap );
+
+    surface_index_type npu = surfvec[0].number_u_patches();
+    int nvseg = ( int )vpmap.size() - 1;
+
+    // Every set is cut in the same places, because the ribs were all split to the union of
+    // every set's joints before they were skinned.  The assembly below relies on it: it
+    // pairs patches by index, and piecewise::get leaves its output untouched and merely
+    // returns an error code when asked for a patch that is not there, which summed and
+    // stored would put a patch at the origin with nothing said.  Say it here instead.
+    for ( int s = 1; s < nset; s++ )
+    {
+        if ( surfvec[s].number_u_patches() != npu ||
+             ( int )surfvec[s].number_v_patches() != nvseg )
+        {
+            printf( "SkinRibsBlended: set %d has a %d by %d patch grid against %d by %d\n",
+                    s, ( int )surfvec[s].number_u_patches(), ( int )surfvec[s].number_v_patches(),
+                    ( int )npu, nvseg );
+            return;
+        }
+    }
+
+    double uw0 = upmap[0];
+    double uwmax = upmap[upmap.size() - 1];
+
+    // Which set owns each station.  A station belongs to exactly one.
+    vector< int > owner( nst, 0 );
+    for ( int s = 0; s < nset; s++ )
+    {
+        for ( int k = 0; k < nst; k++ )
+        {
+            if ( insets[s][k] )
+            {
+                owner[k] = s;
+            }
+        }
+    }
+
+    for ( int k = 0; k < nst; k++ )
+    {
+        double wa = ws[k];
+        double wb = vpmap[nvseg];
+        if ( k + 1 < nst )
+        {
+            wb = ws[k + 1];
+        }
+
+        // The skin's joints include every station, so each of its segments lies wholly
+        // within one span.
+        int va = -1;
+        int vb = -1;
+        for ( int v = 0; v < nvseg; v++ )
+        {
+            double vmid = 0.5 * ( vpmap[v] + vpmap[v + 1] );
+            if ( vmid > wa && vmid < wb )
+            {
+                if ( va < 0 )
+                {
+                    va = v;
+                }
+                vb = v;
+            }
+        }
+
+        if ( va < 0 )
+        {
+            continue;
+        }
+
+        int g0 = owner[k];
+        int g1 = owner[( k + 1 ) % nst];
+
+        if ( g0 == g1 )
+        {
+            for ( int v = va; v <= vb; v++ )
+            {
+                for ( surface_index_type u = 0; u < npu; u++ )
+                {
+                    surface_patch_type sp;
+                    if ( surfvec[g0].get( sp, u, v ) != piecewise_surface_type::NO_ERRORS )
+                    {
+                        printf( "SkinRibsBlended: no patch %d %d in set %d\n", ( int )u, v, g0 );
+                        return;
+                    }
+                    if ( m_Surface.set( sp, u, v ) != piecewise_surface_type::NO_ERRORS )
+                    {
+                        printf( "Failure setting patch in SkinRibsBlended\n" );
+                        return;
+                    }
+                }
+            }
+            continue;
+        }
+
+        // A transition.  One weight ramps down across the span, the other up; split each
+        // at whatever joints fall inside, which is a handful, not the whole quilt.
+        oned_piecewise_surface_type wdn, wup;
+        BuildSpanWeight( uw0, uwmax, wa, wb, true, wdn );
+        BuildSpanWeight( uw0, uwmax, wa, wb, false, wup );
+
+        for ( int v = va; v < vb; v++ )
+        {
+            wdn.split_v( vpmap[v + 1] );
+            wup.split_v( vpmap[v + 1] );
+        }
+
+        for ( int v = va; v <= vb; v++ )
+        {
+            oned_surface_patch_type wp0, wp1;
+            wdn.get( wp0, 0, v - va );
+            wup.get( wp1, 0, v - va );
+
+            for ( surface_index_type u = 0; u < npu; u++ )
+            {
+                surface_patch_type s0, s1, p0, p1, acc;
+
+                if ( surfvec[g0].get( s0, u, v ) != piecewise_surface_type::NO_ERRORS ||
+                     surfvec[g1].get( s1, u, v ) != piecewise_surface_type::NO_ERRORS )
+                {
+                    printf( "SkinRibsBlended: no patch %d %d in set %d or %d\n", ( int )u, v, g0, g1 );
+                    return;
+                }
+
+                p0.product1d( s0, wp0 );
+                p1.product1d( s1, wp1 );
+
+                MatchDegree( p0, p1 );
+                acc.sum( p0, p1 );
+
+                if ( m_Surface.set( acc, u, v ) != piecewise_surface_type::NO_ERRORS )
+                {
+                    printf( "Failure setting patch in SkinRibsBlended\n" );
+                    return;
+                }
+            }
+        }
+    }
+
+    ResetFlipNormal();
+    ResetUSkip();
+
+    //==== Store Skinning Data ====//
+    m_SkinType = SKIN_RIBS;
+    m_SkinRibVec = ribsets[0];
+    m_SkinDegreeVec = vector< int >( nrib - 1, 0 );
+    m_SkinParmVec = param;
+    m_SkinClosedFlag = closed_flag;
+
+    // Keep everything the blend was made of.  m_SkinRibVec alone is one group's ribs, which
+    // is not this surface and, once a group's conditions are confined to its own spans, not
+    // even a valid rib for the uniform creator.
+    m_SkinBlendedFlag = true;
+    m_SkinRibSets = ribsets;
+    m_SkinWs = ws;
+    m_SkinInsets = insets;
+}
+
+// Skin again from modified rib sets, keeping the weights and parameterization this surface
+// was blended with.
+void VspSurf::ReSkinBlended( const vector< vector< rib_data_type > > & sets )
+{
+    SkinRibsBlended( sets, m_SkinWs, m_SkinInsets, m_SkinParmVec, m_SkinClosedFlag );
+}
+
+void VspSurf::SkinRibsBlended( const vector< vector< rib_data_type > > &ribsets, const vector < double > &ws,
+                               const vector < vector < bool > > &insets, bool closed_flag )
+{
+    if ( ribsets.empty() )
+    {
+        return;
+    }
+
+    surface_index_type nrib = ribsets[0].size();
+    vector< double > param( nrib );
+    for ( int i = 0; i < nrib; i++ )
+    {
+        param[i] = 1.0 * i;
+    }
+    SkinRibsBlended( ribsets, ws, insets, param, closed_flag );
 }
 
 void VspSurf::SkinRibsUniform( const vector<rib_data_type> &ribs, const vector < int > &degree, const vector < double > & param, bool closed_flag )
@@ -967,6 +1555,9 @@ void VspSurf::SkinRibsUniform( const vector<rib_data_type> &ribs, const vector <
 
     //==== Store Skinning Data ====//
     m_SkinType = SKIN_RIBS;
+
+    ClearBlendData();
+
     m_SkinRibVec = ribs;
     m_SkinDegreeVec = degree;
     m_SkinParmVec = param;
@@ -1004,6 +1595,8 @@ void VspSurf::SkinRibsUniform( const vector<rib_data_type> &ribs, bool closed_fl
 
 void VspSurf::SkinCubicSpline( const vector<rib_data_type> &ribs, const vector<double> &param, const vector <double> &tdisc, const vector < int > &degree, bool closed_flag )
 {
+    ClearBlendData();
+
     spline_creator_type sc;
     surface_index_type nrib, i;
 
@@ -1317,6 +1910,11 @@ vec3d VspSurf::CompTanUW01( double u01, double v01 ) const
 //===== Compute Second Derivative U,U   =====//
 vec3d VspSurf::CompTanUU( double u, double v ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.f_uu( u, v ) );
 
@@ -1327,6 +1925,11 @@ vec3d VspSurf::CompTanUU( double u, double v ) const
 //===== Compute Second Derivative W,W   =====//
 vec3d VspSurf::CompTanWW( double u, double v ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.f_vv( u, v ) );
 
@@ -1337,6 +1940,11 @@ vec3d VspSurf::CompTanWW( double u, double v ) const
 //===== Compute Second Derivative U,W   =====//
 vec3d VspSurf::CompTanUW( double u, double v ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.f_uv( u, v ) );
 
@@ -1347,6 +1955,11 @@ vec3d VspSurf::CompTanUW( double u, double v ) const
 //===== Compute Tangent In U Direction   =====//
 vec3d VspSurf::CompTanU( double u, double v ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.f_u( u, v ) );
 
@@ -1357,6 +1970,11 @@ vec3d VspSurf::CompTanU( double u, double v ) const
 //===== Compute Tangent In W Direction   =====//
 vec3d VspSurf::CompTanW( double u, double v ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.f_v( u, v ) );
 
@@ -1366,6 +1984,11 @@ vec3d VspSurf::CompTanW( double u, double v ) const
 
 vec3d VspSurf::CompPntRST( double r, double s, double t ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.fRST( r, s, t ) );
 
@@ -1375,6 +1998,11 @@ vec3d VspSurf::CompPntRST( double r, double s, double t ) const
 
 vec3d VspSurf::CompTanR( double r, double s, double t ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.f_R( r, s, t ) );
 
@@ -1384,6 +2012,11 @@ vec3d VspSurf::CompTanR( double r, double s, double t ) const
 
 vec3d VspSurf::CompTanS( double r, double s, double t ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.f_S( r, s, t ) );
 
@@ -1393,6 +2026,11 @@ vec3d VspSurf::CompTanS( double r, double s, double t ) const
 
 vec3d VspSurf::CompTanT( double r, double s, double t ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.f_T( r, s, t ) );
 
@@ -1403,6 +2041,11 @@ vec3d VspSurf::CompTanT( double r, double s, double t ) const
 //===== Compute Point On Surf Given  U W =====//
 vec3d VspSurf::CompPnt( double u, double v ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.f( u, v ) );
 
@@ -1413,6 +2056,11 @@ vec3d VspSurf::CompPnt( double u, double v ) const
 //===== Compute Point On Surf Given  U W =====//
 vec3d VspSurf::CompDegenPnt( const int &type, const double &u, double v ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     const double wmax = GetWMax();
 
@@ -1443,6 +2091,11 @@ vec3d VspSurf::CompDegenPnt( const int &type, const double &u, double v ) const
 //===== Compute Normal  =====//
 vec3d VspSurf::CompNorm( double u, double v ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.normal( u, v ) );
 
@@ -1457,6 +2110,11 @@ vec3d VspSurf::CompNorm( double u, double v ) const
 
 vec3d VspSurf::CompAveNorm( double u, double v ) const
 {
+    if ( Empty() )
+    {
+        return vec3d();
+    }
+
     vec3d rtn;
     surface_point_type p( m_Surface.average_normal( u, v ) );
 
@@ -1483,6 +2141,15 @@ vec3d VspSurf::CompAveNorm01( double u01, double v01 ) const
 //===== Compute Surface Curvature Metrics Given  U W =====//
 void VspSurf::CompCurvature( double u, double w, double& k1, double& k2, double& ka, double& kg ) const
 {
+    if ( Empty() )
+    {
+        k1 = 0.0;
+        k2 = 0.0;
+        ka = 0.0;
+        kg = 0.0;
+        return;
+    }
+
     double umn = m_Surface.get_u0();
     double wmn = m_Surface.get_v0();
 
@@ -1942,9 +2609,12 @@ void VspSurf::MakeVTess( int num_v, std::vector<double> &vtess, int n_cap, bool 
             vtess[j] = vabsmin;
             j++;
         }
+        // The lower surface is laid out with the same spacing as the upper surface below, so the
+        // two halves mirror each other.  That leaves the lower half one step short of vlelow; the
+        // point that reaches it is added after these loops.
         for ( ; j < jle; ++j )
         {
-            vtess[j] = vmin + ( vlelow - vmin ) * Cluster( 2.0 * static_cast<double>( j ) / ( nv - 1 ), m_TECluster, m_LECluster );
+            vtess[j] = vmin + ( vlelow - vmin ) * Cluster( static_cast<double>( j ) / jle, m_TECluster, m_LECluster );
         }
         if ( degen )
         {
@@ -2174,25 +2844,27 @@ void VspSurf::Tesselate( const vector<double> &u, const vector<double> &v, std::
             vec3d norm = nmat[i][j];
             if ( norm.mag() < 1e-6 ) // Zero normal vector
             {
-                double tmax = GetWMax();
-                double thalf = 0.5 * GetWMax();
-                if ( v[j] <= TMAGIC ) // Near TE lower
+                // The strip through this parameter has no area, so its normal has to come from
+                // off the strip.  FindNearbyNorm decides where from; all the block supplies is a
+                // tie-break.  Tesselate is handed one block at a time, already split at its
+                // feature lines, so at the low edge of a block the surface lies up and at the
+                // high edge it lies down.
+                //
+                // This replaces four hard coded tests against TMAGIC and the half way point of W,
+                // which only described where a wing keeps its degenerate strips.
+                double dv = 1.0;
+                if ( j == nv - 1 )
                 {
-                    norm = CompNorm( u[i], TMAGIC + 1e-6 );
+                    dv = -1.0;
                 }
-                else if ( v[j] <= thalf && v[j] >= ( thalf - TMAGIC ) ) // Near leading edge
+
+                double du = 1.0;
+                if ( i == nu - 1 )
                 {
-                    norm = CompNorm( u[i], thalf - ( TMAGIC + 1e-6 ) );
+                    du = -1.0;
                 }
-                else if ( v[j] >= thalf && v[j] <= ( thalf + TMAGIC ) ) // Near leading edge
-                {
-                    norm = CompNorm( u[i], thalf + TMAGIC + 1e-6 );
-                }
-                else if ( v[j] >= ( tmax - TMAGIC ) ) // Near TE upper
-                {
-                    norm = CompNorm( u[i], tmax - ( TMAGIC + 1e-6 ) );
-                }
-                norm.normalize();
+
+                FindNearbyNorm( u[i], v[j], du, dv, norm );
             }
 
             if ( m_FlipNormal )

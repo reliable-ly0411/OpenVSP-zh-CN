@@ -1,3 +1,328 @@
+# [OpenVSP 3.53.0](https://github.com/OpenVSP/OpenVSP/releases/tag/OpenVSP_3.53.0)
+
+2026-09-25
+
+OpenVSP 3.53.0
+
+Some cool related features, a bunch of library and build system
+updates and a handful of unimportant fixes.
+
+Over the years, OpenVSP's development has often been driven by certain
+alpha users.  They often sat next to the developer (or at least had
+their ear) and were able to steer development by saying things like:
+'make it do this...' or 'it would be cool if...'.  OpenVSP would not
+be what it is today without their input.  The OG OpenVSP alpha user is
+Andy Hahn.
+
+The OpenVSP v2 (and earlier) fuselage component had simple control
+of how the body was lofted from nose to tail (today called skinning).
+It did many things, but there were obvious gaps in its capabilities.
+
+When we were doing the v3 re-write (~2015), Andy said 'make it do
+the missing things.'  And so we did, and the v3 skinning for
+fuselage and stack were born.
+
+Ever since, Andy has complained that the v3 skinning is too
+complicated.  He isn't wrong.
+
+So recently, some users came to me and said 'Can you make skinning
+more complicated?' and I said 'Hold my drink, I got you.'
+
+So this one's for you Andy.
+
+Skinning allows you to specify how certain spines (top, bottom, left,
+right) along a body are lofted.  While you can set the values of the
+angle, slew, strength, and curvature separately for each spine, the
+choice of which parameters to set (or leave un-set) had to be the same
+at each station.
+
+This restriction has been lifted.  You can now choose to set (or leave
+un-set) the skinning parameters independently for each spine.  This is
+great for designs where you want a sharp corner in some places, but
+smooth behavior other places.
+
+In addition, you are no longer limited to just the TBLR spines.  You
+can insert additional spines at a user-defined location.  Be judicious,
+a little here goes a long way.  Only use this if you need to.
+
+The orientation of the coordinate system used for defining the tangent
+and curvature vectors in terms of angle and slew was previously based
+on a virtual circle at each section.  Values were specified at TBLR
+and then interpolated around this virtual circle.  This worked well
+enough and nobody (except me) ever really knew about the virtual circle.
+
+The added control left this solution a little lacking, so now there
+is an option to use the local curve's shape to define the local
+coordinate system.  This option 'Angle Basis From Curve' is subtle,
+but if you need it, you need it.
+
+To help with the madness, skinning control is now visualized with
+colored arrows along each spine that illustrate what you're controlling.
+There is a color key to map each one to TBLR to CMGY - with user-defined
+in blue (with the active one in red).  The 'before' side is dashed,
+the 'after' side is solid.  This probably should have been there from
+the start, but sometimes the developer doesn't see the obvious.
+
+In addition to some new math, these changes required some changes to
+the old skinning math.  Consequently, the exact surface definition
+for old files will change a tiny amount.  This will break unit tests
+(I'm looking at you John and AJ) that expect exact matches.  There
+should be no significant changes - let me know if there is.
+
+Previously, our stack and fuselage surfaces were circumferentially
+cubic.  Now, if you use different controls along different spines,
+you will get 6th order surfaces that way.  It shouldn't matter,
+but maybe some downstream tools will struggle, so I'm just letting
+you know.
+
+Since its introduction, there has been much confusion about Stack
+vs Fuselage in OpenVSP.  Many users go straight to Fuselage and
+never give Stack a second look.  However, in most situations, they
+should be using Stack for everything they're using Fuselage for.
+I've tried everything from educating to negotiating -- nothing
+seems to change this.  So, I'm going to try something else.
+Fuselages can now be converted into Stacks (via the GUI or API).
+Everything should convert -- it should produce the exact same
+surface.  Your SubSurfaces, structures parts, attributes, and
+CFDMesh sources should be transferred over.  ParmID's and
+GeomID's will be left intact -- so your Links, Design Vars, and
+Advanced Links will still be connected (you may need to change
+what your link calculates, but it should stay connected).  So,
+if you've used Fuselage in the past but want to change your ways,
+there is now a button for that.
+
+The other big thing in this release is a sweeping update to our build
+system.  Some time ago, CMake updated to v4 -- breaking lots of stuff
+that used v3.  While most of VSP and our dependencies worked fine
+with v4, there were a few libraries that could not transition
+gracefully.  I've had to force v3 until I had time to deal with the
+mess.  That time has finally come.
+
+The OpenVSP build process should now work fine with CMake v4.  This
+required updating STEPCode, libxml2, and GLEW.  Hopefully this is
+better for everyone.
+
+If you've tried to track *.vsp3 files with version control, you may
+have noticed that the order of some things change for no apparent
+reason.  This has hopefully been fixed -- once saved with this
+version, the order of things in the file should be stable on
+subsequent saves.  Hopefully this will make version controlling
+more pleasant.
+
+There are a handful of other fixes in here that probably don't
+matter.  A user would really have to be trying hard to hit these
+defects.  They're good to fix, but aren't worth sweating.
+
+Features:
+- Independent skinning controls (not just values) for spines
+- User-defined intermediate skinning spines
+- Angle Basis From Curve option for skinning
+- Visualization of skinning vectors
+- Convert Fuselage to Stack
+
+Build System:
+- STEPCode 0.8.1 (with some tweaks)
+- libxml2 2.15.4
+- GLEW 2.3.1
+- Build updated to be compatible with CMake 4
+
+Bug Fixes:
+- Entities in *.vsp3 files should now have stable ordering
+
+
+---
+
+
+# [OpenVSP 3.52.2](https://github.com/OpenVSP/OpenVSP/releases/tag/OpenVSP_3.52.2)
+
+2026-09-23
+
+OpenVSP 3.52.2
+
+Good news - the stuff I was scared of in 3.52.0 seems to be working fine.
+Bad news - one of the changes I wasn't worried about bit me.  So here
+is a quick bugfix release to fix that up.
+
+Fixes:
+- Fix tessellation spacing on wing lower surface.
+
+
+---
+
+
+# [OpenVSP 3.52.1](https://github.com/OpenVSP/OpenVSP/releases/tag/OpenVSP_3.52.1)
+
+2026-09-19
+
+OpenVSP 3.52.1
+
+Quick fix for a scaling bug in CompGeom that came in from merging too many
+different things together.
+
+Fixes:
+- Fix CompGeom scaling / un-scaling bug
+
+
+---
+
+
+# [OpenVSP 3.52.0](https://github.com/OpenVSP/OpenVSP/releases/tag/OpenVSP_3.52.0)
+
+2026-09-19
+
+OpenVSP 3.52.0
+
+This one almost went out the door as a .4 bugfix-only release made from
+trimmings on the floor resulting from a handful of big features I am working
+on.  Those big features aren't quite ready to release yet, but by the time
+I was done sweeping up the mess, it looked more like a .0 than a .4 release.
+In addition to the bycatch, there are a group of fixes for problems
+identified by some users.
+
+The tidy up was initiated because I was getting annoyed dealing with fixes
+in four separate piles, so I decided to stack them all together and release
+them.  Now I can rebase all my work on top of this and keep going.  The
+upcoming features are really cool, but you'll just have to be patient.
+If you like fewer bugs in your tools, you should still update.
+
+If you rummage around in the commit messages here, you'll find breadcrumbs
+about the in-progress features.  I'm not saying what they are, but I'm
+also too lazy / not paranoid enough for the level of op-sec to go
+back and scrub everything.  On the other hand, I am aware of the leaks
+and I don't want you to think you got one over on me.
+
+The most 'feature' part of this release is a handful of improvements
+to FitModel.  Most importantly, FitModel has gained API support for all
+your automated fitting needs.  In the GUI, things are a little nicer,
+with a few small tweaks - most noticable, you can now 'undo' an
+optimization step.
+
+The most scary thing here is a change to how ID's are remapped when collisions
+happen.  This is a substantial change to something that is very core, so I
+don't take this lightly.  OpenVSP uses unique ID's for a lot of entities
+(namely Parms and Geoms).  Sometimes (when you insert a file into itself,
+or when you paste a duplicate geometry) collisions occur -- the new entity
+has the same ID as the preexisting entity.  This is bad.  So, previously
+when a collision is detected (during the paste operation), a new ID is
+created and any later (during the paste) reference to the colliding ID
+is replaced with the new ID on the fly.
+
+The problem arises when an ID within the pasted set of entities referrs to
+an entity outside the pasted set of entities.  In that situation, a new ID
+is created, but no new entity is created with that ID.  This results in
+an invalid link.  This was safe for about a decade because the problem
+never came up.  However, the introduction of Routing Geometry (3.43.0)
+made it possible.  If you copy/paste a Routing Geom without including
+everything the Routing geom, then the route points will point to nowhere.
+
+So now the ID remapping is a two-pass process.  On the first pass, new ID's
+are created for entities within the paste set (but not for references).  On
+the second pass, things are created with the new ID's.  Any ID that referrs
+to an entity outside the paste set will be preserved.  So, if you copy
+a Routing geom without any of the things it points at, it will still work.
+
+If your Routing geom points at GeomA and GeomB, and then you copy/paste
+the Routing geom and GeomA (but not GeomB), the new Routing Geom will now
+point at GeomACopy and GeomB (the original).  It is pretty slick.
+
+I say this is scary because it is really core code that is pretty tricky
+and hasn't been touched in ~10 years.  Any time I go near it, I get a bit
+nervous.  That said, I've beaten on this quite a bit and I feel good about
+it.
+
+A few of the bugs were user reported.  Keenan noticed that a recent fix
+for how planar slice automatic bounds were calculated had changed the
+bounds on a test case -- hopefully the new bounds will achieve the best
+of both worlds.
+
+Mass Properties calculation is now faster and more accurate.  There was
+a bug in the inertia calculation for solids that I had been compensating
+for by jacking up the tessellation of each slice.  That made it slow,
+the fix was to find the bug and then not over-resolve. Thanks
+Mike R. for the test case.
+
+The GUI controls for the N parameter used from attachment could not be
+used.  They lie within a box that was too small.
+
+Converting a zero height (or width) rounded rectangle to CEdit would crash.
+The CEdit screen would also crash if you deleted the XSec while the GUI
+was still open.  Both fixed.
+
+The *.vkey file written alongside *.vspgeom files was missing some surfaces
+if there were no triangles outside a subsurface.  I.e. if you walpaper
+your entire Geom with SubSurfaces, then the surface would vanish from
+the *.vkey file.  I don't know why Dave insisted on doing this, but now
+it works.
+
+There has been a problem using FindParm( container_id, name, group ) from
+the API -- you couldn't find all Parms.  Hopefully that has been sorted
+and Parms from SubSurfacex, XSecs, Textures, Mesh Sources, Bogies, Routing
+Points, etc. should all be findable.  Lights, control surface groups and
+FEA assembly connections were entirely unreachable.  They should be
+reachable now.
+
+VSPAERO control surfaces should now work on geom's whose name contains
+an underscore.  The Reynolds number was scaled wrong in VSPAERO, this has
+been fixed.
+
+There was another pretty heavy pass over the API - auditing coverage
+and documentation.  Hopefully things are in a better place and we won't
+have another heavy pass like this in the future.
+
+The 'Scale' feature in OpenVSP has been chronically plagued with
+errors of omission.  The whole thing has been audited and hopefully
+we're close to full coverage for now.  If you try to scale a model and
+it doesn't scale the way you'd like, let me know.
+
+The process of resetting everything when a model is renewed has been
+simplified and hopefully made more complete.  Parms now remember their
+initial value, so resetting to default is straightforward.
+
+Bryan S. had AI help him fix a bunch of issues he was encountering
+with FEA Structures.  Thanks
+
+In certain situations of degenerate surfaces, normal vector
+calculation has been improved.  This will remove some visual artifacts
+that have been bothering me for about a decade.
+
+And a bunch more small fixes all over the place.  There are so many
+fixes that even looking at the changes I don't remember them all.
+They certainly aren't all listed here.
+
+Features:
+- FitModel undo button
+- FitModel GUI improvements
+- FitModel API access
+- Read point clouds as .csv files
+- Read unformatted Plot3D and Cart3D .tri files
+- Expose Parasite Drag flow conditions in Results - thanks Ojasvi
+
+Bugs:
+- Fix ID remapping when referencing an ID outside of the DecodeXml set
+- Fix scaling of Reynolds number in VSPAERO
+- Fix Mass Properties calculation - now better and faster
+- API access to lights, control surface groups and FEA assembly connections
+- AddMaterial now writes the material to the file
+- Tag file names carry a . separator; CFDMesh writes them to a subdirectory
+- Fix Parm lookup by container, name and group after a file load
+- Fix NGonMesh contributing nothing to CompGeom and mass properties
+- Fix WireGeom not moving when the Geom moves
+- Fix WireGeom's four patch types sharing one Parm name
+- Fix VSPAERO control surface lookup for a Geom name containing an underscore
+- Fix export crash on a model with no geometry
+- Fix crashes and bad geometry from degenerate plates and zero area triangles
+- Fix a polygon mesh being used after the sweep that deletes it
+- Fix vspgeom key file dropping a part covered entirely by subsurfaces
+- Fix Cobra exiting on a zero nose or aft length
+- Fix Geom rename not reaching the rest of the model
+- Register three GUI screen enums and the Background3D error code for scripts
+- Fix the 'N' attachment buttons being outside the layout
+- Fix colour picker deactivation
+
+
+---
+
+
 # [OpenVSP 3.51.3](https://github.com/OpenVSP/OpenVSP/releases/tag/OpenVSP_3.51.3)
 
 2026-08-17

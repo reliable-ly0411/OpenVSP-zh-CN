@@ -10,33 +10,42 @@
 
 #include "Geom.h"
 
+class UnformattedIn;
 
 //==== Wireframe Geom ====//
+//==== A Geom whose shape is a grid of points ====//
 class WireGeom : public Geom
 {
 public:
     WireGeom( Vehicle* vehicle_ptr );
     virtual ~WireGeom();
 
-    virtual void UpdateSurf();
-    virtual void UpdateDrawObj();
+    virtual void UpdateSurf() override;
+    virtual void UpdateXForm() override;
+    virtual void UpdateDrawObj() override;
+    virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec ) override;
 
-    virtual void Scale();
-    virtual void UpdateBBox();
+    virtual void ApplyScale( double currentScale ) override;
+    // Put the main points where this Geom sits, and work out the normals there.  Called
+    // whenever the placement or the shape changes, so moving the Geom moves what is drawn.
+    virtual void UpdateXFormPts();
+
+    virtual void UpdateBBox() override;
     virtual Matrix4d GetTotalTransMat() const;
 
-    virtual void ReadP3D( FILE* fp, int ni, int nj, int nk );
+    virtual void ReadP3D( FILE* fp, int ni, int nj, int nk, int nvar = 3 );
+    virtual void ReadP3D( UnformattedIn &fp, int ni, int nj, int nk, int nvar = 3 );
     virtual void ReadXSec( FILE* fp );
 
-    virtual xmlNodePtr EncodeXml( xmlNodePtr & node );
-    virtual xmlNodePtr DecodeXml( xmlNodePtr & node );
+    virtual xmlNodePtr EncodeXml( xmlNodePtr & node ) override;
+    virtual xmlNodePtr DecodeXml( xmlNodePtr & node ) override;
 
-    virtual vector< TMesh* > CreateTMeshVec( bool skipnegflipnormal, const int & n_ref = 0 ) const;
+    virtual vector< TMesh* > CreateTMeshVec( bool skipnegflipnormal, const int & n_ref = 0 ) const override;
 
-    virtual void CreateDegenGeom( vector<DegenGeom> &dgs, bool preview = false, const int & n_ref = 0 );
+    virtual void CreateDegenGeom( vector<DegenGeom> &dgs, bool preview = false, const int & n_ref = 0 ) override;
 
-    virtual int GetNumTotalHrmSurfs() const;
-    virtual void WriteXSecFile( int geom_no, FILE* dump_file );
+    virtual int GetNumTotalHrmSurfs() const override;
+    virtual void WriteXSecFile( int geom_no, FILE* dump_file ) override;
 
     // Scale Transformation Matrix
     Matrix4d m_ScaleMatrix;
@@ -65,7 +74,46 @@ public:
 
 protected:
 
+    // The wireframe drawn as a polyline, for the case where it is a single row or column of
+    // points and there are no quads to make a mesh out of.  Empty otherwise.
+    DrawObj m_LineDO;
+
     vector < vector < vec3d > > m_WirePts;
+
+    // The grid, placed, and the normals worked out there so a scale in the transform counts.
+    static void BuildWireXFormPts( const vector < vector < vec3d > > &main_pts, const Matrix4d &trans,
+                                   bool invert,
+                                   vector < vector < vec3d > > &xform_pts,
+                                   vector < vector < vec3d > > &xform_norm );
+
+    // Its extent.
+    static void BuildWireBndBox( const vector < vector < vec3d > > &xform_pts, BndBox &bbox );
+
+    // Draw it as a grid of quads.
+    static void BuildWireDrawObjs( const vector < vector < vec3d > > &xform_pts,
+                                   const vector < vector < vec3d > > &xform_norm,
+                                   vector < DrawObj > &draw_obj_vec );
+
+
+    // The points after they have been rearranged -- swapped, reversed, skipped, strided,
+    // patched -- but before this Geom's placement is applied.  This is the shape itself, which
+    // is what another Geom can stand in for.
+public:
+    virtual const vector < vector < vec3d > > & GetMainWirePts() const
+    {
+        return m_MainPts;
+    }
+    virtual Matrix4d GetWireTransMat() const
+    {
+        return GetTotalTransMat();
+    }
+    virtual bool GetWireInvert() const
+    {
+        return m_InvertFlag() ^ m_OtherInvertFlag;
+    }
+
+protected:
+    vector < vector < vec3d > > m_MainPts;
     vector < vector < vec3d > > m_XFormPts;
 
     vector < vector < vec3d > > m_XFormNorm;

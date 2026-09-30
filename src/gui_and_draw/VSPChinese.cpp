@@ -14,6 +14,32 @@ using Entry = std::pair<const char *, const char *>;
 const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
     static const std::unordered_map<std::string, std::string> table = {
+        // OpenVSP 3.53.0 skinning, conversion and FitModel display text.
+        { "Analysis Output", "分析输出" },
+        { "Sort by Dist", "按距离排序" },
+        { "Undo", "撤销" },
+        { "Ok", "确定" },
+        { "Convert to Stack", "转为堆叠几何体" },
+        { "Convert Fuselage to Stack Geom (can not be un-done)?", "将机身转为堆叠几何体？此操作不可撤销。" },
+        { "Angle Basis From Curve", "以截面曲线为角度基准" },
+        { "Show Tangent Vectors", "显示切向量" },
+        { "Show Curvature Vectors", "显示曲率向量" },
+        { "Sides", "四侧" },
+        { "Spines", "脊线" },
+        { "L/R Sym", "左右对称" },
+        { "Spine Skinning", "脊线蒙皮" },
+        { "Show Blending Vectors", "显示过渡向量" },
+        { "Spine", "脊线" },
+        { "Surf", "曲面" },
+        { "none", "无" },
+        { "fix", "固定" },
+        { "free", "自由" },
+        { "Surface index a target point is matched to", "目标点匹配的曲面索引" },
+        { "Measure skinning angles from the cross section curve rather than from an assumed circle.", "以截面曲线而非假定圆测量蒙皮角度。" },
+        { "Position of this spine around the cross section, on a [0, 1] basis", "脊线沿截面周向的位置，范围为 [0, 1]" },
+        { "Mirror this spine to the other side", "将此脊线镜像到左右另一侧" },
+        { "Mirror this spine to the other half", "将此脊线镜像到上下另一半" },
+
         // Main menus and common actions.
         { "File", "文件" }, { "Edit", "编辑" }, { "Window", "窗口" },
         { "View", "视图" }, { "Model", "模型" }, { "Analysis", "分析" },

@@ -104,6 +104,7 @@ public:
     string AddGeom( const GeomType & type );
     string AddGeom( Geom* add_geom );
     string AddMeshGeom( int normal_set, int degen_set = vsp::SET_NONE, bool suppressdisks = false, bool skipnegflipnormal = false, int n_ref = 0, bool checkFlat = false, const string & singleGeomID = string() );
+    string AddMeshGeom( BndBox & bbox, int normal_set, int degen_set = vsp::SET_NONE, bool suppressdisks = false, bool skipnegflipnormal = false, int n_ref = 0, bool checkFlat = false, const string & singleGeomID = string() );
 
     void SetSavedXSec( XSec * xSec );
     XSec * GetSavedXSec();
@@ -115,6 +116,10 @@ public:
     vector< TMesh* > CreateTMeshVec( int normal_set );
     vector< TMesh* > CreateTMeshVec( const vector < string > &geom_vec );
     vector< TMesh* > CreateTMeshVec( const string &geomid );
+
+    vector< TMesh* > CreateTMeshVec( int normal_set, BndBox & bbox );
+    vector< TMesh* > CreateTMeshVec( const vector < string > &geom_vec, BndBox & bbox );
+    vector< TMesh* > CreateTMeshVec( const string &geomid, BndBox & bbox );
 
     vector< TetraMassProp* > CreateTetraMassPropVec( int set );
     vector< TetraMassProp* > CreateTetraMassPropVec( const string &geomid );
@@ -141,7 +146,6 @@ public:
     void DeleteActiveGeomVec();
     void CopyActiveGeomVec();
     void DeleteGeomVec( const vector<string> & del_vec );
-    void DeleteGeom( const string & geom_id );
     void AddTopGeomID( const string & geom_id, const string &insert_after_id = string() );
     void RemoveTopGeomID( const string & geom_id );
     void CutGeomVec( const vector<string> & cut_vec );
@@ -150,6 +154,10 @@ public:
     vector< string > PasteClipboard();
     bool IDinClipboard( const string & id );
     vector< string > CopyGeomVec( const vector<string> & geom_vec );
+
+    // Replaces a Fuselage with a Stack of the same shape, in the Fuselage's place in the tree
+    // and under its ID.  Returns that ID, or an empty string if it cannot be converted.
+    string ConvertFuselageToStack( const string & fuse_id );
 
     void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
 
@@ -172,13 +180,9 @@ public:
     void CopyPasteSet(int copyIndex, int pasteIndex);
 
     //==== Geom Type Data =====//
-    vector< string > GetValidTypeGeoms();
-    vector< GeomType > GetEditableGeomTypes();
-
     int GetNumGeomTypes()                                    { return ( int )m_GeomTypeVec.size(); }
     int GetNumFixedGeomTypes();
     GeomType GetGeomType( int index );
-    void SetGeomType( int index, const GeomType & type );
 
     BndBox GetBndBox()                                        { return m_BBox; }
     BndBox GetScaleIndependentBndBox()                        { return m_ScaleIndependentBBox; }
@@ -516,6 +520,7 @@ public:
     // FitModelMgr
     BoolParm m_SelectOneFlag;
     BoolParm m_SelectBoxFlag;
+    IntParm m_SurfIndx;
     IntParm m_UType;
     IntParm m_WType;
     Parm m_UTargetPt;
@@ -690,6 +695,11 @@ protected:
     void AddDefaultAttributes();
 
 private:
+
+    // Erase and free a Geom without touching the hierarchy.  Only DeleteGeomVec calls this,
+    // after RemoveGeomVecFromHierarchy has detached it.
+    void DeleteGeom( const string & geom_id );
+
 
     void Wype();
 };

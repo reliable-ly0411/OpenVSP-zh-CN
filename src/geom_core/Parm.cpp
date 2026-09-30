@@ -9,6 +9,7 @@
 
 #include "Parm.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "LinkMgr.h"
 #include <cfloat>
 
@@ -29,6 +30,7 @@ Parm::Parm()
     m_Type = vsp::PARM_DOUBLE_TYPE;
     m_Val = 0.0;
     m_LastVal = 0.0;
+    m_InitVal = 0.0;
     m_UpperLimit =  1.0e16;
     m_LowerLimit = -1.0e16;
     m_ActiveFlag = true;
@@ -69,7 +71,24 @@ void Parm::Init( const string& name, const string& group_name, ParmContainer* co
         m_Container->AddParm( m_ID );
     }
 
+    // Taken after the limits are on, since Set above ran against the limits a bare Parm
+    // starts with and the value may have been pulled into range since.  This is the value
+    // the Parm actually holds once it is set up, which is what has to be gone back to.
+    m_InitVal = m_Val;
+
     m_ParmAttrCollection.SetCollAttach( m_ID, vsp::ATTROBJ_PARM );
+}
+
+//==== Put The Parm Back The Way A New One Starts ====//
+void Parm::ResetToInitVal()
+{
+    // Through Set, so a derived Parm gets to keep whatever it works out from the value --
+    // the result a FractionParm carries alongside its fraction, say -- and so the container
+    // hears about it.  Nothing to say when the Parm is already there, which most are.
+    if ( m_Val != m_InitVal )
+    {
+        Set( m_InitVal );
+    }
 }
 
 void Parm::ReSetLinkContainerID()
@@ -362,7 +381,7 @@ void Parm::DecodeXml( xmlNodePtr & node, bool detailed )
         val = XmlUtil::FindDoubleProp( n, "Value", m_Val );
 
         string oldID = XmlUtil::FindStringProp( n, "ID", m_ID );
-        string newID = ParmMgr.RemapID( oldID, m_ID );
+        string newID = IDMgr.RemapID( oldID, m_ID );
 
 
         if( newID.compare( m_ID ) != 0 )        // they differ

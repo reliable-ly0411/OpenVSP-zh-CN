@@ -92,9 +92,8 @@ HingeGeom::~HingeGeom()
 }
 
 //==== Scale ====//
-void HingeGeom::Scale()
+void HingeGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
 
     m_JointTranslate *= currentScale;
     m_JointTransMin *= currentScale;
@@ -108,7 +107,6 @@ void HingeGeom::Scale()
     m_PrimYOffRel *= currentScale;
     m_PrimZOffRel *= currentScale;
 
-    m_LastScale = m_Scale();
 }
 
 void HingeGeom::UpdateSurf()
@@ -509,6 +507,14 @@ void HingeGeom::UpdateDrawObj()
 
     m_MotionLinesDO.m_PntVec.clear();
     m_MotionArrowsDO.m_PntVec.clear();
+    m_MotionArrowsDO.m_NormVec.clear();
+
+    // MakeCircleArrow flags these itself, but it only runs for a rotating joint.  A
+    // translating one fills the arrows through the vector form of MakeArrowhead, which knows
+    // nothing of the DrawObj, and a joint that does neither is left with the points cleared
+    // and nothing to say so.  Either way the renderer would go on drawing the last arrow.
+    m_MotionLinesDO.m_GeomChanged = true;
+    m_MotionArrowsDO.m_GeomChanged = true;
 
     if ( m_JointRotateFlag.Get() )
     {
@@ -517,7 +523,7 @@ void HingeGeom::UpdateDrawObj()
     }
     if ( m_JointTranslateFlag.Get() )
     {
-        MakeArrowhead(baseAxis[ m_PrimaryDir() ], baseAxis[ m_PrimaryDir() ] - baseOrigin, 0.5 * axlen * 0.5, m_MotionArrowsDO.m_PntVec );
+        MakeArrowhead(baseAxis[ m_PrimaryDir() ], baseAxis[ m_PrimaryDir() ] - baseOrigin, 0.5 * axlen * 0.5, m_MotionArrowsDO.m_PntVec, m_MotionArrowsDO.m_NormVec );
     }
 
     m_PrimaryLineDO.m_PntVec.clear();
@@ -602,7 +608,6 @@ void HingeGeom::LoadDrawObjs(vector< DrawObj* > & draw_obj_vec)
     m_MotionArrowsDO.m_Visible = ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || isactive;
     m_MotionArrowsDO.m_LineWidth = 1.0;
     m_MotionArrowsDO.m_Type = DrawObj::VSP_SHADED_TRIS;
-    m_MotionArrowsDO.m_NormVec = vector <vec3d> ( m_MotionArrowsDO.m_PntVec.size() );
 
     for ( int i = 0; i < 4; i++ )
     {

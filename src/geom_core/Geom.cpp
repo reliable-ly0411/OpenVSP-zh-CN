@@ -15,6 +15,7 @@
 #include "SVGUtil.h"
 #include "StringUtil.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "SubSurfaceMgr.h"
 #include "HingeGeom.h"
 #include "HumanGeom.h"
@@ -47,16 +48,6 @@ GeomType::GeomType( int id, const string& name, bool fixed_flag, const string& m
 // suppress the implicit move operations that vector<GeomType> relies on to avoid deep copies.
 static_assert( std::is_nothrow_move_constructible< GeomType >::value, "GeomType must be nothrow move constructible" );
 static_assert( std::is_nothrow_move_assignable< GeomType >::value, "GeomType must be nothrow move assignable" );
-
-void GeomType::CopyFrom( const GeomType & t )
-{
-    m_Type = t.m_Type;
-    m_Name = t.m_Name;
-    m_FixedFlag = t.m_FixedFlag;
-    m_ModuleName = t.m_ModuleName;
-    m_DisplayName = t.m_DisplayName;
-    m_GeomID = t.m_GeomID;
-}
 
 
 
@@ -208,6 +199,20 @@ void GeomBase::SetDirtyFlags( Parm* parm_ptr )
         // GeomXSec::m_ActiveXSec
         // WingGeom::m_ActiveAirfoil
         // PropGeom::m_ActiveBlade
+    }
+    else if ( gname == string("Skinning") )
+    {
+        // A flag that only decides whether something is drawn shapes no surface, so it asks
+        // for the draw objects and nothing else.  Falling through to the terminal case below
+        // would re-loft the body to change which line segments are in a DrawObj.
+        m_HighlightDirty = true;
+        // GeomXSec::m_ShowSkinningTanFlag
+        // GeomXSec::m_ShowSkinningCurveFlag
+    }
+    else if ( gname == string("Blending") )
+    {
+        m_HighlightDirty = true;
+        // WingGeom::m_ShowBlendingFlag
     }
     else if ( gname.substr(0, 3) == string("Fea") )
     {
@@ -495,6 +500,16 @@ void GeomBase::RemoveChildID( const string &id )
     vector_remove_val( m_ChildIDVec, id );
 }
 
+void GeomBase::AddStepChildID( const string &id )
+{
+    if ( vector_contains_val( m_StepChildIDVec, id ) )
+    {
+        return;
+    }
+
+    m_StepChildIDVec.push_back( id );
+}
+
 void GeomBase::RemoveStepChildID( const string &id )
 {
     vector_remove_val( m_StepChildIDVec, id );
@@ -539,9 +554,19 @@ xmlNodePtr GeomBase::EncodeXml( xmlNodePtr & node )
             XmlUtil::AddStringNode( child_node, "ID", m_ChildIDVec[i] );
         }
 
+        Vehicle* veh = VehicleMgr.GetVehicle();
+
         xmlNodePtr sclist_node = xmlNewChild( geombase_node, nullptr, BAD_CAST "Step_Child_List", nullptr );
         for ( int i = 0 ; i < ( int )m_StepChildIDVec.size() ; i++ )
         {
+            // A Geom on the clipboard is registered with the Geoms its points name, but it is
+            // not part of the model and is not written, so it is left out here.  It becomes a
+            // step child like any other once it is pasted.
+            if ( veh && veh->IDinClipboard( m_StepChildIDVec[i] ) )
+            {
+                continue;
+            }
+
             xmlNodePtr schild_node = xmlNewChild( sclist_node, nullptr, BAD_CAST "Step_Child", nullptr );
             XmlUtil::AddStringNode( schild_node, "ID", m_StepChildIDVec[i] );
         }
@@ -559,7 +584,13 @@ xmlNodePtr GeomBase::DecodeXml( xmlNodePtr & node )
         //m_Type.m_Name   = XmlUtil::FindString( child_node, "TypeName", m_Type.m_Name );
         //m_Type.m_Type   = XmlUtil::FindInt( child_node, "TypeID", m_Type.m_Type );
         m_Type.m_FixedFlag = !!XmlUtil::FindInt( geombase_node, "TypeFixed", m_Type.m_FixedFlag );
-        m_ParentID = ParmMgr.RemapID( XmlUtil::FindString( geombase_node, "ParentID", m_ParentID ) );
+        // The parent only comes across if it was part of the same read or copy.  Anything
+        // else and this Geom lands at the top level, where the paste puts it.
+        m_ParentID = IDMgr.RemapCopiedID( XmlUtil::FindString( geombase_node, "ParentID", m_ParentID ) );
+        if ( m_ParentID.empty() )
+        {
+            m_ParentID = "NONE";
+        }
 
         m_ChildIDVec.clear();
 
@@ -571,7 +602,11 @@ xmlNodePtr GeomBase::DecodeXml( xmlNodePtr & node )
             for ( int i = 0 ; i < num_children ; i++ )
             {
                 xmlNodePtr n = XmlUtil::GetNode( cl_node, "Child", i );
-                m_ChildIDVec.push_back( ParmMgr.RemapID( XmlUtil::FindString( n, "ID", string() ) ) );
+                string child = IDMgr.RemapCopiedID( XmlUtil::FindString( n, "ID", string() ) );
+                if ( !child.empty() )
+                {
+                    m_ChildIDVec.push_back( child );
+                }
             }
         }
 
@@ -585,7 +620,11 @@ xmlNodePtr GeomBase::DecodeXml( xmlNodePtr & node )
             for ( int i = 0 ; i < num_stepchildren ; i++ )
             {
                 xmlNodePtr n = XmlUtil::GetNode( scl_node, "Step_Child", i );
-                m_StepChildIDVec.push_back( ParmMgr.RemapID( XmlUtil::FindString( n, "ID", string() ) ) );
+                string child = IDMgr.RemapCopiedID( XmlUtil::FindString( n, "ID", string() ) );
+                if ( !child.empty() )
+                {
+                    AddStepChildID( child );
+                }
             }
         }
     }
@@ -1398,6 +1437,49 @@ void GeomXForm::AcceptScale()
     m_LastScale = 1;
 }
 
+//==== Scale (template method) ====//
+// Compute the incremental scale factor, let the derived Geom scale its own dimensional Parms and
+// geom-specific nested containers (ApplyScale), then always recurse into the Geom-common
+// containers.  Only reached when the scale actually changed (see Geom::Update).
+void Geom::Scale()
+{
+    double currentScale = m_Scale() / m_LastScale();
+
+    ApplyScale( currentScale );
+    ScaleCommonSubComponents( currentScale );
+
+    m_LastScale = m_Scale();
+}
+
+// Scale the dimensional Parms of the containers that every Geom can carry: sub-surfaces, CFD mesh
+// sources, and FEA structures.  Each container knows which of its own Parms are dimensional.
+void Geom::ScaleCommonSubComponents( double currentScale )
+{
+    for ( int i = 0; i < ( int )m_SubSurfVec.size(); i++ )
+    {
+        if ( m_SubSurfVec[i] )
+        {
+            m_SubSurfVec[i]->Scale( currentScale );
+        }
+    }
+
+    for ( int i = 0; i < ( int )m_MainSourceVec.size(); i++ )
+    {
+        if ( m_MainSourceVec[i] )
+        {
+            m_MainSourceVec[i]->Scale( currentScale );
+        }
+    }
+
+    for ( int i = 0; i < ( int )m_FeaStructVec.size(); i++ )
+    {
+        if ( m_FeaStructVec[i] )
+        {
+            m_FeaStructVec[i]->Scale( currentScale );
+        }
+    }
+}
+
 bool GeomXForm::RigidAttachedToParent() const
 {
     if ( IsParentJoint() )
@@ -1764,16 +1846,6 @@ void Geom::NoShow()
 }
 
 //==== Copy Geometry ====//
-void Geom::CopyFrom( Geom* geom )
-{
-    xmlNodePtr root = xmlNewNode( nullptr, ( const xmlChar * )"Vsp_Geometry" );
-
-    geom->EncodeGeom( root );
-    DecodeGeom( root );
-
-    xmlFreeNode( root );
-}
-
 //==== Update ====//
 void Geom::Update( bool fullupdate )
 {
@@ -3931,7 +4003,7 @@ void Geom::ReadV2File( xmlNodePtr &root )
     m_WLoc = XmlUtil::FindDouble( root, "V_Attach", m_WLoc() );
 
     //==== Read Pointer ID and Parent/Children Info ====//
-    string newID = ParmMgr.ForceRemapID( XmlUtil::FindString( root, "PtrID", m_ID ), 10 );
+    string newID = IDMgr.ForceRemapID( XmlUtil::FindString( root, "PtrID", m_ID ), 10 );
 
     if( newID.compare( m_ID ) != 0 )
     {
@@ -3941,7 +4013,7 @@ void Geom::ReadV2File( xmlNodePtr &root )
     string parent = XmlUtil::FindString( root, "Parent_PtrID", m_ParentID );
     if ( parent != "0" )
     {
-        m_ParentID = ParmMgr.ForceRemapID( parent , 10 );
+        m_ParentID = IDMgr.ForceRemapID( parent , 10 );
     }
 
     m_ChildIDVec.clear();
@@ -3949,7 +4021,7 @@ void Geom::ReadV2File( xmlNodePtr &root )
     for (  i = 0 ; i < numChildren ; i++ )
     {
         xmlNodePtr child_node = XmlUtil::GetNode( root, "Children_PtrID", i );
-        m_ChildIDVec.push_back( ParmMgr.ForceRemapID( XmlUtil::ExtractString( child_node ) , 10 ) );
+        m_ChildIDVec.push_back( IDMgr.ForceRemapID( XmlUtil::ExtractString( child_node ) , 10 ) );
     }
 
     //==== Read CFD Mesh Sources ====//
@@ -4507,14 +4579,36 @@ void Geom::CreateDegenGeom( DegenGeom &degenGeom, const vector< vector< vec3d > 
     degenGeom.setParentGeom( this );
     degenGeom.setSurfNum( isurf );
     degenGeom.setFlipNormal( flipnormal );
-    degenGeom.setMainSurfInd( m_MainSurfIndxVec[isurf] );
-    degenGeom.setSymCopyInd( m_SurfCopyIndx[isurf] );
+
+    // The symmetry tables are indexed by surface number, and a Geom with no surface of its own
+    // -- a wireframe, whose points are already transformed -- has none of them: UpdateSymmAttach
+    // sizes them by the number of main surfaces.  Such a Geom is its own main surface and its
+    // own symmetry copy, with no relative transform.
+    int main_surf_indx = 0;
+    int sym_copy_indx = 0;
+    Matrix4d trans_mat;
+
+    if ( isurf >= 0 && isurf < ( int )m_MainSurfIndxVec.size() )
+    {
+        main_surf_indx = m_MainSurfIndxVec[isurf];
+    }
+    if ( isurf >= 0 && isurf < ( int )m_SurfCopyIndx.size() )
+    {
+        sym_copy_indx = m_SurfCopyIndx[isurf];
+    }
+    if ( isurf >= 0 && isurf < ( int )m_TransMatVec.size() )
+    {
+        trans_mat = m_TransMatVec[isurf];
+    }
+
+    degenGeom.setMainSurfInd( main_surf_indx );
+    degenGeom.setSymCopyInd( sym_copy_indx );
     degenGeom.setCfdSurfType( cfdsurftype );
 
     vector < double > tmatvec( 16 );
     for ( int j = 0; j < 16; j++ )
     {
-        tmatvec[j] = m_TransMatVec[isurf].data()[ j ];
+        tmatvec[j] = trans_mat.data()[ j ];
     }
     degenGeom.setTransMat( tmatvec );
 
@@ -4566,7 +4660,7 @@ void Geom::CreateDegenGeom( DegenGeom &degenGeom, const vector< vector< vec3d > 
     // degenerate subsurfaces
     for ( int j = 0; j < m_SubSurfVec.size(); j++ )
     {
-        if ( m_SubSurfVec[j]->m_MainSurfIndx() == -1 || m_MainSurfIndxVec[isurf] == m_SubSurfVec[j]->m_MainSurfIndx() )
+        if ( m_SubSurfVec[j]->m_MainSurfIndx() == -1 || main_surf_indx == m_SubSurfVec[j]->m_MainSurfIndx() )
         {
             degenGeom.addDegenSubSurf( m_SubSurfVec[j], isurf );    //TODO is there a way to eliminate having to send in the surf index "i"
 
@@ -4593,9 +4687,14 @@ const VspSurf* Geom::GetSurfPtr( int indx ) const
 {
     if ( indx >= 0 && indx < GetNumTotalSurfs() )
     {
-        return &m_SurfVec[ indx ];
+        // m_SurfVec is filled by Update, so it can be short of the count before the first one.
+        if ( indx < ( int ) m_SurfVec.size() )
+        {
+            return &m_SurfVec[ indx ];
+        }
+        return nullptr;
     }
-    assert( true );
+    assert( false );
     return nullptr;
 }
 
@@ -4606,7 +4705,7 @@ const VspSurf* Geom::GetMainSurfPtr( int indx ) const
     {
         return &m_MainSurfVec[ indx ];
     }
-    assert( true );
+    assert( false );
     return nullptr;
 }
 
@@ -5871,6 +5970,51 @@ void Geom::AddLinkableParms( vector< string > & linkable_parm_vec, const string 
     }
 }
 
+void Geom::HandFeaStructsTo( Geom* to )
+{
+    if ( !to || to == this )
+    {
+        return;
+    }
+
+    for ( int i = 0 ; i < ( int )m_FeaStructVec.size() ; i++ )
+    {
+        if ( !m_FeaStructVec[i] )
+        {
+            continue;
+        }
+
+        m_FeaStructVec[i]->SetParentGeomID( to->GetID() );
+        to->m_FeaStructVec.push_back( m_FeaStructVec[i] );
+    }
+
+    // Emptied rather than deleted: the destination owns them now, and this Geom's destructor
+    // would otherwise free structures that are still in use.
+    m_FeaStructVec.clear();
+}
+
+void Geom::HandCfdSourcesTo( Geom* to )
+{
+    if ( !to || to == this )
+    {
+        return;
+    }
+
+    to->DelAllSources();
+
+    for ( int i = 0 ; i < ( int )m_MainSourceVec.size() ; i++ )
+    {
+        if ( m_MainSourceVec[i] )
+        {
+            to->AddCfdMeshSource( m_MainSourceVec[i] );
+        }
+    }
+
+    // Emptied rather than deleted: the destination owns them now, and this Geom's destructor
+    // would otherwise free sources that are still in use.
+    m_MainSourceVec.clear();
+}
+
 void Geom::ChangeID( const string &id )
 {
     Vehicle *veh = VehicleMgr.GetVehicle();
@@ -5882,9 +6026,23 @@ void Geom::ChangeID( const string &id )
 
     ParmContainer::ChangeID( id );
 
+    // The component ID as well as the parent container: the mesher matches a subsurface to a
+    // surface by comparing that against this Geom's ID, so a Geom whose ID changes has to tell
+    // its subsurfaces both halves or they stop matching anything.
     for ( int i = 0 ; i < ( int )m_SubSurfVec.size() ; i ++ )
     {
-        m_SubSurfVec[i]->SetParentContainer( GetID() );
+        m_SubSurfVec[i]->SetCompID( GetID() );
+    }
+
+    // And the structures built on it, which resolve this Geom by ID from about forty places --
+    // every one of which would find nothing, leaving a structure that cannot be meshed and says
+    // nothing about why.
+    for ( int i = 0 ; i < ( int )m_FeaStructVec.size() ; i ++ )
+    {
+        if ( m_FeaStructVec[i] )
+        {
+            m_FeaStructVec[i]->SetParentGeomID( GetID() );
+        }
     }
 }
 
@@ -5911,6 +6069,31 @@ void Geom::DelSubSurf( int ind )
     }
 
     SubSurfaceMgr.ReSuffixGroupNames( GetID() );
+}
+
+void Geom::HandSubSurfsTo( Geom* to )
+{
+    if ( !to || to == this )
+    {
+        return;
+    }
+
+    while ( !to->m_SubSurfVec.empty() )
+    {
+        to->DelSubSurf( 0 );
+    }
+
+    for ( int i = 0; i < ( int )m_SubSurfVec.size(); i++ )
+    {
+        m_SubSurfVec[i]->SetCompID( to->GetID() );
+        to->AddSubSurf( m_SubSurfVec[i] );
+    }
+
+    // Emptied rather than deleted: the destination owns them now, and this Geom's destructor
+    // would otherwise free subsurfaces that are still in use.
+    m_SubSurfVec.clear();
+
+    SubSurfaceMgr.ReSuffixGroupNames( to->GetID() );
 }
 
 SubSurface* Geom::AddSubSurf( int type, int surfindex )
@@ -6315,6 +6498,11 @@ GeomXSec::GeomXSec( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
     m_Type.m_Name = m_Name;
 
     m_ActiveXSec.Init( "ActiveXSec", "Index", this, 0, 0, 1e6 );
+
+    m_ActiveSpine = -1;
+
+    m_ShowSkinningTanFlag.Init( "ShowSkinningTanFlag", "Skinning", this, true, false, true );
+    m_ShowSkinningCurveFlag.Init( "ShowSkinningCurveFlag", "Skinning", this, false, false, true );
 }
 //==== Destructor ====//
 GeomXSec::~GeomXSec()
@@ -6326,7 +6514,390 @@ void GeomXSec::Update( bool fullupdate )
 {
     m_ActiveXSec.SetUpperLimit( m_XSecSurf.NumXSec() - 1 );
 
+    SyncSkinSpines();
+
     Geom::Update( fullupdate );
+}
+
+void GeomXSec::SetActiveSkinSpine( int index )
+{
+    if ( index != m_ActiveSpine )
+    {
+        m_ActiveSpine = index;
+
+        // Nothing about the surface depends on which spine is being edited -- only which
+        // colour its vectors are drawn in -- so ask for the highlight and no more.  And then
+        // do it: a Parm would have been carried into an update by ParmChanged, and this is
+        // not one, so nothing else is going to.  Selecting a row in the browser has to
+        // recolour the vectors there and then, not at the next parameter change.
+        SetDirtyFlag( HIGHLIGHT );
+        Update();
+    }
+}
+
+// Ask the active XSec where a new spine should go.  They all carry the same stations, so any
+// of them would answer the same.
+double GeomXSec::SuggestSkinSpineW01()
+{
+    SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( m_ActiveXSec() ) );
+    if ( !xs )
+    {
+        return 0.125;
+    }
+
+    return xs->SuggestSpineW01();
+}
+
+// Whether a spine placed at w01 would survive GetStations rather than being merged into a
+// station already there.  Asked on the first cross section, which is where the position
+// lives; the others are synced to it.
+bool GeomXSec::SkinSpineW01IsClear( double w01 )
+{
+    SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( 0 ) );
+    if ( !xs )
+    {
+        return false;
+    }
+
+    double t0 = xs->GetCurve().GetCurve().get_t0();
+    double period = xs->GetCurve().GetCurve().get_tmax() - t0;
+    double w = t0 + w01 * period;
+
+    vector< SkinXSec::SkinStation > stations;
+    xs->GetStations( stations );
+
+    for ( int i = 0; i < ( int )stations.size(); i++ )
+    {
+        double d = std::abs( stations[i].m_W - w );
+
+        // The section is a closed loop, so the far end of the range is a neighbour of the
+        // near end.
+        if ( d > 0.5 * period )
+        {
+            d = period - d;
+        }
+
+        if ( d < SkinXSec::GetMinStationGap() )
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+int GeomXSec::AddSkinSpine( double w01 )
+{
+    int index = -1;
+
+    for ( int i = 0; i < m_XSecSurf.NumXSec(); i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( xs )
+        {
+            xs->AddSpine( w01 );
+            index = xs->NumSpines() - 1;
+        }
+    }
+
+    m_SurfDirty = true;
+
+    return index;
+}
+
+void GeomXSec::DelSkinSpine( int index )
+{
+    for ( int i = 0; i < m_XSecSurf.NumXSec(); i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( xs )
+        {
+            xs->DelSpine( index );
+        }
+    }
+
+    m_SurfDirty = true;
+}
+
+void GeomXSec::DelAllSkinSpines()
+{
+    for ( int i = 0; i < m_XSecSurf.NumXSec(); i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( xs )
+        {
+            xs->DelAllSpines();
+        }
+    }
+
+    m_SurfDirty = true;
+}
+
+string GeomXSec::GetSkinSpineName( int index )
+{
+    SkinXSec* master = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( 0 ) );
+    if ( !master )
+    {
+        return string();
+    }
+
+    SkinSpine* sp = master->GetSpine( index );
+    if ( !sp )
+    {
+        return string();
+    }
+
+    return sp->GetName();
+}
+
+void GeomXSec::SetSkinSpineName( int index, const string & name )
+{
+    SkinXSec* master = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( 0 ) );
+    if ( !master )
+    {
+        return;
+    }
+
+    SkinSpine* sp = master->GetSpine( index );
+    if ( !sp )
+    {
+        return;
+    }
+
+    sp->SetName( name );
+
+    // The name is the parm group alias, so two spines sharing one collide in the Parm Link
+    // and Design Variable pickers -- which is the whole reason AddSpine goes to the trouble
+    // of finding an unused number.  Renaming has to keep that, so a name already in use, or
+    // an empty one, falls back to the lowest number free here.
+    for ( int i = 0; i < master->NumSpines(); i++ )
+    {
+        SkinSpine* other = master->GetSpine( i );
+        if ( other && other != sp && other->GetName() == sp->GetName() )
+        {
+            sp->SetName( "" );
+            break;
+        }
+    }
+
+    if ( sp->GetName().empty() )
+    {
+        sp->SetName( master->UnusedSpineName() );
+    }
+
+    // SyncSkinSpines carries the name to every other cross section's copy, and the group
+    // alias is rebuilt from it.
+    m_LateUpdateFlag = true;
+}
+
+int GeomXSec::NumSkinSpines()
+{
+    for ( int i = 0; i < m_XSecSurf.NumXSec(); i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( xs )
+        {
+            return xs->NumSpines();
+        }
+    }
+    return 0;
+}
+
+// Make every XSec carry the same spines as the active one, at the same positions and with
+// the same symmetry.  Values are deliberately left alone: varying them along the body is
+// the point of a spine.
+// A spine runs the length of the body, so its position, its symmetry and its name belong to
+// the Geom rather than to any one cross section -- only the skinning values it carries are
+// per XSec.  The first cross section holds them, and the rest follow.
+//
+// The active cross section used to hold them, which made a write to W01 stick or not
+// depending on which one the GUI happened to be showing: setting it through the API or a Parm
+// Link on any other cross section was silently undone on the next update.
+// Distance between two positions on the [0, 1] basis, around a section that closes on
+// itself -- so 0.02 and 0.98 are neighbours.
+static double SpineW01Dist( double a, double b )
+{
+    double d = std::abs( a - b );
+
+    if ( d > 0.5 )
+    {
+        d = 1.0 - d;
+    }
+
+    return d;
+}
+
+void GeomXSec::SyncSkinSpines()
+{
+    SkinXSec* master = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( 0 ) );
+    if ( !master )
+    {
+        return;
+    }
+
+    int nspine = master->NumSpines();
+
+    for ( int i = 0; i < m_XSecSurf.NumXSec(); i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( !xs || xs == master )
+        {
+            continue;
+        }
+
+        // Match the copies by which spine they are of, not by where they sit in the array.
+        // Position only agrees while nothing reorders either list, and a paste rebuilds one
+        // of them in the source's order -- after which two spines could trade places and one
+        // would be read as the other.
+        for ( int k = 0; k < nspine; k++ )
+        {
+            SkinSpine* m = master->GetSpine( k );
+            if ( !m )
+            {
+                continue;
+            }
+
+            SkinSpine* c = nullptr;
+            for ( int j = 0; j < xs->NumSpines(); j++ )
+            {
+                SkinSpine* cand = xs->GetSpine( j );
+                if ( cand && cand->GetSpineID() == m->GetSpineID() )
+                {
+                    c = cand;
+                    break;
+                }
+            }
+
+            if ( !c )
+            {
+                // No copy of this spine here.  Before making one, look for a spine this Geom
+                // does not know the tag of: that is what a cross section pasted from another
+                // Geom brings, and it holds the values the user meant to carry across.  Adopt
+                // it rather than throwing those values away.
+                //
+                // By position around the section, not by position in the array.  The two Geoms
+                // agree on where their spines sit; they agree on nothing about the order they
+                // were added in, and a paste rebuilds the list in the source's order.  Taking
+                // the first unknown spine in the list is the very matching-by-index that the
+                // tag exists to replace -- with two spines at W01 0.4 and 0.6 added in
+                // opposite orders, each one's values land on the other.
+                //
+                double bestdist = 2.0;
+
+                for ( int j = 0; j < xs->NumSpines(); j++ )
+                {
+                    SkinSpine* cand = xs->GetSpine( j );
+                    if ( !cand )
+                    {
+                        continue;
+                    }
+
+                    bool known = false;
+                    for ( int q = 0; q < nspine && !known; q++ )
+                    {
+                        SkinSpine* mq = master->GetSpine( q );
+                        if ( mq && mq->GetSpineID() == cand->GetSpineID() )
+                        {
+                            known = true;
+                        }
+                    }
+
+                    if ( known )
+                    {
+                        continue;
+                    }
+
+                    double d = SpineW01Dist( cand->m_W01(), m->m_W01() );
+
+                    if ( d < bestdist )
+                    {
+                        bestdist = d;
+                        c = cand;
+                    }
+                }
+
+                // Adopt it only where this master is also the master nearest to it.  With
+                // one spine either side there is nothing to disambiguate and the values
+                // cross however far apart the two sit -- the position belongs to this Geom
+                // and carrying the values is the whole point of the paste.  With several,
+                // letting the first master in the list take whatever happens to be nearest
+                // to it hands it one that plainly belongs to a later master, and that later
+                // master then gets a freshly seeded spine while its values sit somewhere
+                // else.
+                for ( int q = 0; q < nspine && c; q++ )
+                {
+                    SkinSpine* mq = master->GetSpine( q );
+                    if ( q != k && mq && SpineW01Dist( mq->m_W01(), c->m_W01() ) < bestdist )
+                    {
+                        c = nullptr;
+                    }
+                }
+
+                if ( c )
+                {
+                    c->SetSpineID( m->GetSpineID() );
+                }
+            }
+
+            if ( !c )
+            {
+                // Seed it where it is going to live.  AddSpine takes its values and its Set
+                // flags from the stations around the position it is given, so adding at a
+                // fixed W and moving it afterwards seeds it from the wrong neighborhood --
+                // a cross section that lost a spine would come back with the angle of
+                // somewhere else entirely.
+                c = xs->AddSpine( m->m_W01() );
+                if ( c )
+                {
+                    c->SetSpineID( m->GetSpineID() );
+                }
+            }
+
+            if ( c )
+            {
+                c->m_W01 = m->m_W01();
+                c->m_LRSymFlag = m->m_LRSymFlag();
+                c->m_TBSymFlag = m->m_TBSymFlag();
+                c->SetName( m->GetName() );
+            }
+        }
+
+        // Both lists hold the same spines now.  Put them in the same order too: matching by
+        // tag is what makes the sync safe, and every index below this line is what makes it
+        // necessary.
+        xs->OrderSpinesLike( master );
+
+        // Anything left over is a spine this Geom no longer has.
+        for ( int j = xs->NumSpines() - 1; j >= 0; j-- )
+        {
+            SkinSpine* cand = xs->GetSpine( j );
+
+            bool wanted = false;
+            for ( int k = 0; k < nspine && !wanted; k++ )
+            {
+                SkinSpine* m = master->GetSpine( k );
+                if ( m && cand && cand->GetSpineID() == m->GetSpineID() )
+                {
+                    wanted = true;
+                }
+            }
+
+            if ( !wanted )
+            {
+                xs->DelSpine( j );
+            }
+        }
+    }
+
+    // Names and the group alias built from them have to follow add, delete and rename.
+    for ( int i = 0; i < m_XSecSurf.NumXSec(); i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( xs )
+        {
+            xs->RenumberSpines();
+        }
+    }
 }
 
 void GeomXSec::UpdateDrawObj()
@@ -6377,6 +6948,539 @@ void GeomXSec::UpdateHighlightDrawObj()
     }
 
     m_HighlightXSecDrawObj.m_GeomChanged = true;
+
+    UpdateSkinDrawObj( relTrans, m_ActiveXSec() );
+}
+
+// Append the line segments that visualize one skinning station, each as a tail/tip pair
+// starting at the XSec point.  The caller passes the draw object for the side being drawn,
+// which is what separates the dashed before vectors from the solid after ones.
+static void AppendSkinVectors( const vec3d &pnt, const curve_point_type &tp, const curve_point_type &np,
+                               double du, bool tanflag, bool curveflag, vector < vec3d > &pntvec )
+{
+    if ( tanflag )
+    {
+        vec3d tan( tp.x(), tp.y(), tp.z() );
+
+        pntvec.push_back( pnt );
+        pntvec.push_back( pnt + tan * du );
+    }
+
+    if ( curveflag )
+    {
+        // The curvature term of the loft's expansion about the XSec is fpp * du^2 / 2.  Being
+        // even in du, it is not mirrored between the before and after sides the way the
+        // tangent is.  A closed body normally has negative curvature, so this usually points
+        // inward.
+        vec3d nrm( np.x(), np.y(), np.z() );
+
+        pntvec.push_back( pnt );
+        pntvec.push_back( pnt + nrm * ( 0.5 * du * du ) );
+    }
+}
+
+// One colour per station, so what the sliders are moving can be picked out of the bundle of
+// vectors at a cross section.  The four sides take the set the engine definition stations
+// use, and the Skinning tab keys them by colouring each side's divider to match.
+// A spine is not one of the four and takes a colour of its own.
+// Blue for a spine, and red for the one being edited, since the point of separating it is
+// that the user can see which of several they are moving.
+int GeomXSec::SkinDrawColor( int k )
+{
+    switch ( k )
+    {
+        case SKIN_DRAW_TOP:
+            return DrawObj::CYAN;
+        case SKIN_DRAW_BOTTOM:
+            return DrawObj::MAGENTA;
+        case SKIN_DRAW_LEFT:
+            return DrawObj::LIME;
+        case SKIN_DRAW_RIGHT:
+            return DrawObj::YELLOW;
+        case SKIN_DRAW_SPINE:
+            return DrawObj::BLUE;
+        case SKIN_DRAW_ACTIVE_SPINE:
+            return DrawObj::RED;
+    }
+
+    return DrawObj::WHITE;
+}
+
+// The skinning controls are evaluated at every station, in the order used to build the
+// control curves in XSec::GetTanNormCrv -- the four sides at Right, Bottom, Left and Top,
+// with any spines between them.
+void GeomXSec::UpdateSkinDrawObj( const Matrix4d &relTrans, int index )
+{
+    m_SkinDrawObj_vec.resize( NUM_SKIN_DRAW );
+    m_SkinBeforeDrawObj_vec.resize( NUM_SKIN_DRAW );
+    m_SkinArrowDrawObj_vec.resize( NUM_SKIN_DRAW );
+
+    for ( int k = 0; k < NUM_SKIN_DRAW; k++ )
+    {
+        m_SkinDrawObj_vec[k].m_PntVec.clear();
+        m_SkinBeforeDrawObj_vec[k].m_PntVec.clear();
+        m_SkinArrowDrawObj_vec[k].m_PntVec.clear();
+        m_SkinArrowDrawObj_vec[k].m_NormVec.clear();
+        m_SkinDrawObj_vec[k].m_GeomChanged = true;
+        m_SkinBeforeDrawObj_vec[k].m_GeomChanged = true;
+        m_SkinArrowDrawObj_vec[k].m_GeomChanged = true;
+    }
+
+    // With nothing to draw, stop before the tangent and normal curves are fitted -- that is
+    // the work here, not the handful of points it ends in.
+    if ( !m_ShowSkinningTanFlag() && !m_ShowSkinningCurveFlag() )
+    {
+        return;
+    }
+
+    SkinXSec* sxs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( index ) );
+    if ( !sxs )
+    {
+        return;
+    }
+
+    int nxsec = m_XSecSurf.NumXSec();
+    bool first = ( index == 0 );
+    bool last = ( index == nxsec - 1 );
+
+    // Match SkinXSec::GetRib -- the 'left' parameters drive the loft before this XSec,
+    // except at the first XSec where they drive the loft after it instead.  The 'right'
+    // parameters drive the loft after this XSec, and are unused at either end.
+    piecewise_curve_type beforetan, beforenrm;
+    bool drawbefore = false;
+    piecewise_curve_type aftertan, afternrm;
+    bool drawafter = false;
+
+    if ( first )
+    {
+        if ( !last )
+        {
+            sxs->GetSkinCrvs( true, aftertan, afternrm );
+            drawafter = true;
+        }
+    }
+    else
+    {
+        sxs->GetSkinCrvs( true, beforetan, beforenrm );
+        drawbefore = true;
+
+        if ( !last )
+        {
+            sxs->GetSkinCrvs( false, aftertan, afternrm );
+            drawafter = true;
+        }
+    }
+
+    const piecewise_curve_type &crv = sxs->GetCurve().GetCurve();
+
+    // Draw at every station, so user defined spines get vectors alongside the four sides.
+    vector< SkinXSec::SkinStation > stations;
+    sxs->GetStations( stations );
+
+    // Ribs are skinned with a uniform parameterization, so one section spans du = 1.
+    // Drawing the derivatives at full magnitude therefore shows the Hermite tangent and
+    // curvature vectors that reach across the neighboring section.
+    for ( int i = 0; i < ( int )stations.size(); i++ )
+    {
+        double t = stations[i].m_W;
+
+        // A side's station parameter is its own index -- the four of them sit at 0, 1, 2
+        // and 3.  Everything else came from a spine.
+        int k = SKIN_DRAW_SPINE;
+        if ( stations[i].m_IsSide )
+        {
+            k = ( int )stations[i].m_W;
+        }
+        else if ( stations[i].m_SpineIndex == m_ActiveSpine )
+        {
+            k = SKIN_DRAW_ACTIVE_SPINE;
+        }
+
+        curve_point_type p = crv.f( t );
+        vec3d pnt( p.x(), p.y(), p.z() );
+
+        // The section before this XSec runs toward decreasing u, so its tangent is drawn
+        // reversed to point along the surface as it actually leaves the XSec.
+        if ( drawbefore )
+        {
+            AppendSkinVectors( pnt, beforetan.f( t ), beforenrm.f( t ), -1.0,
+                               m_ShowSkinningTanFlag(), m_ShowSkinningCurveFlag(),
+                               m_SkinBeforeDrawObj_vec[k].m_PntVec );
+        }
+
+        if ( drawafter )
+        {
+            AppendSkinVectors( pnt, aftertan.f( t ), afternrm.f( t ), 1.0,
+                               m_ShowSkinningTanFlag(), m_ShowSkinningCurveFlag(),
+                               m_SkinDrawObj_vec[k].m_PntVec );
+        }
+    }
+
+    // The heads come after the transform, which would otherwise skew them.
+    double axlen = 1.0;
+    if ( m_Vehicle )
+    {
+        axlen = m_Vehicle->m_AxisLength();
+    }
+
+    for ( int k = 0; k < NUM_SKIN_DRAW; k++ )
+    {
+        relTrans.xformvec( m_SkinDrawObj_vec[k].m_PntVec );
+        relTrans.xformvec( m_SkinBeforeDrawObj_vec[k].m_PntVec );
+
+        MakeArrowheads( m_SkinDrawObj_vec[k].m_PntVec, 0.25 * axlen, m_SkinArrowDrawObj_vec[k] );
+        MakeArrowheads( m_SkinBeforeDrawObj_vec[k].m_PntVec, 0.25 * axlen, m_SkinArrowDrawObj_vec[k] );
+    }
+}
+
+// Gather the ribs for one skin.
+//
+// Every station gets a rib, but stations enforcing identical conditions produce identical
+// ribs, so they are grouped and the group skinned once.  insets records which stations each
+// group covers, which is what the blend weights are built from: a span with the same group
+// at both ends carries a constant weight of one, so grouping costs nothing in the blend.
+//
+// Returns false when every station enforces the same conditions, in which case there is a
+// single group and the caller should take the ordinary unblended path.
+bool GeomXSec::BuildSkinRibSets( int nxsec, vector< vector< rib_data_type > > &rib_sets,
+                                 vector< double > &ws, vector< vector< bool > > &insets,
+                                 vector< int > &stationmap )
+{
+    rib_sets.clear();
+    insets.clear();
+    ws.clear();
+
+    bool blend = false;
+
+    // Station layout comes from the XSecs, which all carry the same stations.
+    for ( int i = 0; i < nxsec; i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( xs )
+        {
+            xs->GetStationW( ws );
+            break;
+        }
+    }
+
+    // A spine that enforces nothing anywhere has nothing to say about the loft, and letting
+    // it stand would hand its neighborhood to a pass that enforces nothing.  Drop it.  This
+    // is decided across every XSec at once, so the station layout stays identical for all of
+    // them -- the rib sets are blended against one shared list of W, and a station that
+    // vanished from one XSec but not another would tear that apart.
+    vector< SkinXSec::SkinStation > st0;
+    for ( int i = 0; i < nxsec; i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( xs )
+        {
+            xs->GetStations( st0 );
+            break;
+        }
+    }
+
+    stationmap.clear();
+    for ( int k = 0; k < ( int )st0.size(); k++ )
+    {
+        bool anywhere = st0[k].m_IsSide;
+
+        for ( int i = 0; i < nxsec && !anywhere; i++ )
+        {
+            SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+            if ( !xs )
+            {
+                continue;
+            }
+
+            vector< SkinXSec::SkinStation > st;
+            xs->GetStations( st );
+
+            // The angle and curvature flags and no others, because those are the four the
+            // grouping keys on and the two per side a rib is built from.  Slew and strength
+            // are parts of a tangent the angle flag decides, and gate nothing by themselves
+            // -- a station carrying only those enforces nothing, but asking about them here
+            // would keep it, hand it a condition group of its own and blend that group's
+            // unconstrained solution into the surface.
+            if ( k < ( int )st.size() &&
+                 ( st[k].m_LAngleSet || st[k].m_LCurveSet ||
+                   st[k].m_RAngleSet || st[k].m_RCurveSet ) )
+            {
+                anywhere = true;
+            }
+        }
+
+        if ( anywhere )
+        {
+            stationmap.push_back( k );
+        }
+    }
+
+    vector< double > wskept( stationmap.size() );
+    for ( int k = 0; k < ( int )stationmap.size(); k++ )
+    {
+        wskept[k] = ws[ stationmap[k] ];
+    }
+    ws = wskept;
+
+    int nst = ws.size();
+    if ( nst < 1 )
+    {
+        return false;
+    }
+
+    // Gather each XSec's stations once.  The grouping below compares station pairs across
+    // every XSec, so asking inside those loops would rebuild and re-sort the same list
+    // thousands of times on a long body -- and each rebuild can drag an XSec update along
+    // with it.
+    vector< vector< SkinXSec::SkinStation > > xsecstations( nxsec );
+    for ( int i = 0; i < nxsec; i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( xs )
+        {
+            xs->GetStations( xsecstations[i] );
+        }
+    }
+
+    // Group stations by the conditions they enforce.  Two stations belong together when
+    // every XSec enforces the same thing at both.
+    vector< int > group( nst, -1 );
+    int ngroup = 0;
+
+    for ( int a = 0; a < nst; a++ )
+    {
+        if ( group[a] >= 0 )
+        {
+            continue;
+        }
+
+        group[a] = ngroup;
+
+        for ( int b = a + 1; b < nst; b++ )
+        {
+            if ( group[b] >= 0 )
+            {
+                continue;
+            }
+
+            bool same = true;
+            for ( int i = 0; i < nxsec && same; i++ )
+            {
+                const vector< SkinXSec::SkinStation > &st = xsecstations[i];
+
+                int sa = stationmap[a];
+                int sb = stationmap[b];
+
+                if ( sa >= ( int )st.size() || sb >= ( int )st.size() )
+                {
+                    continue;
+                }
+
+                if ( st[sa].m_LAngleSet != st[sb].m_LAngleSet || st[sa].m_LCurveSet != st[sb].m_LCurveSet ||
+                     st[sa].m_RAngleSet != st[sb].m_RAngleSet || st[sa].m_RCurveSet != st[sb].m_RCurveSet )
+                {
+                    same = false;
+                }
+            }
+
+            if ( same )
+            {
+                group[b] = ngroup;
+            }
+        }
+
+        ngroup++;
+    }
+
+    if ( ngroup > 1 )
+    {
+        blend = true;
+    }
+
+    rib_sets.resize( ngroup );
+    for ( int g = 0; g < ngroup; g++ )
+    {
+        rib_sets[g].resize( nxsec );
+    }
+
+    insets.resize( ngroup );
+    for ( int g = 0; g < ngroup; g++ )
+    {
+        insets[g].assign( nst, false );
+        for ( int k = 0; k < nst; k++ )
+        {
+            if ( group[k] == g )
+            {
+                insets[g][k] = true;
+            }
+        }
+    }
+
+    return blend;
+}
+
+// Settle every XSec's skinning parms before anything reads them.
+//
+// ValidateParms cascades: continuity forces the right hand Set flags from the left, an Equal
+// flag forces both of its Set flags on, and the symmetry flags copy whole sides across.  The
+// station grouping below keys on exactly those flags, so it has to run after them.  Grouping
+// first and validating later lays the passes out for the flags the user left behind while the
+// ribs are built from the flags validation produced -- and since Update clears the dirty flag
+// at the end, the mismatched surface stands until something else is touched.  Reloading the
+// file then gives a different shape from the same parms.
+void GeomXSec::PrepSkinRibs( int nxsec )
+{
+    for ( int i = 0; i < nxsec; i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( xs )
+        {
+            xs->PrepRibs( i == 0, i == nxsec - 1 );
+        }
+    }
+}
+
+// Fill the rib sets, one rib per blending pass per XSec.
+//
+// Each W = constant curve up the body is its own problem: the XSec curves give its points and
+// the skinning parms give whatever slopes and curvature are enforced along it.  Blending
+// several passes is what used to break that independence, because a pass enforcing a quantity
+// everywhere needed a value for it at stations that never specified one, and the only numbers
+// on hand were the readback values SetUnsetParms had written into the parms.  An unenforced
+// value then steered the loft, and the surface stopped being a function of the parms.
+//
+// Nothing needs inventing now.  A pass enforces only on the spans touching its own stations,
+// which is the whole of where its blend weight is nonzero, and takes its control values only
+// from those stations.  See SkinXSec::GetGroupRib.
+void GeomXSec::StageSkinRibSets( int nxsec, vector< vector< rib_data_type > > &rib_sets,
+                                 const vector< vector< bool > > &insets,
+                                 const vector< int > &stationmap, bool closed )
+{
+    int ngroup = rib_sets.size();
+
+    if ( ngroup < 1 )
+    {
+        return;
+    }
+
+    int nst = stationmap.size();
+
+    vector< vector< SkinXSec::SkinStation > > allstations( nxsec );
+
+    for ( int i = 0; i < nxsec; i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( !xs )
+        {
+            continue;
+        }
+
+        bool first = ( i == 0 );
+        bool last = ( i == nxsec - 1 );
+
+        vector< SkinXSec::SkinStation > full;
+        xs->GetStations( full );
+
+        // Only the kept stations shape the curves.  A dropped spine enforces nothing
+        // anywhere, so its values are pure readback and would otherwise still bend the
+        // control spline through a knot that says nothing.
+        //
+        // The map indexes the unfiltered list of whichever XSec BuildSkinRibSets read, so
+        // what matters is the largest index it holds, not how many entries it has.  All the
+        // XSecs carry the same stations, so this cannot bite; clamping rather than skipping
+        // keeps a malformed model from reading past the end without leaving this XSec
+        // without a rib.
+        allstations[i].resize( nst );
+        for ( int k = 0; k < nst; k++ )
+        {
+            if ( full.empty() )
+            {
+                break;
+            }
+
+            int idx = stationmap[k];
+            if ( idx >= ( int )full.size() )
+            {
+                idx = ( int )full.size() - 1;
+            }
+
+            allstations[i][k] = full[idx];
+        }
+    }
+
+    // Curvature is specified in a frame the angle and slew define, so a pass enforcing
+    // curvature without angle still needs an angle -- there is no way to not need one.  What
+    // matters is where it comes from.  Reading it from the parms is what broke the round
+    // trip: SetUnsetParms had written the achieved value there, so a number the user never
+    // set, produced by the previous build, steered the next one.
+    //
+    // Derive it instead, from a reference loft that enforces nothing anywhere.  It is well
+    // defined, it depends on no other pass so there is nothing to order and nothing circular,
+    // and being computed inside the build it leaves the surface a function of the parms.
+    // Only curvature ever needs it, so most models never pay for it.
+    //
+    // Angle, slew and strength are parts of one tangent and ValidateParms turns them on and
+    // off together, so a station enforcing a tangent supplies every number that tangent
+    // needs.  Curvature is the exception: it is stated in the frame the angle and slew
+    // define, so a station can ask for curvature while leaving the angle free, and then the
+    // frame has to come from somewhere.  Nothing else reads what this loft produces --
+    // GetGroupRib takes every other value from a station in its own group.
+    //
+    // Building it regardless cost a whole extra skin on every update of every Fuselage and
+    // Stack, which on a forty section body was around a sixth of the time spent.
+    bool needref = false;
+    for ( int i = 0; i < nxsec && !needref; i++ )
+    {
+        for ( int k = 0; k < ( int )allstations[i].size(); k++ )
+        {
+            const SkinXSec::SkinStation &st = allstations[i][k];
+
+            if ( ( st.m_LCurveSet && !st.m_LAngleSet ) || ( st.m_RCurveSet && !st.m_RAngleSet ) )
+            {
+                needref = true;
+                break;
+            }
+        }
+    }
+
+    vector< rib_data_type > refribs( nxsec );
+    VspSurf ref;
+
+    if ( needref )
+    {
+        for ( int i = 0; i < nxsec; i++ )
+        {
+            SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+            if ( !xs )
+            {
+                continue;
+            }
+
+            refribs[i].set_f( xs->GetCurve().GetCurve() );
+        }
+
+        ref.SkinRibs( refribs, closed );
+        ref.SetMagicVParm( false );
+    }
+
+    for ( int i = 0; i < nxsec; i++ )
+    {
+        SkinXSec* xs = dynamic_cast < SkinXSec* > ( m_XSecSurf.FindXSec( i ) );
+        if ( !xs )
+        {
+            continue;
+        }
+
+        if ( needref )
+        {
+            xs->FillUnsetFromSurf( i, ref, allstations[i] );
+        }
+
+        for ( int g = 0; g < ngroup; g++ )
+        {
+            xs->GetGroupRib( i == 0, i == nxsec - 1, allstations[i], insets[g], rib_sets[g][i] );
+        }
+    }
 }
 
 void GeomXSec::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
@@ -6407,75 +7511,73 @@ void GeomXSec::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
     m_HighlightXSecDrawObj.m_LineColor = vec3d( 0.0, 0.0, 1.0 );
     m_HighlightXSecDrawObj.m_Type = DrawObj::VSP_LINE_STRIP;
     draw_obj_vec.push_back( &m_HighlightXSecDrawObj );
-}
 
-void GeomXSec::UpdateDrawObjUtil()
-{
-    Geom::UpdateDrawObj();
+    // The two Show flags are not checked here.  They gate what UpdateSkinDrawObj builds, and
+    // a Parm change carries an update behind it -- the highlight one, which is what
+    // SetDirtyFlags hands the Skinning group.  isshown and isactive are not Parms, so nothing
+    // carries them and they are asked every draw.
+    bool skinvisible = isshown && isactive &&
+                       m_GuiDraw.GetDisplayType() == DISPLAY_TYPE::DISPLAY_BEZIER;
 
-    Matrix4d relTrans;
-    relTrans = m_AttachMatrix;
-    relTrans.affineInverse();
-    relTrans.matMult( m_ModelMatrix.data() );
-    relTrans.postMult( m_AttachMatrix.data() );
+    m_SkinDrawObj_vec.resize( NUM_SKIN_DRAW );
+    m_SkinBeforeDrawObj_vec.resize( NUM_SKIN_DRAW );
+    m_SkinArrowDrawObj_vec.resize( NUM_SKIN_DRAW );
 
-    unsigned int nxsec = m_XSecSurf.NumXSec();
-    m_XSecDrawObj_vec.resize( nxsec, DrawObj() );
-
-    //==== Tesselate Surface ====//
-    for ( int i = 0 ; i < nxsec ; i++ )
+    for ( int k = 0; k < NUM_SKIN_DRAW; k++ )
     {
-        m_XSecSurf.FindXSec( i )->GetDrawLines( relTrans, m_XSecDrawObj_vec[i].m_PntVec );
-        m_XSecDrawObj_vec[i].m_GeomChanged = true;
+        vec3d c = DrawObj::Color( SkinDrawColor( k ) );
+
+        snprintf( str, sizeof( str ), "SKIN_%d", k );
+
+        m_SkinDrawObj_vec[k].m_Screen = DrawObj::VSP_MAIN_SCREEN;
+        m_SkinDrawObj_vec[k].m_GeomID = XSECHEADER + m_ID + str;
+        m_SkinDrawObj_vec[k].m_Visible = skinvisible;
+        m_SkinDrawObj_vec[k].m_LineWidth = 2.0;
+        m_SkinDrawObj_vec[k].m_LineColor = c;
+        m_SkinDrawObj_vec[k].m_Type = DrawObj::VSP_LINES;
+        draw_obj_vec.push_back( &m_SkinDrawObj_vec[k] );
+
+        snprintf( str, sizeof( str ), "SKINBEFORE_%d", k );
+
+        // The same colour, dashed.  The stipple is a screen space pattern, so a short vector
+        // reads as dashed the same way a long one does -- which matters here, because these
+        // vectors are as long as the derivative they stand for.  Four pixels on and four off
+        // gives a couple of dashes on the shortest vector worth looking at.
+        m_SkinBeforeDrawObj_vec[k].m_Screen = DrawObj::VSP_MAIN_SCREEN;
+        m_SkinBeforeDrawObj_vec[k].m_GeomID = XSECHEADER + m_ID + str;
+        m_SkinBeforeDrawObj_vec[k].m_Visible = skinvisible;
+        m_SkinBeforeDrawObj_vec[k].m_LineWidth = 2.0;
+        m_SkinBeforeDrawObj_vec[k].m_LineColor = c;
+        m_SkinBeforeDrawObj_vec[k].m_Type = DrawObj::VSP_LINES;
+        m_SkinBeforeDrawObj_vec[k].m_StippleFactor = 4;
+        m_SkinBeforeDrawObj_vec[k].m_StipplePattern = 0xAAAA;
+        m_SkinBeforeDrawObj_vec[k].m_StippleFlag = true;
+        draw_obj_vec.push_back( &m_SkinBeforeDrawObj_vec[k] );
+
+        snprintf( str, sizeof( str ), "SKINARROW_%d", k );
+
+        m_SkinArrowDrawObj_vec[k].m_Screen = DrawObj::VSP_MAIN_SCREEN;
+        m_SkinArrowDrawObj_vec[k].m_GeomID = XSECHEADER + m_ID + str;
+        m_SkinArrowDrawObj_vec[k].m_Visible = skinvisible;
+        m_SkinArrowDrawObj_vec[k].m_LineWidth = 1.0;
+        m_SkinArrowDrawObj_vec[k].m_Type = DrawObj::VSP_SHADED_TRIS;
+
+        // Shade the heads to match the lines they cap.  Alpha follows the other arrowheads.
+        for ( int i = 0; i < 3; i++ )
+        {
+            m_SkinArrowDrawObj_vec[k].m_MaterialInfo.Ambient[i] = 0.2f * ( float )c.v[i];
+            m_SkinArrowDrawObj_vec[k].m_MaterialInfo.Diffuse[i] = ( float )c.v[i];
+            m_SkinArrowDrawObj_vec[k].m_MaterialInfo.Specular[i] = 0.7f;
+            m_SkinArrowDrawObj_vec[k].m_MaterialInfo.Emission[i] = 0.0f;
+        }
+        m_SkinArrowDrawObj_vec[k].m_MaterialInfo.Ambient[3] = 0.2f;
+        m_SkinArrowDrawObj_vec[k].m_MaterialInfo.Diffuse[3] = 0.5f;
+        m_SkinArrowDrawObj_vec[k].m_MaterialInfo.Specular[3] = 0.7f;
+        m_SkinArrowDrawObj_vec[k].m_MaterialInfo.Emission[3] = 0.0f;
+        m_SkinArrowDrawObj_vec[k].m_MaterialInfo.Shininess = 5.0f;
+
+        draw_obj_vec.push_back( &m_SkinArrowDrawObj_vec[k] );
     }
-}
-
-void GeomXSec::UpdateHighlightDrawObjUtil( int bbox_index )
-{
-    Matrix4d attachMat;
-    Matrix4d relTrans;
-    relTrans = m_AttachMatrix;
-    relTrans.affineInverse();
-    relTrans.matMult( m_ModelMatrix.data() );
-    relTrans.postMult( m_AttachMatrix.data() );
-
-    m_XSecSurf.FindXSec( m_ActiveXSec() )->GetDrawLines( relTrans, m_HighlightXSecDrawObj.m_PntVec );
-    m_HighlightXSecDrawObj.m_GeomChanged = true;
-
-    // make bounding box over current XSec if not first xsec in stack/fuse
-    if ( bbox_index > 0 )
-    {
-        VspCurve inbd = m_XSecSurf.FindXSec( bbox_index - 1 )->GetCurve(); // FIXME: Crash when loading a model
-        inbd.Transform( relTrans );
-
-        VspCurve outbd = m_XSecSurf.FindXSec( bbox_index )->GetCurve();
-        outbd.Transform( relTrans );
-
-        BndBox iBBox, oBBox;
-        inbd.GetBoundingBox( iBBox );
-        outbd.GetBoundingBox( oBBox );
-        oBBox.Update( iBBox );
-
-        m_HighlightXSecLoftDrawObj.m_PntVec = oBBox.GetBBoxDrawLines();
-        m_HighlightXSecLoftDrawObj.m_GeomChanged = true;
-    }
-    else
-    {
-        m_HighlightXSecLoftDrawObj.m_PntVec.clear();
-        m_HighlightXSecLoftDrawObj.m_GeomChanged = true;
-    }
-}
-
-void GeomXSec::LoadDrawObjsUtil( vector< DrawObj* > & draw_obj_vec )
-{
-    GeomXSec::LoadDrawObjs( draw_obj_vec );
-    m_HighlightXSecLoftDrawObj.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_HighlightXSecLoftDrawObj.m_GeomID = BBOXHEADER + m_ID + "ACTIVE_SECT";
-    m_HighlightXSecLoftDrawObj.m_Visible = m_Vehicle->IsGeomActive( m_ID );
-    m_HighlightXSecLoftDrawObj.m_LineWidth = 4.0;
-    m_HighlightXSecLoftDrawObj.m_LineColor = vec3d( 0.0, 1.0, 0.0 );
-    m_HighlightXSecLoftDrawObj.m_Type = DrawObj::VSP_LINES;
-    draw_obj_vec.push_back( &m_HighlightXSecLoftDrawObj );
 }
 
 //==== Get XSec ====//

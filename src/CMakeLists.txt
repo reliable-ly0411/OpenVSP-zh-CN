@@ -24,7 +24,14 @@ IF( VSP_LIBRARY_PATH )
 ENDIF( VSP_LIBRARY_PATH )
 
 IF(WIN32)
-    ADD_DEFINITIONS(/D _CRT_SECURE_NO_WARNINGS /D "NOMINMAX" /MP )
+    # _USE_MATH_DEFINES is what makes math.h declare M_PI and its neighbours on MSVC, and it
+    # has to be set before the first include of math.h anywhere in a translation unit.  A
+    # header cannot arrange that for itself: math.h has an include guard, so if anything
+    # earlier in the unit pulled it in already, a later define arrives too late and the
+    # #include is a no-op.  On the command line it is in force before the first token of
+    # every unit, which is the only place the guarantee holds.  Same species as NOMINMAX
+    # beside it.
+    ADD_DEFINITIONS(/D _CRT_SECURE_NO_WARNINGS /D "NOMINMAX" /D _USE_MATH_DEFINES /MP )
     ADD_COMPILE_OPTIONS(/utf-8 /wd4828)
 ENDIF(WIN32)
 
@@ -65,6 +72,11 @@ CONFIGURE_FILE(
 INCLUDE_DIRECTORIES( ${VSP_BINARY_DIR} )
 
 INCLUDE( extLibraryFind )
+
+# Let the sources see VSP_NO_GRAPHICS too, not only the CMake scripts.
+IF( VSP_NO_GRAPHICS )
+	ADD_COMPILE_DEFINITIONS( VSP_NO_GRAPHICS )
+ENDIF()
 
 ADD_SUBDIRECTORY( external )
 
@@ -179,7 +191,39 @@ IF( NOT VSP_NO_API_WRAPPERS )
 
 
     IF( SWIG_FOUND )
-        FIND_PACKAGE( PythonLibsNew 3 )
+        # Find Python with CMake's FindPython3.  To choose an installation, set
+        # Python3_EXECUTABLE or Python3_ROOT_DIR (actions/setup-python sets the
+        # latter).  The older PYTHON_EXECUTABLE, PYTHON_LIBRARY and
+        # PYTHON_INCLUDE_DIR hints are still honored.  Otherwise the Python on the
+        # PATH is preferred over macOS frameworks and the Windows registry.
+        IF( PYTHON_EXECUTABLE AND NOT Python3_EXECUTABLE )
+            SET( Python3_EXECUTABLE ${PYTHON_EXECUTABLE} )
+        ENDIF()
+        IF( PYTHON_LIBRARY AND NOT Python3_LIBRARY )
+            SET( Python3_LIBRARY ${PYTHON_LIBRARY} )
+        ENDIF()
+        IF( PYTHON_INCLUDE_DIR AND NOT Python3_INCLUDE_DIR )
+            SET( Python3_INCLUDE_DIR ${PYTHON_INCLUDE_DIR} )
+        ENDIF()
+        IF( NOT DEFINED Python3_FIND_FRAMEWORK )
+            SET( Python3_FIND_FRAMEWORK LAST )
+        ENDIF()
+        IF( NOT DEFINED Python3_FIND_REGISTRY )
+            SET( Python3_FIND_REGISTRY LAST )
+        ENDIF()
+
+        FIND_PACKAGE( Python3 COMPONENTS Interpreter Development )
+
+        # Variables used by the rest of the build.
+        IF( Python3_FOUND )
+            SET( PYTHONLIBS_FOUND TRUE )
+            SET( PYTHON_EXECUTABLE ${Python3_EXECUTABLE} )
+            SET( PYTHON_INCLUDE_DIR ${Python3_INCLUDE_DIRS} )
+            SET( PYTHON_INCLUDE_PATH ${Python3_INCLUDE_DIRS} )
+            SET( PYTHON_LIBRARY ${Python3_LIBRARIES} )
+            SET( PYTHON_LIBRARIES ${Python3_LIBRARIES} )
+            SET( PYTHON_VERSION ${Python3_VERSION} )
+        ENDIF()
 
         if ( PYTHONLIBS_FOUND )
             execute_process(

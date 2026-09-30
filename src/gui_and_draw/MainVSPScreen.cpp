@@ -14,7 +14,6 @@
 #define _HAS_STD_BYTE 0
 #endif
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "main.h"
@@ -703,7 +702,7 @@ void MainVSPScreen::ActionCB( void * data )
         const string localization_about =
             string( "OpenVSP 简体中文汉化版\n" ) +
             "软件版本：" + VSPVERSION4 + "\n"
-            "汉化版本：3.51.3-Codex-AI-zh-CN-r2\n"
+            "汉化版本：3.53.0-Codex-AI-zh-CN\n"
             "汉化仓库：https://github.com/reliable-ly0411/OpenVSP-zh-CN\n\n"
             "【声明】本中文本地化由 OpenAI Codex AI 生成并维护。\n"
             "汉化内容包括界面、动态标签、命令行帮助及离线帮助文档。\n\n"

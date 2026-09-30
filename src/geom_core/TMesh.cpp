@@ -18,7 +18,6 @@
 #include <windows.h>
 #endif
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "Vehicle.h"
@@ -322,6 +321,17 @@ TetraMassProp::TetraMassProp( const string& id, double denIn, const vec3d& p0, c
     vector < double > vxz2 = { m_v1.x() * m_v2.z(), m_v2.x() * m_v1.z(), m_v1.x() * m_v3.z(), m_v3.x() * m_v1.z(), m_v2.x() * m_v3.z(), m_v3.x() * m_v2.z() };
     m_Ixz = m_Mass / 20.0 * ( 2.0 * compsum( vxz1 ) + compsum( vxz2 ) );
 
+    // The integrals above are taken about p0, which is the origin of the local vectors.
+    // Shift them to the centroid: that is where a parallel axis term has to start from,
+    // and it is the convention every consumer uses -- TriShellMassProp below stores its
+    // moments about its own centroid, and SetDistributedMass takes them that way too.
+    vec3d c = ( m_v1 + m_v2 + m_v3 ) * 0.25;
+    m_Ixx -= m_Mass * ( c.y() * c.y() + c.z() * c.z() );
+    m_Iyy -= m_Mass * ( c.x() * c.x() + c.z() * c.z() );
+    m_Izz -= m_Mass * ( c.x() * c.x() + c.y() * c.y() );
+    m_Ixy -= m_Mass * c.x() * c.y();
+    m_Iyz -= m_Mass * c.y() * c.z();
+    m_Ixz -= m_Mass * c.x() * c.z();
 }
 
 void TetraMassProp::SetDistributedMass( double massIn, const vec3d& cgIn, const double & IxxIn, const double & IyyIn, const double & IzzIn,
@@ -3667,6 +3677,7 @@ xmlNodePtr TMesh::EncodeXml( xmlNodePtr & node )
     xmlNodePtr tmesh_node = xmlNewChild( node, nullptr, BAD_CAST "TMesh", nullptr );
     XmlUtil::AddIntNode( tmesh_node, "Num_Tris", ( int )m_TVec.size() );
     EncodeTriList( tmesh_node );
+    EncodeTagList( tmesh_node );
     return tmesh_node;
 }
 
@@ -3684,6 +3695,65 @@ xmlNodePtr TMesh::EncodeTriList( xmlNodePtr & node )
         XmlUtil::AddVectorVec3dNode( tri_list_node, "Tri", tri );
     }
     return tri_list_node;
+}
+
+// The tags a triangle carries are what tells the parts of a mesh apart -- the component it
+// came from, and any sub-surfaces it falls in -- so they are worth keeping alongside the
+// triangles themselves.  A triangle may carry any number of them, so rather than a node per
+// triangle they go down end to end, behind a count per triangle.
+//
+// The numbers only mean something next to the names the tag maps hold for them, which are
+// written by whoever owns the mesh.  Nothing is written for a mesh whose triangles are
+// untagged.
+xmlNodePtr TMesh::EncodeTagList( xmlNodePtr & node )
+{
+    vector < int > ntagvec( m_TVec.size(), 0 );
+    vector < int > tagvec;
+
+    for ( int i = 0 ; i < ( int ) m_TVec.size() ; i++ )
+    {
+        ntagvec[i] = ( int )m_TVec[i]->m_Tags.size();
+        tagvec.insert( tagvec.end(), m_TVec[i]->m_Tags.begin(), m_TVec[i]->m_Tags.end() );
+    }
+
+    if ( tagvec.empty() )
+    {
+        return nullptr;
+    }
+
+    xmlNodePtr tag_list_node = xmlNewChild( node, nullptr, BAD_CAST "Tag_List", nullptr );
+    XmlUtil::AddVectorIntNode( tag_list_node, "Num_Tags", ntagvec );
+    XmlUtil::AddVectorIntNode( tag_list_node, "Tags", tagvec );
+    return tag_list_node;
+}
+
+void TMesh::DecodeTagList( xmlNodePtr & node )
+{
+    xmlNodePtr tag_list_node = XmlUtil::GetNode( node, "Tag_List", 0 );
+    if ( !tag_list_node )
+    {
+        return;
+    }
+
+    vector < int > ntagvec = XmlUtil::ExtractVectorIntNode( tag_list_node, "Num_Tags" );
+    vector < int > tagvec = XmlUtil::ExtractVectorIntNode( tag_list_node, "Tags" );
+
+    if ( ntagvec.size() != m_TVec.size() )
+    {
+        return;
+    }
+
+    int itag = 0;
+    for ( int i = 0 ; i < ( int )m_TVec.size() ; i++ )
+    {
+        if ( itag + ntagvec[i] > ( int )tagvec.size() )
+        {
+            return;
+        }
+
+        m_TVec[i]->m_Tags.assign( tagvec.begin() + itag, tagvec.begin() + itag + ntagvec[i] );
+        itag += ntagvec[i];
+    }
 }
 
 void TMesh::DecodeXml( xmlNodePtr & node )
@@ -3704,6 +3774,8 @@ void TMesh::DecodeXml( xmlNodePtr & node )
 
         DecodeTriList( tri_list_node, num_tris );
     }
+
+    DecodeTagList( node );
 }
 
 void TMesh::DecodeTriList( xmlNodePtr & node, int num_tris )
@@ -4931,7 +5003,7 @@ void TMesh::Transform( const Matrix4d & TransMat )
 }
 
 // Wrapper
-void TMesh::AddTri( const vec3d &p0, const vec3d &p1, const vec3d &p2, const int &iQuad )
+bool TMesh::AddTri( const vec3d &p0, const vec3d &p1, const vec3d &p2, const int &iQuad )
 {
     double dist_tol = 1.0e-12;
 
@@ -4941,26 +5013,51 @@ void TMesh::AddTri( const vec3d &p0, const vec3d &p1, const vec3d &p2, const int
 
     if ( v01.mag() < dist_tol || v02.mag() < dist_tol || v12.mag() < dist_tol )
     {
-        return;
+        return false;
     }
 
     vec3d norm = cross( v01, v02 );
     norm.normalize();
 
-    AddTri( p0, p1, p2, norm, iQuad );
+    return AddTri( p0, p1, p2, norm, iQuad );
 }
 
-void TMesh::AddTri( const vec3d &p0, const vec3d &p1, const vec3d &p2, const int &iQuad, const int & jref, const int & kref )
+bool TMesh::AddTri( const vec3d &p0, const vec3d &p1, const vec3d &p2, const int &iQuad, const int & jref, const int & kref )
 {
-    AddTri( p0, p1, p2, iQuad );
+    if ( !AddTri( p0, p1, p2, iQuad ) )
+    {
+        return false;
+    }
+
     TTri* tri = m_TVec.back();
     tri->m_jref = jref;
     tri->m_kref = kref;
+
+    return true;
 }
 
 // Base.  i.e. does m_TVec.push_back()
-void TMesh::AddTri( const vec3d &v0, const vec3d &v1, const vec3d &v2, const vec3d &norm, const int &iQuad )
+bool TMesh::AddTri( const vec3d &v0, const vec3d &v1, const vec3d &v2, const vec3d &norm, const int &iQuad )
 {
+    // A triangle enclosing no area is worse than useless further down.  It has no normal
+    // worth reading, nothing can orient it, and it survives into the intersection and into
+    // whatever reads the mesh afterwards.  The cheapest place to be rid of one is before it
+    // exists.
+    //
+    // The question is put as an area rather than as any test on the coordinates, because area
+    // does not care which way the geometry is turned.  The routine used measures it stably --
+    // Kahan's arrangement of Heron's formula, in Vec3d.cpp -- which keeps the cancellation
+    // that the naive form loses on a needle.
+    //
+    // The cutoff is an area in the model's own units.  Turning a twenty unit model to an
+    // arbitrary angle leaves the triangles meant here below 1e-8 and the smallest triangle
+    // actually wanted at 1e-6; this sits between.  Being an absolute area it travels with the
+    // size of the model, so a model built at a very different scale deserves a fresh look.
+    if ( area( v0, v1, v2 ) < TRI_AREA_TOL )
+    {
+        return false;
+    }
+
     // Use For XYZ Tri
     TTri* ttri = new TTri( this );
     ttri->m_Norm = norm;
@@ -4983,14 +5080,22 @@ void TMesh::AddTri( const vec3d &v0, const vec3d &v1, const vec3d &v2, const vec
     m_NVec.push_back( ttri->m_N0 );
     m_NVec.push_back( ttri->m_N1 );
     m_NVec.push_back( ttri->m_N2 );
+
+    return true;
 }
 
-void TMesh::AddTri( const vec3d &v0, const vec3d &v1, const vec3d &v2, const vec3d &norm, const int &iQuad, const int & jref, const int & kref )
+bool TMesh::AddTri( const vec3d &v0, const vec3d &v1, const vec3d &v2, const vec3d &norm, const int &iQuad, const int & jref, const int & kref )
 {
-    AddTri( v0, v1, v2, norm, iQuad );
+    if ( !AddTri( v0, v1, v2, norm, iQuad ) )
+    {
+        return false;
+    }
+
     TTri* tri = m_TVec.back();
     tri->m_jref = jref;
     tri->m_kref = kref;
+
+    return true;
 }
 
 // Base
@@ -5037,10 +5142,14 @@ void TMesh::AddTri( TNode* node0, TNode* node1, TNode* node2, const vec3d & norm
 }
 
 // Wrapper
-void TMesh::AddTri( const vec3d & v0, const vec3d & v1, const vec3d & v2, const vec3d & norm, const vec3d & uw0,
+bool TMesh::AddTri( const vec3d & v0, const vec3d & v1, const vec3d & v2, const vec3d & norm, const vec3d & uw0,
                     const vec3d & uw1, const vec3d & uw2, const int & iQuad, const int & jref, const int & kref ){
     // AddTri with both xyz and uw info
-    AddTri( v0, v1, v2, norm, iQuad );
+    if ( !AddTri( v0, v1, v2, norm, iQuad ) )
+    {
+        return false;
+    }
+
     TTri* tri = m_TVec.back();
     tri->m_N0->m_UWPnt = uw0;
     tri->m_N1->m_UWPnt = uw1;
@@ -5052,6 +5161,8 @@ void TMesh::AddTri( const vec3d & v0, const vec3d & v1, const vec3d & v2, const 
 
     tri->m_jref = jref;
     tri->m_kref = kref;
+
+    return true;
 }
 
 // Base

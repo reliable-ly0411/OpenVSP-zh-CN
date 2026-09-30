@@ -89,6 +89,13 @@ public:
 
     virtual void CopyFrom( XSecCurve* from_crv );
 
+    // Takes another curve's identity, for when this one replaces it: the IDs of the Parms the
+    // two share by group and name -- and the width and height by role, where the names differ
+    // -- the container ID, and the attributes.  Attributes on a Parm with no counterpart move
+    // to the container.  Whatever attributes this one holds are kept, so a copy's are deleted
+    // first.
+    virtual void TakeIdentityOf( XSecCurve* old );
+
     virtual double GetWidth() const
     {
         return 0.0;
@@ -410,11 +417,13 @@ public:
     virtual void UpdateCurve( bool updateParms = true );
 
     //==== Values to Set/Get When Changing Types ====//
-    virtual double GetWidth()
+    // const, so that these override the base rather than hiding it.  Without it a call
+    // through an XSecCurve pointer reached the base and got 0.0 back.
+    virtual double GetWidth() const
     {
         return m_Width();
     }
-    virtual double GetHeight()
+    virtual double GetHeight() const
     {
         return m_Height();
     }
@@ -549,7 +558,9 @@ public:
 
     //===== Read File ====//
     bool ReadXsecFile( const string &file_name );
-    void SetPnts( vector< vec3d > & pnt_vec );
+    // False, and nothing changed, if the points do not form a closed section in the XY plane
+    // running from the right-hand point down through the bottom, round the side and over the top.
+    bool SetPnts( vector< vec3d > & pnt_vec );
 
     virtual void ReadV2FileFuse2( xmlNodePtr &root );
 

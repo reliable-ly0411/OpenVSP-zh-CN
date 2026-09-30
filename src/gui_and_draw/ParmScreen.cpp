@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "ParmScreen.h"
+#include "VSPChinese.h"
 #include "ParmMgr.h"
 #include "LinkMgr.h"
 #include "AdvLinkMgr.h"
@@ -104,7 +105,7 @@ bool ParmScreen::Update()
 
     m_NameString.Update( parm_ptr->GetName() );
     m_GroupString.Update( parm_ptr->GetDisplayGroupName() );
-    m_DescString.Update( parm_ptr->GetDescript() );
+    m_DescString.Update( VSPTranslate( parm_ptr->GetDescript() ) );
 
     m_MinValString.Update( StringUtil::double_to_string(parm_ptr->GetLowerLimit(), "%6.5f") );
     m_CurrValString.Update( StringUtil::double_to_string(parm_ptr->Get(), "%6.5f") );
