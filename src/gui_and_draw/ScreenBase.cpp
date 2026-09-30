@@ -5682,8 +5682,15 @@ void SkinScreen::UpdateSpineBrowser( SkinXSec* xs )
             sym = VSPTranslate( "none" );
         }
 
+        // Localize the generated default only; an arbitrary user name is display data.
+        string display_name = sp->GetName();
+        if ( display_name.compare( 0, 6, "Spine_" ) == 0 && display_name.size() > 6 &&
+             display_name.find_first_not_of( "0123456789", 6 ) == string::npos )
+        {
+            display_name = VSPTranslate( display_name );
+        }
         char str[256];
-        snprintf( str, sizeof( str ), "%s:%6.4f:%s", VSPTranslate( sp->GetName() ).c_str(), sp->m_W01(), sym.c_str() );
+        snprintf( str, sizeof( str ), "%s:%6.4f:%s", display_name.c_str(), sp->m_W01(), sym.c_str() );
         m_SpineBrowser->add( str );
     }
 

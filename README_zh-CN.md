@@ -29,6 +29,7 @@ ZIP 和 `SHA256SUMS.txt`，校验后解压。发布包不会覆盖系统目录�
 Ubuntu 24.04 x86_64：
 
 ```bash
+sudo apt-get install fonts-noto-cjk
 sha256sum -c SHA256SUMS.txt --ignore-missing
 unzip OpenVSP-3.53.0-Codex-AI-zh-CN-Ubuntu-24.04-x86_64.zip
 cd OpenVSP-3.53.0-Linux
@@ -87,7 +88,10 @@ cmake --build build --target package --config Release --parallel 2
 
 同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
 
-## 未发布
+## 3.53.0-Codex-AI-zh-CN
+
+- 修复 Linux 中文字体方框：界面显式使用 Noto CJK 字体，运行前安装 `fonts-noto-cjk`。
+  图标初始化延后到 GUI 路径，带图标的发布包也可在无 DISPLAY 环境输出中文帮助。
 
 - 汉化基线迁移到官方 `OpenVSP_3.53.0`，固定提交
   `fbf9afc31d3bf337a75253e403423cb8c8dd86dc`；保留旧汉化与新上游的双父继承关系。
@@ -103,9 +107,18 @@ cmake --build build --target package --config Release --parallel 2
   保留 FLTK X11、静态 CMINPACK 和 Windows UTF-8 编译配置。
 - 发布流程增加 PR 双平台构建、翻译边界回归、模型保存重开/机身转换冒烟测试和完整案例
   打包校验。已有 Release 一律拒绝覆盖；新版先上传为草稿、下载校验 SHA-256 后公开。
-- 已完成：静态冲突处理、本地化发布守卫、独立翻译回归测试。
-- 待完成：Linux/Windows 完整构建与打包、CLI/模型冒烟测试、Linux GUI 抽查。
-  Windows GUI 尚未人工验收；其自动构建结果不能替代 GUI 验收。
+- 已完成：静态冲突处理、本地化发布守卫、独立翻译回归测试；新脊线列表仅翻译默认名称，
+  自定义脊线名按原文显示。
+- Linux 功能验证：模型冒烟测试通过，包含中文名称保持、机身转换、脊线和保存重开；
+  上游 6 组相关 Python 回归共 89 项通过（机身转换、蒙皮往返、ID 重映射、Stack 首截面、
+  截面复制与身份保持）。
+- Linux 本地验收：GCC 13 Release 编译/ZIP 打包、无 DISPLAY 中文帮助、动态库检查、
+  126 个案例文件与六页中文帮助的逐字节打包校验通过。实际 GUI 已抽查主菜单、几何体树、
+  关于窗口、机翼平面/过渡、机身蒙皮/脊线、机身转换确认框和 FitModel 排序/撤销入口。
+  另补齐抽查发现的机翼、蒙皮和拟合页面混合英文标签。
+- Windows 自动编译、CLI、模型冒烟及打包结论以本标签的 GitHub Actions 和 Release 记录为准；
+  Windows GUI 未人工验收。Linux GUI 仅完成上述显示抽查，不代表全部求解器、CFD/FEA、
+  VSPAERO 或 FitModel 优化流程均已通过功能验收。
 
 ## 3.51.3-Codex-AI-zh-CN-r2
 

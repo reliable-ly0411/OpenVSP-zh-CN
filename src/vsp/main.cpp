@@ -218,15 +218,6 @@ int main( int argc, char** argv )
     //==== Get Vehicle Ptr ====//
     Vehicle* vPtr = VehicleMgr.GetVehicle();
 
-    // Set the packaged icon on every FLTK top-level window.
-    const string icon_path = vPtr->GetExePath() + string( "/vspIcon.png" );
-    Fl_PNG_Image application_icon( icon_path.c_str() );
-    if ( application_icon.fail() == 0 )
-    {
-        Fl_Window::default_icon( &application_icon );
-        Fl_Window::default_xclass( "vsp" );
-    }
-
     vPtr->CheckForVSPAERO( vPtr->GetVSPAEROPath() );
     vPtr->CheckForHelp( vPtr->GetHelpPath() );
 
@@ -234,6 +225,15 @@ int main( int argc, char** argv )
     if ( batchMode( argc, argv, vPtr, ret ) )
     {
         vsp_exit( ret );
+    }
+
+    // Set the packaged icon on every FLTK top-level window.
+    const string icon_path = vPtr->GetExePath() + string( "/vspIcon.png" );
+    Fl_PNG_Image application_icon( icon_path.c_str() );
+    if ( application_icon.fail() == 0 )
+    {
+        Fl_Window::default_icon( &application_icon );
+        Fl_Window::default_xclass( "vsp" );
     }
 
     //==== Init Gui ====//

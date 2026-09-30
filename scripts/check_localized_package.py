@@ -17,6 +17,13 @@ with zipfile.ZipFile(args.archive) as archive:
     if len(roots) != 1:
         raise SystemExit('Expected one package root')
     prefix = roots.pop() + '/'
+    suffix = '.exe' if prefix + 'vsp.exe' in names else ''
+    for executable in ('vsp', 'vspscript', 'vspaero', 'vspviewer', 'vsploads'):
+        if prefix + executable + suffix not in names:
+            raise SystemExit(f'Missing executable: {executable}{suffix}')
+    for resource in ('help/vsp_help', 'help/github-pandoc.css'):
+        if prefix + resource not in names:
+            raise SystemExit(f'Missing resource: {resource}')
     for name in ('README.md', 'README_zh-CN.md', 'AGENTS.md', 'LICENSE', 'vspIcon.png'):
         if archive.read(prefix + name) != (root / name).read_bytes():
             raise SystemExit(f'Packaged document differs: {name}')
