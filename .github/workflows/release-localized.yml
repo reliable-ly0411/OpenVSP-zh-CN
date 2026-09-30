@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing localized tag, for example 3.52.0-Codex-AI-zh-CN-r2
+        description: Existing localized tag (<version>-Codex-AI-zh-CN or <version>-Codex-AI-zh-CN-rN)
         required: true
         type: string
       publish:

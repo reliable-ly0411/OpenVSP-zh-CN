@@ -1,6 +1,6 @@
 > [!IMPORTANT]
 > **非官方简体中文汉化版 / Unofficial Simplified-Chinese localization:**
-> 本仓库基于 OpenVSP 3.51.3，由 OpenAI Codex AI 生成并维护汉化层；原软件版权、
+> 本仓库基于 OpenVSP 3.53.0，由 OpenAI Codex AI 生成并维护汉化层；原软件版权、
 > 作者归属及 NOSA 1.3 许可不变。汉化仓库：
 > <https://github.com/reliable-ly0411/OpenVSP-zh-CN>。
 > 中文使用说明及版本变化见 [`README_zh-CN.md`](README_zh-CN.md)，维护架构与强制规则见

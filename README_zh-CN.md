@@ -88,6 +88,13 @@ cmake --build build --target package --config Release --parallel 2
 
 同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
 
+## 未发布
+
+- 修正 README 首页遗漏的当前基线版本号为 3.53.0；发布工作流改用不绑定版本的标签格式
+  提示，检查脚本按源码版本生成标签示例。
+- 发布守卫新增 README 首页、中文说明与维护规则的当前版本一致性检查；本地检查及
+  旧版本文案拒绝验证通过。历史版本记录保留原版本号。
+
 ## 3.53.0-Codex-AI-zh-CN
 
 - 修复 Linux 中文字体方框：界面显式使用 Noto CJK 字体，运行前安装 `fonts-noto-cjk`。

@@ -99,6 +99,10 @@ def main() -> None:
     if missing:
         raise SystemExit("本地化守卫失败，缺少文件：" + ", ".join(missing))
 
+    require_text("README.md", f"本仓库基于 OpenVSP {version}，")
+    require_text("README_zh-CN.md", f"当前软件版本：OpenVSP {version}\n")
+    require_text("AGENTS.md", f"当前官方基线：OpenVSP {version}，")
+
     require_text("src/gui_and_draw/MainVSPScreen.cpp", "【声明】本中文本地化")
     require_text("src/gui_and_draw/MainVSPScreen.cpp", "VSPVERSION4")
     require_text(
@@ -118,7 +122,7 @@ def main() -> None:
         if not match:
             raise SystemExit(
                 "发布标签必须为 <版本>-Codex-AI-zh-CN 或其 -rN 重发版本，"
-                "例如 3.52.0-Codex-AI-zh-CN-r2"
+                f"例如 {version}-Codex-AI-zh-CN-r2"
             )
         if match.group("version") != version:
             raise SystemExit(f"标签版本 {match.group('version')} 与源码版本 {version} 不一致")
