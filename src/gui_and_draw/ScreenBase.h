@@ -1022,13 +1022,44 @@ protected:
 
     GroupLayout m_SkinLayout;
 
+    // The Skinning tab carries its own tabs: the four fixed sides, and the user defined
+    // spines that can be added between them.
+    Fl_Tabs* m_SkinTabs;
+    GroupLayout m_SpineLayout;
+
     IndexSelector m_SkinIndexSelector;
 
     StringInput m_SkinXSecCurveNameInput;
 
+    //==== Spines sub tab ====//
+    ColResizeBrowser* m_SpineBrowser;
+    int m_ActiveSpine;
+
+    // Which Geom m_ActiveSpine refers to, so it is not carried to another one.
+    string m_ActiveSpineGeomID;
+
+    SliderAdjRangeInput m_SpineWSlider;
+    TriggerButton m_AddSpineButton;
+    TriggerButton m_DelSpineButton;
+    TriggerButton m_DelAllSpinesButton;
+    ToggleButton m_SpineLRSymButton;
+    ToggleButton m_SpineTBSymButton;
+
+    SkinHeader m_SpineHeader;
+    SkinControl m_SpineAngleSkinControl;
+    SkinControl m_SpineSlewSkinControl;
+    SkinControl m_SpineStrengthSkinControl;
+    SkinControl m_SpineCurvatureSkinControl;
+
+    virtual void UpdateSpineBrowser( SkinXSec* xs );
+
     ToggleButton m_AllSymButton;
     TriggerButton m_ClearSkinningButton;
     TriggerButton m_ClearAllSkinningButton;
+    ToggleButton m_ShowSkinningTanToggle;
+    ToggleButton m_ShowSkinningCurveToggle;
+
+    ToggleButton m_CurveBasisToggle;
     SkinHeader m_TopHeader;
     SkinControl m_TopAngleSkinControl;
     SkinControl m_TopSlewSkinControl;
@@ -1206,6 +1237,7 @@ protected:
     GroupLayout m_BlendLayout;
 
     IndexSelector m_BlendIndexSelector;
+    ToggleButton m_ShowBlendingToggle;
 
     GroupLayout m_InLELayout;
     Choice m_InLEChoice;
@@ -1246,8 +1278,10 @@ public:
     virtual void UpdateDrawObj();
     virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
 
-    virtual void SetXSecCurve( XSecCurve* xsc ) { m_XSecCurve = xsc; };
+    virtual void SetXSecCurve( const string &xsc_id ) { m_XSecCurveID = xsc_id; };
 protected:
+
+    virtual XSecCurve* GetXSecCurve();
 
     VSPGUI::VspSubGlWindow * m_GlWin;
 
@@ -1273,7 +1307,7 @@ protected:
 
     TriggerButton m_ResetDefaults;
 
-    XSecCurve * m_XSecCurve;
+    string m_XSecCurveID;
 
     DrawObj m_CurveDO;
 };

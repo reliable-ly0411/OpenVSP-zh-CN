@@ -11,6 +11,7 @@
 #include "VspUtil.h"
 #include "SubSurfaceMgr.h"
 #include "StringUtil.h"
+#include "FileUtil.h"
 #include <cfloat>  //For DBL_EPSILON
 #include "ModeMgr.h"
 
@@ -18,11 +19,6 @@
 
 #include "MeshAnalysis.h"
 
-#ifdef DEBUG_CFD_MESH
-// #include <direct.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#endif
 
 #ifdef DEBUG_CFD_MESH
 #define DEBUG_TIME_OUTPUT
@@ -350,7 +346,7 @@ SurfaceIntersectionSingleton::SurfaceIntersectionSingleton() : ParmContainer()
 
 #ifdef DEBUG_CFD_MESH
     m_DebugDir  = string( "MeshDebug/" );
-    mkdir( m_DebugDir.c_str(), 0777 );
+    MakeDirectory( m_DebugDir );
     m_DebugFile = fopen( "MeshDebug/log.txt", "w" );
     m_DebugDraw = false;
 #endif
@@ -1285,52 +1281,73 @@ void SurfaceIntersectionSingleton::WritePlot3DFile( const string &filename, bool
             allpts = &m_BinAdaptCurveAVec;
         }
 
-        fprintf( fp, " %d\n", nchain );
-
-        int ichain = 0;
-        for ( ichain = 0; ichain < nchain; ichain++ )
-        {
-            fprintf( fp, " %zu 1 1\n", (*allpts)[ichain].size() );
-        }
-
-        for ( ichain = 0; ichain < nchain; ichain++ )
-        {
-            for ( int i = 0; i < (*allpts)[ichain].size(); i++ )
-            {
-                vec3d pt = (*allpts)[ichain][i];
-                fprintf( fp, "%25.17e ", pt.x() );
-            }
-            fprintf( fp, "\n" );
-
-            for ( int i = 0; i < (*allpts)[ichain].size(); i++ )
-            {
-                vec3d pt = (*allpts)[ichain][i];
-                fprintf( fp, "%25.17e ", pt.y() );
-            }
-            fprintf( fp, "\n" );
-
-            for ( int i = 0; i < (*allpts)[ichain].size(); i++ )
-            {
-                vec3d pt = (*allpts)[ichain][i];
-                fprintf( fp, "%25.17e ", pt.z() );
-            }
-            fprintf( fp, "\n" );
-        }
+        WritePlot3DCurveBlocks( fp, *allpts );
 
         fclose( fp );
     }
 }
 
+// Write a set of curves as Plot3D multiple grid blocks.  Every block is a curve, so it
+// is i indexed only -- the j and k dimensions are 1 -- and each block's points are
+// written as all of x, then all of y, then all of z.
+void SurfaceIntersectionSingleton::WritePlot3DCurveBlocks( FILE* fp, const vector < vector < vec3d > > &curve_vec )
+{
+    if ( !fp )
+    {
+        return;
+    }
+
+    int ncurve = curve_vec.size();
+
+    fprintf( fp, " %d\n", ncurve );
+
+    for ( int icurve = 0; icurve < ncurve; icurve++ )
+    {
+        fprintf( fp, " %zu 1 1\n", curve_vec[icurve].size() );
+    }
+
+    for ( int icurve = 0; icurve < ncurve; icurve++ )
+    {
+        for ( int i = 0; i < curve_vec[icurve].size(); i++ )
+        {
+            fprintf( fp, "%25.17e ", curve_vec[icurve][i].x() );
+        }
+        fprintf( fp, "\n" );
+
+        for ( int i = 0; i < curve_vec[icurve].size(); i++ )
+        {
+            fprintf( fp, "%25.17e ", curve_vec[icurve][i].y() );
+        }
+        fprintf( fp, "\n" );
+
+        for ( int i = 0; i < curve_vec[icurve].size(); i++ )
+        {
+            fprintf( fp, "%25.17e ", curve_vec[icurve][i].z() );
+        }
+        fprintf( fp, "\n" );
+    }
+}
+
 Surf* SurfaceIntersectionSingleton::FindSurf( int surf_id )
+{
+    int indx = FindSurfIndx( surf_id );
+    if ( indx >= 0 )
+    {
+        return m_SurfVec[ indx ];
+    }
+    return nullptr;
+}
+
+int SurfaceIntersectionSingleton::FindSurfIndx( int surf_id )
 {
     for ( size_t i = 0; i < m_SurfVec.size(); i++ )
     {
         if ( m_SurfVec[i]->GetSurfID() == surf_id )
         {
-            return m_SurfVec[i];
+            return i;
         }
     }
-    return nullptr;
+    return -1;
 }
 
 void SurfaceIntersectionSingleton::WriteIGESFile( const string& filename, int len_unit,
@@ -1485,15 +1502,7 @@ void SurfaceIntersectionSingleton::WriteSTEPFile( const string& filename, int le
         SdaiSurface* surf = m_NURBSSurfVec[si].WriteSTEPSurf( &step, label, merge_pnts );
         geom_surf_label_map[label].push_back( surf );
 
-        int comp_id = -1;
-        for ( size_t j = 0; j < m_SurfVec.size(); j++ )
-        {
-            if ( m_SurfVec[j]->GetSurfID() == m_NURBSSurfVec[si].m_SurfID )
-            {
-                comp_id = m_SurfVec[j]->GetCompID();
-                break;
-            }
-        }
+        int comp_id = current_surf->GetCompID();
 
         for ( size_t j = 0; j < comp_id_group_vec.size(); j++ )
         {
@@ -1625,9 +1634,16 @@ void SurfaceIntersectionSingleton::BuildNURBSSurfMap()
 
         if ( nurbs_surf.m_NURBSLoopVec.size() == 1 &&
              nurbs_surf.m_NURBSLoopVec[0].m_BorderLoopFlag &&
-             nurbs_surf.m_NURBSLoopVec[0].m_InternalLoopFlag )
+             nurbs_surf.m_NURBSLoopVec[0].m_InternalLoopFlag &&
+             nurbs_surf.m_SurfType != vsp::CFD_NEGATIVE )
         {
-            continue; // Indicates that the surface is completely enclosed
+            // Indicates that the surface is completely enclosed.  A normal surface buried
+            // inside another component bounds nothing and goes.  A negative one does not:
+            // being wholly inside the component it cuts is what makes it the wall of the
+            // cavity, which is as real a boundary as the outer skin.  Only a negative
+            // surface entirely outside its component can be dropped, and that is the test
+            // below.
+            continue;
         }
         else if ( nurbs_surf.m_NURBSLoopVec.size() == 1 &&
                   !nurbs_surf.m_NURBSLoopVec[0].m_InternalLoopFlag &&
@@ -1878,46 +1894,61 @@ void SurfaceIntersectionSingleton::AddIntersectionSeg( const SurfPatch& pA, cons
     // that share that boundary.  So, detect intersections that lie on the patch minimum edge
     // and don't carry those forward.  Don't do this if the minimum parameter is zero.  I.e.
     // there is no prior patch.
+    //
+    // Skip this dedup for FEA structure×structure pairs. After Y-mirror (FeaSymmIndex), planar
+    // part intersections (e.g. XY floor × poly-spar web) can be reported only on the w_min/u_min
+    // side of a split while the w_max twin is missed — dropping the min-edge copy then deletes
+    // the entire chain on one symmetry side.
+    bool skip_min_edge_dedup = false;
+    if ( pA.get_surf_ptr() && pB.get_surf_ptr() &&
+         pA.get_surf_ptr()->GetSurfaceCfdType() == vsp::CFD_STRUCTURE &&
+         pB.get_surf_ptr()->GetSurfaceCfdType() == vsp::CFD_STRUCTURE )
+    {
+        skip_min_edge_dedup = true;
+    }
 
     double tol = 1e-10; // Tolerance buildup due to SurfPatch::find_closest_uw_planar_approx and other inaccuracies
 
-    if ( pA.get_u_min() > 0.0 ) // if Patch A is not the very beginning of u
+    if ( !skip_min_edge_dedup )
     {
-        double lim = pA.get_u_min() + tol;
-        // if both points projected to A are on the starting edge of u
-        if ( plane_uwA0.v[0] <= lim && plane_uwA1.v[0] <= lim )
+        if ( pA.get_u_min() > 0.0 ) // if Patch A is not the very beginning of u
         {
-            return;
+            double lim = pA.get_u_min() + tol;
+            // if both points projected to A are on the starting edge of u
+            if ( plane_uwA0.v[0] <= lim && plane_uwA1.v[0] <= lim )
+            {
+                return;
+            }
         }
-    }
 
-    if ( pB.get_u_min() > 0.0 ) // if Patch B is not the very beginning of u
-    {
-        double lim = pB.get_u_min() + tol;
-        // if both points projected to B are on the starting edge of u
-        if ( plane_uwB0.v[0] <= lim && plane_uwB1.v[0] <= lim )
+        if ( pB.get_u_min() > 0.0 ) // if Patch B is not the very beginning of u
         {
-            return;
+            double lim = pB.get_u_min() + tol;
+            // if both points projected to B are on the starting edge of u
+            if ( plane_uwB0.v[0] <= lim && plane_uwB1.v[0] <= lim )
+            {
+                return;
+            }
         }
-    }
 
-    if ( pA.get_w_min() > 0.0 ) // if Patch A is not the very beginning of w
-    {
-        double lim = pA.get_w_min() + tol;
-        // if both points projected to A are on the starting edge of w
-        if ( plane_uwA0.v[1] <= lim && plane_uwA1.v[1] <= lim )
+        if ( pA.get_w_min() > 0.0 ) // if Patch A is not the very beginning of w
         {
-            return;
+            double lim = pA.get_w_min() + tol;
+            // if both points projected to A are on the starting edge of w
+            if ( plane_uwA0.v[1] <= lim && plane_uwA1.v[1] <= lim )
+            {
+                return;
+            }
         }
-    }
 
-    if ( pB.get_w_min() > 0.0 ) // if Patch B is not the very beginning of w
-    {
-        double lim = pB.get_w_min() + tol;
-        // if both points projected to B are on the starting edge of w
-        if ( plane_uwB0.v[1] <= lim && plane_uwB1.v[1] <= lim )
+        if ( pB.get_w_min() > 0.0 ) // if Patch B is not the very beginning of w
         {
-            return;
+            double lim = pB.get_w_min() + tol;
+            // if both points projected to B are on the starting edge of w
+            if ( plane_uwB0.v[1] <= lim && plane_uwB1.v[1] <= lim )
+            {
+                return;
+            }
         }
     }
 

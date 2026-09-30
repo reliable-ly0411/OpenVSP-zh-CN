@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "FitModelScreen.h"
 #include "ParmMgr.h"
 
@@ -14,7 +15,7 @@
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
-FitModelScreen::FitModelScreen( ScreenMgr* mgr ) : TabScreen( mgr, 400, 469 + 107, "Fit Model", "", 107 )
+FitModelScreen::FitModelScreen( ScreenMgr* mgr ) : TabScreen( mgr, 525, 469 + 107, "Fit Model", "", 107 )
 {
     m_NVarLast = 0;
 
@@ -83,11 +84,45 @@ FitModelScreen::FitModelScreen( ScreenMgr* mgr ) : TabScreen( mgr, 400, 469 + 10
 
     // Pointer for the widths of each column in the browser to support resizing
     // Last column width must be 0
-    static int target_col_widths[] = { 90, 42, 42, 42, 42, 42, 42, 50, 0 }; // widths for each column
+    static int target_col_widths[] = { 90, 36, 60, 42, 42, 42, 42, 42, 42, 50, 0 }; // widths for each column
 
+    int movebw = 20;
     int browser_h = 150;
-    m_TargetPtBrowser = m_PickPtsLayout.AddColResizeBrowser( target_col_widths, 8, browser_h );
+    int start_x = m_PickPtsLayout.GetX();
+    int start_y = m_PickPtsLayout.GetY();
+
+    m_PickPtsLayout.AddSubGroupLayout( m_MoveTargetPtLayout, movebw, browser_h );
+
+    m_MoveTargetPtLayout.SetSameLineFlag( false );
+    m_MoveTargetPtLayout.SetFitWidthFlag( false );
+
+    m_MoveTargetPtLayout.SetButtonWidth( movebw );
+    m_MoveTargetPtLayout.AddButton( m_MoveTargetPtTopButton, "@2<<" );
+    m_MoveTargetPtLayout.AddYGap();
+    m_MoveTargetPtLayout.AddButton( m_MoveTargetPtUpButton, "@2<" );
+    m_MoveTargetPtLayout.AddY( browser_h - 4 * m_MoveTargetPtLayout.GetStdHeight() - 2 * m_MoveTargetPtLayout.GetGapHeight() );
+    m_MoveTargetPtLayout.AddButton( m_MoveTargetPtDownButton, "@2>" );
+    m_MoveTargetPtLayout.AddYGap();
+    m_MoveTargetPtLayout.AddButton( m_MoveTargetPtBotButton, "@2>>" );
+
+    m_PickPtsLayout.SetY( start_y );
+    m_PickPtsLayout.AddX( movebw );
+    m_PickPtsLayout.SetFitWidthFlag( true );
+
+    m_PickPtsLayout.AddSubGroupLayout( m_TargetPtBrowserLayout, m_PickPtsLayout.GetRemainX(), browser_h );
+    m_PickPtsLayout.AddY( browser_h );
+
+    m_TargetPtBrowser = m_TargetPtBrowserLayout.AddColResizeBrowser( target_col_widths, 10, browser_h );
     m_TargetPtBrowser->callback( staticScreenCB, this );
+
+    m_PickPtsLayout.SetX( start_x );
+
+    m_PickPtsLayout.SetFitWidthFlag( false );
+    m_PickPtsLayout.SetSameLineFlag( true );
+
+    m_PickPtsLayout.SetChoiceButtonWidth( 60 );
+
+    m_PickPtsLayout.SetSliderWidth( m_PickPtsLayout.GetW() / 2 - m_PickPtsLayout.GetChoiceButtonWidth() );
 
     m_TargetGeomPicker.AddExcludeType( MESH_GEOM_TYPE );
     m_TargetGeomPicker.AddExcludeType( HUMAN_GEOM_TYPE );
@@ -98,8 +133,9 @@ FitModelScreen::FitModelScreen( ScreenMgr* mgr ) : TabScreen( mgr, 400, 469 + 10
     m_TargetGeomPicker.AddExcludeType( NGON_GEOM_TYPE );
     m_PickPtsLayout.AddGeomPicker( m_TargetGeomPicker );
 
-    m_PickPtsLayout.SetFitWidthFlag( false );
-    m_PickPtsLayout.SetSameLineFlag( true );
+    m_PickPtsLayout.AddChoice( m_SurfChoice, "Surface" );
+
+    m_PickPtsLayout.ForceNewLine();
 
     m_PickPtsLayout.SetButtonWidth( 50 );
 
@@ -128,10 +164,11 @@ FitModelScreen::FitModelScreen( ScreenMgr* mgr ) : TabScreen( mgr, 400, 469 + 10
 
     m_PickPtsLayout.SetFitWidthFlag( false );
 
-    m_PickPtsLayout.SetButtonWidth( ( m_PickPtsLayout.GetRemainX() ) / 3 );
+    m_PickPtsLayout.SetButtonWidth( ( m_PickPtsLayout.GetRemainX() ) / 4 );
     m_PickPtsLayout.AddButton( m_AddTargetPtButton, "Add Target" );
     m_PickPtsLayout.AddButton( m_DelTargetPtButton, "Delete Target" );
     m_PickPtsLayout.AddButton( m_ClearTargetPtButton, "Clear Target" );
+    m_PickPtsLayout.AddButton( m_SortTargetPtButton, "Sort by Dist" );
 
     m_PickPtsLayout.ForceNewLine();
     m_PickPtsLayout.SetFitWidthFlag( true );
@@ -224,24 +261,26 @@ FitModelScreen::FitModelScreen( ScreenMgr* mgr ) : TabScreen( mgr, 400, 469 + 10
     m_OptimLayout.ForceNewLine();
 
 
+    int halfw = ( m_OptimLayout.GetRemainX() ) / 2;
 
-    m_OptimLayout.SetButtonWidth( ( m_OptimLayout.GetRemainX() ) / 2 );
+    m_OptimLayout.SetButtonWidth( halfw );
 
     m_OptimLayout.AddButton( m_SearchUWButton, "Search UW" );
     m_OptimLayout.AddButton( m_RefineUWButton, "Refine UW" );
 
     m_OptimLayout.ForceNewLine();
 
-    m_OptimLayout.AddButton( m_UpdateDistButton, "Update Distance" );
     m_OptimLayout.AddButton( m_OptimizeButton, "Fit" );
+    m_OptimLayout.AddButton( m_UndoButton, "Undo" );
 
     m_OptimLayout.ForceNewLine();
 
-    m_OptimLayout.SetFitWidthFlag( true );
-    m_OptimLayout.SetSameLineFlag( false );
+    m_OptimLayout.AddButton( m_UpdateDistButton, "Update" );
 
-    m_OptimLayout.SetButtonWidth( 100 );
-    m_OptimLayout.AddOutput( m_DistOutput, "Distance Metric" );
+    m_OptimLayout.SetFitWidthFlag( true );
+
+    m_OptimLayout.SetButtonWidth( halfw / 2 );
+    m_OptimLayout.AddOutput( m_DistOutput, "Distance", halfw );
 
     //===== Save/Load Tab =====//
     Fl_Group* saveLoad_group = AddSubGroup( saveLoad_tab, 5 );
@@ -306,6 +345,37 @@ bool FitModelScreen::Update()
 
     m_TargetGeomPicker.Update();
 
+    // The surface list belongs to whichever Geom is picked, and its length moves with the model,
+    // so it is rebuilt here rather than once at construction.  An index left past the end -- a
+    // symmetry turned off since it was chosen -- is brought back to the first surface.
+    m_SurfChoice.ClearItems();
+
+    Geom* target_geom = veh->FindGeom( m_TargetGeomPicker.GetGeomChoice() );
+    if ( target_geom )
+    {
+        int nsurf = target_geom->GetNumTotalSurfs();
+
+        for ( int isurf = 0; isurf < nsurf; isurf++ )
+        {
+            snprintf( str, sizeof( str ), "Surf_%d", isurf );
+            m_SurfChoice.AddItem( str );
+        }
+        m_SurfChoice.UpdateItems();
+
+        if ( veh->m_SurfIndx() < 0 || veh->m_SurfIndx() >= nsurf )
+        {
+            veh->m_SurfIndx = 0;
+        }
+        m_SurfChoice.SetVal( veh->m_SurfIndx() );
+
+        m_SurfChoice.Activate();
+    }
+    else
+    {
+        m_SurfChoice.UpdateItems();
+        m_SurfChoice.Deactivate();
+    }
+
     m_UToggleGroup.Update( veh->m_UType.GetID() );
     m_USlider.Update( veh->m_UTargetPt.GetID() );
 
@@ -322,7 +392,7 @@ bool FitModelScreen::Update()
 
     m_TargetPtBrowser->column_char( ':' );         // use : as the column character
 
-    snprintf( str, sizeof( str ),  "@b@.GEOM:@b@c@.X:@b@c@.Y:@b@c@.Z:@b@c@.U:@b@c@.Type:@b@c@.W:@b@.Type" );
+    snprintf( str, sizeof( str ),  "@b@.几何体:@b@c@.曲面:@b@c@.距离:@b@c@.X:@b@c@.Y:@b@c@.Z:@b@c@.U:@b@c@.类型:@b@c@.W:@b@.类型" );
     m_TargetPtBrowser->add( str );
 
     int num_fix = FitModelMgr.GetNumTargetPt();
@@ -337,25 +407,28 @@ bool FitModelScreen::Update()
                 string ut;
                 string wt;
 
-                if( tpt->GetUType() == TargetPt::FIXED )
+                if( tpt->GetUType() == vsp::FIT_MODEL_FIXED )
                 {
-                    ut = string( "fix" );
+                    ut = VSPTranslate( "fix" );
                 }
                 else
                 {
-                    ut = string( "free" );
+                    ut = VSPTranslate( "free" );
                 }
 
-                if( tpt->GetWType() == TargetPt::FIXED )
+                if( tpt->GetWType() == vsp::FIT_MODEL_FIXED )
                 {
-                    wt = string( "fix" );
+                    wt = VSPTranslate( "fix" );
                 }
                 else
                 {
-                    wt = string( "free" );
+                    wt = VSPTranslate( "free" );
                 }
 
-                snprintf( str, sizeof( str ),  "%s:%4.2f:%4.2f:%4.2f:%4.2f:%s:%4.2f:%s", g->GetName().c_str(), tpt->GetPt().x(), tpt->GetPt().y(), tpt->GetPt().z(), tpt->GetUW().x(), ut.c_str(), tpt->GetUW().y(), wt.c_str() );
+                // Distance gets %.3g rather than the fixed format the coordinates use.  A converged
+                // fit leaves distances several orders of magnitude smaller than the model, and
+                // %4.2f would show every one of them as 0.00.
+                snprintf( str, sizeof( str ),  "%s:%d:%.3g:%4.2f:%4.2f:%4.2f:%4.2f:%s:%4.2f:%s", g->GetName().c_str(), tpt->GetSurfIndx(), tpt->GetDist(), tpt->GetPt().x(), tpt->GetPt().y(), tpt->GetPt().z(), tpt->GetUW().x(), ut.c_str(), tpt->GetUW().y(), wt.c_str() );
                 m_TargetPtBrowser->add( str );
             }
         }
@@ -440,6 +513,17 @@ bool FitModelScreen::Update()
     m_CondOutput.Update( str );
 
     m_DistOutput.Update( std::to_string( static_cast<long double> (FitModelMgr.m_DistMetric) ) );
+
+    // Nothing to put back until an operation has run, and a snapshot taken against a different set
+    // of variables or target points cannot be put back at all.
+    if ( FitModelMgr.CanUndo() )
+    {
+        m_UndoButton.Activate();
+    }
+    else
+    {
+        m_UndoButton.Deactivate();
+    }
 
     //===== Save/Load =====//
     m_SaveOutput.Update( StringUtil::truncateFileName( FitModelMgr.GetSaveFitFileName(), 40 ) );
@@ -534,6 +618,7 @@ void FitModelScreen::CallBack( Fl_Widget* w )
 
         if ( tpt )
         {
+            veh->m_SurfIndx = tpt->GetSurfIndx();
             veh->m_UType = tpt->GetUType();
             veh->m_WType = tpt->GetWType();
 
@@ -622,6 +707,27 @@ void FitModelScreen::GuiDeviceCallBack( GuiDevice* device )
         FitModelMgr.DelAllTargetPts( );
         FitModelMgr.UpdateDist();
     }
+    else if ( device == &m_SortTargetPtButton )
+    {
+        // Measures the distances itself, so there is no UpdateDist call to pair with this one.
+        FitModelMgr.SortTargetPtsByDist();
+    }
+    else if ( device == &m_MoveTargetPtTopButton )
+    {
+        FitModelMgr.MoveCurrTargetPt( vsp::REORDER_MOVE_TOP );
+    }
+    else if ( device == &m_MoveTargetPtUpButton )
+    {
+        FitModelMgr.MoveCurrTargetPt( vsp::REORDER_MOVE_UP );
+    }
+    else if ( device == &m_MoveTargetPtDownButton )
+    {
+        FitModelMgr.MoveCurrTargetPt( vsp::REORDER_MOVE_DOWN );
+    }
+    else if ( device == &m_MoveTargetPtBotButton )
+    {
+        FitModelMgr.MoveCurrTargetPt( vsp::REORDER_MOVE_BOTTOM );
+    }
     else if ( device == &m_AddVarButton )
     {
         FitModelMgr.AddCurrVar( );
@@ -636,6 +742,10 @@ void FitModelScreen::GuiDeviceCallBack( GuiDevice* device )
     {
         FitModelMgr.DelAllVars( );
         RebuildAdjustTab();
+    }
+    else if ( device == &m_SurfChoice )
+    {
+        VehicleMgr.GetVehicle()->m_SurfIndx = m_SurfChoice.GetVal();
     }
     else if ( device == &m_ParmPicker )
     {
@@ -655,6 +765,10 @@ void FitModelScreen::GuiDeviceCallBack( GuiDevice* device )
     else if ( device == &m_UpdateDistButton )
     {
         FitModelMgr.UpdateDist();
+    }
+    else if ( device == &m_UndoButton )
+    {
+        FitModelMgr.Undo();
     }
     else if ( device == &m_OptimizeButton )
     {
@@ -729,4 +843,30 @@ void FitModelScreen::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
     }
 
     FitModelMgr.LoadDrawObjs( draw_obj_vec );
+
+    m_TargetUWPntDrawObj.m_PntVec.clear();
+
+    m_TargetUWPntDrawObj.m_GeomID = "IDFORTARGETUWPNTDO";
+    m_TargetUWPntDrawObj.m_Type = DrawObj::VSP_POINTS;
+    m_TargetUWPntDrawObj.m_PointSize = 10.0;
+    m_TargetUWPntDrawObj.m_PointColor = vec3d( 0.0, 0.8, 0.0 );
+    m_TargetUWPntDrawObj.m_GeomChanged = true;
+
+    Vehicle* veh = VehicleMgr.GetVehicle();
+    Geom* target_geom = veh->FindGeom( m_TargetGeomPicker.GetGeomChoice() );
+
+    // The surface count moves with the model, so an index that was in range when it was picked can
+    // fall out of it while the Geom is still the one chosen.
+    if ( target_geom && veh->m_SurfIndx() >= 0 && veh->m_SurfIndx() < target_geom->GetNumTotalSurfs() )
+    {
+        const VspSurf* s = target_geom->GetSurfPtr( veh->m_SurfIndx() );
+        if ( s )
+        {
+            m_TargetUWPntDrawObj.m_PntVec.push_back( s->CompPnt01( veh->m_UTargetPt(), veh->m_WTargetPt() ) );
+        }
+    }
+
+    // Pushed even when nothing was found to draw, so that picking a Geom without a surface clears
+    // the point left from the one before it.
+    draw_obj_vec.push_back( &m_TargetUWPntDrawObj );
 }

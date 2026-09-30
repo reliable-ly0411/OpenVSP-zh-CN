@@ -5,7 +5,6 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "BORGeom.h"
@@ -233,15 +232,13 @@ void BORGeom::ComputeCenter()
 }
 
 //==== Scale ====//
-void BORGeom::Scale()
+void BORGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
 
     m_Diameter *= currentScale;
 
     m_XSCurve->SetScale( currentScale );
 
-    m_LastScale = m_Scale();
 }
 
 void BORGeom::AddDefaultSources( double base_len )
@@ -282,6 +279,8 @@ void BORGeom::SetXSecCurveType( int type )
         if ( oldXSCurve )
         {
             m_XSCurve->CopyFrom( oldXSCurve );
+            m_XSCurve->DeleteAttributes();
+            m_XSCurve->TakeIdentityOf( oldXSCurve );
             delete oldXSCurve;
         }
 
@@ -423,6 +422,8 @@ EditCurveXSec* BORGeom::ConvertToEdit()
 
     if ( xscrv_ptr && xscrv_ptr != m_XSCurve )
     {
+        xscrv_ptr->DeleteAttributes();
+        xscrv_ptr->TakeIdentityOf( m_XSCurve );
         delete m_XSCurve;
 
         m_XSCurve = xscrv_ptr;

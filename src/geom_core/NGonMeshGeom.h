@@ -21,21 +21,21 @@ public:
     NGonMeshGeom( Vehicle* vehicle_ptr );
     virtual ~NGonMeshGeom();
 
-    virtual int GetNumMainSurfs() const
+    virtual int GetNumMainSurfs() const override
     {
         return 0;
     };
 
-    virtual void UpdateSurf();
-    virtual void UpdateDrawObj();
-    virtual void LoadDrawObjs(vector< DrawObj* > & draw_obj_vec);
+    virtual void UpdateSurf() override;
+    virtual void UpdateDrawObj() override;
+    virtual void LoadDrawObjs(vector< DrawObj* > & draw_obj_vec) override;
 
-    virtual void Scale();
-    virtual void UpdateBBox();
+    virtual void ApplyScale( double currentScale ) override;
+    virtual void UpdateBBox() override;
     virtual Matrix4d GetTotalTransMat()const ;
 
-    virtual xmlNodePtr EncodeXml( xmlNodePtr & node );
-    virtual xmlNodePtr DecodeXml( xmlNodePtr & node );
+    virtual xmlNodePtr EncodeXml( xmlNodePtr & node ) override;
+    virtual xmlNodePtr DecodeXml( xmlNodePtr & node ) override;
 
     virtual void SplitLEGeom();
     virtual void Triangulate();
@@ -45,7 +45,7 @@ public:
     virtual void RemovePotentialFiles( const string& file_name );
     virtual void WriteVSPGEOM( string fname, vector < string > &all_fnames );
 
-    virtual vector< TMesh* > CreateTMeshVec();
+    virtual vector< TMesh* > CreateTMeshVec( bool skipnegflipnormal, const int & n_ref = 0 ) const override;
 
     // Scale Transformation Matrix
     Matrix4d m_ScaleMatrix;

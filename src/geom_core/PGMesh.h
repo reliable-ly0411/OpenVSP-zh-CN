@@ -21,7 +21,6 @@
 #include "Vec3d.h"
 #include "Matrix4d.h"
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 #include <cassert>
 
@@ -230,7 +229,7 @@ public:
 
     PGNode * FindDoubleBackNode( PGEdge* & edouble ) const;
 
-    void SplitEdge( PGEdge *e0, PGEdge *e1 );
+    bool SplitEdge( PGEdge *e0, PGEdge *e1 );
 
     void GetHullEdges( vector < PGEdge* > & evec ) const;
 
@@ -467,7 +466,7 @@ public:
     PGPoint* AddPoint( const vec3d& p );
     void  RemovePoint( PGPoint* pptr );
 
-    PGMesh* GetActiveMesh();
+    PGMesh* GetActiveMesh() const;
 
     bool Check();
     void ResetPointNumbers();
@@ -476,6 +475,12 @@ public:
     void WriteVSPGeomPnts( FILE* file_id, const Matrix4d & XFormMat );
     void WriteTagFiles( const string& file_name, vector < string > &all_fnames );
     void WriteVSPGEOMKeyFile(const string & file_name, vector < string > &all_fnames );
+
+    // A part's own name and ID.  The tag maps are keyed by tag and a part is itself a tag --
+    // the first one in every tag combo -- so these are plain lookups.  GetTagNames and
+    // GetTagIDs return these same strings with the combo's subsurfaces appended.
+    std::string GetPartName( int part );
+    std::string GetPartID( int part );
 
     // Get Comma Delimited list of names for a set of tags
     std::string GetTagNames( const std::vector<int> & tags );

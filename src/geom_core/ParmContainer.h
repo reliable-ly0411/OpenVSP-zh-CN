@@ -45,6 +45,10 @@ public:
     virtual void AddParm( const string & id );
     virtual void RemoveParm( const string & id );
 
+    // Put every Parm in the container back the way a new one starts.  A container with
+    // state that is not a Parm has more to do and should extend this.
+    virtual void ResetToInitVals();
+
     virtual string GetParentContainer() const       { return m_ParentContainer; }
     virtual ParmContainer* GetParentContainerPtr() const;
 
@@ -73,6 +77,10 @@ public:
     virtual string FindParm( const string& parm_name, const string& group_name );
     virtual string FindParm( int group_ind, int parm_ind );
     virtual string FindParm( const string& name );
+
+    // Rebuild the map that finds a Parm by group and name from the Parms held now.
+    virtual void UpdateGroupParmMap();
+
     virtual void GetGroupNames( vector< string > & group_names );
     virtual int GetGroupNames( const string &parm_id, vector< string > & group_names );
     virtual int GetParmIDs( const string &parm_id, vector< string > & parm_ids );
@@ -84,7 +92,37 @@ public:
 
     virtual void CopyVals( ParmContainer *from );
 
+    // Like CopyVals, but pairs the Parms by group as well as by name -- the pairing SwapIDs
+    // uses -- so a name that appears in two groups is not confused.
+    virtual void CopyMatchingVals( ParmContainer *from );
+
     virtual void SwapIDs( ParmContainer* from );
+
+    // Trade identities with another container: the Parms the two have in common by group and
+    // name, and then the container IDs themselves.  Everything holding either identity goes on
+    // naming the same thing afterwards -- a link, a design variable, an analysis that named a
+    // Geom, a control surface group that named a subsurface.  For when one object takes
+    // another's place rather than being created beside it.
+    virtual void SwapIdentity( ParmContainer* other );
+
+    // Trade container IDs only, leaving the Parms' IDs where they are.  For a container nested in
+    // one whose SwapIDs has already traded its Parms.
+    virtual void SwapContainerID( ParmContainer* other );
+
+    // Moves this container's attributes to another, and the receiving collection takes the
+    // giving collection's ID as well.  A Parm's attributes belong with its ID, not here.
+    virtual void HandAttributesTo( ParmContainer* to );
+
+    // Moves the attributes of each Parm with no counterpart of the same group and name in
+    // another container onto that container, where they are kept rather than lost.
+    virtual void HandUnpairedAttributesTo( ParmContainer* to );
+
+    // Moves the attributes of each Parm to the Parm of the same group and name in another
+    // container, beside whatever that one holds.
+    virtual void HandPairedAttributesTo( ParmContainer* to );
+
+    // Deletes the attributes on this container and on each of its Parms.
+    virtual void DeleteAttributes();
 
     AttributeCollection* GetAttrCollection()
     {
@@ -121,6 +159,18 @@ protected:
     virtual void LoadGroupParmVec( vector< string > & parm_vec );
     virtual void LoadGroupParmVec( vector< string > & parm_vec, bool displaynames );
 
+    // Take a new ID.  This moves the object in the registries that find it by ID, and tells
+    // whatever this object contains that its container has a new name.  It does not tell
+    // anything holding this ID as a reference -- a link, an attribute, a preset, a Geom's
+    // parent, child or step child list.
+    //
+    // Those hold together because an ID only changes before anything in the model refers to the
+    // object: a file read or a paste settles the ID first and then reads the references,
+    // translating each through the remap map, and IDs assigned at construction, such as user
+    // parms and the built-in FEA materials, are set before anything can name them.
+    //
+    // ParmMgr::SwapIDs is the deliberate exception, and compensates by swapping: two live Parms
+    // trade IDs so that everything holding either one keeps naming the same cross section.
     virtual void ChangeID( const string &id );
 
 };

@@ -8,13 +8,13 @@
 // Justin Gravett
 //////////////////////////////////////////////////////////////////////
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "FeaStructure.h"
 
 #include "Vehicle.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "StructureMgr.h"
 #include "WingGeom.h"
 #include "ConformalGeom.h"
@@ -62,6 +62,17 @@ FeaStructure::~FeaStructure()
         delete m_FeaBCVec[i];
     }
     m_FeaBCVec.clear();
+}
+
+void FeaStructure::Scale( double currentScale )
+{
+    for ( int i = 0; i < ( int )m_FeaPartVec.size(); i++ )
+    {
+        if ( m_FeaPartVec[i] )
+        {
+            m_FeaPartVec[i]->Scale( currentScale );
+        }
+    }
 }
 
 void FeaStructure::Update()
@@ -959,6 +970,29 @@ int FeaStructure::GetFeaBCIndex( FeaBC* fea_bc )
     return -1; // indicates an error
 }
 
+// Told once, and passed on to everything inside that resolves the parent for itself.
+void FeaStructure::SetParentGeomID( const string & id )
+{
+    m_ParentGeomID = id;
+
+    for ( int i = 0; i < ( int )m_FeaPartVec.size(); i++ )
+    {
+        if ( m_FeaPartVec[i] )
+        {
+            m_FeaPartVec[i]->SetParentGeomID( id );
+        }
+    }
+
+    // A structure's subsurfaces are matched to a surface the same way a Geom's own are.
+    for ( int i = 0; i < ( int )m_FeaSubSurfVec.size(); i++ )
+    {
+        if ( m_FeaSubSurfVec[i] )
+        {
+            m_FeaSubSurfVec[i]->SetCompID( id );
+        }
+    }
+}
+
 void FeaStructure::SetDirtyFlag()
 {
     for ( unsigned int i = 0; i < m_FeaPartVec.size(); i++ )
@@ -1015,6 +1049,14 @@ FeaPart::FeaPart( const string &geomID, const string &structID, int type )
 FeaPart::~FeaPart()
 {
 
+}
+
+void FeaPart::Scale( double currentScale )
+{
+    // Absolute center location -- authoritative when the part is placed in absolute mode; the
+    // relative location Parm is a dimensionless fraction and is left alone.  Slice-type parts
+    // (spars, ribs, poly spars) are positioned by this; other part types override.
+    m_AbsCenterLocation.Set( m_AbsCenterLocation() * currentScale );
 }
 
 void FeaPart::Update()
@@ -1078,6 +1120,20 @@ void FeaPart::Update()
         {
             m_CapFeaPropertyID = StructureMgr.GetSomeBeamProperty();
         }
+    }
+
+    // The parent may have fewer main surfaces than when this part was made -- a prop losing
+    // blades is the easy way to get there -- and the index is not corrected anywhere.  The
+    // surface builders below fetch the parent surface by that index and dereference the
+    // result without checking, so leave the part unbuilt rather than follow a null.
+    Geom* parent_geom = VehicleMgr.GetVehicle() ? VehicleMgr.GetVehicle()->FindGeom( m_ParentGeomID ) : nullptr;
+    if ( parent_geom && m_MainSurfIndx >= parent_geom->GetNumMainSurfs() )
+    {
+        m_MainFeaPartSurfVec.clear();
+        m_FeaPartSurfVec.clear();
+        m_SymmIndexVec.clear();
+        m_SurfDirty = false;
+        return;
     }
 
     if ( m_SurfDirty )
@@ -1244,8 +1300,8 @@ xmlNodePtr FeaPart::DecodeXml( xmlNodePtr & node )
 {
     if ( node )
     {
-        m_FeaPropertyID = ParmMgr.RemapID( XmlUtil::FindString( node, "FeaPropertyID", m_FeaPropertyID ) );
-        m_CapFeaPropertyID = ParmMgr.RemapID( XmlUtil::FindString( node, "CapFeaPropertyID", m_CapFeaPropertyID ) );
+        m_FeaPropertyID = IDMgr.RemapRefID( XmlUtil::FindString( node, "FeaPropertyID", m_FeaPropertyID ) );
+        m_CapFeaPropertyID = IDMgr.RemapRefID( XmlUtil::FindString( node, "CapFeaPropertyID", m_CapFeaPropertyID ) );
     }
 
     return ParmContainer::DecodeXml( node );
@@ -1286,6 +1342,14 @@ void FeaPart::UpdateSymmParts()
 
     int nsurf = m_MainFeaPartSurfVec.size();
     int nsymm = m_SymmIndexVec.size();
+
+    if ( nsymm < 1 )
+    {
+        // No symmetry indices means no copies to build, and the loops below would write
+        // nsurf entries into a vector sized nsurf * nsymm.
+        m_FeaPartSurfVec.clear();
+        return;
+    }
 
     m_FeaPartSurfVec.resize( nsurf * nsymm );
 
@@ -2997,6 +3061,19 @@ bool FeaPolySpar::ValidPtIndex( int index )
 //===================== FeaRib =====================//
 //////////////////////////////////////////////////////
 
+// A rib's perpendicular edge is either the ID of another FEA part or one of three sentinels:
+// "Trailing Edge", "Leading Edge", "None".  A part is followed if it came along with the copy;
+// a sentinel is a word rather than an ID, and is passed through untouched.
+static string RemapPerpendicularEdgeID( const string &id )
+{
+    if ( id == "Trailing Edge" || id == "Leading Edge" || id == "None" || id.empty() )
+    {
+        return id;
+    }
+
+    return IDMgr.RemapRefID( id );
+}
+
 FeaRib::FeaRib( const string &geomID, const string &structID, int type ) : FeaSlice( geomID, structID, type )
 {
     m_Theta.Init( "Theta", "FeaRib", this, 0.0, -90.0, 90.0 );
@@ -3114,7 +3191,7 @@ xmlNodePtr FeaRib::DecodeXml( xmlNodePtr & node )
 
     if ( fea_prt_node )
     {
-        m_PerpendicularEdgeID = XmlUtil::FindString( fea_prt_node, "PerpendicularEdgeID", m_PerpendicularEdgeID );
+        m_PerpendicularEdgeID = RemapPerpendicularEdgeID( XmlUtil::FindString( fea_prt_node, "PerpendicularEdgeID", m_PerpendicularEdgeID ) );
 
         // Check for previous implementation of perpendicular edge for ribs to enable compatibility in new VSP versions
         xmlNodePtr child_node = XmlUtil::GetNode( fea_prt_node, "FeaRib", 0 );
@@ -3730,6 +3807,13 @@ FeaFixPoint::FeaFixPoint( const string &compID, const string &structID, const st
     m_CapFeaPropertyID = "";
 }
 
+void FeaFixPoint::Scale( double currentScale )
+{
+    m_AbsX.Set( m_AbsX() * currentScale );
+    m_AbsY.Set( m_AbsY() * currentScale );
+    m_AbsZ.Set( m_AbsZ() * currentScale );
+}
+
 void FeaFixPoint::UpdateSurface()
 {
     m_MainFeaPartSurfVec.clear(); // FeaFixPoints are not a VspSurf
@@ -3977,8 +4061,8 @@ xmlNodePtr FeaFixPoint::DecodeXml( xmlNodePtr & node )
 
     if ( fea_prt_node )
     {
-        m_ParentFeaPartID = ParmMgr.RemapID( XmlUtil::FindString( fea_prt_node, "ParentFeaPartID", m_ParentFeaPartID ) );
-        m_OtherGeomID = ParmMgr.RemapID( XmlUtil::FindString( fea_prt_node, "OtherGeomID", m_OtherGeomID ) );
+        m_ParentFeaPartID = IDMgr.RemapRefID( XmlUtil::FindString( fea_prt_node, "ParentFeaPartID", m_ParentFeaPartID ) );
+        m_OtherGeomID = IDMgr.RemapRefID( XmlUtil::FindString( fea_prt_node, "OtherGeomID", m_OtherGeomID ) );
     }
 
     return fea_prt_node;
@@ -4136,7 +4220,7 @@ xmlNodePtr FeaPartTrim::DecodeXml( xmlNodePtr & node )
     for ( int i = 0 ; i < num_trim ; i++ )
     {
         xmlNodePtr n = XmlUtil::GetNode( tl_node, "TrimPart", i );
-        AddTrimPart(ParmMgr.RemapID( XmlUtil::FindString( n, "ID", string() ) ) );
+        AddTrimPart(IDMgr.RemapRefID( XmlUtil::FindString( n, "ID", string() ) ) );
     }
 
     ParmContainer::DecodeXml( node );
@@ -4186,7 +4270,7 @@ void FeaPartTrim::UpdateDrawObjs()
                 arrowLineDO.m_PntVec.push_back( cen );
                 arrowLineDO.m_PntVec.push_back( cen + dir * axlen );
 
-                MakeArrowhead( cen + dir * axlen, dir, 0.25 * axlen, arrowHeadDO.m_PntVec );
+                MakeArrowhead( cen + dir * axlen, dir, 0.25 * axlen, arrowHeadDO.m_PntVec, arrowHeadDO.m_NormVec );
 
             }
         }
@@ -4195,7 +4279,6 @@ void FeaPartTrim::UpdateDrawObjs()
     arrowHeadDO.m_GeomID = m_ID + "Arrows";
     arrowHeadDO.m_LineWidth = 1.0;
     arrowHeadDO.m_Type = DrawObj::VSP_SHADED_TRIS;
-    arrowHeadDO.m_NormVec = vector <vec3d> ( arrowHeadDO.m_PntVec.size() );
 
     for ( int i = 0; i < 3; i++ )
     {
@@ -4550,6 +4633,16 @@ FeaDome::FeaDome( const string &geomID, const string &structID, int type ) : Fea
     m_FlipDirectionFlag.SetDescript( "Flag to Flip the Direction of the FeaDome" );
 }
 
+void FeaDome::Scale( double currentScale )
+{
+    m_Aradius.Set( m_Aradius() * currentScale );
+    m_Bradius.Set( m_Bradius() * currentScale );
+    m_Cradius.Set( m_Cradius() * currentScale );
+    m_XLoc.Set( m_XLoc() * currentScale );
+    m_YLoc.Set( m_YLoc() * currentScale );
+    m_ZLoc.Set( m_ZLoc() * currentScale );
+}
+
 void FeaDome::UpdateSurface()
 {
     BuildDomeSurf();
@@ -4802,6 +4895,13 @@ FeaRibArray::FeaRibArray( const string &geomID, const string &structID, int type
 FeaRibArray::~FeaRibArray()
 {
 
+}
+
+void FeaRibArray::Scale( double currentScale )
+{
+    m_RibAbsSpacing.Set( m_RibAbsSpacing() * currentScale );
+    m_AbsStartLocation.Set( m_AbsStartLocation() * currentScale );
+    m_AbsEndLocation.Set( m_AbsEndLocation() * currentScale );
 }
 
 void FeaRibArray::UpdateSurface()
@@ -5087,7 +5187,7 @@ xmlNodePtr FeaRibArray::DecodeXml( xmlNodePtr & node )
 
     if ( fea_prt_node )
     {
-        m_PerpendicularEdgeID = XmlUtil::FindString( fea_prt_node, "PerpendicularEdgeID", m_PerpendicularEdgeID );
+        m_PerpendicularEdgeID = RemapPerpendicularEdgeID( XmlUtil::FindString( fea_prt_node, "PerpendicularEdgeID", m_PerpendicularEdgeID ) );
 
         // Check for previous implementation of perpendicular edge for ribs to enable compatibility in new VSP versions
         xmlNodePtr child_node = XmlUtil::GetNode( fea_prt_node, "FeaRib", 0 );
@@ -5158,6 +5258,13 @@ FeaSliceArray::FeaSliceArray( const string &geomID, const string &structID, int 
     m_ZRot.SetDescript( "Rotation About Each Slice's Z Axis" );
 
     m_NumSlices = 0;
+}
+
+void FeaSliceArray::Scale( double currentScale )
+{
+    m_SliceAbsSpacing.Set( m_SliceAbsSpacing() * currentScale );
+    m_AbsStartLocation.Set( m_AbsStartLocation() * currentScale );
+    m_AbsEndLocation.Set( m_AbsEndLocation() * currentScale );
 }
 
 void FeaSliceArray::UpdateSurface()
@@ -5830,7 +5937,7 @@ xmlNodePtr FeaProperty::DecodeXml( xmlNodePtr & node )
 
     if ( node )
     {
-        m_FeaMaterialID = ParmMgr.RemapID( XmlUtil::FindString( node, "FeaMaterialID", m_FeaMaterialID ) );
+        m_FeaMaterialID = IDMgr.RemapRefID( XmlUtil::FindString( node, "FeaMaterialID", m_FeaMaterialID ) );
     }
 
     return node;
@@ -5959,7 +6066,7 @@ xmlNodePtr FeaLayer::DecodeXml( xmlNodePtr & node )
 
     if ( node )
     {
-        m_FeaMaterialID = ParmMgr.RemapID( XmlUtil::FindString( node, "FeaLaminaID", m_FeaMaterialID ) );
+        m_FeaMaterialID = IDMgr.RemapRefID( XmlUtil::FindString( node, "FeaLaminaID", m_FeaMaterialID ) );
     }
 
     return node;
@@ -6932,7 +7039,7 @@ xmlNodePtr FeaMaterial::DecodeXml( xmlNodePtr & node )
 
     if ( node )
     {
-        m_Description = ParmMgr.RemapID( XmlUtil::FindString( node, "Description", m_Description ) );
+        m_Description = XmlUtil::FindString( node, "Description", m_Description );
 
         int numlayers = XmlUtil::GetNumNames( node, "FeaLayerInfo" );
 
@@ -7616,10 +7723,10 @@ xmlNodePtr FeaConnection::DecodeXml( xmlNodePtr & conn_node )
     {
         ParmContainer::DecodeXml( conn_node );
 
-        m_StartFixPtID = ParmMgr.RemapID( XmlUtil::FindString( conn_node, "StartFixPtID", m_StartFixPtID ) );
-        m_StartStructID = ParmMgr.RemapID( XmlUtil::FindString( conn_node, "StartStructID", m_StartStructID ) );
-        m_EndFixPtID = ParmMgr.RemapID( XmlUtil::FindString( conn_node, "EndFixPtID", m_EndFixPtID ) );
-        m_EndStructID = ParmMgr.RemapID( XmlUtil::FindString( conn_node, "EndStructID", m_EndStructID ) );
+        m_StartFixPtID = IDMgr.RemapRefID( XmlUtil::FindString( conn_node, "StartFixPtID", m_StartFixPtID ) );
+        m_StartStructID = IDMgr.RemapRefID( XmlUtil::FindString( conn_node, "StartStructID", m_StartStructID ) );
+        m_EndFixPtID = IDMgr.RemapRefID( XmlUtil::FindString( conn_node, "EndFixPtID", m_EndFixPtID ) );
+        m_EndStructID = IDMgr.RemapRefID( XmlUtil::FindString( conn_node, "EndStructID", m_EndStructID ) );
     }
 
     return conn_node;
@@ -7805,7 +7912,7 @@ xmlNodePtr FeaAssembly::DecodeXml( xmlNodePtr & assy_node )
             for ( int i = 0; i < num_struct; i++ )
             {
                 xmlNodePtr n = XmlUtil::GetNode( structlist_node, "Structure", i );
-                m_StructIDVec.push_back( ParmMgr.RemapID( XmlUtil::FindString( n, "ID", string() ) ) );
+                m_StructIDVec.push_back( IDMgr.RemapRefID( XmlUtil::FindString( n, "ID", string() ) ) );
             }
         }
 
@@ -7974,8 +8081,8 @@ xmlNodePtr FeaBC::DecodeXml( xmlNodePtr & node )
 
     if ( conn_node )
     {
-        m_PartID = ParmMgr.RemapID( XmlUtil::FindString( conn_node, "PartID", m_PartID ) );
-        m_SubSurfID = ParmMgr.RemapID( XmlUtil::FindString( conn_node, "SubSurfID", m_SubSurfID ) );
+        m_PartID = IDMgr.RemapRefID( XmlUtil::FindString( conn_node, "PartID", m_PartID ) );
+        m_SubSurfID = IDMgr.RemapRefID( XmlUtil::FindString( conn_node, "SubSurfID", m_SubSurfID ) );
 
     }
 

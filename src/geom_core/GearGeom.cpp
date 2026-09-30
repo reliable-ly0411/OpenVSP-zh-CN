@@ -5,11 +5,11 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "GearGeom.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "LinkMgr.h"
 #include "VspCurve.h"
 #include "VspSurf.h"
@@ -2335,7 +2335,6 @@ void Bogie::UpdateDrawObj( const Matrix4d &relTrans )
 
         vec3d u = axend - axstart;
         MakeCircleArrow(axstart + 0.6 * u, u, 0.5 * axlen, 0.5 * axlen, m_AxisCircleDO, m_AxisArrowDO );
-        m_AxisArrowDO.m_NormVec = vector <vec3d> ( m_AxisArrowDO.m_PntVec.size() );
 
         MakeDashedLine( axstart,  axend, 4, m_AxisDO.m_PntVec );
 
@@ -2404,8 +2403,8 @@ xmlNodePtr Bogie::DecodeXml( xmlNodePtr & node )
 
     if ( bogie_node )
     {
-        m_StowParentID = ParmMgr.RemapID( XmlUtil::FindString( bogie_node, "StowParentID", m_StowParentID ) );
-        m_MechParentID = ParmMgr.RemapID( XmlUtil::FindString( bogie_node, "MechParentID", m_MechParentID ) );
+        m_StowParentID = IDMgr.RemapRefID( XmlUtil::FindString( bogie_node, "StowParentID", m_StowParentID ) );
+        m_MechParentID = IDMgr.RemapRefID( XmlUtil::FindString( bogie_node, "MechParentID", m_MechParentID ) );
     }
 
     return pcnode;
@@ -2752,6 +2751,9 @@ GearGeom::GearGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
     m_TessW = 8;
 
     // Bogie * mg =  CreateAndAddBogie();
+
+    // What the first UpdateParents compares against.
+    m_ParentHash = 0;
 
     m_MainSurfVec.clear();
 }
@@ -3198,9 +3200,8 @@ void GearGeom::ComputeCenter()
 }
 
 //==== Scale ====//
-void GearGeom::Scale()
+void GearGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
 
     for ( int i = 0; i < ( int )m_Bogies.size(); i++ )
     {
@@ -3229,7 +3230,6 @@ void GearGeom::Scale()
     m_ZCGMaxGlobal *= currentScale;
     m_ZCGNominalGlobal *= currentScale;
 
-    m_LastScale = m_Scale();
 }
 
 void GearGeom::AddDefaultSources( double base_len )
@@ -3365,9 +3365,11 @@ void GearGeom::UpdateParents()
     std::sort( parent_vec.begin(), parent_vec.end() );
     parent_vec.erase(std::unique( parent_vec.begin(), parent_vec.end()), parent_vec.end() );
 
-    // Serialize m_ParmIDs into single long string.
-    string str = string_vec_serialize( parent_vec );
-    // Calculate hash to detect changes in m_ParmIDs
+    // The Geoms depended on, plus this Geom's own ID, hashed to tell whether the step-child
+    // registration still matches.  That registration is this Geom's ID sitting in each of
+    // those Geoms' lists, so either end changing makes it stale.
+    string str = string_vec_serialize( parent_vec ) + m_ID;
+    // Calculate hash to detect changes
     std::size_t str_hash = std::hash < std::string >{}( str );
 
     // Relies on currency of m_ParmIDs by UpdateVarBrowser()

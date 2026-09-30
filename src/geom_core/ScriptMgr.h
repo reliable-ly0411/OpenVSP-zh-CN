@@ -11,7 +11,6 @@
 #if !defined(SCRIPTMGR__INCLUDED_)
 #define SCRIPTMGR__INCLUDED_
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include <angelscript.h>
@@ -99,18 +98,11 @@ public:
     asITypeInfo* m_DoubleArrayType;
     asITypeInfo* m_DoubleMatArrayType;
     asITypeInfo* m_Vec3dArrayType;
+    asITypeInfo* m_Vec2dArrayType;
     asITypeInfo* m_StringArrayType;
 
     //==== Utility ====//
-    void Print( const string & data, bool new_line );
-    void Print( const vec3d & data, bool new_line );
-    void Print( double data, bool new_line );
-    void Print( int data, bool new_line );
 
-    double Rad2Deg( double r )                      { return r*( 180.0 / M_PI ); }
-    double Deg2Rad( double d )                      { return d*( M_PI / 180.0 ); }
-    double Min( double x, double y )                { return  (x < y ) ? x : y; }
-    double Max( double x, double y )                { return  (x > y ) ? x : y; }
 
 private:
 
@@ -120,6 +112,7 @@ private:
 
     static void RegisterEnums( asIScriptEngine* se );
     static void RegisterVec3d( asIScriptEngine* se );
+    static void RegisterVec2d( asIScriptEngine* se );
     static void RegisterMatrix4d( asIScriptEngine* se );
     static void RegisterCustomGeomMgr( asIScriptEngine* se );
     static void RegisterAdvLinkMgr( asIScriptEngine* se );
@@ -211,6 +204,11 @@ private:
     CScriptArray* GetAttributeDoubleMatrixVal( const string & attrID );
 
     void SetAttributeVec3d( const string & attrID, CScriptArray* vec3dVector );
+
+    //==== vec2d functions that take a polygon ====//
+    bool PointInPolygon( const vec2d & R, CScriptArray* pnts );
+    double PolyArea2d( CScriptArray* pnts );
+    vec2d PolyCentroid2d( CScriptArray* pnts );
     void SetAttributeIntMatrix( const string & attrID, CScriptArray* intMatrix );
     void SetAttributeDoubleMatrix( const string & attrID, CScriptArray* dblMatrix );
 
@@ -302,6 +300,31 @@ private:
     CScriptArray* GetFeaLayerIDVec( const string & material_id );
     CScriptArray* GetGeomTextureIDVec( const string & geom_id );
     CScriptArray* GetFeaTrimPartIDVec( const string & trim_id );
+    CScriptArray* GetFitModelVarVec();
+    void AddFitModelTargetPts( const string & geom_id, int surf_indx, CScriptArray* pt_arr );
+    void AddFitModelTargetPtsFixedU( const string & geom_id, int surf_indx, CScriptArray* pt_arr, double u );
+    void AddFitModelTargetPtsFixedUs( const string & geom_id, int surf_indx, CScriptArray* pt_arr, CScriptArray* u_arr );
+    void AddFitModelTargetPtsFixedW( const string & geom_id, int surf_indx, CScriptArray* pt_arr, double w );
+    void AddFitModelTargetPtsFixedWs( const string & geom_id, int surf_indx, CScriptArray* pt_arr, CScriptArray* w_arr );
+    void AddFitModelTargetPtsFixedUW( const string & geom_id, int surf_indx, CScriptArray* pt_arr, double u, double w );
+    void AddFitModelTargetPtsFixedUWs( const string & geom_id, int surf_indx, CScriptArray* pt_arr, CScriptArray* u_arr, CScriptArray* w_arr );
+
+    string CreatePtCloudGeomFromPts( CScriptArray* pt_arr, const string & name );
+    CScriptArray* KeepPtsInBBox( CScriptArray* pt_arr, const vec3d & min_pt, const vec3d & max_pt );
+    CScriptArray* RemovePtsInBBox( CScriptArray* pt_arr, const vec3d & min_pt, const vec3d & max_pt );
+    CScriptArray* KeepPtsInRange( CScriptArray* pt_arr, int dir_index, double low, double high );
+    CScriptArray* RemovePtsInRange( CScriptArray* pt_arr, int dir_index, double low, double high );
+    CScriptArray* KeepPtsAbove( CScriptArray* pt_arr, int dir_index, double val );
+    CScriptArray* KeepPtsBelow( CScriptArray* pt_arr, int dir_index, double val );
+    CScriptArray* KeepPtsNearPt( CScriptArray* pt_arr, const vec3d & center, double radius );
+    CScriptArray* RemovePtsNearPt( CScriptArray* pt_arr, const vec3d & center, double radius );
+    CScriptArray* KeepPtsNearGeom( CScriptArray* pt_arr, const string & geom_id, int surf_indx, double tol );
+    CScriptArray* RemovePtsNearGeom( CScriptArray* pt_arr, const string & geom_id, int surf_indx, double tol );
+    CScriptArray* UniquePts( CScriptArray* pt_arr, double tol );
+    CScriptArray* UnionPts( CScriptArray* pt_arr_a, CScriptArray* pt_arr_b, double tol );
+    CScriptArray* IntersectPts( CScriptArray* pt_arr_a, CScriptArray* pt_arr_b, double tol );
+    CScriptArray* SubtractPts( CScriptArray* pt_arr_a, CScriptArray* pt_arr_b, double tol );
+
     CScriptArray* GetPtCloudPnts( const string & geom_id );
     CScriptArray* GetFeaAssemblyIDVec();
     CScriptArray* GetFeaAssemblyStructureIDVec( const string & assembly_id );

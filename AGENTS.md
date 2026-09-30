@@ -7,8 +7,8 @@
 
 - 官方只读上游：`https://github.com/OpenVSP/OpenVSP.git`。
 - 汉化仓库：`https://github.com/reliable-ly0411/OpenVSP-zh-CN`。
-- 当前官方基线：OpenVSP 3.51.3，提交
-  `51bdec01d9a50fa4bdbc960b0def21dcd6330f72`；同步元数据见 `.github/upstream.json`。
+- 当前官方基线：OpenVSP 3.53.0，提交
+  `fbf9afc31d3bf337a75253e403423cb8c8dd86dc`；同步元数据见 `.github/upstream.json`。
 - 相对官方 OpenVSP 只保留汉化、目标平台兼容、案例打包和本仓库维护所需的最小差异。
 - OpenVSP 原软件、算法及英文源码的版权和作者归属不变，并遵循 NOSA 1.3；Codex
   是本地化和代码修改工具，不是 OpenVSP 原作者。

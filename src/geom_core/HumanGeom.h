@@ -119,7 +119,7 @@ public:
         return 0;
     }
 
-    virtual void Scale();
+    virtual void ApplyScale( double currentScale );
 
     virtual int GetNumMainMeshs() const
     {
@@ -199,7 +199,9 @@ public:
     Parm m_RotateHead;
 
 protected:
-    virtual void ApplyScale(); // this is for intersectTrim
+    // See MeshGeom::ScaleTriangles.  A HumanGeom has nothing to do here, but the pair is kept
+    // named apart so the hook and this cannot be confused for one another.
+    virtual void ScaleTriangles();
     virtual void UpdateSurf();
 
     static const int m_half_tris[NUM_MESH_TRI][3];

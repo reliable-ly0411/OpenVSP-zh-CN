@@ -7,11 +7,11 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "Vehicle.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "StlHelper.h"
 #include "WingGeom.h"
 #include "ParasiteDragMgr.h"
@@ -145,6 +145,9 @@ ParasiteDragMgrSingleton::ParasiteDragMgrSingleton() : ParmContainer()
 
 void ParasiteDragMgrSingleton::Renew()
 {
+    // Every Parm, including the excrescence type and value this used to set by hand.
+    ResetToInitVals();
+
     m_TableRowVec.clear();
     m_ExcresRowVec.clear();
 
@@ -158,9 +161,6 @@ void ParasiteDragMgrSingleton::Renew()
     m_TurbCfEqnName = "Blasius Power Law";
     m_RefGeomID = "";
     m_ModeID = "";
-
-    m_ExcresType = 0;
-    m_ExcresValue = 0;
 
     m_CurrentExcresIndex = -1;
 }
@@ -453,7 +453,7 @@ void ParasiteDragMgrSingleton::SetupFullCalculation()
         // Don't pass mode parameters here as they've already been applied to 'set'.
         veh->CreateDegenGeom( set, /* useMode */ false, /* modeID */ "" );
         string meshID = veh->CompGeomAndFlatten( set, 0 );
-        veh->DeleteGeom( meshID );
+        veh->DeleteGeomVec( { meshID } );
 
         // Restore set visibility. At this point, all geoms in the set will only be in the 
         //  Not_Shown set. We want the Parasite Drag table to contain the same geoms before 
@@ -3227,6 +3227,9 @@ string ParasiteDragMgrSingleton::ExportToCSV()
     res->Add( new NameValData( "FC_Temp", m_Temp.Get(), "Flow condition temperature." ) );
     res->Add( new NameValData( "FC_Pres", m_Pres.Get(), "Flow condition pressure." ) );
     res->Add( new NameValData( "FC_Rho", m_Rho.Get(), "Flow condition density." ) );
+    res->Add( new NameValData( "FreestreamPropChoice", m_FreestreamType.Get(), "Freestream property input mode choice." ) );
+    res->Add( new NameValData( "Re_L", m_ReqL.Get(), "Reynolds number per unit length." ) );
+    res->Add( new NameValData( "SpecificHeatRatio", m_SpecificHeatRatio.Get(), "Ratio of specific heats." ) );
 
     // Component Related
     if ( !m_ExportSubCompFlag() )
@@ -3421,8 +3424,8 @@ xmlNodePtr ParasiteDragMgrSingleton::DecodeXml( xmlNodePtr & node )
     if ( ParasiteDragnode )
     {
         ParmContainer::DecodeXml( ParasiteDragnode );
-        m_RefGeomID = ParmMgr.RemapID( XmlUtil::FindString( ParasiteDragnode, "ReferenceGeomID", m_RefGeomID ) );
-        m_ModeID = ParmMgr.RemapID( XmlUtil::FindString( ParasiteDragnode, "ModeID", m_ModeID ) );
+        m_RefGeomID = IDMgr.RemapRefID( XmlUtil::FindString( ParasiteDragnode, "ReferenceGeomID", m_RefGeomID ) );
+        m_ModeID = IDMgr.RemapRefID( XmlUtil::FindString( ParasiteDragnode, "ModeID", m_ModeID ) );
 
         xmlNodePtr ExcresDragnode = XmlUtil::GetNode( ParasiteDragnode, "Excrescence", 0 );
 
@@ -3929,7 +3932,7 @@ void ParasiteDragMgrSingleton::RenewDegenGeomVec()
         // Don't pass mode parameters here as they've already been applied to 'set'.
         veh->CreateDegenGeom( set, /* useMode */ false, /* modeID */ "" );
         string meshID = veh->CompGeomAndFlatten( set, 0);
-        veh->DeleteGeom(meshID);
+        veh->DeleteGeomVec( { meshID } );
         veh->ShowOnlySet( set );
 
         // First Assignment of DegenGeomVec, Will Carry Through to Rest of Calculate_X

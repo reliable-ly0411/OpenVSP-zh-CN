@@ -9,6 +9,7 @@
 
 #include "Parm.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "LinkMgr.h"
 #include "StringUtil.h"
 #include "StlHelper.h"
@@ -70,6 +71,7 @@ ParmContainer::ParmContainer()
     m_Name = string( "Default" );
     m_LateUpdateFlag = true; // Force update first time through.
     m_ParmContainer_Type = vsp::ATTROBJ_FREE;
+    AttachAttrCollection();
     ParmMgr.AddParmContainer( this );
 }
 
@@ -99,6 +101,20 @@ void ParmContainer::AddParm( const string& id )
 void ParmContainer::RemoveParm( const string& id )
 {
     vector_remove_val( m_ParmVec, id );
+}
+
+//==== Put Every Parm Back The Way A New One Starts ====//
+void ParmContainer::ResetToInitVals()
+{
+    for ( int i = 0; i < ( int )m_ParmVec.size(); i++ )
+    {
+        Parm* p = ParmMgr.FindParm( m_ParmVec[i] );
+
+        if ( p )
+        {
+            p->ResetToInitVal();
+        }
+    }
 }
 
 //==== Return Pointer To Parent Container ====//
@@ -182,16 +198,20 @@ xmlNodePtr ParmContainer::EncodeXml( xmlNodePtr & node )
     LoadGroupParmVec( m_ParmVec, false );
     ParmMgr.IncNumParmChanges();
 
-    unordered_map< string, vector< std::pair< string, string > > >::iterator groupIter;
-    for ( groupIter = m_GroupParmMap.begin() ; groupIter != m_GroupParmMap.end() ; ++groupIter )
+    // Write groups in name order.  m_GroupParmMap's iteration order depends on
+    // its history, so it differs between a new and a reloaded model.
+    vector< string > group_names = m_GroupNames;
+    sort( group_names.begin(), group_names.end() );
+
+    for ( int i = 0 ; i < ( int )group_names.size() ; i++ )
     {
-        string name = groupIter->first;
+        const string & name = group_names[i];
         gnode = xmlNewChild( parmcontain_node, nullptr, BAD_CAST name.c_str(), nullptr );
 
         if ( gnode )
         {
             vector< std::pair< string, string > >::iterator parmIter;
-            for ( parmIter = groupIter->second.begin(); parmIter != groupIter->second.end(); ++parmIter )
+            for ( parmIter = m_GroupParmMap[name].begin(); parmIter != m_GroupParmMap[name].end(); ++parmIter )
             {
                 string parmID = parmIter->first;
                 Parm* p = ParmMgr.FindParm( parmID );
@@ -213,7 +233,7 @@ xmlNodePtr ParmContainer::DecodeXml( xmlNodePtr & node )
     if ( child_node )
     {
         string oldID = XmlUtil::FindString( child_node, "ID", m_ID );
-        string newID = ParmMgr.RemapID( oldID, m_ID );
+        string newID = IDMgr.RemapID( oldID, m_ID );
 
         if( newID.compare( m_ID ) != 0 )        // they differ
         {
@@ -249,6 +269,23 @@ xmlNodePtr ParmContainer::DecodeXml( xmlNodePtr & node )
         }
     }
     m_AttrCollection.DecodeXml( child_node );
+
+    // Built again, because the map built above is now stale.  Decoding a Parm remaps its ID,
+    // so every entry put in before the loop names a Parm ID that no longer exists.  A container
+    // that is walked as part of the linkable set has its map rebuilt by
+    // LinkMgr::BuildLinkableParmData and never notices; every other container -- a subsurface,
+    // a cross section, a texture, a mesh source, a bogie, a routing point, an FEA part -- keeps
+    // the stale map for the life of the model, and FindParm( id, name, group ) answers nothing
+    // on it.  That is why those Parms can be read from a model just built and not from the same
+    // model reopened.  The call above the loop is not redundant: that one builds the map the
+    // loop walks to find each group's node, so it has to come first and this has to come after.
+    LoadGroupParmVec( m_ParmVec, false );
+
+    // Paired with the rebuild, the same way the call above the loop is.  LoadGroupParmVec sets
+    // the dirty flag, but BuildLinkableParmData gates on the change COUNT and only lowers the
+    // flag once it has done some work -- so a flag raised without a count to go with it is
+    // never lowered, and every FindParm after this calls in only to be turned away.
+    ParmMgr.IncNumParmChanges();
 
     return child_node;
 
@@ -302,6 +339,11 @@ void ParmContainer::LoadGroupParmVec( vector< string > & parm_vec, bool displayn
 void ParmContainer::LoadGroupParmVec( vector< string > & parm_vec )
 {
     LoadGroupParmVec( parm_vec, true );
+}
+
+void ParmContainer::UpdateGroupParmMap()
+{
+    LoadGroupParmVec( m_ParmVec, false );
 }
 
 //==== Find Parm ID Given GroupName and Parm Index ====//
@@ -524,6 +566,125 @@ void ParmContainer::CopyVals( ParmContainer *from )
             {
                 p->Set( fp->Get() );
             }
+        }
+    }
+}
+
+void ParmContainer::CopyMatchingVals( ParmContainer *from )
+{
+    if ( !from || from == this )
+    {
+        return;
+    }
+
+    for ( int i = 0 ; i < ( int )m_ParmVec.size() ; i++ )
+    {
+        Parm *p = ParmMgr.FindParm( m_ParmVec[i] );
+        if ( p )
+        {
+            Parm *fp = ParmMgr.FindParm( from->FindParm( p->GetName(), p->GetGroupName() ) );
+            if ( fp )
+            {
+                p->Set( fp->Get() );
+            }
+        }
+    }
+}
+
+// The IDs cannot simply be assigned across: for the moment between the two writes both objects
+// would answer to the same ID, and whichever registry is asked first would hand back the wrong
+// one.  A spare name in the middle keeps every ID unique at every step.
+void ParmContainer::SwapIdentity( ParmContainer* other )
+{
+    if ( !other || other == this )
+    {
+        return;
+    }
+
+    SwapIDs( other );
+
+    string mine = m_ID;
+    string theirs = other->m_ID;
+
+    other->ChangeID( "SWAPIDENTITY_TEMP_ID" );
+    ChangeID( theirs );
+    other->ChangeID( mine );
+}
+
+void ParmContainer::SwapContainerID( ParmContainer* other )
+{
+    if ( !other || other == this )
+    {
+        return;
+    }
+
+    string mine = m_ID;
+    string theirs = other->m_ID;
+
+    other->ChangeID( "SWAPIDENTITY_TEMP_ID" );
+    ChangeID( theirs );
+    other->ChangeID( mine );
+}
+
+void ParmContainer::HandAttributesTo( ParmContainer* to )
+{
+    if ( !to || to == this )
+    {
+        return;
+    }
+
+    m_AttrCollection.HandAttrsTo( to->GetAttrCollection() );
+    to->GetAttrCollection()->SwapID( &m_AttrCollection );
+}
+
+void ParmContainer::HandUnpairedAttributesTo( ParmContainer* to )
+{
+    if ( !to || to == this )
+    {
+        return;
+    }
+
+    for ( int i = 0 ; i < ( int )m_ParmVec.size() ; i++ )
+    {
+        Parm* p = ParmMgr.FindParm( m_ParmVec[i] );
+        if ( p && to->FindParm( p->GetName(), p->GetGroupName() ).empty() )
+        {
+            p->GetAttrCollection()->HandAttrsTo( to->GetAttrCollection() );
+        }
+    }
+}
+
+void ParmContainer::HandPairedAttributesTo( ParmContainer* to )
+{
+    if ( !to || to == this )
+    {
+        return;
+    }
+
+    for ( int i = 0 ; i < ( int )m_ParmVec.size() ; i++ )
+    {
+        Parm* p = ParmMgr.FindParm( m_ParmVec[i] );
+        if ( p )
+        {
+            Parm* q = ParmMgr.FindParm( to->FindParm( p->GetName(), p->GetGroupName() ) );
+            if ( q )
+            {
+                p->GetAttrCollection()->HandAttrsTo( q->GetAttrCollection() );
+            }
+        }
+    }
+}
+
+void ParmContainer::DeleteAttributes()
+{
+    m_AttrCollection.DelAllAttrs();
+
+    for ( int i = 0 ; i < ( int )m_ParmVec.size() ; i++ )
+    {
+        Parm* p = ParmMgr.FindParm( m_ParmVec[i] );
+        if ( p )
+        {
+            p->GetAttrCollection()->DelAllAttrs();
         }
     }
 }

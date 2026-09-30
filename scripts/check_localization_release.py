@@ -123,6 +123,7 @@ def main() -> None:
         if match.group("version") != version:
             raise SystemExit(f"标签版本 {match.group('version')} 与源码版本 {version} 不一致")
         verify_release_notes(args.expected_tag)
+        require_text("src/gui_and_draw/MainVSPScreen.cpp", f"汉化版本：{args.expected_tag}\\n")
 
     if args.print_version:
         print(version)

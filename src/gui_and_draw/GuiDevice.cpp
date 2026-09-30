@@ -2616,10 +2616,18 @@ void ColorPicker::Init( VspScreen* screen, Fl_Button* title, Fl_Button* result,
     for ( int i = 0 ; i < ( int )m_ColorButtons.size() ; i++ )
     {
         m_ColorButtons[i]->callback( StaticDeviceCB, this );
+        AddWidget( m_ColorButtons[i] );
     }
     m_RGB_Sliders[0]->callback( StaticDeviceCB, this );
     m_RGB_Sliders[1]->callback( StaticDeviceCB, this );
     m_RGB_Sliders[2]->callback( StaticDeviceCB, this );
+
+    // Registered so Deactivate reaches them.
+    AddWidget( m_RGB_Sliders[0] );
+    AddWidget( m_RGB_Sliders[1] );
+    AddWidget( m_RGB_Sliders[2] );
+    AddWidget( m_ColorResult );
+    AddWidget( title );
 }
 
 vec3d ColorPicker::GetIndexRGB( int index )
@@ -3703,13 +3711,13 @@ void SkinHeader::Init( VspScreen* screen,
 
 void SkinHeader::Activate()
 {
-    if ( !m_ContChoice )
+    // A header built without a continuity choice still has its Set and Equal buttons, and
+    // they are the whole of it -- returning early on the missing choice left them live.  The
+    // spine header is built that way, so both of its calls were doing nothing at all.
+    if ( m_ContChoice )
     {
-        return;
+        m_ContChoice->Activate();
     }
-
-    assert( m_ContChoice );
-    m_ContChoice->Activate();
 
     for( int i = 0; i < (int)m_Buttons.size(); i++ )
     {
@@ -3720,13 +3728,13 @@ void SkinHeader::Activate()
 
 void SkinHeader::Deactivate()
 {
-    if ( !m_ContChoice )
+    // A header built without a continuity choice still has its Set and Equal buttons, and
+    // they are the whole of it -- returning early on the missing choice left them live.  The
+    // spine header is built that way, so both of its calls were doing nothing at all.
+    if ( m_ContChoice )
     {
-        return;
+        m_ContChoice->Deactivate();
     }
-
-    assert( m_ContChoice );
-    m_ContChoice->Deactivate();
 
     for( int i = 0; i < (int)m_Buttons.size(); i++ )
     {

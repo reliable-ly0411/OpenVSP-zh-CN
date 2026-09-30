@@ -8,7 +8,6 @@
 #include <windows.h>
 #endif
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "Vehicle.h"
@@ -70,8 +69,12 @@ void CreateTMeshVecFromPts( const Geom * geom,
         flipnormal = !flipnormal;
     }
 
-    BuildTMeshTris( TMeshVec[itmesh], flipnormal, geom->GetWMax( indx ), platenum, n_ref, iQuad );
-
+    if ( !BuildTMeshTris( TMeshVec[itmesh], flipnormal, geom->GetWMax( indx ), platenum, n_ref, iQuad ) )
+    {
+        // Nothing in this patch had any area, so there is no surface here to carry forward.
+        delete TMeshVec[itmesh];
+        TMeshVec.pop_back();
+    }
 }
 
 void CreateTMeshVecFromPts( const Geom * geom,
@@ -179,6 +182,8 @@ void CreateTMeshVecFromPtsCheckFlat( const Geom * geom,
                     iuend++;
                 }
 
+                size_t nbefore = TMeshVec.size();
+
                 CreateTMeshVecFromPts( geom,
                                        TMeshVec,
                                        pnts,
@@ -190,9 +195,18 @@ void CreateTMeshVecFromPtsCheckFlat( const Geom * geom,
                                        iQuad, flatpatch );
 
                 // Over-ride some variable copies to full range rather than patch subset.
-                TMeshVec.back()->m_UWPnts = uw_pnts;
-                TMeshVec.back()->m_XYZPnts = pnts;
-                TMeshVec.back()->m_Wmin = uw_pnts[0][0].y();
+                //
+                // A strip whose triangles all enclose no area adds nothing at all, so there
+                // is not always a new TMesh to override.  Without this check back() is
+                // either an earlier, already finished TMesh -- whose points would be
+                // replaced with this strip's -- or, on the first strip, the back of an
+                // empty vector.
+                if ( TMeshVec.size() > nbefore )
+                {
+                    TMeshVec.back()->m_UWPnts = uw_pnts;
+                    TMeshVec.back()->m_XYZPnts = pnts;
+                    TMeshVec.back()->m_Wmin = uw_pnts[0][0].y();
+                }
 
                 iustart = iuend;
             }
@@ -223,9 +237,23 @@ void CreateTMeshVecFromPtsCheckFlat( const Geom * geom,
 }
 
 
-void BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, int n_ref, int &iQuad  )
+bool BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, int n_ref, int &iQuad  )
 {
-    double tol=1.0e-12;
+    // Below this a section of the patch is taken to enclose nothing.
+    //
+    // It is an area, in the model's own units, and it is meant to catch a patch that has
+    // collapsed rather than one that is merely small.  At 1e-12 it caught only the sections
+    // that had collapsed exactly; sections a hundred times larger than that -- still measuring
+    // zero across two of their three dimensions -- passed, and were meshed into hundreds of
+    // triangles with no area for the solver to do anything with.
+    double areatol = 1.0e-9;
+
+    // The edge length below which a triangle is not built at all.  This is a LENGTH, in the
+    // model's own units, and is a different question from the area test above -- it was
+    // left at its long standing value when that one was loosened, because raising it would
+    // quietly raise the minimum edge length for every quad of every patch this function
+    // builds, not just for the collapsed sections the area test is aimed at.
+    double edgetol = 1.0e-12;
 
     vector< vector<vec3d> > *pnts = &(tmesh->m_XYZPnts);
     vector< vector<vec3d> > *uw_pnts = &(tmesh->m_UWPnts);
@@ -256,7 +284,7 @@ void BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
 
             areaj += area( v0, v1, v2 ) + area( v0, v2, v3 );
         }
-        if ( areaj > tol )
+        if ( areaj > areatol )
         {
             firstj = j;
             break;
@@ -278,11 +306,26 @@ void BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
 
             areaj += area( v0, v1, v2 ) + area( v0, v2, v3 );
         }
-        if ( areaj > tol )
+        if ( areaj > areatol )
         {
             lastj = j;
             break;
         }
+    }
+
+    // Every section of this patch is degenerate, so there is nothing here to build.
+    //
+    // The patch is real geometry -- it is a flat end of a body, whose plate representation
+    // collapses onto a line -- but as a plate it encloses no area, and the lines below would
+    // read uw_pnts[ -1 ] looking for the first section that does.  That read landed outside
+    // the vector and took whatever was in front of it, which sometimes brought the export
+    // down and otherwise fed a made up value into the mesh without saying so.
+    //
+    // Saying no here leaves the patch out.  A patch with no area contributes no triangles
+    // either way; the difference is that it is now left out deliberately.
+    if ( firstj < 0 || lastj < 0 )
+    {
+        return false;
     }
 
     // Use degenerate j sections to find u to set condition
@@ -332,7 +375,7 @@ void BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
             if ( evencorners )
             {
                 d20 = v2 - v0;
-                if ( d21.mag() > tol && d01.mag() > tol && d20.mag() > tol )
+                if ( d21.mag() > edgetol && d01.mag() > edgetol && d20.mag() > edgetol )
                 {
                     norm = cross( d21, d01 );
                     norm.normalize();
@@ -346,7 +389,7 @@ void BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
                     }
                 }
 
-                if ( d03.mag() > tol && d23.mag() > tol && d20.mag() > tol )
+                if ( d03.mag() > edgetol && d23.mag() > edgetol && d20.mag() > edgetol )
                 {
                     norm = cross( d03, d23 );
                     norm.normalize();
@@ -363,7 +406,7 @@ void BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
             else
             {
                 d31 = v3 - v1;
-                if ( d01.mag() > tol && d31.mag() > tol && d03.mag() > tol )
+                if ( d01.mag() > edgetol && d31.mag() > edgetol && d03.mag() > edgetol )
                 {
                     norm = cross( d01, d03 );
                     norm.normalize();
@@ -377,7 +420,7 @@ void BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
                     }
                 }
 
-                if ( d21.mag() > tol && d23.mag() > tol && d31.mag() > tol )
+                if ( d21.mag() > edgetol && d23.mag() > edgetol && d31.mag() > edgetol )
                 {
                     norm = cross( d23, d21 );
                     norm.normalize();
@@ -407,6 +450,8 @@ void BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
             jref = ref_start;
         }
     }
+
+    return true;
 }
 
 vector<TMesh*> CopyTMeshVec( const vector<TMesh*> &tmv )
@@ -2833,7 +2878,10 @@ double MakeSlices( vector<TMesh*> &tmv, const BndBox & bbox, int numSlices, int 
 
         if ( tesselate )
         {
-            int ntess = numSlices;
+            // Subdividing the slice lets the octree reject most of the model for each small
+            // quad.  Eight is the cheapest: coarser defeats the culling, finer becomes the
+            // work.  The loop is nested, so tying this to numSlices grew it as the cube.
+            int ntess = 8;
             double ds = 1.0 / (double) ntess;
             int iQuad = 0;
             for ( i = 0 ; i < ntess ; i++ )
@@ -4031,7 +4079,10 @@ void AreaSlice( vector<TMesh*> &tmv, vector<TMesh*> &slicevec, const BndBox &bbo
 
     vector< double > loc_vec;
     bool mpslice = false; // Do counting for mass properties slicing.
-    bool tesselate = false; // Sub-tessellate slice into smaller triangles.
+    // Sub-tessellate the slice into smaller triangles.  The areas do not depend on it, but
+    // small quads let the octree reject most of the model for each one, where a quad spanning
+    // the whole section has to be tested against everything.
+    bool tesselate = true;
     MakeSlices( slicevec, tbbox, numSlices, vsp::X_DIR, loc_vec, mpslice, tesselate, autoBounds, start, end, slctype );
 
     // Fill vector of cfdtypes so we don't have to pass TMeshVec all the way down.
@@ -4556,8 +4607,6 @@ void MassSlice( vector<TMesh*> &tmv, vector<TMesh*> &slicevec, BndBox &bbox,
         double compMass = 0.0;
         vec3d cgSolid( 0, 0, 0 ), cgShell( 0, 0, 0 );
         double compVolSolid = 0.0, compAreaShell = 0.0;
-
-        id_vec.push_back( id );
 
         for ( j = 0; j < tetraVecVec.size(); j++ )
         {

@@ -96,7 +96,7 @@ public:
     virtual void CreatePtCloudGeom();
     virtual string CreateNGonMeshGeom( bool cullfracflag = false, double cullfrac = 0.03, int n_ref = 0, bool FindBodyWakes = false );
 
-    virtual void Scale();
+    virtual void ApplyScale( double currentScale );
 
 
     //==== Intersection, Splitting and Trimming ====//
@@ -136,7 +136,22 @@ protected:
     virtual void UpdateBBox();
     virtual void UpdateDrawObj();
 
-    virtual void ApplyScale(); // this is for intersectTrim
+    // Work out which DrawObj draws each tag combination this MeshGeom's own triangles carry.
+    //
+    // SubSurfaceMgr keeps a map like this, but it is global and is cleared and rebuilt from
+    // scratch by whichever meshing operation ran last.  A MeshGeom that draws out of it
+    // draws by whatever happens to be registered rather than by what it holds, which is no
+    // use to a mesh read from a file or restored from a saved model.  PGMulti snapshots the
+    // map for the same reason.
+    virtual void UpdateTagMap();
+    map< vector < int >, int > m_SingleTagMap;
+
+    // Scale the triangles themselves, by m_Scale over the scale they were last left at.  This
+    // is not the ApplyScale( double ) hook above -- it is how IntersectTrim gets the mesh to
+    // its working size and back, and it keeps m_LastScale itself.  Named apart from the hook
+    // because the two differed only by an argument list, and a mechanical conversion to the
+    // hook once took this one's bookkeeping with it.
+    virtual void ScaleTriangles();
     vector<TMesh*> m_SubSurfVec;
 
 };

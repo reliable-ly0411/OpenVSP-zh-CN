@@ -708,6 +708,20 @@ void StackGeom::InitXSecs( vector < StackXSec* > stack_xs )
         if ( i == 0 )
         {
             xs->FlipLRSkinning();
+
+            // The first section starts at the origin, whatever placement the preset gave it.
+            xs->m_XDelta = 0.0;
+            xs->m_YDelta = 0.0;
+            xs->m_ZDelta = 0.0;
+            xs->m_XRotate = 0.0;
+            xs->m_YRotate = 0.0;
+            xs->m_ZRotate = 0.0;
+            xs->m_XAbs = 0.0;
+            xs->m_YAbs = 0.0;
+            xs->m_ZAbs = 0.0;
+            xs->m_XRotateAbs = 0.0;
+            xs->m_YRotateAbs = 0.0;
+            xs->m_ZRotateAbs = 0.0;
         }
     }
     // ValidateParms to update index parm upper limits
@@ -762,6 +776,11 @@ void StackGeom::UpdatePreTess()
 //==== Update Fuselage And Cross Section Placement ====//
 void StackGeom::UpdateSurf()
 {
+    // One surface is skinned here.  UpdateEngine replaces it with as many as the engine
+    // representation needs -- none, one, or several -- so the count from the last update
+    // says nothing about this one.
+    m_MainSurfVec.resize( 1 );
+
     unsigned int nxsec = m_XSecSurf.NumXSec();
 
     if ( m_OrderPolicy() == STACK_LOOP )
@@ -785,8 +804,16 @@ void StackGeom::UpdateSurf()
     }
 
     //==== Cross Section Curves & joint info ====//
-    vector< rib_data_type > rib_vec;
-    rib_vec.resize( nxsec );
+    // One rib set per group of stations enforcing the same conditions.  When every station
+    // enforces the same thing there is a single group and one skin is enough.
+    vector< vector< rib_data_type > > rib_sets;
+    vector< double > station_w;
+    vector< vector< bool > > insets;
+    // Validation cascades the Set flags, and the grouping below keys on them.
+    PrepSkinRibs( nxsec );
+
+    vector< int > stationmap;
+    bool blend = BuildSkinRibSets( nxsec, rib_sets, station_w, insets, stationmap );
 
     //==== Update XSec Location/Rotation ====//
     for ( int i = 0 ; i < nxsec ; i++ )
@@ -797,21 +824,36 @@ void StackGeom::UpdateSurf()
         {
             EnforceOrder( xs, i, m_OrderPolicy() );
 
-            bool first = false;
-            bool last = false;
-
-            if( i == 0 ) first = true;
-            else if( i == (nxsec-1) ) last = true;
-
             //==== Reset Group Names ====//
             xs->SetGroupDisplaySuffix( i );
 
-            rib_vec[i] = xs->GetRib( first, last );
         }
     }
 
 
-    m_MainSurfVec[0].SkinRibsUniform( rib_vec, false );
+    // Values a pass does not own now come from a pass that left them free, so the ribs
+    // cannot be filled until every XSec is placed.
+    StageSkinRibSets( nxsec, rib_sets, insets, stationmap, false );
+
+    // BuildSkinRibSets gives up without a station, which cannot happen for these Geoms -- but
+    // both branches below index the first set.
+    if ( rib_sets.empty() )
+    {
+        return;
+    }
+
+    if ( !blend )
+    {
+        // One group means every station enforces the same thing, which is the uniform
+        // structure this creator is built for -- and GetGroupRib leaves the regions off in
+        // that case, so there is nothing for it to be blind to.  It solves the whole quilt
+        // in one factored pass instead of one curve creator call per strip.
+        m_MainSurfVec[0].SkinRibsUniform( rib_sets[0], false );
+    }
+    else
+    {
+        m_MainSurfVec[0].SkinRibsBlended( rib_sets, station_w, insets, false );
+    }
     m_MainSurfVec[0].SetMagicVParm( false );
 
     for ( int i = 0 ; i < nxsec ; i++ )
@@ -1078,9 +1120,8 @@ void StackGeom::AddLinkableParms( vector< string > & linkable_parm_vec, const st
 }
 
 //==== Scale ====//
-void StackGeom::Scale()
+void StackGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
     for ( int i = 0 ; i < m_XSecSurf.NumXSec() ; i++ )
     {
         XSec* xs = m_XSecSurf.FindXSec( i );
@@ -1095,7 +1136,6 @@ void StackGeom::Scale()
         m_ExtensionDistance.Set( m_ExtensionDistance() * currentScale );
     }
 
-    m_LastScale = m_Scale();
 }
 
 void StackGeom::AddDefaultSources( double base_len )
@@ -1105,18 +1145,11 @@ void StackGeom::AddDefaultSources( double base_len )
     case STACK_FREE:
     {
 
+        StackXSec* firstxs = (StackXSec*) m_XSecSurf.FindXSec( 0 );
         StackXSec* lastxs = (StackXSec*) m_XSecSurf.FindXSec( m_XSecSurf.NumXSec() - 1);
-        if( lastxs )
+        if( firstxs && lastxs )
         {
-            Matrix4d prevxform;
-            prevxform.loadIdentity();
-
-            prevxform.matMult( lastxs->GetTransform()->data() );
-
-            prevxform.affineInverse();
-            vec3d offset = prevxform.xform( vec3d( 0.0, 0.0, 0.0 ) );
-
-            double len = offset.mag();
+            double len = dist( lastxs->GetTransform()->getTranslation(), firstxs->GetTransform()->getTranslation() );
 
             AddDefaultSourcesXSec( base_len, len, 0 );
             AddDefaultSourcesXSec( base_len, len, m_XSecSurf.NumXSec() - 1 );
@@ -1130,20 +1163,13 @@ void StackGeom::AddDefaultSources( double base_len )
         int iback = -1;
         double dfront = -1.0;
 
+        StackXSec* firstxs = ( StackXSec* ) m_XSecSurf.FindXSec( 0 );
         for ( int i = 0 ; i < m_XSecSurf.NumXSec() ; i++ )
         {
             StackXSec* xs = ( StackXSec* ) m_XSecSurf.FindXSec( i );
-            if ( xs )
+            if ( xs && firstxs )
             {
-                Matrix4d prevxform;
-                prevxform.loadIdentity();
-
-                prevxform.matMult( xs->GetTransform()->data() );
-
-                prevxform.affineInverse();
-                vec3d offset = prevxform.xform( vec3d( 0.0, 0.0, 0.0 ) );
-
-                double len = offset.mag();
+                double len = dist( xs->GetTransform()->getTranslation(), firstxs->GetTransform()->getTranslation() );
 
                 if ( len > dfront )
                 {
@@ -1175,66 +1201,49 @@ void StackGeom::EnforceOrder( StackXSec* xs, int indx, int policy )
 {
     int nxsec = m_XSecSurf.NumXSec();
 
-    bool first = false;
     bool last = false;
-    bool nextlast = false;
-
-    if( indx == 0 ) first = true;
-    else if( indx == (nxsec-1) ) last = true;
-    else if( indx == (nxsec-2) ) nextlast = true;
-
-    // STACK_FREE implicit.
-    if ( first )
+    if ( indx > 0 && indx == nxsec - 1 )
     {
-        xs->m_XDelta.SetLowerUpperLimits( 0.0, 0.0 );
-        xs->m_YDelta.SetLowerUpperLimits( 0.0, 0.0 );
-        xs->m_ZDelta.SetLowerUpperLimits( 0.0, 0.0 );
-
-        xs->m_XRotate.SetLowerUpperLimits( 0.0, 0.0 );
-        xs->m_YRotate.SetLowerUpperLimits( 0.0, 0.0 );
-        xs->m_ZRotate.SetLowerUpperLimits( 0.0, 0.0 );
-
-        xs->m_XAbs.SetLowerUpperLimits( 0.0, 0.0 );
-        xs->m_YAbs.SetLowerUpperLimits( 0.0, 0.0 );
-        xs->m_ZAbs.SetLowerUpperLimits( 0.0, 0.0 );
-
-        xs->m_XRotateAbs.SetLowerUpperLimits( 0.0, 0.0 );
-        xs->m_YRotateAbs.SetLowerUpperLimits( 0.0, 0.0 );
-        xs->m_ZRotateAbs.SetLowerUpperLimits( 0.0, 0.0 );
+        last = true;
     }
-    else
-    {
-        xs->m_XDelta.SetLowerUpperLimits( -1.0e12, 1.0e12 );
-        xs->m_YDelta.SetLowerUpperLimits( -1.0e12, 1.0e12 );
-        xs->m_ZDelta.SetLowerUpperLimits( -1.0e12, 1.0e12 );
 
-        xs->m_XRotate.SetLowerUpperLimits( -180.0, 180.0 );
-        xs->m_YRotate.SetLowerUpperLimits( -180.0, 180.0 );
-        xs->m_ZRotate.SetLowerUpperLimits( -180.0, 180.0 );
+    // STACK_FREE implicit.  The first cross section is placed and rotated like any other; with
+    // nothing before it, its relative and absolute placement are the same thing.
+    xs->m_XDelta.SetLowerUpperLimits( -1.0e12, 1.0e12 );
+    xs->m_YDelta.SetLowerUpperLimits( -1.0e12, 1.0e12 );
+    xs->m_ZDelta.SetLowerUpperLimits( -1.0e12, 1.0e12 );
 
-        xs->m_XAbs.SetLowerUpperLimits( -1.0e12, 1.0e12 );
-        xs->m_YAbs.SetLowerUpperLimits( -1.0e12, 1.0e12 );
-        xs->m_ZAbs.SetLowerUpperLimits( -1.0e12, 1.0e12 );
+    xs->m_XRotate.SetLowerUpperLimits( -180.0, 180.0 );
+    xs->m_YRotate.SetLowerUpperLimits( -180.0, 180.0 );
+    xs->m_ZRotate.SetLowerUpperLimits( -180.0, 180.0 );
 
-        xs->m_XRotateAbs.SetLowerUpperLimits( -180.0, 180.0 );
-        xs->m_YRotateAbs.SetLowerUpperLimits( -180.0, 180.0 );
-        xs->m_ZRotateAbs.SetLowerUpperLimits( -180.0, 180.0 );
-    }
+    xs->m_XAbs.SetLowerUpperLimits( -1.0e12, 1.0e12 );
+    xs->m_YAbs.SetLowerUpperLimits( -1.0e12, 1.0e12 );
+    xs->m_ZAbs.SetLowerUpperLimits( -1.0e12, 1.0e12 );
+
+    xs->m_XRotateAbs.SetLowerUpperLimits( -180.0, 180.0 );
+    xs->m_YRotateAbs.SetLowerUpperLimits( -180.0, 180.0 );
+    xs->m_ZRotateAbs.SetLowerUpperLimits( -180.0, 180.0 );
 
     if( policy == STACK_LOOP )
     {
         if ( last )
         {
+            // The last cross section closes the loop onto the first, wherever that is.
             StackXSec* prevxs = (StackXSec*) m_XSecSurf.FindXSec( indx - 1);
-            if( prevxs )
+            StackXSec* firstxs = (StackXSec*) m_XSecSurf.FindXSec( 0 );
+            if( prevxs && firstxs )
             {
+                Matrix4d firstxform = *( firstxs->GetTransform() );
+
                 Matrix4d prevxform;
                 prevxform.loadIdentity();
 
                 prevxform.matMult( prevxs->GetTransform()->data() );
 
                 prevxform.affineInverse();
-                vec3d offset = prevxform.xform( vec3d( 0.0, 0.0, 0.0 ) );
+                prevxform.matMult( firstxform.data() );
+                vec3d offset = prevxform.getTranslation();
 
                 xs->m_XDelta.SetLowerUpperLimits( offset.x(), offset.x() );
                 xs->m_YDelta.SetLowerUpperLimits( offset.y(), offset.y() );
@@ -1252,9 +1261,27 @@ void StackGeom::EnforceOrder( StackXSec* xs, int indx, int policy )
                 xs->m_XRotate.Set( angle.x() );
                 xs->m_YRotate.Set( angle.y() );
                 xs->m_ZRotate.Set( angle.z() );
+
+                vec3d abs_offset = firstxform.getTranslation();
+                vec3d abs_angle = firstxform.getAngles();
+
+                xs->m_XAbs.SetLowerUpperLimits( abs_offset.x(), abs_offset.x() );
+                xs->m_YAbs.SetLowerUpperLimits( abs_offset.y(), abs_offset.y() );
+                xs->m_ZAbs.SetLowerUpperLimits( abs_offset.z(), abs_offset.z() );
+
+                xs->m_XAbs.Set( abs_offset.x() );
+                xs->m_YAbs.Set( abs_offset.y() );
+                xs->m_ZAbs.Set( abs_offset.z() );
+
+                xs->m_XRotateAbs.SetLowerUpperLimits( abs_angle.x(), abs_angle.x() );
+                xs->m_YRotateAbs.SetLowerUpperLimits( abs_angle.y(), abs_angle.y() );
+                xs->m_ZRotateAbs.SetLowerUpperLimits( abs_angle.z(), abs_angle.z() );
+
+                xs->m_XRotateAbs.Set( abs_angle.x() );
+                xs->m_YRotateAbs.Set( abs_angle.y() );
+                xs->m_ZRotateAbs.Set( abs_angle.z() );
             }
 
-            StackXSec* firstxs = (StackXSec*) m_XSecSurf.FindXSec( 0 );
             if( firstxs )
             {
                 xs->m_Spin = firstxs->m_Spin();

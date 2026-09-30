@@ -348,7 +348,7 @@ void NameValData::CopyFrom( NameValData* nvd )
         return;
     }
 
-    string lastreset = ParmMgr.ResetRemapID();
+    string lastreset = IDMgr.ResetRemapID();
 
     xmlNodePtr root = xmlNewNode( nullptr, ( const xmlChar * )"Vsp_Attributes" );
 
@@ -357,7 +357,7 @@ void NameValData::CopyFrom( NameValData* nvd )
     DecodeXml( attr_node );
 
     xmlFreeNode( root );
-    ParmMgr.ResetRemapID( lastreset );
+    IDMgr.ResetRemapID( lastreset );
 }
 
 string NameValData::TruncateString( string str, int len )
@@ -475,8 +475,8 @@ void NameValData::DecodeXml( xmlNodePtr & node )
 
         bool protect_flag = XmlUtil::FindIntProp( node, "Protection", default_int );
 
-        string ID = IDMgr.RemapID( XmlUtil::FindStringProp( node, "ID", default_str ) );
-        string attachID = IDMgr.RemapID( XmlUtil::FindStringProp( node, "AttachID", default_str ) );
+        string ID = IDMgr.RemapID( XmlUtil::FindStringProp( node, "ID", m_ID ) );
+        string attachID = IDMgr.RemapRefID( XmlUtil::FindStringProp( node, "AttachID", m_AttachID ) );
 
         m_Name = XmlUtil::FindStringProp( node, "Name", default_str );
         m_Type = XmlUtil::FindIntProp( node, "Type", default_int );
@@ -509,7 +509,7 @@ void NameValData::DecodeXml( xmlNodePtr & node )
         }
         else if ( m_Type == vsp::PARM_REFERENCE_DATA )
         {
-            string parmIDData = XmlUtil::FindStringProp( node, "ParmIDData", default_str );
+            string parmIDData = IDMgr.RemapRefID( XmlUtil::FindStringProp( node, "ParmIDData", string() ) );
             SetParmIDData( { parmIDData } );
         }
         else if ( m_Type == vsp::VEC3D_DATA )
@@ -1238,6 +1238,60 @@ void AttributeCollection::ChangeID( const string &id )
     {
         m_ID = id;
     }
+
+    // Every attribute in here is attached by this collection's ID -- Add is what puts it there --
+    // so they all have to be told, the same way Parm and ParmContainer tell their collection when
+    // their own ID changes.  Leaving them behind writes an attach naming a collection that no
+    // longer exists.
+    vector < NameValData* > attr_vec = GetAllPtrs();
+    for ( int i = 0; i < ( int )attr_vec.size(); i++ )
+    {
+        if ( attr_vec[i] )
+        {
+            attr_vec[i]->SetAttrAttach( m_ID );
+        }
+    }
+}
+
+void AttributeCollection::HandAttrsTo( AttributeCollection* to )
+{
+    if ( !to || to == this )
+    {
+        return;
+    }
+
+    vector < NameValData* > attr_vec = GetAllPtrs();
+    for ( int i = 0; i < ( int )attr_vec.size(); i++ )
+    {
+        if ( attr_vec[i] && Remove( attr_vec[i] ) == 0 )
+        {
+            to->Add( attr_vec[i] );
+        }
+    }
+}
+
+void AttributeCollection::SwapID( AttributeCollection* other )
+{
+    if ( !other || other == this )
+    {
+        return;
+    }
+
+    string mine = m_ID;
+    string theirs = other->m_ID;
+
+    other->ChangeID( "SWAPIDENTITY_TEMP_COLL_ID" );
+    ChangeID( theirs );
+    other->ChangeID( mine );
+}
+
+void AttributeCollection::DelAllAttrs()
+{
+    vector < NameValData* > attr_vec = GetAllPtrs();
+    for ( int i = 0; i < ( int )attr_vec.size(); i++ )
+    {
+        Del( attr_vec[i] );
+    }
 }
 
 // ==== Encode Data To XML Data Structure ====//
@@ -1274,39 +1328,27 @@ void AttributeCollection::EncodeXml( xmlNodePtr & node ) const
 }
 
 //==== Decode Data from XML Data Structure ====//
-void AttributeCollection::DecodeXml( xmlNodePtr & node, bool retainIDs )
+void AttributeCollection::DecodeXml( xmlNodePtr & node )
 {
-    string default_str = "None";
-    int default_int = 0;
-    double default_dbl = 0.;
-    
     string attrXmlName = "AttributeCollection";
     xmlNodePtr dnode = XmlUtil::GetNode( node, attrXmlName.c_str(), 0 );
     if ( dnode )
     {
         int decode_error = 0;
 
-        string attachID;
-        if ( !retainIDs )
+        string oldID = XmlUtil::FindStringProp( dnode, "ID", m_ID );
+
+        string newID = IDMgr.RemapID( oldID, m_ID );
+
+        if( newID.compare( m_ID ) != 0 )
         {
-            string oldID = XmlUtil::FindStringProp( dnode, "ID", m_ID );
-
-            string newID = IDMgr.RemapID( oldID, m_ID );
-
-            if( newID.compare( m_ID ) != 0 )
-            {
-                ChangeID( newID );
-            }
-
-            attachID = IDMgr.RemapID( XmlUtil::FindStringProp( dnode, "AttachID", m_AttachID ) , m_AttachID );
-        }
-        else
-        {
-            attachID = m_AttachID;
+            ChangeID( newID );
         }
 
-        int attachType = XmlUtil::FindIntProp( dnode, "AttachType", vsp::ATTROBJ_FREE );
-        SetCollAttach( attachID, attachType );
+        // The attach names the object holding this collection, and is not read back from the
+        // file.  AttachAttrCollection supplies it, ID and type together, from the owner's
+        // constructor and again whenever the owner's ID changes -- and a container settles its
+        // own ID before it reads its collection.
 
         //then get all the xmlNodePtrs to all the Attributes in there...
         int num_Attr = XmlUtil::GetNumNames( dnode, "Attribute" );
@@ -1315,7 +1357,10 @@ void AttributeCollection::DecodeXml( xmlNodePtr & node, bool retainIDs )
             xmlNodePtr attrNode = XmlUtil::GetNode( dnode, "Attribute", i );
             if ( attrNode )
             {
-                string attrID = IDMgr.RemapID( XmlUtil::FindStringProp( attrNode, "ID", default_str ) );
+                // The ID the attribute below will take, not this collection's own.  Resolving
+                // it here separates a hardcoded attribute already in the model, which the
+                // file's data is decoded onto, from one that is new.
+                string attrID = IDMgr.RemapID( XmlUtil::FindStringProp( attrNode, "ID", string() ) );
                 NameValData* attr = AttributeMgr.GetAttributePtr( attrID );
 
                 // if there is an existing attribute with the same ID, it is a hardcoded attribute and will use the new XMLfile's attribute data on the existing attribute

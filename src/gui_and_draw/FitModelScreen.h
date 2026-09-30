@@ -66,8 +66,20 @@ protected:
     TriggerButton m_HideNoneButton;
     TriggerButton m_HideInvButton;
 
+    GroupLayout m_MoveTargetPtLayout;
+    GroupLayout m_TargetPtBrowserLayout;
+
+    TriggerButton m_MoveTargetPtTopButton;
+    TriggerButton m_MoveTargetPtUpButton;
+    TriggerButton m_MoveTargetPtDownButton;
+    TriggerButton m_MoveTargetPtBotButton;
+
     ColResizeBrowser* m_TargetPtBrowser;
     GeomPicker m_TargetGeomPicker;
+
+    // Where the U and W target sliders currently point on the picked surface, drawn green.
+    DrawObj m_TargetUWPntDrawObj;
+    Choice m_SurfChoice;
 
     ToggleButton m_UFixButton;
     ToggleButton m_UFreeButton;
@@ -81,6 +93,7 @@ protected:
     TriggerButton m_AddTargetPtButton;
     TriggerButton m_DelTargetPtButton;
     TriggerButton m_ClearTargetPtButton;
+    TriggerButton m_SortTargetPtButton;
 
     StringOutput m_NTgtOutput;
 
@@ -120,6 +133,7 @@ protected:
     TriggerButton m_RefineUWButton;
     TriggerButton m_UpdateDistButton;
     TriggerButton m_OptimizeButton;
+    TriggerButton m_UndoButton;
     StringOutput m_DistOutput;
 
     //===== Save/Load Tab Items =====//

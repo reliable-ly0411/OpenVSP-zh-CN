@@ -18,11 +18,6 @@
 
 #include "StringUtil.h"
 
-#ifdef DEBUG_CFD_MESH
-// #include <direct.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#endif
 
 
 CfdMeshMgrSingleton::CfdMeshMgrSingleton() : SurfaceIntersectionSingleton()
@@ -2064,11 +2059,14 @@ void CfdMeshMgrSingleton::WriteTagFiles( string file_name, const vector< SimpFac
         string base_path, base_fname;
         GetPathFile( base_name, base_path, base_fname );
 
-        StringUtil::change_space_to_underscore( base_fname );
-        string base_path_nospace = base_path + "/" + base_fname;
+        string subdir = base_path + "/" + "TaggedRegions.OpenVSP/";
+        MakeDirectory( subdir );
 
-        string taglist_name = base_name + ".ALL.taglist";
-        string csf_taglist_name = base_name + ".ControlSurfaces.taglist";
+        string taglist_name = subdir + base_fname + ".ALL.taglist";
+        string csf_taglist_name = subdir + base_fname + ".ControlSurfaces.taglist";
+
+        StringUtil::change_space_to_underscore( base_fname );
+        string base_path_nospace = subdir + base_fname;
 
         FILE* taglist_fid = fopen( taglist_name.c_str(), "w" );
         FILE* csf_taglist_fid = NULL;
@@ -2103,9 +2101,9 @@ void CfdMeshMgrSingleton::WriteTagFiles( string file_name, const vector< SimpFac
                         parttag.push_back( tag );
 
                         string str = SubSurfaceMgr.m_TagNames[ part ];
-                        int pos = str.find_first_of( '_' );
-                        string gname = str.substr( 0, pos );
-                        string sname = str.substr( pos + 2 );
+                        string gname;
+                        string sname;
+                        StringUtil::split_comp_tag_name( str, gname, sname );
 
                         StringUtil::change_space_to_underscore( gname );
                         StringUtil::change_space_to_underscore( sname );
@@ -2115,8 +2113,8 @@ void CfdMeshMgrSingleton::WriteTagFiles( string file_name, const vector< SimpFac
 
                         string ptagname = gname + sname + "_" + tname;
 
-                        string tagfile_name = base_path_nospace + ptagname + ".tag";
-                        string tagfile_localname = base_fname + ptagname;
+                        string tagfile_name = base_path_nospace + "." + ptagname + ".tag";
+                        string tagfile_localname = base_fname + "." + ptagname;
 
                         fprintf( taglist_fid, "%s\n", tagfile_localname.c_str() );
 
@@ -2620,9 +2618,8 @@ vector< Surf* > CfdMeshMgrSingleton::CreateDomainSurfs()
     innerTopLeft = vec3d(corners[5][0], outerTopLeft[1], corners[5][2]);
 
     //Checks to see if inner plane is outside of outer plane
-    if ((innerBottomLeft.x() < outerBottomLeft.x() || innerBottomRight.x() > outerBottomRight.x()
-            || innerTopLeft.z() > outerTopLeft.z() ||  innerBottomLeft.z() < outerBottomLeft.z())
-        && GetCfdSettingsPtr()->m_FarManLocFlag)
+    if ( innerBottomLeft.x() < outerBottomLeft.x() || innerBottomRight.x() > outerBottomRight.x()
+      || innerTopLeft.z() > outerTopLeft.z() || innerBottomLeft.z() < outerBottomLeft.z() )
     {
         isInside = false;
     }
@@ -2795,6 +2792,7 @@ vector< Surf* > CfdMeshMgrSingleton::CreateDomainSurfs()
 
         domainSurfs[i]->GetSurfCore()->MakePlaneSurf( pt0, pt1, pt2, pt3 );
         domainSurfs[i]->GetSurfCore()->BuildPatches( domainSurfs[i] );
+        domainSurfs[i]->SetFlipFlag( false );
     }
     return domainSurfs;
 }
@@ -3276,7 +3274,8 @@ void CfdMeshMgrSingleton::RemoveInteriorTris()
                 int comp_id = m_SurfVec[i]->GetCompID();
                 if ( i != s && comp_id != s_comp_id ) // Don't check self intersection.
                 {
-                    if ( m_SurfVec[s]->GetFeaSymmIndex() >=0 && m_SurfVec[s]->GetFeaSymmIndex() != m_SurfVec[i]->GetFeaSymmIndex() )
+                    if ( m_SurfVec[s]->GetFeaSymmIndex() >=0 && m_SurfVec[i]->GetFeaSymmIndex() >= 0 &&
+                         m_SurfVec[s]->GetFeaSymmIndex() != m_SurfVec[i]->GetFeaSymmIndex() )
                     {
                         // Do nothing.
                     }
@@ -4135,10 +4134,9 @@ void CfdMeshMgrSingleton::UpdateBBoxDOSymSplit( const BndBox &box )
     innerTopRight = vec3d(corners[6][0], outerTopRight[1], corners[6][2]);
     innerTopLeft = vec3d(corners[5][0], outerTopLeft[1], corners[5][2]);
 
-    //Checks to see if inner plane is outside of outer plane
-    if (!((innerBottomLeft.x() < outerBottomLeft.x() || innerBottomRight.x() > outerBottomRight.x()
-         || innerTopLeft.z() > outerTopLeft.z() ||  innerBottomLeft.z() < outerBottomLeft.z())
-        && GetCfdSettingsPtr()->m_FarManLocFlag))
+    // Checks to see if inner plane is outside of outer plane
+    if (! ( innerBottomLeft.x() < outerBottomLeft.x() || innerBottomRight.x() > outerBottomRight.x()
+         || innerTopLeft.z() > outerTopLeft.z() || innerBottomLeft.z() < outerBottomLeft.z()) )
     {
         //=== Symmetry Plane InnerBox as 'line strips' ===//
         temp = innerBottomLeft;
@@ -4275,9 +4273,25 @@ void CfdMeshMgrSingleton::SubTagTris()
 
                 name = geom_ptr->GetName() + nplate + "_Surf" + to_string((long long)geom_comp_map[geom_id].size() - 1 );
                 exportid = geom_id + idplate + "_Surf" + to_string( (long long)geom_comp_map[geom_id].size() - 1 );
-                if ( surf->GetWakeFlag() ) name = geom_ptr->GetName()
-                                                 + to_string( (long long)comp_num_map[ surf->GetUnmergedCompID() ] )
-                                                 + "_Wake";
+                if ( surf->GetWakeFlag() )
+                {
+                    name = geom_ptr->GetName()
+                           + to_string( (long long)comp_num_map[ surf->GetUnmergedCompID() ] )
+                           + "_Wake";
+
+                    // A wake is never given a GeomID of its own -- it is built from a curve
+                    // rather than from a Geom, and the Geom it trails from is named by
+                    // GetRefGeomID.  Left as it was, the ID came out as the surface suffix
+                    // alone and the key file's ID field was written empty.  That field is
+                    // not free to be empty: the reader splits the row on commas with strtok,
+                    // which runs empty fields together and shifts every later field along.
+                    //
+                    // The wake takes the ID of the Geom it belongs to.  The marker is kept on
+                    // the end for anything reading the full string, and falls off the ten
+                    // character GeomID that the key file asks for, so the file names the Geom
+                    // the wake came from and the numbering groups it there.
+                    exportid = surf->GetRefGeomID() + "_Wake";
+                }
             }
 
             SubSurfaceMgr.m_CompNames.push_back(name);

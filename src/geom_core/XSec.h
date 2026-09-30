@@ -68,6 +68,16 @@ public:
     //==== Copy Between Different Types ====//
     virtual void CopyFrom( XSec* xs );
     virtual void CopyBasePos( XSec* xs ) = 0;
+
+    // Deletes the attributes on this cross section, its Parms, and its curve.
+    virtual void DeleteAttributes();
+
+    // Takes another cross section's identity, for when this one replaces it: the IDs of the
+    // Parms the two share by group and name, the container IDs, and the attributes, for this
+    // section and its curve.  Attributes on a Parm with no counterpart move to the container.
+    // Whatever attributes this one holds are kept, so a copy's are deleted first.
+    virtual void TakeIdentityOf( XSec* old );
+
     virtual xmlNodePtr EncodeXml( xmlNodePtr & node );
     virtual xmlNodePtr DecodeXml( xmlNodePtr & node );
 
@@ -79,6 +89,10 @@ public:
     virtual double GetProjectionCosine();
 
     virtual void GetSimpleBasis( vec3d &xdir, vec3d &ydir, vec3d &zdir );
+
+    // The cross section's own orientation, before anything is said about where around the
+    // section a station sits: width, up and principal directions as this XSec is placed.
+    virtual void GetBaseBasis( Matrix4d &basis );
 
     virtual void GetBasis( double t, Matrix4d &basis );
     virtual void GetTanNormVec( double t, double theta, double phi, vec3d &tangent, vec3d &normal );
@@ -120,11 +134,112 @@ protected:
     virtual void ChangeID( const string &id );
 };
 
+// A user defined skinning station at an arbitrary position around the cross section.
+//
+// Skinning has always been controlled at four fixed places -- Top, Bottom, Left and Right.
+// A spine adds another, anywhere in between, carrying its own conditions and values.  It
+// runs the length of the body: its position and symmetry are synced across every XSec by
+// the Geom, while the values stay per XSec, which is the point of having it.
+//
+// Symmetry works the opposite way round from the AllSym / TBSym / RLSym controls.  Those
+// start on and tie the four sides together; a spine starts alone, and the flags below
+// mirror it to the other side, the other half, or both.  Mirrored copies are generated
+// rather than stored, so there is nothing to keep in sync and the browser shows only what
+// the user made.
+class SkinSpine : public ParmContainer
+{
+public:
+    SkinSpine();
+
+    virtual void ParmChanged( Parm* parm_ptr, int type );
+
+    // A spine's parms land in its Geom's flattened group map alongside every other parm
+    // beneath that Geom, so they need to be told apart.  The suffix carries the XSec index,
+    // the alias the spine's name -- giving SkinSpine_2_Spine_0 and matching how an XSec's
+    // own parms already read.
+    virtual void SetGroupDisplaySuffix( int num );
+    virtual void SetGroupAlias( const string & alias );
+
+    // Where this spine's mirror images sit.  Right is W = 0, Bottom 1, Left 2, Top 3, so a
+    // left/right mirror is W -> 2 - W and a top/bottom mirror is W -> -W, both modulo the
+    // cross section period.
+    virtual void GetMirrorW( vector< double > &ws, vector< bool > &flipslew, double period );
+
+    // Which spine this is one cross section's copy of.
+    //
+    // A spine runs the length of the body: every cross section holds a copy carrying the
+    // values it enforces there, while the position and the name belong to the first.  Keeping
+    // those copies in step by matching them on position in the array holds only for as long as
+    // nothing reorders it -- and a paste rebuilds the array from whatever the source held, in
+    // the source's order.  Two spines at W01 0.4 and 0.6 could then trade places on one cross
+    // section and nothing would notice: one's values would be read as the other's, and moving
+    // the first to 0.35 would move the wrong one.
+    //
+    // The tag is shared by every copy of one spine and generated once, when the spine is
+    // created.  It is not a Parm and not a container ID -- each copy is its own container --
+    // it says only which spine this copy is of.
+    virtual const string & GetSpineID() const                   { return m_SpineID; }
+    virtual void SetSpineID( const string & id )                { m_SpineID = id; }
+
+    Parm m_W01;
+
+    string m_SpineID;
+
+    BoolParm m_LRSymFlag;
+    BoolParm m_TBSymFlag;
+
+    BoolParm m_LAngleSet;
+    BoolParm m_LSlewSet;
+    BoolParm m_LStrengthSet;
+    BoolParm m_LCurveSet;
+    BoolParm m_RAngleSet;
+    BoolParm m_RSlewSet;
+    BoolParm m_RStrengthSet;
+    BoolParm m_RCurveSet;
+
+    BoolParm m_LRAngleEq;
+    BoolParm m_LRSlewEq;
+    BoolParm m_LRStrengthEq;
+    BoolParm m_LRCurveEq;
+
+    Parm m_LAngle;
+    Parm m_LSlew;
+    Parm m_LStrength;
+    Parm m_LCurve;
+    Parm m_RAngle;
+    Parm m_RSlew;
+    Parm m_RStrength;
+    Parm m_RCurve;
+};
+
 class SkinXSec : public XSec
 {
 public:
 
     SkinXSec( XSecCurve *xsc );
+    virtual ~SkinXSec();
+
+    virtual xmlNodePtr EncodeXml( xmlNodePtr & node );
+    virtual xmlNodePtr DecodeXml( xmlNodePtr & node );
+
+    // Carry the spines' Parm identity across as well as this container's own.
+    virtual void SwapIDs( ParmContainer* from );
+
+    virtual void DeleteAttributes();
+    virtual void TakeIdentityOf( XSec* old );
+
+    virtual void AddLinkableParms( vector< string > & parm_vec, const string & link_container_id = string() );
+
+    // Where the skinning angles are measured from.  See m_CurveBasisFlag.
+    virtual void GetBasis( double t, Matrix4d &basis );
+
+    // Whether this section has no extent at all, and so no tangent to take a frame from.
+    virtual bool IsPointSection();
+    virtual bool IsPointSection( double extent );
+
+    // How far the cross section curve reaches, measured from the curve rather than from the
+    // shape's Width and Height parms, which some shapes do not keep their size in.
+    virtual double SectionExtent();
 
     virtual void CopySetValidate( IntParm &m_TopCont,
             BoolParm &m_TopLAngleSet,
@@ -140,6 +255,8 @@ public:
             BoolParm &m_TopLRStrengthEq,
             BoolParm &m_TopLRCurveEq );
 
+    virtual void ChangeID( const string &newid );
+
     virtual void ValidateParms( IntParm &m_TopCont,
             BoolParm &m_TopLAngleSet,
             BoolParm &m_TopLSlewSet,
@@ -154,17 +271,125 @@ public:
             BoolParm &m_TopLRStrengthEq,
             BoolParm &m_TopLRCurveEq );
 
-    virtual void CrossValidateParms( BoolParm &topEq,
-            BoolParm &rightEq,
-            BoolParm &bottomEq,
-            BoolParm &leftEq,
-            BoolParm &topRSet,
-            BoolParm &topLSet,
-            bool CX );
-
     virtual void ValidateParms( );
+    virtual void ValidateSpineParms();
+    virtual void ClearSpineSkinning();
 
+    // Sides in station order, matching XSec::GetTanNormCrv's control value layout and the
+    // order the skinning blend weights are built in.
+    enum { SKIN_SIDE_RIGHT = 0, SKIN_SIDE_BOTTOM, SKIN_SIDE_LEFT, SKIN_SIDE_TOP, NUM_SKIN_SIDES };
+
+    // One place where skinning is controlled around the cross section.  The four sides are
+    // stations at W = 0, 1, 2, and 3; user defined spines add more at arbitrary W.  The
+    // skinning path reads stations rather than sides, so it does not care how many there
+    // are or where they sit.
+    struct SkinStation
+    {
+        double m_W;
+
+        // Whether this is one of the four fixed sides or came from a spine.
+        // The sides anchor the control spline and always stand; a spine is the user's, and
+        // one that enforces nothing anywhere is dropped instead.
+        bool m_IsSide;
+
+        // Which spine this came from, or -1 for a side.  A spine's mirror images carry the
+        // same index, since they are that spine seen elsewhere on the section.
+        int m_SpineIndex;
+
+        bool m_LAngleSet;
+        bool m_LSlewSet;
+        bool m_LStrengthSet;
+        bool m_LCurveSet;
+        bool m_RAngleSet;
+        bool m_RSlewSet;
+        bool m_RStrengthSet;
+        bool m_RCurveSet;
+
+        double m_LAngle;
+        double m_LSlew;
+        double m_LStrength;
+        double m_LCurve;
+        double m_RAngle;
+        double m_RSlew;
+        double m_RStrength;
+        double m_RCurve;
+    };
+
+    // One station built from a side's parameters.
+    virtual void GetSideStation( int side, SkinStation &st );
+
+    // Every station around the cross section, ordered by W.
+    virtual void GetStations( vector< SkinStation > &stations );
+
+    // W of every station, ordered.  What the blend weights are built from.
+    virtual void GetStationW( vector< double > &ws );
+
+    // One rib per station, each enforcing only that station's conditions.
+    virtual void PrepRibs( bool first, bool last );
+
+    virtual void GetRibs( bool first, bool last, vector< rib_data_type > &ribs );
+
+    // Build the ribs from a supplied station list rather than the parms.
+    virtual void GetRibs( bool first, bool last, vector< rib_data_type > &ribs,
+                          const vector< SkinStation > &stations );
+
+    // The one rib a blending pass uses: conditions confined to the spans its own stations
+    // touch, values drawn only from those stations.
+    virtual void GetGroupRib( bool first, bool last, const vector< SkinStation > &stations,
+                              const vector< bool > &ingroup, rib_data_type &rib );
+
+    // Replace every value this station does not enforce with what surf actually did there.
+    // These are the values with no authority of their own, so a pass that needs them takes
+    // them from a solution that left them free.
+    virtual void FillUnsetFromSurf( int irib, const VspSurf &surf, vector< SkinStation > &stations );
+
+    // The Top side's rib.  Retained for callers that do not blend.
     virtual rib_data_type GetRib( bool first, bool last );
+
+    virtual bool AnyAngleSet( bool left, const vector< SkinStation > &stations );
+    virtual bool AnyCurveSet( bool left, const vector< SkinStation > &stations );
+
+    // Whether every station enforces the same conditions, in which case one skin suffices.
+
+    virtual void SetGroupDisplaySuffix( int num );
+
+    //==== User defined spines ====//
+    // A position for a new spine that will not land on a station already there.
+    virtual double SuggestSpineW01();
+
+    virtual SkinSpine* AddSpine( double w01 );
+
+    virtual void GetNearestStation( double w, SkinStation &near );
+
+    // Sample the control values the existing stations already produce at w.  Used to seed a
+    // new spine so that adding one changes nothing until the user asks it to.
+    virtual void InterpStationControls( double w, bool left, double &angle, double &slew,
+                                        double &strength, double &curve );
+
+    // Name the spines Spine_0, Spine_1 ... and push the XSec index and each spine's name
+    // down onto its parms, so the display group names stay right as spines come and go.
+    virtual void RenumberSpines();
+
+    // The lowest numbered Spine_ name not already in use here.
+    virtual string UnusedSpineName() const;
+
+    // Put this cross section's spines in the same order as another's, matching by tag.
+    virtual void OrderSpinesLike( const SkinXSec* other );
+    virtual void DelSpine( int index );
+    virtual void DelAllSpines();
+    virtual int NumSpines() const                       { return m_SpineVec.size(); }
+    virtual SkinSpine* GetSpine( int index );
+
+    // The smallest gap allowed between stations.  Two stations at the same parameter would
+    // give the control spline a zero length segment.
+    static double GetMinStationGap()                    { return 1.0e-3; }
+
+    // Build the tangent (fp) and normal (fpp) curves that control the loft on one side
+    // of this XSec.  'left' selects the parameters that control the loft before this
+    // XSec, otherwise the parameters controlling the loft after it are used.
+    virtual void GetSkinCrvs( bool left, piecewise_curve_type &tangentcrv, piecewise_curve_type &normcrv );
+    virtual void GetSkinCrvs( bool left, const vector< SkinStation > &stations,
+                              piecewise_curve_type &tangentcrv, piecewise_curve_type &normcrv );
 
     virtual void SetUnsetParms( int irib, const VspSurf &surf );
 
@@ -187,6 +412,21 @@ public:
             Parm &RCurve );
 
     virtual double GetScale() = 0;
+
+    // Take the station's frame from the cross section curve rather than from a circle.
+    //
+    // Angle and slew are rotations of a frame, so they only mean what the user expects if
+    // that frame follows the section.  It is built by assuming the section is a circle
+    // traversed uniformly in the curve parameter: the up direction is where the circle's
+    // tangent would point, and the width direction is radially out from it.  On a circle
+    // that is exact; on anything else it is not, and a zero angle then does not mean the
+    // loft leaves along the surface -- it means it leaves along a direction borrowed from a
+    // circle nobody drew.
+    //
+    // Set this and the frame is taken from the curve itself: the up direction is the curve's
+    // own tangent at the station, and the width direction follows.  Experimental, and off by
+    // default, since it changes every surface that enforces a skinning condition.
+    BoolParm m_CurveBasisFlag;
 
     BoolParm m_AllSymFlag;
     BoolParm m_TBSymFlag;
@@ -299,6 +539,8 @@ public:
     virtual void SetTanSlews( int side, double top, double right, double bottom, double left );
     virtual void SetTanStrengths( int side, double top, double right, double bottom, double left );
     virtual void SetCurvatures( int side, double top, double right, double bottom, double left );
+    // Multiplies every tangent strength and curvature, on all four sides and every spine.
+    virtual void ScaleTanStrengths( double factor );
     virtual void FlipLRSkinning();
 
     virtual void SetV2DefaultBehavior();
@@ -308,6 +550,9 @@ public:
     virtual void ReadV2FileFuse1( xmlNodePtr &root );
 
 protected:
+
+    vector< SkinSpine* > m_SpineVec;
+
 };
 
 

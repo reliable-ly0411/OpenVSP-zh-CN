@@ -147,13 +147,11 @@ Matrix4d PtCloudGeom::GetTotalTransMat() const
     return retMat;
 }
 
-void PtCloudGeom::Scale()
+void PtCloudGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
     m_ScaleFromOrig *= currentScale;
     m_ScaleMatrix.loadIdentity();
     m_ScaleMatrix.scale( m_ScaleFromOrig() );
-    m_LastScale = m_Scale();
 }
 
 void PtCloudGeom::UpdateBBox()
@@ -204,7 +202,7 @@ int PtCloudGeom::ReadPTS( const char* file_name )
         while ( !stopFlag )
         {
             double x, y, z;
-            if ( EOF == fscanf( file_id, "%lf %lf %lf\n", &x, &y, &z ) )
+            if ( EOF == fscanf( file_id, "%lf%*[, ]%lf%*[, ]%lf\n", &x, &y, &z ) )
             {
                 break;
             }

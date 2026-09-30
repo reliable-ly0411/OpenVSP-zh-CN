@@ -13,7 +13,6 @@
 #if !defined(VSPAUXILIARYGEOM__INCLUDED_)
 #define VSPAUXILIARYGEOM__INCLUDED_
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "Geom.h"
@@ -31,7 +30,7 @@ public:
 
     virtual void ComputeCenter();
 
-    virtual void Scale();
+    virtual void ApplyScale( double currentScale );
 
     virtual void AddDefaultSources( double base_len = 1.0 );
 

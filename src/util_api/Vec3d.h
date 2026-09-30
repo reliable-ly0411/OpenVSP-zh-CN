@@ -29,10 +29,6 @@ typedef Eigen::Matrix< double, 1, 3, 0x1, 1, 3 > threed_point_type;
 
 class vec2d;
 
-  /*!
-    vec3d is typically used to describe coordinate points and vectors in 3D space.
-    All 3 elements in the vector are of type double.
-  */
 class vec3d;
 class Matrix4d;
 
@@ -58,17 +54,17 @@ class Matrix4d;
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        vec3d a(), b()                                # Default Constructor
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
 
     a.set_xyz( 1.0, 2.0, 3.0 )
     b.set_xyz( 4.0, 5.0, 6.0 )
 
-    vec3d c = a + b
+    c = a + b
 
-    Print( "a + b = ", False )
+    print( "a + b = ", False )
 
-    Print( c )
-
+    print( c )
     \endcode
     \endPythonOnly
   */
@@ -79,8 +75,7 @@ vec3d operator+( const vec3d& a, const vec3d& b );
 	\ingroup vec3d
 */
   /*!
-    \forcpponly
-    Subtraction operator for two vec3d objects, performed by the subtraction of each corresponding component    \code{.cpp}
+    Subtraction operator for two vec3d objects, performed by the subtraction of each corresponding component
     \forcpponly
     \code{.cpp}
     vec3d a(), b();                                // Default Constructor
@@ -97,17 +92,17 @@ vec3d operator+( const vec3d& a, const vec3d& b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        vec3d a(), b()                                # Default Constructor
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
 
     a.set_xyz( 1.0, 2.0, 3.0 )
     b.set_xyz( 4.0, 5.0, 6.0 )
 
-    vec3d c = a - b
+    c = a - b
 
-    Print( "a - b = ", False )
+    print( "a - b = ", False )
 
-    Print( c )
-
+    print( c )
     \endcode
     \endPythonOnly
   */
@@ -136,18 +131,17 @@ vec3d operator-( const vec3d& a, const vec3d& b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        vec3d a()                                # Default Constructor
+    a = vec3d()                                # Default Constructor
 
     a.set_xyz( 1.0, 2.0, 3.0 )
 
     b = 1.5
 
-    vec3d c = a * b
+    c = a * b
 
-    Print( "a * b = ", False )
+    print( "a * b = ", False )
 
-    Print( c )
-
+    print( c )
     \endcode
     \endPythonOnly
   */
@@ -176,18 +170,17 @@ vec3d operator*( const vec3d& a, double b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        vec3d a()                                # Default Constructor
+    a = vec3d()                                # Default Constructor
 
     a.set_xyz( 1.0, 2.0, 3.0 )
 
     b = 1.5
 
-    vec3d c = a * b
+    c = a * b
 
-    Print( "a * b = ", False )
+    print( "a * b = ", False )
 
-    Print( c )
-
+    print( c )
     \endcode
     \endPythonOnly
   */
@@ -216,18 +209,17 @@ vec3d operator*( const vec3d& a, const vec3d& b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        vec3d a()                                # Default Constructor
+    a = vec3d()                                # Default Constructor
 
     a.set_xyz( 1.0, 2.0, 3.0 )
 
     b = 1.5
 
-    vec3d c = a / b
+    c = a / b
 
-    Print( "a / b = ", False )
+    print( "a / b = ", False )
 
-    Print( c )
-
+    print( c )
     \endcode
     \endPythonOnly
   */
@@ -235,10 +227,13 @@ vec3d operator*( const vec3d& a, const vec3d& b );
 vec3d operator/( const vec3d& a, double b );
 
 
-  /*!
+/*!
+    \ingroup vec3d
+*/
+/*!
     vec3d is typically used to describe coordinate points and vectors in 3D space.
     All 3 elements in the vector are of type double.
-  */
+*/
 class vec3d
 {
 private:
@@ -292,11 +287,10 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
     a.set_xyz( 2.0, 4.0, 6.0 )
-
     \endcode
     \endPythonOnly
     \param [in] xx New X value
@@ -307,7 +301,38 @@ public:
 
     vec3d& set_xyz( double xx, double yy, double zz );
 
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Set all three coordinates from a vector of three doubles.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d()
+
+    a.set_vec( [ 1.0, 2.0, 3.0 ] )
+
+    assert abs( a.x() - 1.0 ) < 1e-12, "set_vec did not set x"
+
+    assert abs( a.z() - 3.0 ) < 1e-12, "set_vec did not set z"
+    \endcode
+    \endPythonOnly
+    \sa set_xyz
+    \param [in] a vector<double> Three coordinates, X, Y and Z
+    \return vec3d Updated vec3d
+*/
+
     vec3d& set_vec( const std::vector<double> &a );
+/*!
+    \internal
+    Set the coordinates from a raw double[3] or float[3].  set_vec and set_xyz are the ones to use
+    from a script.
+*/
+/*!
+    \internal
+    Set the coordinates from a raw double[3] or float[3].  The bindings cannot carry a C array;
+    set_vec and set_xyz are the ones to use from a script.
+*/
     vec3d& set_arr( const double a[] );
     vec3d& set_arr( const float a[] );
   /*!
@@ -322,11 +347,10 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
     a.set_x( 2.0 )
-
     \endcode
     \endPythonOnly
     \param [in] xx New X value
@@ -347,11 +371,10 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
     a.set_y( 4.0 )
-
     \endcode
     \endPythonOnly
     \param [in] yy New Y value
@@ -372,11 +395,10 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
     a.set_z( 6.0 )
-
     \endcode
     \endPythonOnly
     \param [in] zz in double new z value
@@ -386,11 +408,85 @@ public:
     vec3d& set_z( double zz );
 
 
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Set this vec3d to another reflected about the YZ plane, negating X.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    b = vec3d()
+
+    b.set_refx( a )
+
+    assert abs( b.x() + 1.0 ) < 1e-12, "set_refx did not negate x"
+
+    assert abs( b.y() - 2.0 ) < 1e-12, "set_refx disturbed y"
+    \endcode
+    \endPythonOnly
+    \sa set_refy, set_refz, reflect_yz
+    \param [in] a vec3d Point to reflect
+    \return vec3d Updated vec3d
+*/
+
     vec3d& set_refx( const vec3d &a );
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Set this vec3d to another reflected about the XZ plane, negating Y.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    b = vec3d()
+
+    b.set_refy( a )
+
+    assert abs( b.y() + 2.0 ) < 1e-12, "set_refy did not negate y"
+
+    assert abs( b.x() - 1.0 ) < 1e-12, "set_refy disturbed x"
+    \endcode
+    \endPythonOnly
+    \sa set_refx, set_refz, reflect_xz
+    \param [in] a vec3d Point to reflect
+    \return vec3d Updated vec3d
+*/
+
     vec3d& set_refy( const vec3d &a );
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Set this vec3d to another reflected about the XY plane, negating Z.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    b = vec3d()
+
+    b.set_refz( a )
+
+    assert abs( b.z() + 3.0 ) < 1e-12, "set_refz did not negate z"
+
+    assert abs( b.x() - 1.0 ) < 1e-12, "set_refz disturbed x"
+    \endcode
+    \endPythonOnly
+    \sa set_refx, set_refy, reflect_xy
+    \param [in] a vec3d Point to reflect
+    \return vec3d Updated vec3d
+*/
+
     vec3d& set_refz( const vec3d &a );
 
     // Get Point Values
+/*!
+    \internal
+    Copy the coordinates into a raw array or an Eigen point.  Of no use from a script, which should
+    use x(), y() and z().
+*/
     void get_pnt( double pnt[3] ) const
     {
         pnt[0] = v[0];
@@ -408,30 +504,25 @@ public:
   /*!
     Get the X coordinate (index 0) of the vec3d
     \forcpponly
-    \code{cpp}
+    \code{.cpp}
     vec3d a();                                // Default Constructor
 
     a.set_xyz( 2.0, 4.0, 6.0 );
 
-    Print( "a.x() = ", false );
-    Print( a.x() );
+    if ( abs( a.x() - 2.0 ) > 1e-12 )                    { Print( "ERROR: x" ); __failure++; }
 
-    Print( "a[0]= ", false );
-    Print( a[0] );
+    if ( abs( a[0] - 2.0 ) > 1e-12 )                     { Print( "ERROR: x" ); __failure++; }
     \endcode
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        vec3d a()                                # Default Constructor
+    a = vec3d()                                # Default Constructor
 
     a.set_xyz( 2.0, 4.0, 6.0 )
 
-    Print( "a.x() = ", False )
-    Print( a.x() )
+    assert abs( a.x() - 2.0 ) < 1e-12, "x did not return the coordinate"
 
-    Print( "a[0]= ", False )
-    Print( a[0] )
-
+    assert abs( a[0] - 2.0 ) < 1e-12, "indexing disagrees with x()"
     \endcode
     \endPythonOnly
     \return X value
@@ -445,30 +536,25 @@ public:
   /*!
     Get the Y coordinate (index 1) of the vec3d
     \forcpponly
-    \code{cpp}
+    \code{.cpp}
     vec3d a();                                // Default Constructor
 
     a.set_xyz( 2.0, 4.0, 6.0 );
 
-    Print( "a.y() = ", false );
-    Print( a.y() );
+    if ( abs( a.y() - 4.0 ) > 1e-12 )                    { Print( "ERROR: y" ); __failure++; }
 
-    Print( "a[1]= ", false );
-    Print( a[1] );
+    if ( abs( a[1] - 4.0 ) > 1e-12 )                     { Print( "ERROR: y" ); __failure++; }
     \endcode
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        vec3d a()                                # Default Constructor
+    a = vec3d()                                # Default Constructor
 
     a.set_xyz( 2.0, 4.0, 6.0 )
 
-    Print( "a.y() = ", False )
-    Print( a.y() )
+    assert abs( a.y() - 4.0 ) < 1e-12, "y did not return the coordinate"
 
-    Print( "a[1]= ", False )
-    Print( a[1] )
-
+    assert abs( a[1] - 4.0 ) < 1e-12, "indexing disagrees with y()"
     \endcode
     \endPythonOnly
     \return Y value
@@ -482,30 +568,25 @@ public:
   /*!
     Get the Z coordinate (index 2) of the vec3d
     \forcpponly
-    \code{cpp}
+    \code{.cpp}
     vec3d a();                                // Default Constructor
 
     a.set_xyz( 2.0, 4.0, 6.0 );
 
-    Print( "a.z() = ", false );
-    Print( a.z() );
+    if ( abs( a.z() - 6.0 ) > 1e-12 )                    { Print( "ERROR: z" ); __failure++; }
 
-    Print( "a[2]= ", false );
-    Print( a[2] );
+    if ( abs( a[2] - 6.0 ) > 1e-12 )                     { Print( "ERROR: z" ); __failure++; }
     \endcode
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        vec3d a()                                # Default Constructor
+    a = vec3d()                                # Default Constructor
 
     a.set_xyz( 2.0, 4.0, 6.0 )
 
-    Print( "a.z() = ", False )
-    Print( a.z() )
+    assert abs( a.z() - 6.0 ) < 1e-12, "z did not return the coordinate"
 
-    Print( "a[2]= ", False )
-    Print( a[2] )
-
+    assert abs( a[2] - 6.0 ) < 1e-12, "indexing disagrees with z()"
     \endcode
     \endPythonOnly
     \return Z value
@@ -523,6 +604,11 @@ public:
     }
 
     void Transform( const Matrix4d &m );
+/*!
+    \internal
+    Does nothing.  vec3d and BndBox both carry an empty FlipNormal so generic code can call it on
+    either without caring which it has; there is no normal to flip on a point.
+*/
     void FlipNormal()                          {};
 
     // Rotate About Axis --> Change Internal Values
@@ -542,14 +628,13 @@ public:
     \beginPythonOnly
     \code{.py}
     import math
-    #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
     PI = 3.14
 
     a.set_xyz( 1.0, 0.0, 0.0 )
 
     a.rotate_x( 0.5 * PI )
-
     \endcode
     \endPythonOnly
     \param [in] theta double Rotation angle in radians
@@ -573,14 +658,13 @@ public:
     \beginPythonOnly
     \code{.py}
     import math
-    #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
     PI = 3.14
 
     a.set_xyz( 1.0, 0.0, 0.0 )
 
     a.rotate_y( 0.5 * PI )
-
     \endcode
     \endPythonOnly
     \param [in] theta double Rotation angle in radians
@@ -604,14 +688,13 @@ public:
     \beginPythonOnly
     \code{.py}
     import math
-    #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
     PI = 3.14
 
     a.set_xyz( 1.0, 0.0, 0.0 )
 
     a.rotate_z( 0.5 * PI )
-
     \endcode
     \endPythonOnly
     \param [in] theta double Rotation angle in radians
@@ -635,14 +718,13 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
-    #===== Test Scale ====//
+    #===== Test Scale ====
     a.set_xyz( 2.0, 2.0, 2.0 )
 
     a.scale_x( 2.0 )
-
     \endcode
     \endPythonOnly
     \param [in] scale Scaling factor for the X value
@@ -668,14 +750,13 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
-    #===== Test Scale ====//
+    #===== Test Scale ====
     a.set_xyz( 2.0, 2.0, 2.0 )
 
     a.scale_y( 2.0 )
-
     \endcode
     \endPythonOnly
     \param [in] scale Scaling factor for the Y value
@@ -701,14 +782,13 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
-    #===== Test Scale ====//
+    #===== Test Scale ====
     a.set_xyz( 2.0, 2.0, 2.0 )
 
     a.scale_z( 2.0 )
-
     \endcode
     \endPythonOnly
     \param [in] scale Scaling factor for the Z value
@@ -735,14 +815,13 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
-    #===== Test Offset ====//
+    #===== Test Offset ====
     a.set_xyz( 2.0, 2.0, 2.0 )
 
     a.offset_x( 10.0 )
-
     \endcode
     \endPythonOnly
     \param [in] offset Offset for the X value
@@ -768,14 +847,13 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
-    #===== Test Offset ====//
+    #===== Test Offset ====
     a.set_xyz( 2.0, 2.0, 2.0 )
 
     a.offset_y( 10.0 )
-
     \endcode
     \endPythonOnly
     \param [in] offset Offset for the Y value
@@ -801,14 +879,13 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
-    #===== Test Offset ====//
+    #===== Test Offset ====
     a.set_xyz( 2.0, 2.0, 2.0 )
 
     a.offset_z( 10.0 )
-
     \endcode
     \endPythonOnly
     \param [in] offset Offset for the Z value
@@ -819,6 +896,29 @@ public:
     {
         v[2] += offset;
     };
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Offset one coordinate, chosen by index: 0 for X, 1 for Y, 2 for Z.  The indexed counterpart of
+    offset_x, offset_y and offset_z.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    a.offset_i( 0.5, 1 )
+
+    assert abs( a.y() - 2.5 ) < 1e-12, "offset_i did not offset the Y coordinate"
+
+    assert abs( a.x() - 1.0 ) < 1e-12, "offset_i disturbed a coordinate it should not have"
+
+    \endcode
+    \endPythonOnly
+    \sa offset_x, offset_y, offset_z
+    \param [in] offset double Amount to offset by
+    \param [in] idir int Coordinate index, 0 for X, 1 for Y, 2 for Z
+*/
+
     void offset_i( double offset, int idir )
     {
         v[idir] += offset;
@@ -839,14 +939,14 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
 
-    #===== Test Reflect ====//
+    #===== Test Reflect ====
     a.set_xyz( 1.0, 2.0, 3.0 )
 
     b = a.reflect_xy()
-
     \endcode
     \endPythonOnly
     \return Reflected vec3d
@@ -872,14 +972,14 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
 
-    #===== Test Reflect ====//
+    #===== Test Reflect ====
     a.set_xyz( 1.0, 2.0, 3.0 )
 
     b = a.reflect_xz()
-
     \endcode
     \endPythonOnly
     \return Reflected vec3d
@@ -905,14 +1005,14 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
 
-    #===== Test Reflect ====//
+    #===== Test Reflect ====
     a.set_xyz( 1.0, 2.0, 3.0 )
 
     b = a.reflect_yz()
-
     \endcode
     \endPythonOnly
     \return Reflected vec3d
@@ -979,20 +1079,35 @@ public:
     \beginPythonOnly
     \code{.py}
     import math
-    #==== Test Vec3d ====//
-    vec3d a()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
 
-    #==== Test Mag ====//
+    #==== Test Mag ====
     a.set_xyz( 1.0, 2.0, 3.0 )
 
-    if  abs( a.mag() - math.sqrt( 14 ) ) > 1e-6 : Print( "---> Error: Vec3d Mag " ); }
-
+    assert not ( abs( a.mag() - math.sqrt( 14 ) ) > 1e-6 ), "Vec3d Mag"
     \endcode
     \endPythonOnly
     \return Magnitude
 */
 
     double mag() const;                // x = a.mag()
+
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Get the square of the magnitude.  Cheaper than mag, which has to take a square root, and enough on its own when magnitudes are only being compared.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    assert abs( a.magsq() - 14.0 ) < 1e-12, "magsq did not return the squared magnitude"
+    \endcode
+    \endPythonOnly
+    \sa mag
+    \return double Squared magnitude
+*/
 
     double magsq() const;
 
@@ -1014,17 +1129,18 @@ public:
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b(), c()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
+    c = vec3d()
 
-    #==== Test Cross ====//
+    #==== Test Cross ====
     a.set_xyz( 4.0, 0.0, 0.0 )
     b.set_xyz( 0.0, 3.0, 0.0 )
 
     c = cross( a, b )
 
     c.normalize()
-
     \endcode
     \endPythonOnly
 */
@@ -1032,12 +1148,109 @@ public:
     void normalize();           // a.normalize()
 
 
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Get the index of the largest coordinate: 0 for X, 1 for Y, 2 for Z.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 5.0, 3.0 )
+
+    assert a.major_comp() == 1, "major_comp did not find the largest coordinate"
+    \endcode
+    \endPythonOnly
+    \sa minor_comp
+    \return int Index of the largest coordinate
+*/
+
     int major_comp() const;
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Get the index of the smallest coordinate: 0 for X, 1 for Y, 2 for Z.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 5.0, 3.0 )
+
+    assert a.minor_comp() == 0, "minor_comp did not find the smallest coordinate"
+    \endcode
+    \endPythonOnly
+    \sa major_comp
+    \return int Index of the smallest coordinate
+*/
+
     int minor_comp() const;
 
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Test whether any coordinate is NaN.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    assert not a.isnan(), "isnan reported a NaN in an ordinary point"
+    \endcode
+    \endPythonOnly
+    \sa isinf, isfinite
+    \return bool True if any coordinate is NaN
+*/
+
     bool isnan() const;
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Test whether any coordinate is infinite.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    assert not a.isinf(), "isinf reported an infinity in an ordinary point"
+    \endcode
+    \endPythonOnly
+    \sa isnan, isfinite
+    \return bool True if any coordinate is infinite
+*/
+
     bool isinf() const;
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Test whether every coordinate is finite -- neither infinite nor NaN.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    assert a.isfinite(), "isfinite rejected an ordinary point"
+    \endcode
+    \endPythonOnly
+    \sa isnan, isinf
+    \return bool True if all three coordinates are finite
+*/
+
     bool isfinite() const;
+
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Print the vec3d to stdout, for debugging.  Writes to the console rather than returning anything, so there is nothing for an example to check.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    a.print( "a" )
+
+    assert abs( a.x() - 1.0 ) < 1e-12, "print changed the point"
+    \endcode
+    \endPythonOnly
+    \param [in] label string Label to print in front of the coordinates
+*/
 
     void print( const char* label = "" ) const;
 
@@ -1130,17 +1343,17 @@ public:
     \beginPythonOnly
     \code{.py}
     import math
-    #==== Test Vec3d ====//
-    vec3d a(), b()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
 
-    #==== Test Dist ====//
+    #==== Test Dist ====
     a.set_xyz( 2.0, 2.0, 2.0 )
     b.set_xyz( 3.0, 4.0, 5.0 )
 
-    d = dist( a; b )
+    d = dist( a, b )
 
-    if  abs( d - math.sqrt( 14 ) ) > 1e-6 : Print( "---> Error: Vec3d Dist " ); }
-
+    assert not ( abs( d - math.sqrt( 14 ) ) > 1e-6 ), "Vec3d Dist"
     \endcode
     \endPythonOnly
     \sa dist_squared
@@ -1172,17 +1385,17 @@ double dist( const vec3d& a, const vec3d& b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
 
-    #==== Test Dist ====//
+    #==== Test Dist ====
     a.set_xyz( 2.0, 2.0, 2.0 )
     b.set_xyz( 3.0, 4.0, 5.0 )
 
-    d2 = dist_squared( a; b )
+    d2 = dist_squared( a, b )
 
-    if  abs( d2 - 14 ) > 1e-6 : Print( "---> Error: Vec3d Dist " ); }
-
+    assert not ( abs( d2 - 14 ) > 1e-6 ), "Vec3d Dist"
     \endcode
     \endPythonOnly
     \sa dist
@@ -1212,15 +1425,15 @@ double dist_squared( const vec3d& a, const vec3d& b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
 
-    #==== Test Dot ====//
+    #==== Test Dot ====
     a.set_xyz( 1.0, 2.0, 3.0 )
     b.set_xyz( 2.0, 3.0, 4.0 )
 
-    if  abs( dot( a, b ) - 20 ) > 1e-6 : Print( "---> Error: Vec3d Dot " ); }
-
+    assert not ( abs( dot( a, b ) - 20 ) > 1e-6 ), "Vec3d Dot"
     \endcode
     \endPythonOnly
     \param [in] a First vec3d
@@ -1251,17 +1464,18 @@ double dot( const vec3d& a, const vec3d& b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b(), c()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
+    c = vec3d()
 
-    #==== Test Cross ====//
+    #==== Test Cross ====
     a.set_xyz( 4.0, 0.0, 0.0 )
     b.set_xyz( 0.0, 3.0, 0.0 )
 
     c = cross( a, b )
 
     c.normalize()
-
     \endcode
     \endPythonOnly
     \param [in] a First vec3d
@@ -1291,16 +1505,16 @@ vec3d cross( const vec3d& a, const vec3d& b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
     PI = 3.14159265359
 
-    #==== Test Angle ====//
+    #==== Test Angle ====
     a.set_xyz( 1.0, 1.0, 0.0 )
     b.set_xyz( 1.0, 0.0, 0.0 )
 
-    if  abs( angle( a, b ) - PI / 4 ) > 1e-6 : Print( "---> Error: Vec3d Angle " ); }
-
+    assert not ( abs( angle( a, b ) - PI / 4 ) > 1e-6 ), "Vec3d Angle"
     \endcode
     \endPythonOnly
     \param [in] a First vec3d
@@ -1331,17 +1545,18 @@ double angle( const vec3d& a, const vec3d& b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b(), c()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
+    c = vec3d()
     PI = 3.14159265359
 
-    #==== Test Angle ====//
+    #==== Test Angle ====
     a.set_xyz( 1.0, 1.0, 0.0 )
     b.set_xyz( 1.0, 0.0, 0.0 )
     c.set_xyz( 0.0, 0.0, 1.0 )
 
-    if  abs( signed_angle( a, b, c ) - -PI / 4 ) > 1e-6 : Print( "---> Error: Vec3d SignedAngle " ); }
-
+    assert not ( abs( signed_angle( a, b, c ) - -PI / 4 ) > 1e-6 ), "Vec3d SignedAngle"
     \endcode
     \endPythonOnly
     \param [in] a First vec3d
@@ -1375,19 +1590,19 @@ double signed_angle( const vec3d& a, const vec3d& b, const vec3d& ref );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        vec3d pnt = vec3d( 2, 4, 6)
+    pnt = vec3d( 2, 4, 6)
 
-    vec3d line_pt1(), line_pt2()
+    line_pt1 = vec3d()
+    line_pt2 = vec3d()
 
     line_pt1.set_z( 4 )
     line_pt2.set_y( 3 )
 
-    vec3d p_ln1 = pnt - line_pt1
+    p_ln1 = pnt - line_pt1
 
-    vec3d ln2_ln1 = line_pt2 - line_pt1
+    ln2_ln1 = line_pt2 - line_pt1
 
-    numer =  cos_angle( p_ln1; ln2_ln1 ) * p_ln1.mag()
-
+    numer =  cos_angle( p_ln1, ln2_ln1 ) * p_ln1.mag()
     \endcode
     \endPythonOnly
     \sa angle
@@ -1419,17 +1634,18 @@ double cos_angle( const vec3d& a, const vec3d& b );
     \endforcpponly
     \beginPythonOnly
     \code{.py}
-        #==== Test Vec3d ====//
-    vec3d a(), b(), c()                                # Default Constructor
+    #==== Test Vec3d ====
+    a = vec3d()                                # Default Constructor
+    b = vec3d()
+    c = vec3d()
     PI = 3.14
 
-    #==== Test Rotate ====//
+    #==== Test Rotate ====
     a.set_xyz( 1.0, 1.0, 0.0 )
     b.set_xyz( 1.0, 0.0, 0.0 )
     c.set_xyz( 0.0, 0.0, 1.0 )
 
     c = RotateArbAxis( b, PI, a )
-
     \endcode
     \endPythonOnly
     \param [in] p Coordinate point to rotate
@@ -1443,14 +1659,78 @@ vec3d RotateArbAxis( const vec3d & p, double theta, const vec3d & r );
 
 namespace std
 {
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Format a vec3d as a string, for printing or writing to a file.
+    \beginPythonOnly
+    \code{.py}
+    a = vec3d( 1.0, 2.0, 3.0 )
+
+    s = to_string( a )
+
+    assert len( s ) > 0, "to_string returned nothing"
+    \endcode
+    \endPythonOnly
+    \param [in] v vec3d Point to format
+    \return string The formatted point
+*/
+
 string to_string( const vec3d &v);
 }
 
 vec3d slerp( const vec3d& a, const vec3d& b, const double &t );
 
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Fit a plane through a set of points by least squares, reporting a point on the plane and its
+    normal.
+    \beginPythonOnly
+    \code{.py}
+    pts = Vec3dVec( [ vec3d( 0.0, 0.0, 0.0 ), vec3d( 1.0, 0.0, 0.0 ), vec3d( 0.0, 1.0, 0.0 ), vec3d( 1.0, 1.0, 0.0 ) ] )
+
+    cen = vec3d()
+    norm = vec3d()
+
+    FitPlane( pts, cen, norm )
+
+    assert abs( cen.z() ) < 1e-9, "FitPlane put the centre off the plane"
+
+    assert abs( abs( norm.z() ) - 1.0 ) < 1e-9, "FitPlane did not find the plane normal"
+
+    \endcode
+    \endPythonOnly
+    \param [in] pts vector<vec3d> Points to fit the plane through
+    \param [out] cen vec3d A point on the fitted plane
+    \param [out] norm vec3d Normal of the fitted plane
+*/
+
 void FitPlane( const std::vector < vec3d > & pts, vec3d & cen, vec3d & norm );
 
 // Vector version that does not branch on magnitude of values.
+/*!
+    \ingroup vec3d
+*/
+/*!
+    Sum a vector of vec3d using compensated summation, which keeps the rounding error down over a long list.
+    \beginPythonOnly
+    \code{.py}
+    pts = Vec3dVec( [ vec3d( 1.0, 0.0, 0.0 ), vec3d( 0.0, 2.0, 0.0 ), vec3d( 0.0, 0.0, 3.0 ) ] )
+
+    s = compsum( pts )
+
+    assert abs( s.x() - 1.0 ) < 1e-12, "compsum is wrong in x"
+
+    assert abs( s.z() - 3.0 ) < 1e-12, "compsum is wrong in z"
+    \endcode
+    \endPythonOnly
+    \param [in] x vector<vec3d> Points to sum
+    \return vec3d Sum of the points
+*/
+
 vec3d compsum( const std::vector < vec3d > &x );
 
 // Perform compensated summation of a vector of values.  Should be robust to rounding errors when some elements of x

@@ -241,6 +241,7 @@ public:
     virtual void WriteSurfsIntCurves( const string &filename  );
     virtual void WriteGridToolCurvFile( const string &filename, bool rawflag );
     virtual void WritePlot3DFile( const string &filename, bool rawflag );
+    virtual void WritePlot3DCurveBlocks( FILE* fp, const vector < vector < vec3d > > &curve_vec );
     virtual void WriteIGESFile( const string &filename, int len_unit,
                                 bool label_id = false, bool label_surf_num = false, bool label_split_num = false,
                                 bool label_name = false, const string &label_delim = "" );
@@ -252,6 +253,7 @@ public:
     //virtual void CheckDupOrAdd( Node* node, vector< Node* > & nodeVec );
 
     virtual Surf* FindSurf( int surf_id ); // Find surface given surf ID
+    virtual int FindSurfIndx( int surf_id ); // Find surface given surf ID
 
     virtual void DeleteDuplicateSurfs();
     virtual void BuildGrid();

@@ -13,7 +13,6 @@
 //
 //******************************************************************************
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 
 #include "PGMesh.h"
@@ -1822,9 +1821,15 @@ PGNode * PGFace::FindDoubleBackNode( PGEdge* & edouble ) const
 }
 
 // Split edge e0 into e0,e1.  Direction indeterminte (e1 can go before or after e0).
-// e0 can also appear more than once in this face.
-void PGFace::SplitEdge( PGEdge *e0, PGEdge *e1 )
+// e0 can also appear more than once in this face.  Says whether e1 went in.
+//
+// It cannot always go in.  The place for it is found from the two edges either side of e0,
+// and on a face whose loop doubles back on itself neither of them holds the node e1 needs to
+// join.  The caller has to know that, because it is the caller that decides whether e1 is to
+// count this face among its own -- and the two have to agree.
+bool PGFace::SplitEdge( PGEdge *e0, PGEdge *e1 )
 {
+    bool inserted = false;
 
     PGNode* ns = e0->SharedNode( e1 );
     PGNode* n1 = e1->OtherNode( ns );
@@ -1848,14 +1853,18 @@ void PGFace::SplitEdge( PGEdge *e0, PGEdge *e1 )
             // enext->ContainsNode( n0 ); Should be true.
             // Insert e1 betweeen eprev and e0.
             vector_insert_after( m_EdgeVec, iprev, e1 );
+            inserted = true;
         }
         else if ( enext->ContainsNode( n1 ) )
         {
             // eprev->ContainsNode( n0 ); Should be true.
             // Insert e1 betweeen e0 and enext.
             vector_insert_after( m_EdgeVec, i0, e1 );
+            inserted = true;
         }
     }
+
+    return inserted;
 }
 
 void PGFace::GetHullEdges( vector < PGEdge* > & evec ) const
@@ -2572,10 +2581,14 @@ int PGMesh::MergeCoincidentNodes()
 
     DumpGarbage();
 
+    ClearTris();
+
+    // This mesh is garbage the moment its last face goes: PGMulti::CleanUnused hands it to
+    // the garbage vector and DumpGarbage deletes it.  Everything this mesh owns has to be
+    // finished with before that sweep runs, because nothing may touch this afterwards.
     m_PGMulti->CleanUnused();
     m_PGMulti->DumpGarbage();
 
-    ClearTris();
     return nmerge;
 }
 
@@ -2917,10 +2930,13 @@ void PGMesh::SealDoubleBackNodes()
 
     DumpGarbage();
 
+    ClearTris();
+
+    // This mesh is garbage the moment its last face goes: PGMulti::CleanUnused hands it to
+    // the garbage vector and DumpGarbage deletes it.  Everything this mesh owns has to be
+    // finished with before that sweep runs, because nothing may touch this afterwards.
     m_PGMulti->CleanUnused();
     m_PGMulti->DumpGarbage();
-
-    ClearTris();
 }
 
 void PGMesh::ResetEdgeLoopFlags()
@@ -3219,20 +3235,24 @@ PGEdge * PGMesh::SplitEdge( PGEdge *e0, PGNode *n )
 
     PGEdge *e1 = AddEdge( n, n1 );
 
-    // Copy face vector
-    e1->m_FaceVec = e0->m_FaceVec;
-
-    //e0->DumpMatlab();
-    //e1->DumpMatlab();
-
-
+    // e1 counts a face as its own only once that face has taken e1 into its edge loop.
+    //
+    // Every face of e0 used to be copied across before they were asked, on the assumption
+    // that each would take it.  A face whose loop doubles back cannot say where e1 goes and
+    // takes nothing, and one that no longer holds e0 at all has nothing to insert beside;
+    // either way the face was left not knowing about an edge that claimed it.  When such a
+    // face was later removed, it was unhooked from the edges in its own loop -- which did not
+    // include e1 -- so e1 was left holding a pointer to a face that had been deleted.
     vector <PGFace* > fv = e0->m_FaceVec;
 
     for ( int i = 0; i < fv.size(); i++ )
     {
         PGFace *f = fv[i];
-        f->SplitEdge( e0, e1 );
-        //f->DumpMatlab();
+
+        if ( f->SplitEdge( e0, e1 ) )
+        {
+            e1->AddConnectFace( f );
+        }
     }
 
     return e1;
@@ -3777,10 +3797,13 @@ void PGMesh::MergeFaces( bool ( * facemergetest ) ( PGFace *f0, PGFace *f1 ), vo
 
     DumpGarbage();
 
+    ClearTris();
+
+    // This mesh is garbage the moment its last face goes: PGMulti::CleanUnused hands it to
+    // the garbage vector and DumpGarbage deletes it.  Everything this mesh owns has to be
+    // finished with before that sweep runs, because nothing may touch this afterwards.
     m_PGMulti->CleanUnused();
     m_PGMulti->DumpGarbage();
-
-    ClearTris();
 }
 
 void PGMesh::Coarsen1()
@@ -3853,10 +3876,13 @@ void PGMesh::CleanColinearVerts()
     CleanUnused();
     DumpGarbage();
 
+    ClearTris();
+
+    // This mesh is garbage the moment its last face goes: PGMulti::CleanUnused hands it to
+    // the garbage vector and DumpGarbage deletes it.  Everything this mesh owns has to be
+    // finished with before that sweep runs, because nothing may touch this afterwards.
     m_PGMulti->CleanUnused();
     m_PGMulti->DumpGarbage();
-
-    ClearTris();
 }
 
 void PGMesh::WriteVSPGeom( const string & fname )
@@ -4671,7 +4697,7 @@ void PGMulti::DumpGarbage()
     m_GarbagePointVec.clear();
 }
 
-PGMesh* PGMulti::GetActiveMesh()
+PGMesh* PGMulti::GetActiveMesh() const
 {
     return m_MeshVec[ m_ActiveMesh ];
 }
@@ -4887,9 +4913,9 @@ void PGMulti::WriteTagFiles( const string& file_name, vector < string > &all_fna
                         parttag.push_back( tag );
 
                         string str = m_TagNames[ part ];
-                        int pos = str.find_first_of( '_' );
-                        string gname = str.substr( 0, pos );
-                        string sname = str.substr( pos + 2 );
+                        string gname;
+                        string sname;
+                        StringUtil::split_comp_tag_name( str, gname, sname );
 
                         StringUtil::change_space_to_underscore( gname );
                         StringUtil::change_space_to_underscore( sname );
@@ -4899,8 +4925,8 @@ void PGMulti::WriteTagFiles( const string& file_name, vector < string > &all_fna
 
                         string ptagname = gname + sname + "_" + tname;
 
-                        string tagfile_name = base_path_nospace + ptagname + ".tag";
-                        string tagfile_localname = base_fname + ptagname;
+                        string tagfile_name = base_path_nospace + "." + ptagname + ".tag";
+                        string tagfile_localname = base_fname + "." + ptagname;
 
                         fprintf( taglist_fid, "%s\n", tagfile_localname.c_str() );
 
@@ -4955,14 +4981,30 @@ void PGMulti::WriteVSPGEOMKeyFile( const string & file_name, vector < string > &
 
     all_fnames.push_back( key_name );
 
-    int npart = 0;
-    for ( int i = 0 ; i < ( int )m_TagKeys.size() ; i++ )
+    // Count the parts themselves, not the tag combos that happen to hold a single tag.  A
+    // part whose subsurfaces cover it completely owns no such combo, and went uncounted and
+    // undeclared while the tag section below still referred to it.
+    vector < int > partvec;
+    MakePartList( partvec );
+
+    // A part indexes the component arrays as part - 1.  Anything that does not is dropped
+    // here, before the count is taken, so that the number written in the header and the
+    // number of lines written below cannot disagree -- the reader takes the header at its
+    // word and reads exactly that many.  This is the same filter
+    // SubSurfaceMgrSingleton::WriteVSPGEOMKeyFile applies; m_ThickVec and its neighbours
+    // here are copies of the very arrays it is protecting.
+    vector < int > goodparts;
+    goodparts.reserve( partvec.size() );
+    for ( int i = 0 ; i < ( int )partvec.size() ; i++ )
     {
-        if ( m_TagKeys[i].size() == 1 )
+        if ( partvec[i] >= 1 && partvec[i] <= ( int )m_ThickVec.size() )
         {
-            npart++;
+            goodparts.push_back( partvec[i] );
         }
     }
+    partvec = goodparts;
+
+    int npart = partvec.size();
 
     // Write Out Header Information
     fprintf( fid, "# VSPGEOM v3 Tag Key File\n" );
@@ -4983,10 +5025,7 @@ void PGMulti::WriteVSPGEOMKeyFile( const string & file_name, vector < string > &
 
     for ( int i = 0 ; i < ( int )m_TagKeys.size() ; i++ )
     {
-        string id_list = GetTagIDs( m_TagKeys[i] );
-        int pos = id_list.find( "_Surf" );
-        string gid = id_list.substr( 0, pos );
-        string gid_bare = gid.substr( 0, 10 );
+        string gid_bare = SubSurfaceMgrSingleton::BareGeomID( GetTagIDs( m_TagKeys[i] ) );
         gids.insert( gid_bare );
 
         int part = GetPart( m_TagKeys[i] );
@@ -5015,49 +5054,25 @@ void PGMulti::WriteVSPGEOMKeyFile( const string & file_name, vector < string > &
     fprintf( fid, "# part#,geom#,surf#,gname,gid,thick,plate,copy#,geomcopy#\n" );
 
 
-    for ( int i = 0 ; i < ( int )m_TagKeys.size() ; i++ )
+    for ( int i = 0 ; i < npart ; i++ )
     {
-        if ( m_TagKeys[i].size() != 1 )
+        int part = partvec[i];
+
+        string gname, snum;
+        SubSurfaceMgrSingleton::SplitCompName( GetPartName( part ), gname, snum );
+
+        // A part whose name carries no _Surf token has no surface number -- a CFDMesh wake,
+        // the symmetry plane and the far field are all named that way.  The field is written
+        // as zero rather than left empty, because the reader splits this line on commas with
+        // strtok, which runs empty fields together and would shift every later field along.
+        // Zero is what the reader already made of the value it used to be given here, which
+        // was a fragment of the name rather than a number at all.
+        if ( snum.empty() )
         {
-            continue;
+            snum = "0";
         }
 
-        int part = GetPart( m_TagKeys[i] );
-
-        string comp_list = GetTagNames( m_TagKeys[i] );
-
-        // Find position of token _Surf
-        int spos = comp_list.find( "_Surf" );
-
-        string gname = comp_list.substr( 0, spos );
-
-        string snum, ssnames, ssids;
-
-        // Find position of first comma
-        int cpos = comp_list.find( "," );
-        if ( cpos != std::string::npos )
-        {
-            snum = comp_list.substr( spos + 5, cpos - ( spos + 5 ) );
-            ssnames = comp_list.substr( cpos );
-        }
-        else
-        {
-            snum = comp_list.substr( spos + 5 );
-        }
-
-        string id_list = GetTagIDs( m_TagKeys[i] );
-
-        // Find position of token _Surf
-        spos = id_list.find( "_Surf" );
-        string gid = id_list.substr( 0, spos );
-        string gid_bare = gid.substr( 0, 10 );
-
-        // Find position of first comma
-        cpos = id_list.find( "," );
-        if ( cpos != std::string::npos )
-        {
-            ssids = id_list.substr( cpos );
-        }
+        string gid_bare = SubSurfaceMgrSingleton::BareGeomID( GetPartID( part ) );
 
         // Lookup Geom number
         int gnum = distance( gids.begin(), gids.find( gid_bare ) );
@@ -5236,6 +5251,30 @@ string PGMulti::GetTagIDs( const int indx )
     return string( "Error_Tag" );
 }
 
+string PGMulti::GetPartName( int part )
+{
+    unordered_map< int, string >::iterator si = m_TagNames.find( part );
+
+    if ( si == m_TagNames.end() )
+    {
+        return string( "Error_Part" );
+    }
+
+    return si->second;
+}
+
+string PGMulti::GetPartID( int part )
+{
+    unordered_map< int, string >::iterator si = m_TagIDs.find( part );
+
+    if ( si == m_TagIDs.end() )
+    {
+        return string( "Error_Part" );
+    }
+
+    return si->second;
+}
+
 string PGMulti::GetGID( const int& tag )
 {
     string id_list = GetTagIDs( tag - 1 );
@@ -5409,47 +5448,35 @@ void PGMulti::GetPartData( vector < string > &gidvec, vector < int > &partvec, v
     partvec.clear();
     surfvec.clear();
 
-    for ( int i = 0 ; i < ( int )m_TagKeys.size() ; i++ )
+    // Walk the parts themselves, for the same reason WriteVSPGEOMKeyFile does.
+    vector < int > parts;
+    MakePartList( parts );
+
+    for ( int i = 0 ; i < ( int )parts.size() ; i++ )
     {
-        if ( m_TagKeys[i].size() != 1 )
-        {
-            continue;
-        }
+        int part = parts[i];
 
-        int part = GetPart( m_TagKeys[i] );
+        string gname, snum;
+        SubSurfaceMgrSingleton::SplitCompName( GetPartName( part ), gname, snum );
 
-        string comp_list = GetTagNames( m_TagKeys[i] );
-
-        // Find position of token _Surf
-        int spos = comp_list.find( "_Surf" );
-
-        string gname = comp_list.substr( 0, spos );
-
-        string snum, ssnames, ssids;
-
-        // Find position of first comma
-        int cpos = comp_list.find( "," );
-        if ( cpos != std::string::npos )
-        {
-            snum = comp_list.substr( spos + 5, cpos - ( spos + 5 ) );
-            ssnames = comp_list.substr( cpos );
-        }
-        else
-        {
-            snum = comp_list.substr( spos + 5 );
-        }
-
-        string id_list = GetTagIDs( m_TagKeys[i] );
-
-        // Find position of token _Surf
-        spos = id_list.find( "_Surf" );
-        string gid = id_list.substr( 0, spos );
-        string gid_bare = gid.substr( 0, 10 );
-
-
-        gidvec.push_back( gid_bare );
+        gidvec.push_back( SubSurfaceMgrSingleton::BareGeomID( GetPartID( part ) ) );
         partvec.push_back( part );
-        surfvec.push_back( stoi( snum ) );
+
+        // SplitCompName reports no surface number for a name that does not carry the token,
+        // and stoi throws on that rather than returning anything.  Nothing here is expected
+        // to produce such a name -- only CFDMesh makes wakes, and CFDMesh does not build a
+        // PGMulti -- but the previous code would have gone down on it, so it is answered.
+        int sn = -1;
+
+        try
+        {
+            sn = stoi( snum );
+        }
+        catch ( const std::exception &e )
+        {
+        }
+
+        surfvec.push_back( sn );
     }
 }
 

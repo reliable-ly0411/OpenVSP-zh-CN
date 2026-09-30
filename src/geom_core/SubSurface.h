@@ -101,6 +101,15 @@ public:
     {
         return m_CompID;
     }
+
+    // Which Geom this subsurface belongs to.  The mesher matches a subsurface to a surface by
+    // comparing this against the Geom's own ID, so a subsurface handed from one Geom to another
+    // has to be told, and the parent container has to follow for the Parm tree to agree.
+    virtual void SetCompID( const string & id )
+    {
+        m_CompID = id;
+        SetParentContainer( id );
+    }
     virtual std::vector< std::vector< SSLineSeg > >& GetSplitSegs()
     {
         return m_SplitLVec;
@@ -144,6 +153,11 @@ public:
     virtual std::vector< TMesh* > CreateTMeshVec( const vector < double > &uvec, const vector < double > &vvec ) const; // Method to create a TMeshVector
     virtual void UpdateDrawObjs(); // Method to create lines to draw
     virtual void PrepareSplitVec();
+
+    // Scale this sub-surface's dimensional Parms by currentScale.  Most sub-surface types are
+    // defined in (non-dimensional) parametric u/w space and need nothing; the base is a no-op.
+    virtual void Scale( double currentScale ) {}
+
     virtual void SetDisplaySuffix( int num );
     // Save, Load
     virtual xmlNodePtr EncodeXml( xmlNodePtr & node );
@@ -277,6 +291,8 @@ public:
 
     XSecCurve* GetXSecCurve()       { return m_XSCurve; }
 
+    virtual void Scale( double currentScale );
+
     Parm m_CenterU;
     Parm m_CenterW;
 
@@ -296,7 +312,12 @@ public:
     virtual ~SSIntersect();
 
     virtual void Intersect();
-    virtual void IntersectBezier();
+
+    // An earlier way of making an intersection subsurface, working from the Bezier surfaces rather
+    // than from a discrete mesh.  It worked; the discrete path was taken instead.  Kept for
+    // reference.  Restoring it also means restoring vsp::LimitedIntersectSurfaces, which was only
+    // ever in the API so that geom_core could reach it, and which has since been taken back out.
+    // virtual void IntersectBezier();
 
     virtual void SetFromUWChain( vector < vec3d > uwchain );
 
@@ -319,6 +340,7 @@ public:
     virtual void UpdateDrawObjs();
     virtual void LoadDrawObjs( std::vector< DrawObj* >& draw_obj_vec );
     virtual void PrepareSplitVec();
+    virtual void Scale( double currentScale );
 
     enum SS_CONTROL_SUBTYPE { UPPER_SURF, LOWER_SURF, BOTH_SURF };
 

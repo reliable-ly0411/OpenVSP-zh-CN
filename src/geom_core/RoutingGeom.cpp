@@ -13,6 +13,7 @@
 #include "WingGeom.h"
 #include <cfloat>  //For DBL_EPSILON
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "StlHelper.h"
 
 using namespace vsp;
@@ -59,6 +60,23 @@ RoutingPoint::RoutingPoint()
     m_Radius.Init( "Radius", "RoutePt", this, 0.0, 0.0, 1.0e12 );
 
     m_Placed = true;
+}
+
+void RoutingPoint::Scale( double currentScale )
+{
+    // L coordinate in length units (used when m_L01Flag selects the dimensional representation).
+    m_L0Len.Set( m_L0Len() * currentScale );
+
+    // Offset from the anchor point.  Both the absolute (parent-independent) and relative
+    // (parent-frame) representations are length offsets; whichever m_DeltaType selects is
+    // authoritative, and scaling both keeps them consistent.
+    m_DeltaX.Set( m_DeltaX() * currentScale );
+    m_DeltaY.Set( m_DeltaY() * currentScale );
+    m_DeltaZ.Set( m_DeltaZ() * currentScale );
+
+    m_DeltaXRel.Set( m_DeltaXRel() * currentScale );
+    m_DeltaYRel.Set( m_DeltaYRel() * currentScale );
+    m_DeltaZRel.Set( m_DeltaZRel() * currentScale );
 }
 
 void RoutingPoint::Update()
@@ -513,7 +531,7 @@ xmlNodePtr RoutingPoint::DecodeXml( xmlNodePtr & node )
 
     if ( node )
     {
-        m_ParentID = ParmMgr.RemapID( XmlUtil::FindString( node, "ParentID", m_ParentID ) );
+        m_ParentID = IDMgr.RemapRefID( XmlUtil::FindString( node, "ParentID", m_ParentID ) );
     }
 
     return node;
@@ -580,6 +598,8 @@ RoutingGeom::RoutingGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
     m_ActivePointDO.m_PointSize = 10;
     m_ActivePointDO.m_PointColor = vec3d( 0, 0, 1 );
 
+    // What the first UpdateParents compares against.
+    m_ParentHash = 0;
 }
 
 //==== Destructor ====//
@@ -672,9 +692,11 @@ void RoutingGeom::UpdateParents()
     std::sort( parent_vec.begin(), parent_vec.end() );
     parent_vec.erase(std::unique( parent_vec.begin(), parent_vec.end()), parent_vec.end() );
 
-    // Serialize m_ParmIDs into single long string.
-    string str = string_vec_serialize( parent_vec );
-    // Calculate hash to detect changes in m_ParmIDs
+    // The Geoms depended on, plus this Geom's own ID, hashed to tell whether the step-child
+    // registration still matches.  That registration is this Geom's ID sitting in each of
+    // those Geoms' lists, so either end changing makes it stale.
+    string str = string_vec_serialize( parent_vec ) + m_ID;
+    // Calculate hash to detect changes
     std::size_t str_hash = std::hash < std::string >{}( str );
 
     // Relies on currency of m_ParmIDs by UpdateVarBrowser()
@@ -710,11 +732,15 @@ void RoutingGeom::ComputeCenter()
 {
 }
 
-void RoutingGeom::Scale()
+void RoutingGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
-
-    m_LastScale = m_Scale();
+    for ( int i = 0; i < ( int )m_RoutingPointVec.size(); i++ )
+    {
+        if ( m_RoutingPointVec[i] )
+        {
+            m_RoutingPointVec[i]->Scale( currentScale );
+        }
+    }
 }
 
 void RoutingGeom::AddDefaultSources( double base_len )
@@ -1007,11 +1033,36 @@ void RoutingGeom::UpdateSurf()
 }
 
 
-void RoutingGeom::DisableParms()
+// A RoutingGeom has no position of its own -- its points are computed in absolute coordinates
+// from their parent Geoms, so the model matrix must be identity at all times.  The XForm Parms
+// are deactivated in DisableParms(), but Deactivate() only greys out the GUI.  Group
+// transformations, the API, Parm links, and files written before this was enforced all write the
+// Parms directly.  Geom::Update() calls this hook while m_XFormDirty, immediately before
+// UpdateXForm() composes the attach and model matrices, so the values are enforced everywhere
+// they could otherwise leak in.
+void RoutingGeom::UpdateCopyXFormParms()
 {
+    m_AbsRelFlag = vsp::REL;
+
     m_TransAttachFlag = vsp::ATTACH_TRANS_NONE;
     m_RotAttachFlag = vsp::ATTACH_ROT_NONE;
 
+    m_XRelLoc = 0.0;
+    m_YRelLoc = 0.0;
+    m_ZRelLoc = 0.0;
+
+    m_XRelRot = 0.0;
+    m_YRelRot = 0.0;
+    m_ZRelRot = 0.0;
+
+    m_Origin = 0.0;
+}
+
+// Deactivation only.  This must run after Geom::UpdateXForm() because GeomXForm::DeactivateXForms()
+// re-Activates these Parms.  Values are forced in UpdateCopyXFormParms(), which runs before the
+// matrices are composed.
+void RoutingGeom::DisableParms()
+{
     m_AbsRelFlag.Deactivate();
     m_TransAttachFlag.Deactivate();
     m_RotAttachFlag.Deactivate();

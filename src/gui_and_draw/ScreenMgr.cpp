@@ -84,6 +84,25 @@
 //==== Constructor ====//
 ScreenMgr::ScreenMgr( Vehicle* vPtr )
 {
+    #ifdef _WIN32
+        // Use a font with complete Simplified-Chinese glyph coverage.
+        Fl::set_font(FL_HELVETICA,     " Microsoft YaHei");
+        Fl::set_font(FL_HELVETICA + 1, "BMicrosoft YaHei");
+        Fl::set_font(FL_HELVETICA + 2, "IMicrosoft YaHei");
+        Fl::set_font(FL_HELVETICA + 3, "PMicrosoft YaHei");
+    #elif defined(__linux__)
+        // Xft does not automatically fall back from Helvetica to CJK fonts.
+        // Ubuntu runtime requirement: fonts-noto-cjk.
+        Fl::set_font(FL_HELVETICA,     " Noto Sans CJK SC");
+        Fl::set_font(FL_HELVETICA + 1, "BNoto Sans CJK SC");
+        Fl::set_font(FL_HELVETICA + 2, "INoto Sans CJK SC");
+        Fl::set_font(FL_HELVETICA + 3, "PNoto Sans CJK SC");
+        Fl::set_font(FL_COURIER,       " Noto Sans Mono CJK SC");
+        Fl::set_font(FL_COURIER + 1,   "BNoto Sans Mono CJK SC");
+        Fl::set_font(FL_COURIER + 2,   "INoto Sans Mono CJK SC");
+        Fl::set_font(FL_COURIER + 3,   "PNoto Sans Mono CJK SC");
+    #endif
+
     if ( vPtr )
     {
         m_VehiclePtr = vPtr;
@@ -96,13 +115,7 @@ ScreenMgr::ScreenMgr( Vehicle* vPtr )
     Fl::add_timeout( UPDATE_TIME, StaticTimerCB, this );
     Fl::add_handler( GlobalHandler );
 
-    #ifdef _WIN32
-        // Use a font with complete Simplified-Chinese glyph coverage.
-        Fl::set_font(FL_HELVETICA,     " Microsoft YaHei");
-        Fl::set_font(FL_HELVETICA + 1, "BMicrosoft YaHei");
-        Fl::set_font(FL_HELVETICA + 2, "IMicrosoft YaHei");
-        Fl::set_font(FL_HELVETICA + 3, "PMicrosoft YaHei");
-    #endif
+
 
     m_NativeFileChooser = nullptr;
 

@@ -139,6 +139,11 @@ void FuselageGeom::UpdatePreTess()
 //==== Update Fuselage And Cross Section Placement ====//
 void FuselageGeom::UpdateSurf()
 {
+    // One surface is skinned here.  UpdateEngine replaces it with as many as the engine
+    // representation needs -- none, one, or several -- so the count from the last update
+    // says nothing about this one.
+    m_MainSurfVec.resize( 1 );
+
     unsigned int nxsec = m_XSecSurf.NumXSec();
 
     if ( m_OrderPolicy() == FUSE_LOOP )
@@ -163,8 +168,16 @@ void FuselageGeom::UpdateSurf()
     }
 
     //==== Cross Section Curves & joint info ====//
-    vector< rib_data_type > rib_vec;
-    rib_vec.resize( nxsec );
+    // One rib set per group of stations enforcing the same conditions.  When every station
+    // enforces the same thing there is a single group and one skin is enough.
+    vector< vector< rib_data_type > > rib_sets;
+    vector< double > station_w;
+    vector< vector< bool > > insets;
+    // Validation cascades the Set flags, and the grouping below keys on them.
+    PrepSkinRibs( nxsec );
+
+    vector< int > stationmap;
+    bool blend = BuildSkinRibSets( nxsec, rib_sets, station_w, insets, stationmap );
 
     //==== Update XSec Location/Rotation ====//
     for ( int i = 0 ; i < nxsec ; i++ )
@@ -181,17 +194,32 @@ void FuselageGeom::UpdateSurf()
 
             xs->SetRefLength( m_Length() );
 
-            bool first = false;
-            bool last = false;
-
-            if( i == 0 ) first = true;
-            else if( i == (nxsec-1) ) last = true;
-
-            rib_vec[i] = xs->GetRib( first, last );
         }
     }
 
-    m_MainSurfVec[0].SkinRibsUniform( rib_vec, false );
+    // Values a pass does not own now come from a pass that left them free, so the ribs
+    // cannot be filled until every XSec is placed.
+    StageSkinRibSets( nxsec, rib_sets, insets, stationmap, false );
+
+    // BuildSkinRibSets gives up without a station, which cannot happen for these Geoms -- but
+    // both branches below index the first set.
+    if ( rib_sets.empty() )
+    {
+        return;
+    }
+
+    if ( !blend )
+    {
+        // One group means every station enforces the same thing, which is the uniform
+        // structure this creator is built for -- and GetGroupRib leaves the regions off in
+        // that case, so there is nothing for it to be blind to.  It solves the whole quilt
+        // in one factored pass instead of one curve creator call per strip.
+        m_MainSurfVec[0].SkinRibsUniform( rib_sets[0], false );
+    }
+    else
+    {
+        m_MainSurfVec[0].SkinRibsBlended( rib_sets, station_w, insets, false );
+    }
     m_MainSurfVec[0].SetMagicVParm( false );
 
     for ( int i = 0 ; i < nxsec ; i++ )
@@ -436,9 +464,8 @@ void FuselageGeom::AddLinkableParms( vector< string > & linkable_parm_vec, const
 }
 
 //==== Scale ====//
-void FuselageGeom::Scale()
+void FuselageGeom::ApplyScale( double currentScale )
 {
-    double currentScale = m_Scale() / m_LastScale();
     m_Length *= currentScale;
     for ( int i = 0 ; i < m_XSecSurf.NumXSec() ; i++ )
     {
@@ -454,7 +481,6 @@ void FuselageGeom::Scale()
         m_ExtensionDistance.Set( m_ExtensionDistance() * currentScale );
     }
 
-    m_LastScale = m_Scale();
 }
 
 void FuselageGeom::AddDefaultSources( double base_len )

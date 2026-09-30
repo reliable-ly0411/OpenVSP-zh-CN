@@ -10,6 +10,7 @@
 #if !defined(FITMODEL__INCLUDED_)
 #define FITMODEL__INCLUDED_
 
+#include "APIDefines.h"
 #include "VehicleMgr.h"
 #include "Vehicle.h"
 #include "Geom.h"
@@ -19,7 +20,7 @@
 #include <string>
 
 #define MIN_FIT_FILE_VER 1
-#define CURRENT_FIT_FILE_VER 1
+#define CURRENT_FIT_FILE_VER 2
 
 using std::string;
 using std::vector;
@@ -36,18 +37,18 @@ class TargetPt
 public:
     TargetPt()
     {
-        m_UType = 0;
-        m_WType = 0;
+        m_UType = vsp::FIT_MODEL_FREE;
+        m_WType = vsp::FIT_MODEL_FREE;
         m_UClosed = false;
         m_WClosed = false;
         m_MatchGeom = "";
+        m_SurfIndx = 0;
+        m_Dist = 0.0;
     }
 
     virtual ~TargetPt()
     {
     }
-
-    enum { FIXED, FREE };
 
     vec3d GetPt()
     {
@@ -72,6 +73,14 @@ public:
     void SetMatchGeom( const string &geomid )
     {
         m_MatchGeom = geomid;
+    }
+    int GetSurfIndx() const
+    {
+        return m_SurfIndx;
+    }
+    void SetSurfIndx( int surfindx )
+    {
+        m_SurfIndx = surfindx;
     }
     int GetUType()
     {
@@ -105,6 +114,21 @@ public:
     {
         m_WClosed = wClosed;
     }
+    // The distance from this point to the surface point it is matched to, as of the last time
+    // something moved one of them.  Stored rather than calculated on demand because the browser
+    // displays it and the GUI refreshes often; evaluating the surface once per point per frame
+    // would not pay for itself.  Not written to file -- it is derived, and Load recalculates it.
+    double GetDist() const
+    {
+        return m_Dist;
+    }
+    void SetDist( double d )
+    {
+        m_Dist = d;
+    }
+
+    void UpdateDist();
+    void UpdateDist( Geom* matchgeom );
 
     xmlNodePtr WrapXml( xmlNodePtr & node );
     xmlNodePtr UnwrapXml( xmlNodePtr & node );
@@ -126,8 +150,10 @@ protected:
     bool m_UClosed;
     bool m_WClosed;
     string m_MatchGeom;
+    int m_SurfIndx;
     vec2d m_UW;
     vec3d m_Pt;
+    double m_Dist;
 };
 
 //==== Fit Model Manager ====//
@@ -186,6 +212,17 @@ public:
     void DelAllTargetPts();
     void ValidateTargetPts();
 
+    // Reorder the target points worst fit first.  Recomputes the distances before sorting, so the
+    // order reflects the model as it stands rather than whenever the distances were last measured.
+    void SortTargetPtsByDist();
+
+    // Move one target point within the list.  Returns where it ended up, which is the index passed
+    // in when there is nothing to move.
+    int MoveTargetPt( int index, int reorder_type );
+
+    // Move the selected target point, carrying the selection along with it.
+    void MoveCurrTargetPt( int reorder_type );
+
     int GetNumTargetPt()
     {
         return ( int )m_TargetPts.size();
@@ -214,6 +251,12 @@ public:
 
     void UpdateDist();
     int Optimize();
+
+    // Undo the last Optimize, SearchTargetUW or RefineTargetUW.  Each of those snapshots the
+    // optimization vector before it runs; Undo puts it back.  One level deep -- the snapshot is
+    // spent once it has been used.
+    bool CanUndo();
+    bool Undo();
 
     virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
 
@@ -290,6 +333,22 @@ private:
     void BuildPtrVec();
     void ParmToX( double *x );
     void XtoParm( const double *x );
+
+    // Take the snapshot Undo restores.  BuildPtrVec must have been called first, since the
+    // optimization vector is laid out from the pointer vectors it builds.
+    void SaveUndoState();
+
+    // Throw the snapshot away.  Reordering the target points has to do this: the snapshot is laid
+    // out in target point order, and UndoSignature cannot tell an order change apart when the
+    // points that swapped describe themselves identically, so restoring it would put one point's
+    // surface coordinates onto another.
+    void ForgetUndoState();
+
+    // What the snapshot was taken against.  The layout of the optimization vector depends on which
+    // Parms are variables and on the free/fixed state of every target point, so restoring a
+    // snapshot taken against a different setup would write values into the wrong slots.  Comparing
+    // this is what stops that.
+    string UndoSignature();
     static double Clamp01( double x, bool closed );
 
     bool m_GUIShown;
@@ -312,8 +371,17 @@ private:
     vector < Geom* > m_TargetGeomPtrVec;
     int m_NumOptVars;
 
+    vector< double > m_XPrevious;
+    string m_UndoSignature;
+    bool m_UndoValid;
+
     DrawObj m_TargetPntDrawObj;
     DrawObj m_TargetLineDrawObj;
+
+    // The selected target point, drawn blue.  Separate DrawObjs because color is a property of the
+    // DrawObj rather than of the points within it.
+    DrawObj m_HighlightPntDrawObj;
+    DrawObj m_HighlightLineDrawObj;
 
     string m_SaveFitFileName;
     string m_LoadFitFileName;

@@ -7,13 +7,15 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#define _USE_MATH_DEFINES
+#include <algorithm>
 #include <cmath>
 
 #include "XSec.h"
 #include "Geom.h"
 #include "ParmMgr.h"
+#include "IDMgr.h"
 #include "StlHelper.h"
+#include "XmlUtil.h"
 #include <float.h>
 
 using std::string;
@@ -60,9 +62,13 @@ void XSec::ChangeID( const string &newid )
     string oldid = m_ID;
     ParmContainer::ChangeID( newid );
 
+    // The XSec kept as the copy buffer has no XSecSurf holding it.
     XSecSurf* xssurf = ( XSecSurf* ) GetParentContainerPtr();
 
-    xssurf->ChangeXSecID( oldid, newid );
+    if ( xssurf )
+    {
+        xssurf->ChangeXSecID( oldid, newid );
+    }
 
     if ( m_XSCurve  )
     {
@@ -196,22 +202,69 @@ Matrix4d* XSec::GetTransform()
 //==== Copy From XSec ====//
 void XSec::CopyFrom( XSec* xs )
 {
-    string lastreset = ParmMgr.ResetRemapID();
+    string lastreset = IDMgr.ResetRemapID();
     xmlNodePtr root = xmlNewNode( nullptr, ( const xmlChar * )"Vsp_Geometry" );
-    if ( xs->GetType() == GetType() && xs->GetXSecCurve()->GetType() == GetXSecCurve()->GetType() )
-    {
-        xs->EncodeXml( root );
-        DecodeXml( root );
-    }
-    else
-    {
-        xs->XSec::EncodeXml( root );
-        DecodeXml( root );
 
+    // Always encode the source at its own level, and let this XSec take what it recognizes.
+    // Decoding is already tolerant in both directions: ParmContainer::DecodeXml matches parms
+    // by name, so a parm this type does not have is simply absent and keeps its default, and
+    // a node this type does not know about is never looked for.
+    //
+    // Dropping to XSec::EncodeXml when the types differed threw away everything a derived
+    // XSec holds outside its own Parms.  For a SkinXSec that is the entire spine set, and
+    // ChangeXSecShape takes this path every single time: it builds the replacement from the
+    // same XSecSurf, so the XSec types always match and only the XSecCurve type differs.
+    // Changing a cross section's shape silently deleted its spines, and doing it to the
+    // active cross section deleted them from every cross section on the Geom, because
+    // SyncSkinSpines then truncated the rest to match the master.
+    xs->EncodeXml( root );
+    IDMgr.PreRegisterIDs( root );
+
+    // Decoding adds the source's attributes to whatever is here, so what is here goes first.
+    DeleteAttributes();
+    DecodeXml( root );
+
+    // Width and height are the one thing names cannot carry across a type change: the curve
+    // types spell them differently -- Diameter, Chord, Width -- so nothing above restated
+    // them.  Only needed when the curve types differ.  Doing it unconditionally would be
+    // harmless for the plain setters but not quite for an Airfoil, where GetHeight is
+    // m_Chord * m_ThickChord and SetWidthHeight divides it back out: (c*t)/c differs from t
+    // in the last bit about an eighth of the time, so a same type copy would stop being
+    // exact.
+    if ( xs->GetXSecCurve()->GetType() != GetXSecCurve()->GetType() )
+    {
         m_XSCurve->SetWidthHeight( xs->GetXSecCurve()->GetWidth(), xs->GetXSecCurve()->GetHeight() );
     }
+
     xmlFreeNode( root );
-    ParmMgr.ResetRemapID( lastreset );
+    IDMgr.ResetRemapID( lastreset );
+}
+
+void XSec::DeleteAttributes()
+{
+    ParmContainer::DeleteAttributes();
+
+    if ( m_XSCurve )
+    {
+        m_XSCurve->DeleteAttributes();
+    }
+}
+
+void XSec::TakeIdentityOf( XSec* old )
+{
+    if ( !old || old == this )
+    {
+        return;
+    }
+
+    SwapIdentity( old );
+    old->HandAttributesTo( this );
+    old->HandUnpairedAttributesTo( this );
+
+    if ( m_XSCurve && old->m_XSCurve )
+    {
+        m_XSCurve->TakeIdentityOf( old->m_XSCurve );
+    }
 }
 
 //==== Encode XML ====//
@@ -304,17 +357,12 @@ void XSec::GetSimpleBasis( vec3d &xdir, vec3d &ydir, vec3d &zdir )
 {
     Matrix4d basis;
 
-    // Get primary orientation of this XSecSurf
-    XSecSurf* xsecsurf = (XSecSurf*) GetParentContainerPtr();
-    xsecsurf->GetBasicTransformation( 0.0, basis );
-
-    // Transform primary orientation to orientation of this XSec
-    basis.postMult( GetTransform()->data() );
+    GetBaseBasis( basis );
 
     basis.getBasis( xdir, ydir, zdir );
 }
 
-void XSec::GetBasis( double t, Matrix4d &basis )
+void XSec::GetBaseBasis( Matrix4d &basis )
 {
     // Get primary orientation of this XSecSurf
     XSecSurf* xsecsurf = (XSecSurf*) GetParentContainerPtr();
@@ -322,6 +370,11 @@ void XSec::GetBasis( double t, Matrix4d &basis )
 
     // Transform primary orientation to orientation of this XSec
     basis.postMult( GetTransform()->data() );
+}
+
+void XSec::GetBasis( double t, Matrix4d &basis )
+{
+    GetBaseBasis( basis );
 
     // Pull out width, up, and principal directions.
     vec3d wdir, updir, pdir;
@@ -393,13 +446,25 @@ void XSec::GetTanNormCrv( const vector< double > &ts, const vector< double > &th
         pts[i] << thetas[i], angstr[i], crvstr[i];
         phipts[i] << phis[i], 0.0, 0.0;
     }
-    pcc.set_closed_cubic_spline( pts.begin() );
+    // A monotonicity limited PCHIP, rather than a C2 spline.  A C2 spline is a global
+    // interpolant: changing the control value at one station moves the curve everywhere, so
+    // editing a spine on one side of the body rings through to the far side.  PCHIP takes
+    // each joint's slope from its immediate neighbors, so a station's influence stops at the
+    // stations either side of it, and the limiter keeps the interpolated control inside the
+    // range the stations actually ask for -- four stations at 0, 0, 30, 0 degrees otherwise
+    // give an angle of -2.2 between them, a direction nobody chose.  The cost is C1 rather
+    // than C2 between stations.
+
+    // The second stage below keeps the unlimited form: it interpolates tangent and normal
+    // vectors, and limiting those would constrain each Cartesian component of a direction on
+    // its own, which is a different property and not one worth asking for.
+    pcc.set_monotonic_chip( pts.begin(), eli::geom::general::C1 );
 
     // Build control curve.
     piecewise_curve_type crvcntrl, crvphi;
     pcc.create( crvcntrl );
 
-    pcc.set_closed_cubic_spline( phipts.begin() );
+    pcc.set_monotonic_chip( phipts.begin(), eli::geom::general::C1 );
     pcc.create( crvphi );
 
 
@@ -410,6 +475,72 @@ void XSec::GetTanNormCrv( const vector< double > &ts, const vector< double > &th
     vector< double > crvts;
 
     GetCurve().GetCurve().get_pmap( crvts );
+
+    // Sample at the stations as well as at the XSec curve's own joints.
+    //
+    // The controls are laid out at the stations, but what the rib actually carries is a
+    // curve of tangent and normal vectors, built by evaluating the controls at these
+    // parameters and fitting through the results.  A station falling between two joints
+    // never gets sampled, so its value is smeared across the gap rather than enforced: on a
+    // default Stack the joints fall on half integers, and a spine at W=2.5 holds its 40
+    // degrees exactly while one at W=2.25 achieves 24 of them.  Which is to say the control
+    // resolution was the cross section curve's segmentation, not the user's station layout.
+    // Matches SkinXSec::GetMinStationGap: two stations closer than this are one station, so
+    // two sample parameters that close are one sample.
+    double sampgap = 1.0e-3;
+
+    // Take the bounds before inserting anything.  Reading them from the back of crvts inside
+    // the loop would read whatever was last pushed instead of the largest parameter, and
+    // every station beyond it would be rejected as out of range -- which left the first
+    // station sampled and the rest of them not.
+    double tfirst = crvts[0];
+    double tlast = crvts[crvts.size() - 1];
+
+    for ( int i = 0; i < ( int )ts.size(); i++ )
+    {
+        if ( ts[i] < tfirst || ts[i] > tlast )
+        {
+            continue;
+        }
+
+        bool have = false;
+        for ( int j = 0; j < ( int )crvts.size(); j++ )
+        {
+            if ( std::abs( crvts[j] - ts[i] ) < sampgap )
+            {
+                have = true;
+                break;
+            }
+        }
+
+        if ( !have )
+        {
+            crvts.push_back( ts[i] );
+        }
+    }
+    std::sort( crvts.begin(), crvts.end() );
+
+    // Sample the controls four times per interval.  The curve fitted through the tangents and
+    // normals interpolates their Cartesian components, so a direction that turns between two
+    // samples comes out short by the sagitta of the turn.  The controls are known exactly at
+    // any W, so take the samples close enough together that the fit has little left to guess.
+    const int nsub = 4;
+    if ( crvts.size() > 1 )
+    {
+        vector< double > dense;
+        dense.reserve( nsub * ( crvts.size() - 1 ) + 1 );
+
+        for ( int i = 0; i + 1 < ( int )crvts.size(); i++ )
+        {
+            for ( int k = 0; k < nsub; k++ )
+            {
+                dense.push_back( crvts[i] + ( crvts[i + 1] - crvts[i] ) * k / ( double )nsub );
+            }
+        }
+        dense.push_back( crvts[ crvts.size() - 1 ] );
+
+        crvts = dense;
+    }
 
     int ntcrv = crvts.size();
 
@@ -437,11 +568,13 @@ void XSec::GetTanNormCrv( const vector< double > &ts, const vector< double > &th
     {
         pcc.set_segment_dt( crvts[i+1] - crvts[i], i );
     }
-    // Build tangent and normal vector curves.
-    pcc.set_closed_cubic_spline( tanpts.begin() );
+    // Build tangent and normal vector curves.  PCHIP here too: a C2 spline through these
+    // samples would carry a station's influence back around the cross section even though
+    // the samples themselves are already local.
+    pcc.set_chip( tanpts.begin(), eli::geom::general::C1 );
     pcc.create( tangentcrv );
 
-    pcc.set_closed_cubic_spline( nrmpts.begin() );
+    pcc.set_chip( nrmpts.begin(), eli::geom::general::C1 );
     pcc.create( normcrv );
 }
 
@@ -557,6 +690,8 @@ EditCurveXSec* XSec::ConvertToEdit()
 
     if ( xscrv_ptr && xscrv_ptr != m_XSCurve )
     {
+        xscrv_ptr->DeleteAttributes();
+        xscrv_ptr->TakeIdentityOf( m_XSCurve );
         SetXSecCurve( xscrv_ptr );
     }
 
@@ -571,6 +706,9 @@ EditCurveXSec* XSec::ConvertToEdit()
 SkinXSec::SkinXSec( XSecCurve *xsc ) : XSec( xsc)
 {
     m_Name = "SkinXSec";
+
+    m_CurveBasisFlag.Init( "CurveBasis", m_GroupName, this, 0, 0, 1 );
+    m_CurveBasisFlag.SetDescript( "Measure skinning angles from the cross section curve rather than from an assumed circle." );
 
     m_AllSymFlag.Init( "AllSym", m_GroupName, this, 1, 0, 1 );
     m_AllSymFlag.SetDescript( "Set all skinning parameters equal." );
@@ -696,7 +834,269 @@ SkinXSec::SkinXSec( XSecCurve *xsc ) : XSec( xsc)
     m_LeftRCurve.Init( "LeftRCurve", m_GroupName, this,  0.0, -1e12, 1e12 );
 }
 
+SkinXSec::~SkinXSec()
+{
+    DelAllSpines();
+}
 
+xmlNodePtr SkinXSec::EncodeXml( xmlNodePtr & node )
+{
+    xmlNodePtr xsec_node = XSec::EncodeXml( node );
+
+    if ( xsec_node )
+    {
+        xmlNodePtr spine_root = xmlNewChild( xsec_node, nullptr, BAD_CAST "SkinSpines", nullptr );
+        if ( spine_root )
+        {
+            XmlUtil::AddIntNode( spine_root, "NumSpines", m_SpineVec.size() );
+
+            for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+            {
+                char name[256];
+                snprintf( name, sizeof( name ), "SkinSpine_%d", i );
+                xmlNodePtr spine_node = xmlNewChild( spine_root, nullptr, BAD_CAST name, nullptr );
+                if ( spine_node )
+                {
+                    XmlUtil::AddStringNode( spine_node, "SpineID", m_SpineVec[i]->GetSpineID() );
+                    m_SpineVec[i]->EncodeXml( spine_node );
+                }
+            }
+        }
+    }
+
+    return xsec_node;
+}
+
+xmlNodePtr SkinXSec::DecodeXml( xmlNodePtr & node )
+{
+    xmlNodePtr xsec_node = XSec::DecodeXml( node );
+
+    DelAllSpines();
+
+    if ( xsec_node )
+    {
+        xmlNodePtr spine_root = XmlUtil::GetNode( xsec_node, "SkinSpines", 0 );
+        if ( spine_root )
+        {
+            int nspine = XmlUtil::FindInt( spine_root, "NumSpines", 0 );
+
+            for ( int i = 0; i < nspine; i++ )
+            {
+                char name[256];
+                snprintf( name, sizeof( name ), "SkinSpine_%d", i );
+                xmlNodePtr spine_node = XmlUtil::GetNode( spine_root, name, 0 );
+                if ( spine_node )
+                {
+                    // Not AddSpine: every value it would set is about to be overwritten by
+                    // the file a line later.
+                    SkinSpine* sp = new SkinSpine();
+                    if ( sp )
+                    {
+                        // Older files carry no tag; give those a fresh one so the sync has
+                        // something to match on, which for a file written in step is the same
+                        // as matching by position.
+                        string sid = XmlUtil::FindString( spine_node, "SpineID", "" );
+                        if ( sid.empty() )
+                        {
+                            sid = GenerateRandomID( vsp::ID_LENGTH_PARMCONTAINER );
+                        }
+                        sp->SetSpineID( sid );
+                        sp->SetParentContainer( m_ID );
+                        m_SpineVec.push_back( sp );
+                        sp->DecodeXml( spine_node );
+                    }
+                }
+            }
+        }
+    }
+
+    return xsec_node;
+}
+
+void SkinXSec::AddLinkableParms( vector< string > & parm_vec, const string & link_container_id )
+{
+    XSec::AddLinkableParms( parm_vec, link_container_id );
+
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        if ( m_SpineVec[i] )
+        {
+            m_SpineVec[i]->AddLinkableParms( parm_vec, link_container_id );
+        }
+    }
+}
+
+
+
+// A section with no extent at all, which therefore has no tangent anywhere.
+//
+// Every other section has one, including a slit -- no width or no height.  A slit is not a
+// closed loop: the curve runs out along it and back, so the tangent reverses at each end and
+// the two sides of it get frames a half turn apart.  That is the right answer rather than a
+// problem, since those really are the two sides of the surface and each one's width axis
+// points out of its own.  Only the fold itself has nothing to say, and GetBasis handles that
+// where it meets it.
+//
+// A point has neither, so there is nothing to build a frame from at any parameter.
+bool SkinXSec::IsPointSection()
+{
+    if ( !m_XSCurve || m_XSCurve->GetType() == vsp::XS_POINT )
+    {
+        return true;
+    }
+
+    return SectionExtent() <= 0.0;
+}
+
+// Whether the section is a point, given an extent already measured.  GetBasis runs once per
+// sample of the cross section and wants the extent anyway, and measuring it means building
+// the curve's bounding box -- so asking IsPointSection as well would build it twice for an
+// answer that cannot change between the two calls.
+bool SkinXSec::IsPointSection( double extent )
+{
+    if ( !m_XSCurve || m_XSCurve->GetType() == vsp::XS_POINT )
+    {
+        return true;
+    }
+
+    return extent <= 0.0;
+}
+
+// How far the cross section curve actually reaches.
+//
+// Not the shape's Width and Height parms.  Those are what the user typed, and some shapes do
+// not keep their size there at all: AC25_773's are documented dummies pinned to zero while
+// the curve itself spans about 140 by 62.  Reading them made that section look like a point,
+// so the curve frame was refused on it and the toggle did nothing with no way to tell.
+//
+// The curve is the thing a tangent is taken from, so the curve is the thing to measure.
+double SkinXSec::SectionExtent()
+{
+    BndBox bb;
+    m_TransformedCurve.GetBoundingBox( bb );
+
+    return bb.GetLargestDist();
+}
+
+// The frame the skinning angles are measured from.
+//
+// XSec::GetBasis turns the base orientation to face the station on the assumption that the
+// section is a circle traversed uniformly in the curve parameter.  With m_CurveBasisFlag the
+// turn comes from the curve instead: the up axis is the curve's own tangent there, and the
+// width axis follows from it and the principal direction.  The two agree wherever the section
+// really is a circle, and part company exactly where the assumption was wrong.
+//
+// The tangent is taken from both sides and averaged.  At a corner -- a rounded rectangle's,
+// or the seam of a section that closes on itself -- the two differ, and there is no reason to
+// prefer either; the bisector is the one direction the corner does not argue with, and it is
+// the ordinary tangent wherever the curve is smooth.
+void SkinXSec::GetBasis( double t, Matrix4d &basis )
+{
+    // Measured once and used twice: for the point section test and for the tolerance below.
+    double extent = 0.0;
+    if ( m_CurveBasisFlag() )
+    {
+        extent = SectionExtent();
+    }
+
+    if ( !m_CurveBasisFlag() || IsPointSection( extent ) )
+    {
+        XSec::GetBasis( t, basis );
+        return;
+    }
+
+    GetBaseBasis( basis );
+
+    vec3d wdir, updir, pdir;
+    basis.getBasis( wdir, updir, pdir );
+
+    // Each side to unit length before they are added, so the bisector sits midway rather
+    // than being dragged toward whichever side is parameterized faster.
+    //
+    // A side is only taken if it has a tangent to speak of.  The section spans t over a
+    // range of four and reaches about as far as it is wide, so a tangent is of the order of
+    // the section's size, and anything a billionth of that is rounding rather than a
+    // direction -- normalizing it would turn noise into a confident unit vector.  Both sides
+    // are that small at the ends of a slit, where the curve stops and turns round.
+    // The section is a closed loop, so its two ends are one place and the side "before" the
+    // first parameter is the side approaching the last.  CompTan cannot know that -- asked
+    // for the before side at the start it hands back the after side, and the other way round
+    // at the end -- so at the seam both sides came out the same and the bisector the comment
+    // above promises quietly became a one sided tangent.  Ask at the other end instead.
+    double tmin = m_TransformedCurve.GetCurve().get_parameter_min();
+    double tmax = m_TransformedCurve.GetCurve().get_parameter_max();
+
+    double tb = t;
+    double ta = t;
+
+    if ( t <= tmin )
+    {
+        tb = tmax;
+    }
+    if ( t >= tmax )
+    {
+        ta = tmin;
+    }
+
+    vec3d tanb = m_TransformedCurve.CompTan( tb, VspCurve::BEFORE );
+    vec3d tana = m_TransformedCurve.CompTan( ta, VspCurve::AFTER );
+
+    double tol = 1.0e-9 * extent;
+
+    vec3d u;
+
+    if ( tanb.mag() > tol )
+    {
+        tanb.normalize();
+        u = u + tanb;
+    }
+    if ( tana.mag() > tol )
+    {
+        tana.normalize();
+        u = u + tana;
+    }
+
+    // Negated.  The frame's up axis and the curve run opposite ways round the section: at
+    // the first station the axis points one way along the section and the curve, heading for
+    // the next station, points the other.  Taking the tangent as it comes would turn every
+    // frame through half a turn and invert what angle and slew mean.
+    u = -u;
+
+    // Into the plane of the section.  Not every cross section is planar -- a chevron, or an
+    // edited curve given a third dimension, leaves it -- and the tangent of one that is not
+    // has a component along the principal direction.
+    //
+    // It has to go.  Angle is a rotation of the frame about this axis, and rotating the
+    // principal direction about an axis it is not perpendicular to sweeps a cone of half
+    // angle theta*cos(tilt), not theta.  On ChevronTest the flanks run 42 degrees out of
+    // plane, and a spine there asked for 30 degrees leaves the surface at 22.2 -- the slider
+    // saying one thing and the loft doing another, by a factor that varies around the
+    // section with the local tilt.  Projected, the same spine gives 30.000.
+    //
+    // On a planar section this removes round off and nothing else, which is why it reads as
+    // a formality: circle and rounded rectangle results are identical either way.
+    u = u - pdir * dot( u, pdir );
+
+    // Nothing usable came out: neither side had a tangent, or the two were opposed and
+    // cancelled.  Two unit vectors sum to twice the cosine of half the angle between them,
+    // so the threshold reads as an angle -- within a millionth of a radian of opposed, the
+    // bisector is whichever way the rounding fell and means nothing.  Either way the circle
+    // has an answer here and this does not, so take it.  On the sections tried it is the
+    // first that happens, at the ends of a slit; the second is what a cusp would do.
+    if ( u.mag() < 1.0e-6 )
+    {
+        XSec::GetBasis( t, basis );
+        return;
+    }
+
+    u.normalize();
+
+    // Right handed, the same way round as the base: w cross u is p.
+    vec3d w = cross( u, pdir );
+    w.normalize();
+
+    basis.setBasis( w, u, pdir );
+}
 
 void SkinXSec::CopySetValidate( IntParm &Cont,
     BoolParm &LAngleSet,
@@ -712,15 +1112,12 @@ void SkinXSec::CopySetValidate( IntParm &Cont,
     BoolParm &LRStrengthEq,
     BoolParm &LRCurveEq )
 {
+    // Continuity stays uniform around the cross section.  A C1 or C2 joint requires the
+    // left and right derivative curves to agree over the span that enforces it, but the
+    // values come from one periodic spline through all four stations, so the two curves
+    // only coincide at a station -- never across a whole span -- unless all four sides
+    // agree.  The Set flags below are per side; only continuity is copied.
     Cont = m_TopCont();
-    LAngleSet = m_TopLAngleSet();
-    LSlewSet = m_TopLSlewSet();
-    LStrengthSet = m_TopLStrengthSet();
-    LCurveSet = m_TopLCurveSet();
-    RAngleSet = m_TopRAngleSet();
-    RSlewSet = m_TopRSlewSet();
-    RStrengthSet = m_TopRStrengthSet();
-    RCurveSet = m_TopRCurveSet();
 
     ValidateParms( Cont,
         LAngleSet,
@@ -751,6 +1148,18 @@ void SkinXSec::ValidateParms( IntParm &Cont,
     BoolParm &LRStrengthEq,
     BoolParm &LRCurveEq )
 {
+    // Settle the angle flags before deriving anything from them.  Equality forces its pair
+    // on, and that used to happen at the bottom -- after slew and strength had been derived
+    // from the angle flag's earlier value.  One pass then left LAngleSet on with LStrengthSet
+    // off, which the line below says cannot happen, and the surface was built from that state
+    // while the next validation quietly produced a different one.
+    if ( LRAngleEq() )
+    {
+        LAngleSet = true;
+        RAngleSet = true;
+    }
+
+    // Slew and strength are parts of the same tangent as the angle, so they follow it.
     LStrengthSet = LAngleSet();
     RStrengthSet = RAngleSet();
     LSlewSet = LAngleSet();
@@ -830,67 +1239,8 @@ void SkinXSec::ValidateParms( IntParm &Cont,
     }
 }
 
-void SkinXSec::CrossValidateParms( BoolParm &topEq,
-        BoolParm &rightEq,
-        BoolParm &bottomEq,
-        BoolParm &leftEq,
-        BoolParm &topRSet,
-        BoolParm &topLSet,
-        bool CX )
-{
-    if( !CX )
-    {
-        if ( topEq() || rightEq() || bottomEq() || leftEq() )
-        {
-            topRSet = true;
-            topLSet = true;
-        }
-    }
-    else
-    {
-        topRSet = topLSet();
-        topEq = topLSet();
-        rightEq = topLSet();
-        bottomEq = topLSet();
-        leftEq = topLSet();
-    }
-}
-
-
 void SkinXSec::ValidateParms( )
 {
-    CrossValidateParms( m_TopLRAngleEq,
-            m_RightLRAngleEq,
-            m_BottomLRAngleEq,
-            m_LeftLRAngleEq,
-            m_TopRAngleSet,
-            m_TopLAngleSet,
-            m_TopCont() >= 1 );
-
-    CrossValidateParms( m_TopLRSlewEq,
-            m_RightLRSlewEq,
-            m_BottomLRSlewEq,
-            m_LeftLRSlewEq,
-            m_TopRSlewSet,
-            m_TopLSlewSet,
-            m_TopCont() >= 1 );
-
-    CrossValidateParms( m_TopLRStrengthEq,
-            m_RightLRStrengthEq,
-            m_BottomLRStrengthEq,
-            m_LeftLRStrengthEq,
-            m_TopRAngleSet,
-            m_TopLAngleSet,
-            m_TopCont() >= 1 );
-
-    CrossValidateParms( m_TopLRCurveEq,
-            m_RightLRCurveEq,
-            m_BottomLRCurveEq,
-            m_LeftLRCurveEq,
-            m_TopRCurveSet,
-            m_TopLCurveSet,
-            m_TopCont() >= 2 );
-
     ValidateParms( m_TopCont,
                m_TopLAngleSet,
                m_TopLSlewSet,
@@ -946,6 +1296,8 @@ void SkinXSec::ValidateParms( )
                m_LeftLRSlewEq,
                m_LeftLRStrengthEq,
                m_LeftLRCurveEq );
+
+    ValidateSpineParms();
 
     if ( m_TopLRAngleEq() ) m_TopRAngle = m_TopLAngle();
     if ( m_TopLRSlewEq() ) m_TopRSlew = m_TopLSlew();
@@ -1087,7 +1439,914 @@ void SkinXSec::ValidateParms( )
     }
 }
 
-rib_data_type SkinXSec::GetRib( bool first, bool last )
+// Spines get the same validation the sides do -- strength and slew follow angle, and the
+// continuity setting couples the left and right halves.  Without it a spine's Set flags
+// never move, so clearing its Angle Set leaves the Strength and Slew sliders live.
+void SkinXSec::ValidateSpineParms()
+{
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        SkinSpine* sp = m_SpineVec[i];
+        if ( !sp )
+        {
+            continue;
+        }
+
+        ValidateParms( m_TopCont,
+            sp->m_LAngleSet,
+            sp->m_LSlewSet,
+            sp->m_LStrengthSet,
+            sp->m_LCurveSet,
+            sp->m_RAngleSet,
+            sp->m_RSlewSet,
+            sp->m_RStrengthSet,
+            sp->m_RCurveSet,
+            sp->m_LRAngleEq,
+            sp->m_LRSlewEq,
+            sp->m_LRStrengthEq,
+            sp->m_LRCurveEq );
+
+        // Equal means equal.  The call above settles the flags; the values are copied
+        // separately, exactly as ValidateParms does for the four sides.  Without this a
+        // spine could carry an Equal flag and two different numbers, and which one reached
+        // the surface depended on the continuity: at C0 each side of the joint used its own,
+        // but from C1 up set_right_fp overwrites the left curve, so only the right value
+        // survived and editing the left did nothing at all.
+        if ( sp->m_LRAngleEq() ) sp->m_RAngle = sp->m_LAngle();
+        if ( sp->m_LRSlewEq() ) sp->m_RSlew = sp->m_LSlew();
+        if ( sp->m_LRStrengthEq() ) sp->m_RStrength = sp->m_LStrength();
+        if ( sp->m_LRCurveEq() ) sp->m_RCurve = sp->m_LCurve();
+    }
+}
+
+// Fill one station from a side's parameters.  Slew carries a sign convention per side so
+// that a positive value reads the same way around the cross section; SetUnsetParms applies
+// the matching flip when reading achieved values back.
+//===============================================================================//
+//========================        SkinSpine        ==============================//
+//===============================================================================//
+
+SkinSpine::SkinSpine() : ParmContainer()
+{
+    m_Name = "Spine";
+
+    string group = "SkinSpine";
+
+    // Position on a [0, 1] basis, the way OpenVSP shows U and W everywhere else.  The
+    // skinning works in the cross section curve's own parameter, so this is scaled up
+    // wherever it is read -- 01 in the name to keep which basis is which unmistakable.
+    m_W01.Init( "W01", group, this, 0.125, 0.0, 1.0 );
+    m_W01.SetDescript( "Position of this spine around the cross section, on a [0, 1] basis" );
+
+    m_LRSymFlag.Init( "LRSym", group, this, false, 0, 1 );
+    m_LRSymFlag.SetDescript( "Mirror this spine to the other side" );
+    m_TBSymFlag.Init( "TBSym", group, this, false, 0, 1 );
+    m_TBSymFlag.SetDescript( "Mirror this spine to the other half" );
+
+    m_LAngleSet.Init( "LAngleSet", group, this, 0, 0, 1 );
+    m_LSlewSet.Init( "LSlewSet", group, this, 0, 0, 1 );
+    m_LStrengthSet.Init( "LStrengthSet", group, this, 0, 0, 1 );
+    m_LCurveSet.Init( "LCurveSet", group, this, 0, 0, 1 );
+    m_RAngleSet.Init( "RAngleSet", group, this, 0, 0, 1 );
+    m_RSlewSet.Init( "RSlewSet", group, this, 0, 0, 1 );
+    m_RStrengthSet.Init( "RStrengthSet", group, this, 0, 0, 1 );
+    m_RCurveSet.Init( "RCurveSet", group, this, 0, 0, 1 );
+
+    m_LRAngleEq.Init( "LRAngleEq", group, this, 0, 0, 1 );
+    m_LRSlewEq.Init( "LRSlewEq", group, this, 0, 0, 1 );
+    m_LRStrengthEq.Init( "LRStrengthEq", group, this, 0, 0, 1 );
+    m_LRCurveEq.Init( "LRCurveEq", group, this, 0, 0, 1 );
+
+    m_LAngle.Init( "LAngle", group, this, 0.0, -180.0, 180.0 );
+    m_LSlew.Init( "LSlew", group, this, 0.0, -180.0, 180.0 );
+    m_LStrength.Init( "LStrength", group, this, 0.0, 0.0, 1.0e12 );
+    m_LCurve.Init( "LCurve", group, this, 0.0, -1.0e12, 1.0e12 );
+    m_RAngle.Init( "RAngle", group, this, 0.0, -180.0, 180.0 );
+    m_RSlew.Init( "RSlew", group, this, 0.0, -180.0, 180.0 );
+    m_RStrength.Init( "RStrength", group, this, 0.0, 0.0, 1.0e12 );
+    m_RCurve.Init( "RCurve", group, this, 0.0, -1.0e12, 1.0e12 );
+}
+
+void SkinSpine::ParmChanged( Parm* parm_ptr, int type )
+{
+    ParmContainer* pc = GetParentContainerPtr();
+    if ( pc )
+    {
+        pc->ParmChanged( parm_ptr, type );
+    }
+}
+
+void SkinSpine::SetGroupDisplaySuffix( int num )
+{
+    for ( int i = 0; i < ( int )m_ParmVec.size(); i++ )
+    {
+        Parm* p = ParmMgr.FindParm( m_ParmVec[i] );
+        if ( p )
+        {
+            p->SetGroupDisplaySuffix( num );
+        }
+    }
+}
+
+void SkinSpine::SetGroupAlias( const string & alias )
+{
+    for ( int i = 0; i < ( int )m_ParmVec.size(); i++ )
+    {
+        Parm* p = ParmMgr.FindParm( m_ParmVec[i] );
+        if ( p )
+        {
+            p->SetGroupAlias( alias );
+        }
+    }
+}
+
+// The spine itself plus a mirror for each symmetry asked for.  A left/right mirror sends
+// W to 2 - W, which fixes Bottom and Top and swaps Left and Right; a top/bottom mirror
+// sends W to -W, which fixes Right and Left and swaps Top and Bottom.  Asking for both
+// gives the third, W + 2.  Each reflection reverses the sense of slew, so the mirrored
+// copies carry a flag telling the caller to negate it.
+void SkinSpine::GetMirrorW( vector< double > &ws, vector< bool > &flipslew, double period )
+{
+    ws.clear();
+    flipslew.clear();
+
+    // Up into the cross section curve's parameter, where the reflections are expressed.
+    double w = m_W01() * period;
+
+    ws.push_back( w );
+    flipslew.push_back( false );
+
+    // Half a period is the Left station, which is the axis a left/right mirror reflects in.
+    double half = 0.5 * period;
+
+    if ( m_LRSymFlag() )
+    {
+        ws.push_back( half - w );
+        flipslew.push_back( true );
+    }
+
+    if ( m_TBSymFlag() )
+    {
+        ws.push_back( -w );
+        flipslew.push_back( true );
+    }
+
+    if ( m_LRSymFlag() && m_TBSymFlag() )
+    {
+        // Both reflections compose into a half turn, which reverses slew twice.
+        ws.push_back( half + w );
+        flipslew.push_back( false );
+    }
+
+    for ( int i = 0; i < ( int )ws.size(); i++ )
+    {
+        while ( ws[i] < 0.0 )
+        {
+            ws[i] += period;
+        }
+        while ( ws[i] >= period )
+        {
+            ws[i] -= period;
+        }
+    }
+}
+
+//===============================================================================//
+
+void SkinXSec::SetGroupDisplaySuffix( int num )
+{
+    XSec::SetGroupDisplaySuffix( num );
+
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        if ( m_SpineVec[i] )
+        {
+            m_SpineVec[i]->SetGroupDisplaySuffix( num );
+        }
+    }
+}
+
+// Seed each spine's name with its index and push it down as the parms' group alias.  Two
+// spines on one XSec would otherwise share a display group name; a user is free to rename
+// from here, and the browser shows whatever they choose.
+// The lowest numbered Spine_ name no spine here is using.  Numbering by the array index or
+// by the current count repeats a name as soon as one has been deleted -- with Spine_0 and
+// Spine_1, removing Spine_0 and adding gives a second Spine_1 -- and the name is the parm
+// group alias, so the two then collide in the Parm Link and Design Variable pickers.
+string SkinXSec::UnusedSpineName() const
+{
+    char str[256];
+
+    for ( int n = 0; ; n++ )
+    {
+        snprintf( str, sizeof( str ), "Spine_%d", n );
+
+        bool taken = false;
+        for ( int i = 0; i < ( int )m_SpineVec.size() && !taken; i++ )
+        {
+            if ( m_SpineVec[i] && m_SpineVec[i]->GetName() == string( str ) )
+            {
+                taken = true;
+            }
+        }
+
+        if ( !taken )
+        {
+            return string( str );
+        }
+    }
+}
+
+// ParmContainer::SwapIDs pairs Parms by name and group inside the container it is given, so
+// it never reaches a spine -- a spine is a container of its own, nested in this one.
+//
+// ChangeXSecShape is what makes that matter.  It builds the replacement from the same
+// XSecSurf and hands the old cross section here so the new one keeps its Parm identity;
+// without this the spines come back with freshly minted IDs, and a Parm Link or a Design
+// Variable pointing at a spine parm is left pointing at nothing while the same link onto one
+// of the four sides survives.  Match the spines by tag, the way the sync does.
+void SkinXSec::SwapIDs( ParmContainer* from )
+{
+    XSec::SwapIDs( from );
+
+    SkinXSec* sfrom = dynamic_cast < SkinXSec* > ( from );
+    if ( !sfrom )
+    {
+        return;
+    }
+
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        if ( !m_SpineVec[i] )
+        {
+            continue;
+        }
+
+        for ( int j = 0; j < ( int )sfrom->m_SpineVec.size(); j++ )
+        {
+            if ( sfrom->m_SpineVec[j] &&
+                 sfrom->m_SpineVec[j]->GetSpineID() == m_SpineVec[i]->GetSpineID() )
+            {
+                m_SpineVec[i]->SwapIDs( sfrom->m_SpineVec[j] );
+                break;
+            }
+        }
+    }
+}
+
+void SkinXSec::DeleteAttributes()
+{
+    XSec::DeleteAttributes();
+
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        if ( m_SpineVec[i] )
+        {
+            m_SpineVec[i]->DeleteAttributes();
+        }
+    }
+}
+
+void SkinXSec::TakeIdentityOf( XSec* old )
+{
+    XSec::TakeIdentityOf( old );
+
+    SkinXSec* sold = dynamic_cast < SkinXSec* > ( old );
+    if ( !sold || sold == this )
+    {
+        return;
+    }
+
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        if ( !m_SpineVec[i] )
+        {
+            continue;
+        }
+
+        for ( int j = 0; j < ( int )sold->m_SpineVec.size(); j++ )
+        {
+            if ( sold->m_SpineVec[j] &&
+                 sold->m_SpineVec[j]->GetSpineID() == m_SpineVec[i]->GetSpineID() )
+            {
+                // SwapIDs has already traded the spines' Parm IDs; SwapIdentity would trade them
+                // straight back.
+                m_SpineVec[i]->SwapContainerID( sold->m_SpineVec[j] );
+                sold->m_SpineVec[j]->HandAttributesTo( m_SpineVec[i] );
+                break;
+            }
+        }
+    }
+}
+
+void SkinXSec::RenumberSpines()
+{
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        SkinSpine* sp = m_SpineVec[i];
+        if ( !sp )
+        {
+            continue;
+        }
+
+        // An empty name gets the lowest unused number rather than the array index, which
+        // would collide with a spine already carrying that name.
+        if ( sp->GetName().empty() )
+        {
+            sp->SetName( UnusedSpineName() );
+        }
+
+        sp->SetGroupAlias( sp->GetName() );
+    }
+}
+
+// Put this cross section's spines in the same order as another's, matching by tag.
+//
+// Syncing matches a copy to its master by tag and so does not care what order the arrays are
+// in, but everything downstream reaches a spine by its index: the Skinning tab, DelSkinSpine,
+// GetSkinSpineID and the active spine highlight.  An array that disagrees with the master's
+// therefore makes one index mean different spines on different cross sections, which a paste
+// from another Geom produces -- it rebuilds the list in the source's order.
+void SkinXSec::OrderSpinesLike( const SkinXSec* other )
+{
+    if ( !other )
+    {
+        return;
+    }
+
+    vector< SkinSpine* > ordered;
+    ordered.reserve( m_SpineVec.size() );
+
+    for ( int k = 0; k < ( int )other->m_SpineVec.size(); k++ )
+    {
+        const SkinSpine* o = other->m_SpineVec[k];
+        if ( !o )
+        {
+            continue;
+        }
+
+        for ( int j = 0; j < ( int )m_SpineVec.size(); j++ )
+        {
+            if ( m_SpineVec[j] && m_SpineVec[j]->GetSpineID() == o->GetSpineID() )
+            {
+                ordered.push_back( m_SpineVec[j] );
+                break;
+            }
+        }
+    }
+
+    // A spine the other does not have keeps its place at the end.  This routine orders; it
+    // does not decide what belongs here.
+    for ( int j = 0; j < ( int )m_SpineVec.size(); j++ )
+    {
+        if ( !m_SpineVec[j] )
+        {
+            continue;
+        }
+
+        if ( std::find( ordered.begin(), ordered.end(), m_SpineVec[j] ) == ordered.end() )
+        {
+            ordered.push_back( m_SpineVec[j] );
+        }
+    }
+
+    m_SpineVec = ordered;
+}
+
+// Evaluate the periodic control spline the existing stations define, at w.
+//
+// This is the first stage of what GetTanNormCrv does -- a closed cubic spline through the
+// per station control values -- sampled at one parameter rather than turned into tangent
+// curves.  The values are the raw Parm units the stations carry, so what comes out can be
+// written straight back into a spine.
+void SkinXSec::InterpStationControls( double w, bool left, double &angle, double &slew,
+                                      double &strength, double &curve )
+{
+    vector< SkinStation > stations;
+    GetStations( stations );
+
+    int n = stations.size();
+
+    double t0 = GetCurve().GetCurve().get_t0();
+    double tmax = GetCurve().GetCurve().get_tmax();
+
+    piecewise_cubic_spline_creator_type pcc( n );
+    pcc.set_t0( stations[0].m_W );
+    for ( int i = 0; i < n - 1; i++ )
+    {
+        pcc.set_segment_dt( stations[i + 1].m_W - stations[i].m_W, i );
+    }
+    pcc.set_segment_dt( ( t0 + ( tmax - t0 ) ) - stations[n - 1].m_W, n - 1 );
+
+    // Angle, strength and curvature ride in one curve; slew in another.
+    vector< curve_point_type > pts( n + 1 ), spts( n + 1 );
+    for ( int i = 0; i < n; i++ )
+    {
+        const SkinStation &st = stations[i];
+        if ( left )
+        {
+            pts[i] << st.m_LAngle, st.m_LStrength, st.m_LCurve;
+            spts[i] << st.m_LSlew, 0.0, 0.0;
+        }
+        else
+        {
+            pts[i] << st.m_RAngle, st.m_RStrength, st.m_RCurve;
+            spts[i] << st.m_RSlew, 0.0, 0.0;
+        }
+    }
+    pts[n] = pts[0];
+    spts[n] = spts[0];
+
+    // Seeding samples the same interpolant the surface is built from, so it follows the same
+    // choice -- otherwise a new spine would be seeded off the curve it is joining.
+    piecewise_curve_type crv, scrv;
+    pcc.set_monotonic_chip( pts.begin(), eli::geom::general::C1 );
+    pcc.create( crv );
+
+    pcc.set_monotonic_chip( spts.begin(), eli::geom::general::C1 );
+    pcc.create( scrv );
+
+    curve_point_type v = crv.f( w );
+    curve_point_type sv = scrv.f( w );
+
+    angle = v.x();
+    strength = v.y();
+    curve = v.z();
+    slew = sv.x();
+}
+
+// The station closest to w, measured around the cross section so the seam is not a wall.
+void SkinXSec::GetNearestStation( double w, SkinStation &near )
+{
+    vector< SkinStation > stations;
+    GetStations( stations );
+
+    double t0 = GetCurve().GetCurve().get_t0();
+    double period = GetCurve().GetCurve().get_tmax() - t0;
+
+    int best = 0;
+    double bestd = 2.0 * period;
+
+    for ( int i = 0; i < ( int )stations.size(); i++ )
+    {
+        double d = std::abs( stations[i].m_W - w );
+        if ( d > 0.5 * period )
+        {
+            d = period - d;
+        }
+
+        if ( d < bestd )
+        {
+            bestd = d;
+            best = i;
+        }
+    }
+
+    near = stations[best];
+}
+
+// Where to put a spine when the user just presses Add: the middle of the widest gap in the
+// station layout as it stands.
+//
+// Any fixed choice eventually lands on a station that is already there, and two stations at
+// the same parameter are one station -- the newcomer is merged away and appears in the
+// browser doing nothing at all.  A fixed 0.25 would sit on Bottom; adding twice would put the
+// second on top of the first.  The widest gap is always clear, and always the most useful
+// place to be offered.
+double SkinXSec::SuggestSpineW01()
+{
+    vector< SkinStation > stations;
+    GetStations( stations );
+
+    double t0 = GetCurve().GetCurve().get_t0();
+    double period = GetCurve().GetCurve().get_tmax() - t0;
+
+    int n = stations.size();
+    if ( n < 1 )
+    {
+        return 0.125;
+    }
+
+    double best = stations[0].m_W + 0.5 * period;
+    double bestgap = -1.0;
+
+    for ( int i = 0; i < n; i++ )
+    {
+        int j = i + 1;
+        double wj;
+        if ( j < n )
+        {
+            wj = stations[j].m_W;
+        }
+        else
+        {
+            // The last gap closes back onto the first station, the long way round.
+            wj = stations[0].m_W + period;
+        }
+
+        double gap = wj - stations[i].m_W;
+        if ( gap > bestgap )
+        {
+            bestgap = gap;
+            best = stations[i].m_W + 0.5 * gap;
+        }
+    }
+
+    while ( best >= t0 + period )
+    {
+        best -= period;
+    }
+
+    return ( best - t0 ) / period;
+}
+
+// A ParmContainer's children hold their parent's ID, so changing it has to reach them.
+// XSec::ChangeID reparents the XSecCurve; the spines are children too, and leaving them
+// pointing at an ID that no longer exists would stop SkinSpine::ParmChanged finding the Geom
+// to dirty, after which a spine edit would no longer rebuild the surface.
+void SkinXSec::ChangeID( const string &newid )
+{
+    XSec::ChangeID( newid );
+
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        if ( m_SpineVec[i] )
+        {
+            m_SpineVec[i]->SetParentContainer( newid );
+        }
+    }
+}
+
+// The position comes in on a [0, 1] basis, the way the rest of OpenVSP states U and W.  The
+// skinning works in the cross section curve's own parameter, so scale up once here and pass
+// that to everything below.
+SkinSpine* SkinXSec::AddSpine( double w01 )
+{
+    SkinSpine* sp = new SkinSpine();
+    if ( !sp )
+    {
+        return nullptr;
+    }
+
+    double t0 = GetCurve().GetCurve().get_t0();
+    double period = GetCurve().GetCurve().get_tmax() - t0;
+    double w = t0 + w01 * period;
+
+    // Seed the new spine from what the surrounding stations already produce at w, and give
+    // it their Set flags, so that adding a spine is inert until the user changes something.
+    // Left alone it would enforce nothing where its neighbors enforce a tangent, which
+    // makes the loft run free around it and doubles the tangent magnitude there.
+    double la, ls, lstr, lc, ra, rs, rstr, rc;
+    InterpStationControls( w, true, la, ls, lstr, lc );
+    InterpStationControls( w, false, ra, rs, rstr, rc );
+
+    sp->m_W01 = w01;
+    sp->SetSpineID( GenerateRandomID( vsp::ID_LENGTH_PARMCONTAINER ) );
+    sp->SetParentContainer( m_ID );
+
+    sp->m_LAngle = la;
+    sp->m_LSlew = ls;
+    sp->m_LStrength = lstr;
+    sp->m_LCurve = lc;
+    sp->m_RAngle = ra;
+    sp->m_RSlew = rs;
+    sp->m_RStrength = rstr;
+    sp->m_RCurve = rc;
+
+    // Take the Set flags from the nearest station.  Leaving them all off would be the
+    // larger change, not the smaller one: a spine enforcing nothing where its neighbors
+    // enforce a tangent puts it in its own condition group, so the loft runs free around it
+    // and the tangent there doubles.  Matching the neighborhood is what actually leaves the
+    // surface alone, and on a default model that comes out as angle on, curvature off.
+    SkinStation near;
+    GetNearestStation( w, near );
+
+    sp->m_LAngleSet = near.m_LAngleSet;
+    sp->m_LSlewSet = near.m_LSlewSet;
+    sp->m_LStrengthSet = near.m_LStrengthSet;
+    sp->m_LCurveSet = near.m_LCurveSet;
+    sp->m_RAngleSet = near.m_RAngleSet;
+    sp->m_RSlewSet = near.m_RSlewSet;
+    sp->m_RStrengthSet = near.m_RStrengthSet;
+    sp->m_RCurveSet = near.m_RCurveSet;
+
+    sp->SetName( UnusedSpineName() );
+
+    m_SpineVec.push_back( sp );
+
+    RenumberSpines();
+
+    m_LateUpdateFlag = true;
+
+    return sp;
+}
+
+void SkinXSec::DelSpine( int index )
+{
+    if ( index < 0 || index >= ( int )m_SpineVec.size() )
+    {
+        return;
+    }
+
+    delete m_SpineVec[index];
+    m_SpineVec.erase( m_SpineVec.begin() + index );
+
+    m_LateUpdateFlag = true;
+}
+
+void SkinXSec::DelAllSpines()
+{
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        delete m_SpineVec[i];
+    }
+    m_SpineVec.clear();
+
+    m_LateUpdateFlag = true;
+}
+
+SkinSpine* SkinXSec::GetSpine( int index )
+{
+    if ( index < 0 || index >= ( int )m_SpineVec.size() )
+    {
+        return nullptr;
+    }
+    return m_SpineVec[index];
+}
+
+// The four sides sit at 0, 1, 2 and 3, which is the cross section curve's own parameter only
+// because every XSecCurve in the tree runs 0 to 4.  Spines are placed as t0 + w, and
+// GetGroupRib lays its condition regions out from t0, so all three agree only while t0 is
+// zero.  Nothing here would notice if that changed.
+void SkinXSec::GetSideStation( int side, SkinStation &st )
+{
+    assert( GetCurve().GetCurve().get_t0() == 0.0 );
+
+    st.m_W = side;
+    st.m_IsSide = true;
+
+    if ( side == SKIN_SIDE_RIGHT )
+    {
+        st.m_LAngleSet = m_RightLAngleSet();   st.m_LSlewSet = m_RightLSlewSet();
+        st.m_LStrengthSet = m_RightLStrengthSet(); st.m_LCurveSet = m_RightLCurveSet();
+        st.m_RAngleSet = m_RightRAngleSet();   st.m_RSlewSet = m_RightRSlewSet();
+        st.m_RStrengthSet = m_RightRStrengthSet(); st.m_RCurveSet = m_RightRCurveSet();
+
+        st.m_LAngle = m_RightLAngle();  st.m_LSlew = m_RightLSlew();
+        st.m_LStrength = m_RightLStrength(); st.m_LCurve = m_RightLCurve();
+        st.m_RAngle = m_RightRAngle();  st.m_RSlew = m_RightRSlew();
+        st.m_RStrength = m_RightRStrength(); st.m_RCurve = m_RightRCurve();
+    }
+    else if ( side == SKIN_SIDE_BOTTOM )
+    {
+        st.m_LAngleSet = m_BottomLAngleSet();   st.m_LSlewSet = m_BottomLSlewSet();
+        st.m_LStrengthSet = m_BottomLStrengthSet(); st.m_LCurveSet = m_BottomLCurveSet();
+        st.m_RAngleSet = m_BottomRAngleSet();   st.m_RSlewSet = m_BottomRSlewSet();
+        st.m_RStrengthSet = m_BottomRStrengthSet(); st.m_RCurveSet = m_BottomRCurveSet();
+
+        st.m_LAngle = m_BottomLAngle();  st.m_LSlew = -m_BottomLSlew();
+        st.m_LStrength = m_BottomLStrength(); st.m_LCurve = m_BottomLCurve();
+        st.m_RAngle = m_BottomRAngle();  st.m_RSlew = -m_BottomRSlew();
+        st.m_RStrength = m_BottomRStrength(); st.m_RCurve = m_BottomRCurve();
+    }
+    else if ( side == SKIN_SIDE_LEFT )
+    {
+        st.m_LAngleSet = m_LeftLAngleSet();   st.m_LSlewSet = m_LeftLSlewSet();
+        st.m_LStrengthSet = m_LeftLStrengthSet(); st.m_LCurveSet = m_LeftLCurveSet();
+        st.m_RAngleSet = m_LeftRAngleSet();   st.m_RSlewSet = m_LeftRSlewSet();
+        st.m_RStrengthSet = m_LeftRStrengthSet(); st.m_RCurveSet = m_LeftRCurveSet();
+
+        st.m_LAngle = m_LeftLAngle();  st.m_LSlew = -m_LeftLSlew();
+        st.m_LStrength = m_LeftLStrength(); st.m_LCurve = m_LeftLCurve();
+        st.m_RAngle = m_LeftRAngle();  st.m_RSlew = -m_LeftRSlew();
+        st.m_RStrength = m_LeftRStrength(); st.m_RCurve = m_LeftRCurve();
+    }
+    else
+    {
+        st.m_LAngleSet = m_TopLAngleSet();   st.m_LSlewSet = m_TopLSlewSet();
+        st.m_LStrengthSet = m_TopLStrengthSet(); st.m_LCurveSet = m_TopLCurveSet();
+        st.m_RAngleSet = m_TopRAngleSet();   st.m_RSlewSet = m_TopRSlewSet();
+        st.m_RStrengthSet = m_TopRStrengthSet(); st.m_RCurveSet = m_TopRCurveSet();
+
+        st.m_LAngle = m_TopLAngle();  st.m_LSlew = m_TopLSlew();
+        st.m_LStrength = m_TopLStrength(); st.m_LCurve = m_TopLCurve();
+        st.m_RAngle = m_TopRAngle();  st.m_RSlew = m_TopRSlew();
+        st.m_RStrength = m_TopRStrength(); st.m_RCurve = m_TopRCurve();
+    }
+}
+
+// Every station around the cross section: the four sides, plus each spine and whatever
+// mirrors its symmetry flags ask for, ordered by W.
+//
+// A station lands on the ordered list only if it clears the minimum gap from the ones
+// already there.  Two stations at the same parameter would give the control spline a zero
+// length segment, and a spine dragged onto a side is better ignored than fatal.  The four
+// sides go in first, so they always win a collision.
+void SkinXSec::GetStations( vector< SkinStation > &stations )
+{
+    stations.clear();
+    stations.reserve( NUM_SKIN_SIDES + 4 * m_SpineVec.size() );
+
+    for ( int i = 0; i < NUM_SKIN_SIDES; i++ )
+    {
+        SkinStation st;
+        GetSideStation( i, st );
+        st.m_SpineIndex = -1;
+        stations.push_back( st );
+    }
+
+    double t0 = GetCurve().GetCurve().get_t0();
+    double period = GetCurve().GetCurve().get_tmax() - t0;
+    double gap = GetMinStationGap();
+
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        SkinSpine* sp = m_SpineVec[i];
+        if ( !sp )
+        {
+            continue;
+        }
+
+        vector< double > ws;
+        vector< bool > flipslew;
+        sp->GetMirrorW( ws, flipslew, period );
+
+        for ( int k = 0; k < ( int )ws.size(); k++ )
+        {
+            double w = t0 + ws[k];
+
+            bool clear = true;
+            for ( int j = 0; j < ( int )stations.size(); j++ )
+            {
+                double d = std::abs( stations[j].m_W - w );
+                if ( d > 0.5 * period )
+                {
+                    d = period - d;
+                }
+                if ( d < gap )
+                {
+                    clear = false;
+                    break;
+                }
+            }
+
+            if ( !clear )
+            {
+                continue;
+            }
+
+            double sgn = 1.0;
+            if ( flipslew[k] )
+            {
+                sgn = -1.0;
+            }
+
+            SkinStation st;
+            st.m_W = w;
+            st.m_IsSide = false;
+            st.m_SpineIndex = i;
+
+            st.m_LAngleSet = sp->m_LAngleSet();
+            st.m_LSlewSet = sp->m_LSlewSet();
+            st.m_LStrengthSet = sp->m_LStrengthSet();
+            st.m_LCurveSet = sp->m_LCurveSet();
+            st.m_RAngleSet = sp->m_RAngleSet();
+            st.m_RSlewSet = sp->m_RSlewSet();
+            st.m_RStrengthSet = sp->m_RStrengthSet();
+            st.m_RCurveSet = sp->m_RCurveSet();
+
+            st.m_LAngle = sp->m_LAngle();
+            st.m_LSlew = sgn * sp->m_LSlew();
+            st.m_LStrength = sp->m_LStrength();
+            st.m_LCurve = sp->m_LCurve();
+            st.m_RAngle = sp->m_RAngle();
+            st.m_RSlew = sgn * sp->m_RSlew();
+            st.m_RStrength = sp->m_RStrength();
+            st.m_RCurve = sp->m_RCurve();
+
+            stations.push_back( st );
+        }
+    }
+
+    std::sort( stations.begin(), stations.end(),
+               []( const SkinStation &a, const SkinStation &b ) { return a.m_W < b.m_W; } );
+}
+
+void SkinXSec::GetStationW( vector< double > &ws )
+{
+    vector< SkinStation > stations;
+    GetStations( stations );
+
+    ws.resize( stations.size() );
+    for ( int i = 0; i < ( int )stations.size(); i++ )
+    {
+        ws[i] = stations[i].m_W;
+    }
+}
+
+// Build the tangent (fp) and normal (fpp) curves that control the loft on one side of this
+// XSec.  'left' selects the parameters that control the loft before this XSec, otherwise
+// the parameters controlling the loft after it are used.
+//
+// The control values are laid out at the station parameters and closed back onto the first
+// station, so the periodic spline through them does not care how many stations there are
+// or how they are spaced.
+void SkinXSec::GetSkinCrvs( bool left, piecewise_curve_type &tangentcrv, piecewise_curve_type &normcrv )
+{
+    vector< SkinStation > stations;
+    GetStations( stations );
+
+    GetSkinCrvs( left, stations, tangentcrv, normcrv );
+}
+
+void SkinXSec::GetSkinCrvs( bool left, const vector< SkinStation > &stations,
+                            piecewise_curve_type &tangentcrv, piecewise_curve_type &normcrv )
+{
+    int n = stations.size();
+
+    vector< double > ts( n + 1 );
+    vector< double > angles( n + 1 );
+    vector< double > slews( n + 1 );
+    vector< double > strengths( n + 1 );
+    vector< double > curves( n + 1 );
+
+    double scale = GetScale();
+
+    double t0 = GetCurve().GetCurve().get_t0();
+    double tmax = GetCurve().GetCurve().get_tmax();
+
+    for ( int i = 0; i < n; i++ )
+    {
+        const SkinStation &st = stations[i];
+
+        ts[i] = st.m_W;
+
+        if ( left )
+        {
+            angles[i] = st.m_LAngle * M_PI / 180.0;
+            slews[i] = st.m_LSlew * M_PI / 180.0;
+            strengths[i] = st.m_LStrength * scale;
+            curves[i] = st.m_LCurve * scale;
+        }
+        else
+        {
+            angles[i] = st.m_RAngle * M_PI / 180.0;
+            slews[i] = st.m_RSlew * M_PI / 180.0;
+            strengths[i] = st.m_RStrength * scale;
+            curves[i] = st.m_RCurve * scale;
+        }
+    }
+
+    // Close the periodic control spline back onto the first station.
+    ts[n] = t0 + ( tmax - t0 );
+    angles[n] = angles[0];
+    slews[n] = slews[0];
+    strengths[n] = strengths[0];
+    curves[n] = curves[0];
+
+    GetTanNormCrv( ts, angles, slews, strengths, curves, tangentcrv, normcrv );
+}
+
+bool SkinXSec::AnyAngleSet( bool left, const vector< SkinStation > &stations )
+{
+    for ( int i = 0; i < ( int )stations.size(); i++ )
+    {
+        if ( left && stations[i].m_LAngleSet )
+        {
+            return true;
+        }
+        if ( !left && stations[i].m_RAngleSet )
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool SkinXSec::AnyCurveSet( bool left, const vector< SkinStation > &stations )
+{
+    for ( int i = 0; i < ( int )stations.size(); i++ )
+    {
+        if ( left && stations[i].m_LCurveSet )
+        {
+            return true;
+        }
+        if ( !left && stations[i].m_RCurveSet )
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// One rib per station.  Every rib carries the same tangent and normal curves -- their
+// values come from one periodic spline through all the stations -- but enforces only the
+// conditions its own station asks for.  The surface is skinned once per rib set and the
+// results blended, which keeps it continuous where a station stops enforcing something.
+// Settle the parms before anything reads them.  A staged solve calls this once per XSec and
+// then builds each pass from its own station list, so validation must not be buried in the
+// rib build itself.
+void SkinXSec::PrepRibs( bool first, bool last )
 {
     if( first || last )
     {
@@ -1098,131 +2357,310 @@ rib_data_type SkinXSec::GetRib( bool first, bool last )
     }
 
     ValidateParms( );
+}
 
-    rib_data_type rib;
+// Build the single rib one blending pass uses.
+//
+// A pass owns some stations and knows nothing about the rest.  Two things follow from that,
+// and together they mean the pass never has to invent a number.
+//
+// It enforces only where it has something to say.  Its solution is multiplied by a blend
+// weight that is one at its own stations and zero at every other, so what it does outside the
+// spans touching its stations is discarded anyway.  Confining the conditions to those spans
+// costs nothing and lets the loft run free everywhere else, which is exactly where the pass
+// has no information.
+//
+// And its control values come only from its own stations.  Every station in a pass enforces
+// the same things, so those values are all the user's.  Letting a station outside the pass
+// contribute would put a number nobody chose into the interpolant, and a PCHIP carries a
+// station's influence one span either way -- far enough to reach the spans this pass does
+// enforce on.  Each station therefore takes the values of the nearest member.
+void SkinXSec::GetGroupRib( bool first, bool last, const vector< SkinStation > &stations,
+                            const vector< bool > &ingroup, rib_data_type &rib )
+{
+    int n = stations.size();
 
-    // First GetCurve() forces Update() call if needed;
+    int rep = -1;
+    for ( int k = 0; k < n; k++ )
+    {
+        if ( k < ( int )ingroup.size() && ingroup[k] )
+        {
+            rep = k;
+            break;
+        }
+    }
+
+    if ( rep < 0 )
+    {
+        return;
+    }
+
+    double t0 = GetCurve().GetCurve().get_t0();
+    double period = GetCurve().GetCurve().get_tmax() - t0;
+
+    // Every station takes the values of the nearest member, measured around the section.
+    vector< SkinStation > vals( n );
+    for ( int k = 0; k < n; k++ )
+    {
+        int best = rep;
+        double bestd = 2.0 * period;
+
+        for ( int m = 0; m < n; m++ )
+        {
+            if ( m >= ( int )ingroup.size() || !ingroup[m] )
+            {
+                continue;
+            }
+
+            double d = std::abs( stations[m].m_W - stations[k].m_W );
+            if ( d > 0.5 * period )
+            {
+                d = period - d;
+            }
+
+            if ( d < bestd )
+            {
+                bestd = d;
+                best = m;
+            }
+        }
+
+        vals[k] = stations[best];
+        vals[k].m_W = stations[k].m_W;
+    }
+
+    piecewise_curve_type ltan, lnrm, rtan, rnrm;
+
+    if ( AnyAngleSet( true, vals ) || AnyCurveSet( true, vals ) )
+    {
+        GetSkinCrvs( true, vals, ltan, lnrm );
+    }
+
+    if ( AnyAngleSet( false, vals ) || AnyCurveSet( false, vals ) )
+    {
+        GetSkinCrvs( false, vals, rtan, rnrm );
+    }
+
     rib.set_f( GetCurve().GetCurve() );
 
     if( !first && !last )
+    {
         rib.set_continuity( ( rib_data_type::connection_continuity ) m_TopCont() );
+    }
 
-    piecewise_curve_type tangentcrv;
-    piecewise_curve_type normcrv;
-
-    vector< double > angles( 5, 0.0 );
-    vector< double > slews( 5, 0.0 );
-    vector< double > strengths( 5, 0.0 );
-    vector< double > curves( 5, 0.0 );
-
-    double scale =  GetScale();
+    const SkinStation &st = stations[rep];
 
     // Use 'wrong' side of first cross section to set right side.
-    if ( first && ( m_TopLAngleSet() || m_TopLCurveSet() ) )
+    if ( first )
     {
-        angles[0] = m_RightLAngle()*M_PI/180.0;
-        angles[1] = m_BottomLAngle()*M_PI/180.0;
-        angles[2] = m_LeftLAngle()*M_PI/180.0;
-        angles[3] = m_TopLAngle()*M_PI/180.0;
-        angles[4] = angles[0];
+        if( st.m_LAngleSet ) rib.set_right_fp( ltan );
+        if( st.m_LCurveSet ) rib.set_right_fpp( lnrm );
+    }
+    else
+    {
+        if( st.m_LAngleSet ) rib.set_left_fp( ltan );
+        if( st.m_LCurveSet ) rib.set_left_fpp( lnrm );
 
-        slews[0] = m_RightLSlew()*M_PI/180.0;
-        slews[1] = -m_BottomLSlew()*M_PI/180.0;
-        slews[2] = -m_LeftLSlew()*M_PI/180.0;
-        slews[3] = m_TopLSlew()*M_PI/180.0;
-        slews[4] = slews[0];
-
-        strengths[0] = m_RightLStrength() * scale;
-        strengths[1] = m_BottomLStrength() * scale;
-        strengths[2] = m_LeftLStrength() * scale;
-        strengths[3] = m_TopLStrength() * scale;
-        strengths[4] = strengths[0];
-
-        curves[0] = m_RightLCurve() * scale;
-        curves[1] = m_BottomLCurve() * scale;
-        curves[2] = m_LeftLCurve() * scale;
-        curves[3] = m_TopLCurve() * scale;
-        curves[4] = curves[0];
-
-        GetTanNormCrv( angles, slews, strengths, curves, tangentcrv, normcrv );
-
-        if( m_TopLAngleSet() ) rib.set_right_fp( tangentcrv );
-        if( m_TopLCurveSet() ) rib.set_right_fpp( normcrv );
+        if ( !last )
+        {
+            if( st.m_RAngleSet ) rib.set_right_fp( rtan );
+            if( st.m_RCurveSet ) rib.set_right_fpp( rnrm );
+        }
     }
 
-    // Set the left side of a rib.
-    if( !first && ( m_TopLAngleSet() || m_TopLCurveSet() ) )
+    // One region per span between neighboring stations, on where the span touches a station
+    // this pass owns.  The stations are sorted and the section is periodic, so the last span
+    // closes back onto the first station.
+    vector< double > breaks;
+    vector< unsigned int > masks;
+
+    breaks.push_back( t0 );
+    for ( int k = 1; k < n; k++ )
     {
+        breaks.push_back( stations[k].m_W );
+    }
+    breaks.push_back( t0 + period );
 
-        angles[0] = m_RightLAngle()*M_PI/180.0;
-        angles[1] = m_BottomLAngle()*M_PI/180.0;
-        angles[2] = m_LeftLAngle()*M_PI/180.0;
-        angles[3] = m_TopLAngle()*M_PI/180.0;
-        angles[4] = angles[0];
+    for ( int k = 0; k < n; k++ )
+    {
+        int a = k;
+        int b = k + 1;
+        if ( b >= n )
+        {
+            b = 0;
+        }
 
-        slews[0] = m_RightLSlew()*M_PI/180.0;
-        slews[1] = -m_BottomLSlew()*M_PI/180.0;
-        slews[2] = -m_LeftLSlew()*M_PI/180.0;
-        slews[3] = m_TopLSlew()*M_PI/180.0;
-        slews[4] = slews[0];
+        bool touches = false;
+        if ( a < ( int )ingroup.size() && ingroup[a] ) touches = true;
+        if ( b < ( int )ingroup.size() && ingroup[b] ) touches = true;
 
-        strengths[0] = m_RightLStrength() * scale;
-        strengths[1] = m_BottomLStrength() * scale;
-        strengths[2] = m_LeftLStrength() * scale;
-        strengths[3] = m_TopLStrength() * scale;
-        strengths[4] = strengths[0];
-
-        curves[0] = m_RightLCurve() * scale;
-        curves[1] = m_BottomLCurve() * scale;
-        curves[2] = m_LeftLCurve() * scale;
-        curves[3] = m_TopLCurve() * scale;
-        curves[4] = curves[0];
-
-        GetTanNormCrv( angles, slews, strengths, curves, tangentcrv, normcrv );
-
-        if( m_TopLAngleSet() ) rib.set_left_fp( tangentcrv );
-        if( m_TopLCurveSet() ) rib.set_left_fpp( normcrv );
-
+        if ( touches )
+        {
+            masks.push_back( ~0u );
+        }
+        else
+        {
+            masks.push_back( rib_data_type::CONNECTION_SET );
+        }
     }
 
-    // Set the right side of a rib.
-    if( !first && !last && ( m_TopRAngleSet() || m_TopRCurveSet() ) )
+    // Leave the regions off only when this group owns every station, which is to say it is
+    // the only group: the rib then enforces the same thing all the way round, which is what a
+    // rib without regions means, and the faster uniform creator -- which knows nothing of
+    // regions -- can take it.
+    //
+    // Not merely when the group touches every span.  A rib gains a joint at a station either
+    // by carrying regions, whose breaks are merged into the joint set, or by carrying a
+    // tangent or normal curve, which is sampled at the stations.  A group that enforces
+    // nothing has neither, so dropping its regions would leave it with no joint where a
+    // station falls between two cross section curve joints -- while the group that does
+    // enforce there has one.  The two skins would then have different patches, and the blend,
+    // which pairs them by patch index, would multiply a weight into the wrong interval and
+    // tear the surface.
+    bool ownsall = true;
+    for ( int k = 0; k < n; k++ )
     {
-        angles[0] = m_RightRAngle()*M_PI/180.0;
-        angles[1] = m_BottomRAngle()*M_PI/180.0;
-        angles[2] = m_LeftRAngle()*M_PI/180.0;
-        angles[3] = m_TopRAngle()*M_PI/180.0;
-        angles[4] = angles[0];
-
-        slews[0] = m_RightRSlew()*M_PI/180.0;
-        slews[1] = -m_BottomRSlew()*M_PI/180.0;
-        slews[2] = -m_LeftRSlew()*M_PI/180.0;
-        slews[3] = m_TopRSlew()*M_PI/180.0;
-        slews[4] = slews[0];
-
-        strengths[0] = m_RightRStrength() * scale;
-        strengths[1] = m_BottomRStrength() * scale;
-        strengths[2] = m_LeftRStrength() * scale;
-        strengths[3] = m_TopRStrength() * scale;
-        strengths[4] = strengths[0];
-
-        curves[0] = m_RightRCurve() * scale;
-        curves[1] = m_BottomRCurve() * scale;
-        curves[2] = m_LeftRCurve() * scale;
-        curves[3] = m_TopRCurve() * scale;
-        curves[4] = curves[0];
-
-        GetTanNormCrv( angles, slews, strengths, curves, tangentcrv, normcrv );
-
-        if( m_TopRAngleSet() ) rib.set_right_fp( tangentcrv );
-        if( m_TopRCurveSet() ) rib.set_right_fpp( normcrv );
+        if ( k >= ( int )ingroup.size() || !ingroup[k] )
+        {
+            ownsall = false;
+            break;
+        }
     }
 
-    return rib;
+    if ( !ownsall )
+    {
+        rib.set_condition_regions( breaks, masks );
+    }
+}
+
+void SkinXSec::GetRibs( bool first, bool last, vector< rib_data_type > &ribs )
+{
+    PrepRibs( first, last );
+
+    vector< SkinStation > stations;
+    GetStations( stations );
+
+    GetRibs( first, last, ribs, stations );
+}
+
+// The station list is supplied rather than read from the parms, so a caller can build the
+// ribs from stations it has adjusted -- GetGroupRib hands each pass its own.
+void SkinXSec::GetRibs( bool first, bool last, vector< rib_data_type > &ribs,
+                        const vector< SkinStation > &stations )
+{
+    piecewise_curve_type ltan, lnrm, rtan, rnrm;
+
+    if ( AnyAngleSet( true, stations ) || AnyCurveSet( true, stations ) )
+    {
+        GetSkinCrvs( true, stations, ltan, lnrm );
+    }
+
+    if ( AnyAngleSet( false, stations ) || AnyCurveSet( false, stations ) )
+    {
+        GetSkinCrvs( false, stations, rtan, rnrm );
+    }
+
+    ribs.resize( stations.size() );
+
+    for ( int s = 0; s < ( int )stations.size(); s++ )
+    {
+        rib_data_type &rib = ribs[s];
+
+        // First GetCurve() forces Update() call if needed;
+        rib.set_f( GetCurve().GetCurve() );
+
+        if( !first && !last )
+            rib.set_continuity( ( rib_data_type::connection_continuity ) m_TopCont() );
+
+        const SkinStation &st = stations[s];
+
+        // Use 'wrong' side of first cross section to set right side.
+        if ( first )
+        {
+            if( st.m_LAngleSet ) rib.set_right_fp( ltan );
+            if( st.m_LCurveSet ) rib.set_right_fpp( lnrm );
+        }
+        else
+        {
+            if( st.m_LAngleSet ) rib.set_left_fp( ltan );
+            if( st.m_LCurveSet ) rib.set_left_fpp( lnrm );
+
+            if ( !last )
+            {
+                if( st.m_RAngleSet ) rib.set_right_fp( rtan );
+                if( st.m_RCurveSet ) rib.set_right_fpp( rnrm );
+            }
+        }
+    }
+}
+
+rib_data_type SkinXSec::GetRib( bool first, bool last )
+{
+    vector< rib_data_type > ribs;
+    GetRibs( first, last, ribs );
+
+    // Find Top by its parameter, not by counting.  GetRibs returns one rib per station in W
+    // order, so index SKIN_SIDE_TOP is the Top side only while the stations are exactly the
+    // four sides -- anything inserted below it shifts Top along and this quietly returned a
+    // neighbour's rib instead.  Nothing else can sit at Top's parameter: a station landing
+    // within GetMinStationGap of a side is merged into it.
+    vector< SkinStation > stations;
+    GetStations( stations );
+
+    for ( int i = 0; i < ( int )stations.size() && i < ( int )ribs.size(); i++ )
+    {
+        if ( stations[i].m_W == SKIN_SIDE_TOP )
+        {
+            return ribs[i];
+        }
+    }
+
+    return ribs[ ribs.size() - 1 ];
+}
+
+// Every quantity a station does not enforce is replaced by what surf actually did there.
+//
+// These are exactly the values that carry no authority: the user never set them, so the
+// only meaningful thing to say about them is what the loft chose.  A pass that enforces a
+// quantity somewhere still needs a value for it everywhere, and taking it from a solution
+// that left it free is what keeps that pass from inventing one.
+//
+// Slew needs no sign flip here.  The station list is already in station space -- the sides
+// negate on the way in -- and GetAngStrCrv reports in that same space.  It is SetUnsetParms
+// writing back to the parms that has to flip, because the parms are in GUI space.
+void SkinXSec::FillUnsetFromSurf( int irib, const VspSurf &surf, vector< SkinStation > &stations )
+{
+    double scale = GetScale();
+
+    for ( int i = 0; i < ( int )stations.size(); i++ )
+    {
+        SkinStation &st = stations[i];
+
+        double thetaL, phiL, strengthL, curvatureL;
+        double thetaR, phiR, strengthR, curvatureR;
+
+        GetAngStrCrv( st.m_W, irib,
+                      thetaL, phiL, strengthL, curvatureL,
+                      thetaR, phiR, strengthR, curvatureR,
+                      surf );
+
+        if ( !st.m_LAngleSet ) st.m_LAngle = thetaL * 180.0 / M_PI;
+        if ( !st.m_LSlewSet ) st.m_LSlew = phiL * 180.0 / M_PI;
+        if ( !st.m_LStrengthSet ) st.m_LStrength = strengthL / scale;
+        if ( !st.m_LCurveSet ) st.m_LCurve = curvatureL / scale;
+
+        if ( !st.m_RAngleSet ) st.m_RAngle = thetaR * 180.0 / M_PI;
+        if ( !st.m_RSlewSet ) st.m_RSlew = phiR * 180.0 / M_PI;
+        if ( !st.m_RStrengthSet ) st.m_RStrength = strengthR / scale;
+        if ( !st.m_RCurveSet ) st.m_RCurve = curvatureR / scale;
+    }
 }
 
 void SkinXSec::SetUnsetParms( int irib, const VspSurf &surf )
 {
+    double t0 = GetCurve().GetCurve().get_t0();
+    double period = GetCurve().GetCurve().get_tmax() - t0;
+
     SetUnsetParms( 0.0, false, irib, surf,
              m_RightLAngleSet,
              m_RightLSlewSet,
@@ -1295,6 +2733,36 @@ void SkinXSec::SetUnsetParms( int irib, const VspSurf &surf )
              m_TopRStrength,
              m_TopRCurve );
 
+    // Spines read back the same way, at their own W.  Unlike the four sides they carry no
+    // sign convention on slew, so nothing is flipped here.  A spine whose mirrors are
+    // switched on is read at its own position only: the mirrors are generated from it, so
+    // reading them back would just overwrite it with a reflection of itself.
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        SkinSpine* sp = m_SpineVec[i];
+        if ( !sp )
+        {
+            continue;
+        }
+
+        SetUnsetParms( t0 + sp->m_W01() * period, false, irib, surf,
+                 sp->m_LAngleSet,
+                 sp->m_LSlewSet,
+                 sp->m_LStrengthSet,
+                 sp->m_LCurveSet,
+                 sp->m_RAngleSet,
+                 sp->m_RSlewSet,
+                 sp->m_RStrengthSet,
+                 sp->m_RCurveSet,
+                 sp->m_LAngle,
+                 sp->m_LSlew,
+                 sp->m_LStrength,
+                 sp->m_LCurve,
+                 sp->m_RAngle,
+                 sp->m_RSlew,
+                 sp->m_RStrength,
+                 sp->m_RCurve );
+    }
 }
 
 void SkinXSec::SetUnsetParms( double t, bool flipslew, int irib, const VspSurf &surf,
@@ -1432,6 +2900,7 @@ void SkinXSec::Reset()
     m_LeftRStrength = 0.0;
     m_LeftRCurve = 0.0;
 
+    ClearSpineSkinning();
 }
 
 void SkinXSec::SetContinuity( int cx )
@@ -1695,6 +3164,33 @@ void SkinXSec::SetCurvatures( int side, double top, double right, double bottom,
     }
 }
 
+// Strength and curvature are both multiplied by GetScale() when the ribs are built, and one
+// scale serves both sides of the XSec, so a single factor carries every one of them across.
+void SkinXSec::ScaleTanStrengths( double factor )
+{
+    Parm* parms[] = { &m_TopLStrength, &m_TopRStrength, &m_TopLCurve, &m_TopRCurve,
+                      &m_RightLStrength, &m_RightRStrength, &m_RightLCurve, &m_RightRCurve,
+                      &m_BottomLStrength, &m_BottomRStrength, &m_BottomLCurve, &m_BottomRCurve,
+                      &m_LeftLStrength, &m_LeftRStrength, &m_LeftLCurve, &m_LeftRCurve };
+
+    for ( int i = 0; i < ( int )( sizeof( parms ) / sizeof( parms[0] ) ); i++ )
+    {
+        parms[i]->Set( parms[i]->Get() * factor );
+    }
+
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        SkinSpine* sp = m_SpineVec[i];
+        if ( sp )
+        {
+            sp->m_LStrength.Set( sp->m_LStrength() * factor );
+            sp->m_RStrength.Set( sp->m_RStrength() * factor );
+            sp->m_LCurve.Set( sp->m_LCurve() * factor );
+            sp->m_RCurve.Set( sp->m_RCurve() * factor );
+        }
+    }
+}
+
 void SkinXSec::FlipLRSkinning()
 {
     double ang, slew, str, curv;
@@ -1794,6 +3290,36 @@ void SkinXSec::SetV2DefaultBehavior()
     m_LeftLRAngleEq = 1;
 }
 
+// Stop every spine enforcing anything, without discarding it.  A spine is structure the
+// user placed deliberately, so clearing skinning switches it off rather than deleting it;
+// deleting is its own command.
+void SkinXSec::ClearSpineSkinning()
+{
+    for ( int i = 0; i < ( int )m_SpineVec.size(); i++ )
+    {
+        SkinSpine* sp = m_SpineVec[i];
+        if ( !sp )
+        {
+            continue;
+        }
+
+        // Equal flags first: left standing they force the Set flags straight back on.
+        sp->m_LRAngleEq = false;
+        sp->m_LRSlewEq = false;
+        sp->m_LRStrengthEq = false;
+        sp->m_LRCurveEq = false;
+
+        sp->m_LAngleSet = false;
+        sp->m_LSlewSet = false;
+        sp->m_LStrengthSet = false;
+        sp->m_LCurveSet = false;
+        sp->m_RAngleSet = false;
+        sp->m_RSlewSet = false;
+        sp->m_RStrengthSet = false;
+        sp->m_RCurveSet = false;
+    }
+}
+
 void SkinXSec::ClearSkinning()
 {
     m_AllSymFlag = true;
@@ -1814,6 +3340,18 @@ void SkinXSec::ClearSkinning()
     m_TopRSlewSet = false;
     m_TopRStrengthSet = false;
     m_TopRCurveSet = false;
+
+    // And the equality flags again.  From C1 up, validation derives each of them from the
+    // matching left hand Set flag -- LRAngleEq from LAngleSet -- so the pass above turns
+    // back on exactly what the four lines before it turned off.  The next validation then
+    // reads those equality flags and forces the Set flags back on with them, which left
+    // Clear Skinning clearing nothing whatever at C1 or C2.
+    m_TopLRAngleEq = false;
+    m_TopLRStrengthEq = false;
+    m_TopLRSlewEq = false;
+    m_TopLRCurveEq = false;
+
+    ClearSpineSkinning();
 }
 
 void SkinXSec::ReadV2FileFuse2( xmlNodePtr &root )
