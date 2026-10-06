@@ -1252,16 +1252,6 @@ extern std::string GetVSPHelpPath();
 
 extern bool CheckForVSPHelp( const std::string & path );
 
-/*!
-    \internal
-    Registers the CFD Mesh analyses with the Analysis Manager.  Reaching into CFD Mesh from
-    geom_core this way is a layering violation, kept because the analyses are not registered at
-    startup with the rest.  Deliberately left out of the documentation and the generated examples.
-*/
-
-extern void RegisterCFDMeshAnalyses();
-
-
 //======================== File I/O ================================//
 /*!
     \ingroup FileIO
@@ -2188,6 +2178,20 @@ extern int GetNumDesignVars();
 */
 
 extern void AddDesignVar( const std::string & parm_id, int type );
+
+/*!
+    \ingroup DesignFile
+*/
+/*!
+    Add a design variable
+    \sa XDDM_QUANTITY_TYPE
+    \param [in] parm_id string Parm ID
+    \param [in] type int XDDM type enum (XDDM_VAR or XDDM_CONST)
+    \param [in] lowerlimit double Variable lower limit
+    \param [in] upperlimit double Variable upper limit
+*/
+
+extern void AddDesignVarLimits( const std::string & parm_id, int type, double lowerlimit, double upperlimit );
 
 /*!
     \ingroup DesignFile
@@ -10249,7 +10253,8 @@ extern void SetGeomWireColor( const std::string &geom_id, int r, int g, int b );
     \ingroup Visualization
 */
 /*!
-    Set the display type of the specified geometry
+    Set the display type of the specified geometry.  Refused for a Clone that has an original,
+    which is shown the way its original is.
     \forcpponly
     \code{.cpp}
     string pid = AddGeom( "POD" );                             // Add Pod for testing
@@ -10268,6 +10273,21 @@ extern void SetGeomWireColor( const std::string &geom_id, int r, int g, int b );
     }
 
     // That error was raised deliberately, so take it back off the queue.
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+    }
+
+    //==== A Clone is shown the way its original is ====//
+    array< string > one;
+    one.push_back( pid );
+    array< string > clones = CloneGeomVec( one );
+    SetGeomDisplayType( clones[0], DISPLAY_BEZIER );
+    if ( GetNumTotalErrors() == 0 )
+    {
+        Print( "ERROR: SetGeomDisplayType accepted a Clone" );
+        __failure++;
+    }
     while ( GetNumTotalErrors() > 0 )
     {
         ErrorObj err = PopLastError();
@@ -10291,6 +10311,13 @@ extern void SetGeomWireColor( const std::string &geom_id, int r, int g, int b );
     assert err_mgr.GetNumTotalErrors() > 0, "SetGeomDisplayType accepted a bad Geom ID"
 
     # That error was raised deliberately, so take it back off the queue.
+    while err_mgr.GetNumTotalErrors() > 0 :
+        err = err_mgr.PopLastError()
+
+    #==== A Clone is shown the way its original is ====#
+    clones = CloneGeomVec( [ pid ] )
+    SetGeomDisplayType( clones[0], DISPLAY_BEZIER )
+    assert err_mgr.GetNumTotalErrors() > 0, "SetGeomDisplayType accepted a Clone"
     while err_mgr.GetNumTotalErrors() > 0 :
         err = err_mgr.PopLastError()
 
@@ -11233,7 +11260,9 @@ extern void UpdateGeom( const std::string & geom_id );
     \ingroup Geom
 */
 /*!
-    Delete a particular Geom
+    Delete a particular Geom.  clone_delete says what becomes of each Clone of it.  By default
+    each is left empty and VSP_CLONE_ORIGINAL_LOST is reported for it.  FindGeomClones lists
+    them beforehand.
     \forcpponly
     \code{.cpp}
     //==== Add Wing Geometry ====//
@@ -11247,6 +11276,39 @@ extern void UpdateGeom( const std::string & geom_id );
     if ( FindGeoms().length() >= num_before_del )
     {
         Print( "ERROR: DeleteGeom removed nothing" );
+        __failure++;
+    }
+
+    //==== A Clone of a deleted Geom is left empty and reported ====//
+    array< string > one;
+    one.push_back( pod_id );
+    string clone_id = CloneGeomVec( one )[0];
+
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+    }
+
+    DeleteGeom( pod_id );
+
+    if ( GetGeomCloneOriginal( clone_id ) != "" )
+    {
+        Print( "ERROR: DeleteGeom left the Clone an original" );
+        __failure++;
+    }
+
+    bool lost = false;
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+        if ( err.GetErrorCode() == VSP_CLONE_ORIGINAL_LOST )
+        {
+            lost = true;
+        }
+    }
+    if ( !lost )
+    {
+        Print( "ERROR: DeleteGeom did not report the emptied Clone" );
         __failure++;
     }
 
@@ -11264,19 +11326,37 @@ extern void UpdateGeom( const std::string & geom_id );
     DeleteGeom( wing_id )
     assert len( FindGeoms() ) < num_before_del, "DeleteGeom removed nothing"
 
+    #==== A Clone of a deleted Geom is left empty and reported ====#
+    clone_id = CloneGeomVec( [ pod_id ] )[0]
+
+    err_mgr = ErrorMgrSingleton.getInstance()
+    while err_mgr.GetNumTotalErrors() > 0 :
+        err = err_mgr.PopLastError()
+
+    DeleteGeom( pod_id )
+
+    assert GetGeomCloneOriginal( clone_id ) == "", "DeleteGeom left the Clone an original"
+
+    codes = []
+    while err_mgr.GetNumTotalErrors() > 0 :
+        codes.append( err_mgr.PopLastError().GetErrorCode() )
+    assert VSP_CLONE_ORIGINAL_LOST in codes, "DeleteGeom did not report the emptied Clone"
 
     \endcode
     \endPythonOnly
+    \sa FindGeomClones, CLONE_DELETE_TYPE
     \param [in] geom_id string Geom ID
+    \param [in] clone_delete int What becomes of each Clone of the Geom (CLONE_DELETE_TYPE)
 */
 
-extern void DeleteGeom( const std::string & geom_id );
+extern void DeleteGeom( const std::string & geom_id, int clone_delete = CLONE_DELETE_LEAVE_EMPTY );
 
 /*!
     \ingroup Geom
 */
 /*!
-    Delete multiple Geoms
+    Delete multiple Geoms.  clone_delete applies to each Clone of them that is not itself being
+    deleted, as for DeleteGeom.
     \forcpponly
     \code{.cpp}
     //==== Add Pod Geometry ====//
@@ -11291,6 +11371,19 @@ extern void DeleteGeom( const std::string & geom_id );
     if ( FindGeoms().length() >= num_before_del )
     {
         Print( "ERROR: DeleteGeomVec removed nothing" );
+        __failure++;
+    }
+
+    //==== Delete a Geom and its Clones together ====//
+    array< string > one;
+    one.push_back( pid );
+    string clone_id = CloneGeomVec( one )[0];
+
+    DeleteGeomVec( one, CLONE_DELETE_WITH_ORIGINAL );
+
+    if ( FindGeoms().find( clone_id ) >= 0 )
+    {
+        Print( "ERROR: DeleteGeomVec left the Clone behind" );
         __failure++;
     }
 
@@ -11309,19 +11402,29 @@ extern void DeleteGeom( const std::string & geom_id );
     DeleteGeomVec( mesh_id_vec )
     assert len( FindGeoms() ) < num_before_del, "DeleteGeomVec removed nothing"
 
+    #==== Delete a Geom and its Clones together ====#
+    clone_id = CloneGeomVec( [ pid ] )[0]
+
+    DeleteGeomVec( [ pid ], CLONE_DELETE_WITH_ORIGINAL )
+
+    assert clone_id not in FindGeoms(), "DeleteGeomVec left the Clone behind"
 
     \endcode
     \endPythonOnly
+    \sa FindGeomClones, CLONE_DELETE_TYPE
     \param [in] del_vec vector<string> Vector of Geom IDs
+    \param [in] clone_delete int What becomes of each Clone of those Geoms (CLONE_DELETE_TYPE)
 */
 
-extern void DeleteGeomVec( const std::vector< std::string > & del_vec );
+extern void DeleteGeomVec( const std::vector< std::string > & del_vec, int clone_delete = CLONE_DELETE_LEAVE_EMPTY );
 
 /*!
     \ingroup Geom
 */
 /*!
-    Cut Geom from current location and store on clipboard
+    Cut Geom from current location and store on clipboard.  A pasted Geom is a new Geom, so
+    clone_delete applies to each Clone of the cut Geom, as for DeleteGeom.  A Clone cut along
+    with it is pasted as a Clone of the pasted Geom.
     \forcpponly
     \code{.cpp}
     //==== Add Pod Geometries ====//
@@ -11335,6 +11438,16 @@ extern void DeleteGeomVec( const std::vector< std::string > & del_vec );
     array< string > @geom_ids = FindGeoms();
 
     if ( geom_ids.size() != 2 )                { Print( "---> Error: API Cut/Paste Geom  " ); __failure++; }
+
+    //==== Cutting a Geom replaces its Clone with a real Geom ====//
+    string pid3 = AddGeom( "POD", "" );
+    array< string > one;
+    one.push_back( pid3 );
+    string clone_id = CloneGeomVec( one )[0];
+
+    CutGeomToClipboard( pid3, CLONE_DELETE_REPLACE );
+
+    if ( GetGeomTypeName( clone_id ) != "Pod" )   { Print( "---> Error: CutGeomToClipboard did not replace the Clone" ); __failure++; }
     \endcode
     \endforcpponly
     \beginPythonOnly
@@ -11353,13 +11466,22 @@ extern void DeleteGeomVec( const std::vector< std::string > & del_vec );
         print( "---> Error: API Cut/Paste Geom  " )
         assert False, "---> Error: API Cut/Paste Geom"
 
+    #==== Cutting a Geom replaces its Clone with a real Geom ====#
+    pid3 = AddGeom( "POD", "" )
+    clone_id = CloneGeomVec( [ pid3 ] )[0]
+
+    CutGeomToClipboard( pid3, CLONE_DELETE_REPLACE )
+
+    assert GetGeomTypeName( clone_id ) == "Pod", "CutGeomToClipboard did not replace the Clone"
+
     \endcode
     \endPythonOnly
-    \sa PasteGeomClipboard
+    \sa PasteGeomClipboard, FindGeomClones, CLONE_DELETE_TYPE
     \param [in] geom_id string Geom ID
+    \param [in] clone_delete int What becomes of each Clone of the Geom (CLONE_DELETE_TYPE)
 */
 
-extern void CutGeomToClipboard( const std::string & geom_id );
+extern void CutGeomToClipboard( const std::string & geom_id, int clone_delete = CLONE_DELETE_LEAVE_EMPTY );
 
 /*!
     \ingroup Geom
@@ -11673,7 +11795,8 @@ extern std::string FindGeom( const std::string & name, int index );
     \ingroup Geom
 */
 /*!
-    Set the name of the specified Geom
+    Set the name of the specified Geom.  A Geom that names itself, such as a Clone with its
+    AutoName Parm (group Behavior) on, refuses the name with an error; turn AutoName off first.
     \forcpponly
     \code{.cpp}
     //==== Add Pod Geometry ====//
@@ -11686,6 +11809,31 @@ extern std::string FindGeom( const std::string & name, int index );
     if ( geom_ids.size() != 1 )
     {
         Print( "---> Error: API FindGeomsWithName " );
+        __failure++;
+    }
+
+    //==== A Clone names itself until AutoName is turned off ====//
+    array< string > one;
+    one.push_back( pid );
+    string clone_id = CloneGeomVec( one )[0];
+
+    SetGeomName( clone_id, "MyClone" );
+    if ( GetGeomName( clone_id ) == "MyClone" )
+    {
+        Print( "---> Error: SetGeomName renamed a Clone that names itself" );
+        __failure++;
+    }
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+    }
+
+    SetParmVal( clone_id, "AutoName", "Behavior", 0.0 );
+    SetGeomName( clone_id, "MyClone" );
+    Update();
+    if ( GetGeomName( clone_id ) != "MyClone" )
+    {
+        Print( "---> Error: SetGeomName did not rename the Clone" );
         __failure++;
     }
     \endcode
@@ -11702,6 +11850,20 @@ extern std::string FindGeom( const std::string & name, int index );
     if  len(geom_ids) != 1 :
         print( "---> Error: API FindGeomsWithName " )
         assert False, "---> Error: API FindGeomsWithName"
+
+    #==== A Clone names itself until AutoName is turned off ====#
+    clone_id = CloneGeomVec( [ pid ] )[0]
+
+    SetGeomName( clone_id, "MyClone" )
+    assert GetGeomName( clone_id ) != "MyClone", "SetGeomName renamed a Clone that names itself"
+    err_mgr = ErrorMgrSingleton.getInstance()
+    while err_mgr.GetNumTotalErrors() > 0 :
+        err = err_mgr.PopLastError()
+
+    SetParmVal( clone_id, "AutoName", "Behavior", 0.0 )
+    SetGeomName( clone_id, "MyClone" )
+    Update()
+    assert GetGeomName( clone_id ) == "MyClone", "SetGeomName did not rename the Clone"
 
     \endcode
     \endPythonOnly
@@ -11769,6 +11931,742 @@ extern void SetGeomName( const std::string & geom_id, const std::string & name )
 */
 
 extern std::string GetGeomName( const std::string & geom_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Set which Geom a Clone Geom is a Clone of.  A Clone shows the original's surfaces while
+    keeping its own place in the model.  What else it takes from the original -- symmetry, Set
+    membership, placement, attachment, colour, subsurfaces and the rest -- is controlled by the
+    Parms in its Behavior group.  Passing an empty original_id leaves the Clone showing nothing
+    and turns its AutoName off, so its name is the user's.
+
+    A Clone's Flip_Flag (group Sym) is its own.  With CloneSym on, the Clone also shows its
+    original's flip: the planes are combined, and a plane set on both cancels.
+    \forcpponly
+    \code{.cpp}
+    string pod = AddGeom( "POD", "" );
+
+    string clone = AddGeom( "CLONE", "" );
+
+    SetGeomCloneOriginal( clone, pod );
+
+    if ( GetGeomCloneOriginal( clone ) != pod )
+    {
+        Print( "ERROR: SetGeomCloneOriginal did not take" );
+        __failure++;
+    }
+
+    // A Clone cannot be its own original; refused, original unchanged.
+    SetGeomCloneOriginal( clone, clone );
+
+    if ( GetGeomCloneOriginal( clone ) != pod )
+    {
+        Print( "ERROR: SetGeomCloneOriginal accepted the Clone as its own original" );
+        __failure++;
+    }
+
+    // Clear that error before the next check.
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+    }
+
+    // Asking a Geom that is not a Clone is an error.
+    GetGeomCloneOriginal( pod );
+
+    if ( GetNumTotalErrors() == 0 )
+    {
+        Print( "ERROR: GetGeomCloneOriginal accepted a Geom that is not a Clone" );
+        __failure++;
+    }
+
+    // That error was raised deliberately, so take it back off the queue.
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+    }
+
+    //==== The original's flip and the Clone's own combine ====//
+    SetParmVal( pod, "Y_Rel_Location", "XForm", 3.0 );
+    SetParmVal( clone, "Y_Rel_Location", "XForm", 3.0 );
+    Update();
+    vec3d plain = CompPnt01( clone, 0, 0.5, 0.25 );
+
+    SetParmVal( pod, "Flip_Flag", "Sym", SYM_XZ );
+    Update();
+    vec3d one_plane = CompPnt01( clone, 0, 0.5, 0.25 );
+    if ( abs( ( one_plane.y() - 3.0 ) + ( plain.y() - 3.0 ) ) > 1e-9 )
+    {
+        Print( "ERROR: the Clone did not show its original's flip" );
+        __failure++;
+    }
+
+    SetParmVal( clone, "Flip_Flag", "Sym", SYM_XZ );
+    Update();
+    if ( dist( plain, CompPnt01( clone, 0, 0.5, 0.25 ) ) > 1e-9 )
+    {
+        Print( "ERROR: the same plane on both did not cancel" );
+        __failure++;
+    }
+
+    //==== Clearing the original hands the name back ====//
+    SetGeomCloneOriginal( clone, "" );
+    if ( GetParmVal( FindParm( clone, "AutoName", "Behavior" ) ) != 0.0 )
+    {
+        Print( "ERROR: clearing the original left AutoName on" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod = AddGeom( "POD", "" )
+
+    clone = AddGeom( "CLONE", "" )
+
+    SetGeomCloneOriginal( clone, pod )
+
+    assert GetGeomCloneOriginal( clone ) == pod, "SetGeomCloneOriginal did not take"
+
+    # A Clone cannot be its own original; refused, original unchanged.
+    SetGeomCloneOriginal( clone, clone )
+
+    assert GetGeomCloneOriginal( clone ) == pod, "SetGeomCloneOriginal accepted the Clone as its own original"
+
+    # Clear that error before the next check.
+    err_mgr = ErrorMgrSingleton.getInstance()
+
+    while err_mgr.GetNumTotalErrors() > 0 :
+        err = err_mgr.PopLastError()
+
+    # Asking a Geom that is not a Clone is an error.
+    GetGeomCloneOriginal( pod )
+
+    assert err_mgr.GetNumTotalErrors() > 0, "GetGeomCloneOriginal accepted a Geom that is not a Clone"
+
+    # That error was raised deliberately, so take it back off the queue.
+    while err_mgr.GetNumTotalErrors() > 0 :
+        err = err_mgr.PopLastError()
+
+    #==== The original's flip and the Clone's own combine ====#
+    SetParmVal( pod, "Y_Rel_Location", "XForm", 3.0 )
+    SetParmVal( clone, "Y_Rel_Location", "XForm", 3.0 )
+    Update()
+    plain = CompPnt01( clone, 0, 0.5, 0.25 )
+
+    SetParmVal( pod, "Flip_Flag", "Sym", SYM_XZ )
+    Update()
+    one_plane = CompPnt01( clone, 0, 0.5, 0.25 )
+    assert abs( ( one_plane.y() - 3.0 ) + ( plain.y() - 3.0 ) ) < 1e-9, "the Clone did not show its original's flip"
+
+    SetParmVal( clone, "Flip_Flag", "Sym", SYM_XZ )
+    Update()
+    assert dist( plain, CompPnt01( clone, 0, 0.5, 0.25 ) ) < 1e-9, "the same plane on both did not cancel"
+
+    #==== Clearing the original hands the name back ====#
+    SetGeomCloneOriginal( clone, "" )
+    assert GetParmVal( FindParm( clone, "AutoName", "Behavior" ) ) == 0.0, "clearing the original left AutoName on"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeomCloneOriginal, SYM_FLAG
+    \param [in] clone_id string Clone Geom ID
+    \param [in] original_id string ID of the Geom to be cloned
+*/
+
+extern void SetGeomCloneOriginal( const std::string & clone_id, const std::string & original_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Get the Geom a Clone Geom is a Clone of.  An empty string means the Clone has not been given
+    one, or has been cleared.
+    \forcpponly
+    \code{.cpp}
+    //==== Add Pod Geom and a Clone of it, made under the Pod ====//
+    string pod = AddGeom( "POD" );
+
+    string clone = AddGeom( "CLONE", pod );
+
+    //==== A Clone with no original set takes its parent ====//
+    Update();
+
+    if ( GetGeomCloneOriginal( clone ) != pod )
+    {
+        Print( "ERROR: a Clone made under a Geom did not take it as its original" );
+        __failure++;
+    }
+
+    //==== Once cleared, it does not take the parent again ====//
+    SetGeomCloneOriginal( clone, "" );
+
+    Update();
+
+    if ( GetGeomCloneOriginal( clone ) != "" )
+    {
+        Print( "ERROR: GetGeomCloneOriginal answered for a Clone that has none" );
+        __failure++;
+    }
+
+    //==== Reports the original that was set ====//
+    SetGeomCloneOriginal( clone, pod );
+
+    Update();
+
+    if ( GetGeomCloneOriginal( clone ) != pod )
+    {
+        Print( "ERROR: GetGeomCloneOriginal did not report the Geom that was set" );
+        __failure++;
+    }
+
+    //==== A Geom that is not a Clone is rejected; clear the queue first ====//
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj drained = PopLastError();
+    }
+
+    GetGeomCloneOriginal( pod );
+
+    if ( GetNumTotalErrors() == 0 )
+    {
+        Print( "ERROR: GetGeomCloneOriginal answered for a Geom that is not a Clone" );
+        __failure++;
+    }
+
+    // That error was raised deliberately, so take it back off the queue.
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== Add Pod Geom and a Clone of it, made under the Pod ====#
+    pod = AddGeom( "POD" )
+
+    clone = AddGeom( "CLONE", pod )
+
+    #==== A Clone with no original set takes its parent ====#
+    Update()
+
+    assert GetGeomCloneOriginal( clone ) == pod, "a Clone made under a Geom did not take it as its original"
+
+    #==== Once cleared, it does not take the parent again ====#
+    SetGeomCloneOriginal( clone, "" )
+
+    Update()
+
+    assert GetGeomCloneOriginal( clone ) == "", "GetGeomCloneOriginal answered for a Clone that has none"
+
+    #==== Reports the original that was set ====#
+    SetGeomCloneOriginal( clone, pod )
+
+    Update()
+
+    assert GetGeomCloneOriginal( clone ) == pod, "GetGeomCloneOriginal did not report the Geom that was set"
+
+    #==== A Geom that is not a Clone is rejected; clear the queue first ====#
+    err_mgr = ErrorMgrSingleton.getInstance()
+
+    while err_mgr.GetNumTotalErrors() > 0 :
+        drained = err_mgr.PopLastError()
+
+    GetGeomCloneOriginal( pod )
+
+    assert err_mgr.GetNumTotalErrors() > 0, "GetGeomCloneOriginal answered for a Geom that is not a Clone"
+
+    # That error was raised deliberately, so take it back off the queue.
+    while err_mgr.GetNumTotalErrors() > 0 :
+        err = err_mgr.PopLastError()
+
+    \endcode
+    \endPythonOnly
+    \sa SetGeomCloneOriginal
+    \param [in] clone_id string Clone Geom ID
+    \return string ID of the Geom being cloned, or an empty string if there is none
+*/
+
+extern std::string GetGeomCloneOriginal( const std::string & clone_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Make a Clone Geom of each Geom in a group, keeping the hierarchy among them.  The top Clone
+    of each hierarchy is a sibling of its original, starts at the original's placement, and has
+    CloneXForm off so it can be moved.  The Clones below it have CloneXForm on, so they keep
+    their originals' relative placement.
+    The Clones are returned in model hierarchy order, not the order passed in; use
+    GetGeomCloneOriginal to match them up.
+    \forcpponly
+    \code{.cpp}
+    string pod = AddGeom( "POD" );
+
+    string wing = AddGeom( "WING", pod );
+
+    Update();
+
+    //==== Clone both at once ====//
+    array< string > group;
+    group.push_back( pod );
+    group.push_back( wing );
+
+    array< string > clones = CloneGeomVec( group );
+
+    if ( clones.size() != 2 )
+    {
+        Print( "ERROR: CloneGeomVec did not make a Clone of each Geom" );
+        __failure++;
+    }
+
+    //==== Match each Clone to its original ====//
+    string pod_clone;
+    string wing_clone;
+
+    for ( int i = 0; i < int( clones.size() ); i++ )
+    {
+        if ( GetGeomCloneOriginal( clones[i] ) == pod )
+        {
+            pod_clone = clones[i];
+        }
+        else if ( GetGeomCloneOriginal( clones[i] ) == wing )
+        {
+            wing_clone = clones[i];
+        }
+    }
+
+    if ( pod_clone == "" || wing_clone == "" )
+    {
+        Print( "ERROR: CloneGeomVec did not make a Clone of each Geom" );
+        __failure++;
+    }
+
+    //==== The hierarchy is kept ====//
+    if ( GetGeomParent( wing_clone ) != pod_clone )
+    {
+        Print( "ERROR: CloneGeomVec did not keep the hierarchy" );
+        __failure++;
+    }
+
+    //==== The pod's Clone sits beside the pod, not under it ====//
+    if ( GetGeomParent( pod_clone ) != GetGeomParent( pod ) )
+    {
+        Print( "ERROR: CloneGeomVec did not put the top of the group beside the original" );
+        __failure++;
+    }
+
+    //==== Only the top Clone places itself ====//
+    if ( GetParmVal( FindParm( pod_clone, "CloneXForm", "Behavior" ) ) != 0.0 )
+    {
+        Print( "ERROR: CloneGeomVec did not leave the top of the group free to be placed" );
+        __failure++;
+    }
+
+    if ( GetParmVal( FindParm( wing_clone, "CloneXForm", "Behavior" ) ) != 1.0 )
+    {
+        Print( "ERROR: CloneGeomVec did not have the rest of the group copy its placement" );
+        __failure++;
+    }
+
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod = AddGeom( "POD" )
+
+    wing = AddGeom( "WING", pod )
+
+    Update()
+
+    #==== Clone both at once ====#
+    clones = CloneGeomVec( [pod, wing] )
+
+    assert len( clones ) == 2, "CloneGeomVec did not make a Clone of each Geom"
+
+    #==== Match each Clone to its original ====#
+    by_original = { GetGeomCloneOriginal( c ) : c for c in clones }
+
+    assert pod in by_original and wing in by_original, "CloneGeomVec did not make a Clone of each Geom"
+
+    #==== The hierarchy is kept ====#
+    assert GetGeomParent( by_original[wing] ) == by_original[pod], "CloneGeomVec did not keep the hierarchy"
+
+    #==== The pod's Clone sits beside the pod, not under it ====#
+    assert GetGeomParent( by_original[pod] ) == GetGeomParent( pod ), "CloneGeomVec did not put the top of the group beside the original"
+
+    #==== Only the top Clone places itself ====#
+    assert GetParmVal( FindParm( by_original[pod], "CloneXForm", "Behavior" ) ) == 0.0, "CloneGeomVec did not leave the top of the group free to be placed"
+
+    assert GetParmVal( FindParm( by_original[wing], "CloneXForm", "Behavior" ) ) == 1.0, "CloneGeomVec did not have the rest of the group copy its placement"
+
+    \endcode
+    \endPythonOnly
+    \sa SetGeomCloneOriginal, SetGeomCloneNameSuffix
+    \param [in] geom_id_vec vector<string> Vector of Geom IDs to clone
+    \param [in] name_suffix string Suffix automatic naming appends to each original's name
+    \return vector<string> Vector of the new Clone Geom IDs
+*/
+
+extern std::vector< std::string > CloneGeomVec( const std::vector< std::string > & geom_id_vec, const std::string & name_suffix = "_Clone" );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Set the suffix automatic naming appends to the original's name.  With AutoName on, the Clone
+    is renamed on the next update.  The suffix is saved with the model.
+    \forcpponly
+    \code{.cpp}
+    //==== Add Pod Geom and a Clone of it ====//
+    string pod = AddGeom( "POD" );
+
+    string clone = AddGeom( "CLONE" );
+
+    SetGeomCloneOriginal( clone, pod );
+
+    Update();
+
+    SetGeomCloneNameSuffix( clone, "_Left" );
+
+    Update();
+
+    if ( GetGeomName( clone ) != GetGeomName( pod ) + "_Left" )
+    {
+        Print( "ERROR: SetGeomCloneNameSuffix did not rename the Clone" );
+        __failure++;
+    }
+
+    if ( GetGeomCloneNameSuffix( clone ) != "_Left" )
+    {
+        Print( "ERROR: GetGeomCloneNameSuffix did not report the suffix that was set" );
+        __failure++;
+    }
+
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== Add Pod Geom and a Clone of it ====#
+    pod = AddGeom( "POD" )
+
+    clone = AddGeom( "CLONE" )
+
+    SetGeomCloneOriginal( clone, pod )
+
+    Update()
+
+    SetGeomCloneNameSuffix( clone, "_Left" )
+
+    Update()
+
+    assert GetGeomName( clone ) == GetGeomName( pod ) + "_Left", "SetGeomCloneNameSuffix did not rename the Clone"
+
+    assert GetGeomCloneNameSuffix( clone ) == "_Left", "GetGeomCloneNameSuffix did not report the suffix that was set"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeomCloneNameSuffix, CloneGeomVec
+    \param [in] clone_id string Clone Geom ID
+    \param [in] name_suffix string Suffix to append to the original's name
+*/
+
+extern void SetGeomCloneNameSuffix( const std::string & clone_id, const std::string & name_suffix );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Get the suffix automatic naming appends to the original's name.  A new Clone starts with
+    "_Clone".
+    \forcpponly
+    \code{.cpp}
+    //==== Add Pod Geom and a Clone of it ====//
+    string pod = AddGeom( "POD" );
+
+    string clone = AddGeom( "CLONE" );
+
+    SetGeomCloneOriginal( clone, pod );
+
+    Update();
+
+    if ( GetGeomCloneNameSuffix( clone ) != "_Clone" )
+    {
+        Print( "ERROR: GetGeomCloneNameSuffix did not report the default suffix" );
+        __failure++;
+    }
+
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== Add Pod Geom and a Clone of it ====#
+    pod = AddGeom( "POD" )
+
+    clone = AddGeom( "CLONE" )
+
+    SetGeomCloneOriginal( clone, pod )
+
+    Update()
+
+    #==== A new Clone starts with the default suffix ====#
+    assert GetGeomCloneNameSuffix( clone ) == "_Clone", "GetGeomCloneNameSuffix did not report the default suffix"
+
+    \endcode
+    \endPythonOnly
+    \sa SetGeomCloneNameSuffix, CloneGeomVec
+    \param [in] clone_id string Clone Geom ID
+    \return string Suffix appended to the original's name
+*/
+
+extern std::string GetGeomCloneNameSuffix( const std::string & clone_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Replace a Clone with a full copy of the Geom it shows.  The copy takes the Clone's place,
+    name and children, the Clone's own Parm values (any whose Copy From Original switch is off)
+    are written onto it, and the Clone is deleted.
+
+    The replacement takes the Clone's Geom ID, the IDs of the Parms they share, and its
+    subsurfaces with their IDs, so attached Geoms, design variables, links and VSPAERO control
+    surface groups keep working.  The returned ID is the one passed in.
+
+    The replacement's Flip_Flag holds every plane the Clone showed its shape reflected about.
+
+    A Clone of a polygon mesh is not replaced, because a polygon mesh cannot be copied.
+    \forcpponly
+    \code{.cpp}
+    //==== A Pod and a Clone of it, placed separately ====//
+    string pod = AddGeom( "POD" );
+
+    string clone = AddGeom( "CLONE" );
+
+    SetGeomCloneOriginal( clone, pod );
+
+    SetParmVal( FindParm( clone, "Y_Rel_Location", "XForm" ), 4.0 );
+
+    //==== Flipped: the original about XZ, the Clone's own about XY ====//
+    SetParmVal( FindParm( pod, "Flip_Flag", "Sym" ), SYM_XZ );
+    SetParmVal( FindParm( clone, "Flip_Flag", "Sym" ), SYM_XY );
+
+    Update();
+
+    string name = GetGeomName( clone );
+    vec3d shown = CompPnt01( clone, 0, 0.3, 0.2 );
+
+    //==== Replace the Clone ====//
+    string real = ReplaceCloneGeom( clone );
+
+    Update();
+
+    //==== A Pod, under the Clone's name ====//
+    if ( GetGeomTypeName( real ) != "Pod" )
+    {
+        Print( "ERROR: the replacement is not the original's type" );
+        __failure++;
+    }
+
+    if ( GetGeomName( real ) != name )
+    {
+        Print( "ERROR: the replacement did not take the Clone's name" );
+        __failure++;
+    }
+
+    //==== With the Clone's own placement ====//
+    if ( abs( GetParmVal( FindParm( real, "Y_Rel_Location", "XForm" ) ) - 4.0 ) > 1e-6 )
+    {
+        Print( "ERROR: the replacement did not take the position the Clone held of its own" );
+        __failure++;
+    }
+
+    //==== With the same flip planes, so the surface is unchanged ====//
+    if ( int( GetParmVal( FindParm( real, "Flip_Flag", "Sym" ) ) + 0.5 ) != ( SYM_XZ | SYM_XY ) )
+    {
+        Print( "ERROR: the replacement did not take the planes the Clone showed" );
+        __failure++;
+    }
+
+    if ( dist( shown, CompPnt01( real, 0, 0.3, 0.2 ) ) > 1e-9 )
+    {
+        Print( "ERROR: the replacement does not stand where the Clone stood" );
+        __failure++;
+    }
+
+    //==== The replacement answers to the Clone's own ID ====//
+    if ( real != clone )
+    {
+        Print( "ERROR: the replacement did not take the Clone's ID" );
+        __failure++;
+    }
+
+    //==== It is no longer a Clone; clear the queue first ====//
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj drained = PopLastError();
+    }
+
+    GetGeomCloneOriginal( clone );
+
+    if ( GetNumTotalErrors() == 0 )
+    {
+        Print( "ERROR: what took the Clone's ID is still a Clone" );
+        __failure++;
+    }
+
+    // That error was raised deliberately, so take it back off the queue.
+    while ( GetNumTotalErrors() > 0 )
+    {
+        ErrorObj err = PopLastError();
+    }
+
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    #==== A Pod and a Clone of it, placed separately ====#
+    pod = AddGeom( "POD" )
+
+    clone = AddGeom( "CLONE" )
+
+    SetGeomCloneOriginal( clone, pod )
+
+    SetParmVal( FindParm( clone, "Y_Rel_Location", "XForm" ), 4.0 )
+
+    #==== Flipped: the original about XZ, the Clone's own about XY ====#
+    SetParmVal( FindParm( pod, "Flip_Flag", "Sym" ), SYM_XZ )
+    SetParmVal( FindParm( clone, "Flip_Flag", "Sym" ), SYM_XY )
+
+    Update()
+
+    name = GetGeomName( clone )
+    shown = CompPnt01( clone, 0, 0.3, 0.2 )
+
+    #==== Replace the Clone ====#
+    real = ReplaceCloneGeom( clone )
+
+    Update()
+
+    #==== A Pod, under the Clone's name ====#
+    assert GetGeomTypeName( real ) == "Pod", "the replacement is not the original's type"
+
+    assert GetGeomName( real ) == name, "the replacement did not take the Clone's name"
+
+    #==== With the Clone's own placement ====#
+    assert abs( GetParmVal( FindParm( real, "Y_Rel_Location", "XForm" ) ) - 4.0 ) < 1e-6, \
+           "the replacement did not take the position the Clone held of its own"
+
+    #==== With the same flip planes, so the surface is unchanged ====#
+    assert int( GetParmVal( FindParm( real, "Flip_Flag", "Sym" ) ) + 0.5 ) == ( SYM_XZ | SYM_XY ), \
+           "the replacement did not take the planes the Clone showed"
+    assert dist( shown, CompPnt01( real, 0, 0.3, 0.2 ) ) < 1e-9, "the replacement does not stand where the Clone stood"
+
+    #==== The replacement answers to the Clone's own ID ====#
+    assert real == clone, "the replacement did not take the Clone's ID"
+
+    #==== It is no longer a Clone; clear the queue first ====#
+    err_mgr = ErrorMgrSingleton.getInstance()
+
+    while err_mgr.GetNumTotalErrors() > 0 :
+        drained = err_mgr.PopLastError()
+
+    GetGeomCloneOriginal( clone )
+
+    assert err_mgr.GetNumTotalErrors() > 0, "what took the Clone's ID is still a Clone"
+
+    # That error was raised deliberately, so take it back off the queue.
+    while err_mgr.GetNumTotalErrors() > 0 :
+        err = err_mgr.PopLastError()
+
+    \endcode
+    \endPythonOnly
+    \sa SetGeomCloneOriginal, CloneGeomVec
+    \param [in] clone_id string Clone Geom ID
+    \return string ID of the Geom that replaced it -- the Clone's own ID -- or an empty string on failure
+*/
+
+extern std::string ReplaceCloneGeom( const std::string & clone_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Find the Clones of a group of Geoms that are not in the group themselves -- the ones a
+    delete or cut of the group would leave empty.  Clones of these Clones are not returned,
+    though CLONE_DELETE_WITH_ORIGINAL deletes them too.
+    \forcpponly
+    \code{.cpp}
+    string pod = AddGeom( "POD" );
+
+    Update();
+
+    array< string > group;
+    group.push_back( pod );
+
+    array< string > clones = CloneGeomVec( group );
+
+    //==== The pod's Clone is found ====//
+    array< string > @found = FindGeomClones( group );
+
+    if ( found.size() != 1 || found[0] != clones[0] )
+    {
+        Print( "ERROR: FindGeomClones did not find the Clone of the pod" );
+        __failure++;
+    }
+
+    //==== A Clone in the group is not returned ====//
+    group.push_back( clones[0] );
+
+    if ( FindGeomClones( group ).size() != 0 )
+    {
+        Print( "ERROR: FindGeomClones found a Clone that is going too" );
+        __failure++;
+    }
+
+    //==== Delete the pod, replacing its Clone ====//
+    DeleteGeom( pod, CLONE_DELETE_REPLACE );
+
+    if ( GetGeomTypeName( clones[0] ) != "Pod" )
+    {
+        Print( "ERROR: DeleteGeom did not replace the Clone" );
+        __failure++;
+    }
+
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod = AddGeom( "POD" )
+
+    Update()
+
+    clones = CloneGeomVec( [pod] )
+
+    #==== The pod's Clone is found ====#
+    found = FindGeomClones( [pod] )
+
+    assert list( found ) == [clones[0]], "FindGeomClones did not find the Clone of the pod"
+
+    #==== A Clone in the group is not returned ====#
+    assert len( FindGeomClones( [pod, clones[0]] ) ) == 0, "FindGeomClones found a Clone that is going too"
+
+    #==== Delete the pod, replacing its Clone ====#
+    DeleteGeom( pod, CLONE_DELETE_REPLACE )
+
+    assert GetGeomTypeName( clones[0] ) == "Pod", "DeleteGeom did not replace the Clone"
+
+    \endcode
+    \endPythonOnly
+    \sa DeleteGeom, DeleteGeomVec, CutGeomToClipboard, CLONE_DELETE_TYPE
+    \param [in] geom_id_vec vector<string> Vector of Geom IDs
+    \return vector<string> IDs of the Clones of those Geoms that are not among them
+*/
+
+extern std::vector< std::string > FindGeomClones( const std::vector< std::string > & geom_id_vec );
 
 /*!
     \ingroup Geom
@@ -12896,7 +13794,7 @@ extern std::vector<std::string> GetSubSurf( const std::string & geom_id, const s
     \ingroup SubSurface
 */
 /*!
-    Delete the specified sub-surface
+    Delete the specified sub-surface.  A subsurface a Clone copies from its original is refused; delete it from the original.
     \forcpponly
     \code{.cpp}
     string wid = AddGeom( "WING", "" );                             // Add Wing
@@ -13007,7 +13905,7 @@ extern void ReorderSubSurf( const std::string & geom_id, const std::string & sub
     \ingroup SubSurface
 */
 /*!
-    Delete the specified sub-surface
+    Delete the specified sub-surface.  A subsurface a Clone copies from its original is refused; delete it from the original.
     \forcpponly
     \code{.cpp}
     string wid = AddGeom( "WING", "" );                             // Add Wing
@@ -19379,7 +20277,7 @@ extern std::string GetXSecCurveAlias( const std::string & id );
     \ingroup XSec
 */
 /*!
-    Cut a cross-section from the specified geometry and maintain it in memory
+    Cut a cross-section from the specified geometry and maintain it in memory.  Refused on a Clone; change the Geom it copies.
     \forcpponly
     \code{.cpp}
     string fid = AddGeom( "FUSELAGE", "" );             // Add Fuselage
@@ -19558,7 +20456,7 @@ extern void CopyXSec( const std::string & geom_id, int index );
     \ingroup XSec
 */
 /*!
-    Paste the cross-section currently held in memory to the specified geometry
+    Paste the cross-section currently held in memory to the specified geometry.  Refused on a Clone; change the Geom it copies.
     \forcpponly
     \code{.cpp}
     // Add Stack
@@ -19646,7 +20544,7 @@ extern void PasteXSec( const std::string & geom_id, int index );
     \ingroup XSec
 */
 /*!
-    Insert a cross-section of particular type to the specified geometry after the given index
+    Insert a cross-section of particular type to the specified geometry after the given index.  Refused on a Clone; change the Geom it copies.
     \forcpponly
     \code{.cpp}
     string wing_id = AddGeom( "WING" );
@@ -30005,6 +30903,22 @@ extern double SetParmVal( const std::string & parm_id, double val );
     SetParmVal( wid, 23.0 );
 
     if ( abs( GetParmVal( wid ) - 23 ) > 1e-6 )                { Print( "---> Error: API Parm Val Set/Get " ); __failure++; }
+
+    //==== Flip a Pod's shape about its own XZ plane; its child does not move ====//
+    string pod = AddGeom( "POD" );
+    SetParmVal( pod, "Y_Rel_Location", "XForm", 3.0 );
+    string child = AddGeom( "POD", pod );
+    Update();
+
+    vec3d p0 = CompPnt01( pod, 0, 0.5, 0.25 );
+    vec3d c0 = CompPnt01( child, 0, 0.5, 0.25 );
+
+    SetParmVal( pod, "Flip_Flag", "Sym", SYM_XZ );
+    Update();
+
+    vec3d p1 = CompPnt01( pod, 0, 0.5, 0.25 );
+    if ( abs( ( p1.y() - 3.0 ) + ( p0.y() - 3.0 ) ) > 1e-9 ) { Print( "---> Error: Flip_Flag did not reflect the shape" ); __failure++; }
+    if ( dist( c0, CompPnt01( child, 0, 0.5, 0.25 ) ) > 1e-9 ) { Print( "---> Error: Flip_Flag moved a child" ); __failure++; }
     \endcode
     \endforcpponly
     \beginPythonOnly
@@ -30026,9 +30940,25 @@ extern double SetParmVal( const std::string & parm_id, double val );
         print( "---> Error: API Parm Val Set/Get " )
         assert False, "---> Error: API Parm Val Set/Get"
 
+    #==== Flip a Pod's shape about its own XZ plane; its child does not move ====#
+    pod = AddGeom( "POD" )
+    SetParmVal( pod, "Y_Rel_Location", "XForm", 3.0 )
+    child = AddGeom( "POD", pod )
+    Update()
+
+    p0 = CompPnt01( pod, 0, 0.5, 0.25 )
+    c0 = CompPnt01( child, 0, 0.5, 0.25 )
+
+    SetParmVal( pod, "Flip_Flag", "Sym", SYM_XZ )
+    Update()
+
+    p1 = CompPnt01( pod, 0, 0.5, 0.25 )
+    assert abs( ( p1.y() - 3.0 ) + ( p0.y() - 3.0 ) ) < 1e-9, "Flip_Flag did not reflect the shape"
+    assert dist( c0, CompPnt01( child, 0, 0.5, 0.25 ) ) < 1e-9, "Flip_Flag moved a child"
+
     \endcode
     \endPythonOnly
-    \sa SetParmValUpdate
+    \sa SetParmValUpdate, SYM_FLAG
     \param [in] geom_id string Geom ID
     \param [in] name string Parm name
     \param [in] group string Parm group name
@@ -44947,6 +45877,45 @@ extern void ConvertLMNtoRSTVec( const std::string &geom_id, const int &surf_indx
 
 extern void GetUWTess01(const std::string &geom_id, const int &surf_indx, std::vector < double > &u_out_vec, std::vector < double > &w_out_vec);
 
+/*!
+    \ingroup SurfaceQuery
+*/
+/*!
+    Get the coordinates of the start and end points of a control surface hinge.
+
+    The id argument will be intrepreted as either a Control Surface type SubSurface or as a Hinge Geom.
+
+    Subsurface type control surfaces also require the surf index of the surface the subsurface is on.
+    Hinges only require the geom ID of the hinge and will ignore the surf_indx parameter.
+
+    Hinge end points are output in a vector < vec3d >, with the starting point first, then the ending point of each hinge line.
+
+    Subsurface type control surfaces may have one or two hinge lines -- corresponding to the hinge line along the top and/or bottom surface of the wing.
+    When there are two hinge lines, the second hinge line will follow the first in the returned vector (i.e. [s1, e1, s2, e2]).
+
+    \forcpponly
+    \code{.cpp}
+    string geom_id = AddGeom( "HINGE", "" );
+
+    array< vec3d > hingeendptvec = ControlSurfaceHingeLine( geom_id, 0 );
+    \endcode
+    \endforcpponly
+
+    \beginPythonOnly
+    \code{.py}
+    geom_id = AddGeom( "HINGE", "" )
+
+
+    hingeendptvec = ControlSurfaceHingeLine( geom_id, 0 )
+
+    \endcode
+    \endPythonOnly
+    \param [in] id string Control surface SubSurface ID
+    \param [in] surf_indx int Main surface index from the parent Geom
+    \return vector<vec3d> Vector of 3D hinge line end points
+*/
+
+extern std::vector < vec3d > ControlSurfaceHingeLine( const std::string & id, int surf_indx );
 
 //======================= Measure Functions ============================//
 /*!

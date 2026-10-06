@@ -50,6 +50,7 @@ public:
     vec3d CompPnt01( double u, double w ) const;
 
     void CompCurvature( double u, double w, double& k1, double& k2, double& ka, double& kg ) const;
+    void CompPntCurvature( double u, double w, vec3d &pnt, double& k1, double& k2, double& ka, double& kg ) const;
 
     int UWPointOnBorder( double u, double w, double tol ) const;
 
@@ -103,6 +104,10 @@ public:
     {
         return &m_Surface;
     }
+    const piecewise_surface_type * GetSurf() const
+    {
+        return &m_Surface;
+    }
 
     void GetBorderCurve( const vec3d &uw0, const vec3d &uw1, Bezier_curve &crv ) const;
 
@@ -124,6 +129,21 @@ public:
     double FindNearest( double &u, double &w, const vec3d &pt, double u0, double w0 ) const;
     double FindNearest( double &u, double &w, const vec3d &pt, double u0, double w0, double umin, double umax, double vmin, double vmax ) const;
     double FindNearest( double &u, double &w, const vec3d &pt ) const;
+
+    // One step from (u,w) toward a point in space, taken through the surface's own first
+    // derivatives so that it knows how far a step in the parameters actually moves.
+    void TangentStep( double &u, double &w, const vec3d &target ) const;
+
+    // The equidistant point along the straight line in parameter space between the two.
+    // Always exists, always found; used to seed FindEquidistant.
+    void FindEquidistantOnLine( double &u, double &w, const vec3d &p0, const vec3d &p1,
+                                double u0, double w0, double u1, double w1 ) const;
+
+    // The point equidistant from two others, nearest to them.  Used to split an edge at a
+    // place that actually halves it; see eli/geom/intersect/equidistant_surface.hpp.
+    double FindEquidistant( double &u, double &w, const vec3d &p0, const vec3d &p1,
+                            double u0, double w0,
+                            double ulo, double uhi, double wlo, double whi ) const;
 
     void FindCornerPtVec( vector < vec3d > &uwvec, const double &u0, const double &w0, double len );
 

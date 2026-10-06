@@ -12,6 +12,7 @@
 #include "PropGeom.h"
 #include "ParmMgr.h"
 #include "Vehicle.h"
+#include "VehicleMgr.h"
 #include <float.h>
 
 #include <eli/mutil/nls/newton_raphson_system_method.hpp>
@@ -235,7 +236,6 @@ PropGeom::PropGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     m_Type.m_Name = "Propeller";
     m_Type.m_Type = PROP_GEOM_TYPE;
 
-    m_ExportMainSurf = false;
 
     m_XSecSurf.SetBasicOrientation( Y_DIR, Z_DIR, XS_SHIFT_MID, true );
 
@@ -567,6 +567,9 @@ void PropGeom::UpdateDrawObj()
     relTrans.matMult( m_ModelMatrix.data() );
     relTrans.postMult( m_AttachMatrix.data() );
 
+    // The flip goes innermost.
+    relTrans.matMult( GetFlipMat().data() );
+
     Matrix4d invRelTrans = relTrans;
     invRelTrans.affineInverse();
 
@@ -579,12 +582,35 @@ void PropGeom::UpdateDrawObj()
         relTrans.xformvec( m_XSecDrawObj_vec[ i ].m_PntVec );
     }
 
-    m_ArrowLinesDO.m_PntVec.clear();
-    m_ArrowHeadDO.m_PntVec.clear();
-    m_ArrowHeadDO.m_NormVec.clear();
+    if ( m_TipMarkerScaleFlag.Get() )
+    {
+        m_TipMarkerScale.Activate();
+    }
+    else
+    {
+        m_TipMarkerScale.Deactivate();
+    }
+}
 
-    m_ArrowLinesDO.m_GeomChanged = true;
-    m_ArrowHeadDO.m_GeomChanged = true;
+// The thrust, rotation direction and fold axis at each of placer's symmetric copies.  The
+// rotation direction follows each copy's orientation, flip included.
+void PropGeom::BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec )
+{
+    if ( marker_vec.size() != NUM_PROP_MARKERS )
+    {
+        marker_vec.clear();
+        marker_vec.resize( NUM_PROP_MARKERS );
+    }
+
+    DrawObj &arrow_lines = marker_vec[ PROP_MARKER_LINES ];
+    DrawObj &arrow_heads = marker_vec[ PROP_MARKER_HEADS ];
+
+    arrow_lines.m_PntVec.clear();
+    arrow_heads.m_PntVec.clear();
+    arrow_heads.m_NormVec.clear();
+
+    arrow_lines.m_GeomChanged = true;
+    arrow_heads.m_GeomChanged = true;
 
     double axlen = 1.0;
     double rot_axlen = 1.0;
@@ -599,20 +625,15 @@ void PropGeom::UpdateDrawObj()
 
     if ( m_TipMarkerScaleFlag.Get() )
     {
-        m_TipMarkerScale.Activate();
         rot_axlen = m_TipMarkerScale() * m_Diameter() / 2;
     }
-    else
-    {
-        m_TipMarkerScale.Deactivate();
-    }
 
-    for ( int i = 0; i < GetNumSymmCopies(); i++)
-    {
-        double data[16];
-        m_ModelMatrix.getMat( data );
+    vector< Matrix4d > trans_vec = placer->GetTransMatVec();
+    int nmain = placer->GetNumMainSurfs();
 
-        Matrix4d trans_mat = m_TransMatVec[i * GetNumMainSurfs()]; // Translations for the specific symmetric copy
+    for ( int i = 0; i < placer->GetNumSymmCopies() && nmain > 0 && i * nmain < ( int )trans_vec.size(); i++)
+    {
+        Matrix4d trans_mat = trans_vec[i * nmain]; // Translations for the specific symmetric copy
 
         vec3d cen( 0, 0, 0 );
         vec3d rotdir( -1, 0, 0 );
@@ -620,7 +641,7 @@ void PropGeom::UpdateDrawObj()
         vec3d refdir( 0, 1, 0 );
 
         double rev = 1.0;
-        if ( !m_FlipNormalVec[i * GetNumMainSurfs()] )
+        if ( !placer->GetFlipNormal( i * nmain ) )
         {
             // Note inverse of m_FipNormalVec is used because Props are flipped by 
             // default (m_XSecSurf.GetFlipUD() in UpdateSurf())
@@ -649,24 +670,53 @@ void PropGeom::UpdateDrawObj()
 
         if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
         {
-            m_ArrowLinesDO.m_PntVec.push_back( ptstart );
-            m_ArrowLinesDO.m_PntVec.push_back( ptend );
+            arrow_lines.m_PntVec.push_back( ptstart );
+            arrow_lines.m_PntVec.push_back( ptend );
         }
 
-        m_ArrowLinesDO.m_PntVec.push_back( cen );
-        m_ArrowLinesDO.m_PntVec.push_back( cen + refdir * axlen );
-        m_ArrowLinesDO.m_PntVec.push_back( cen );
-        m_ArrowLinesDO.m_PntVec.push_back( cen + thrustdir * axlen );
-        MakeArrowhead( cen + thrustdir * axlen, thrustdir, 0.25 * axlen, m_ArrowHeadDO.m_PntVec, m_ArrowHeadDO.m_NormVec );
-        MakeCircleArrow( cen, rotdir, rot_axlen, axlen, m_ArrowLinesDO, m_ArrowHeadDO );
+        arrow_lines.m_PntVec.push_back( cen );
+        arrow_lines.m_PntVec.push_back( cen + refdir * axlen );
+        arrow_lines.m_PntVec.push_back( cen );
+        arrow_lines.m_PntVec.push_back( cen + thrustdir * axlen );
+        MakeArrowhead( cen + thrustdir * axlen, thrustdir, 0.25 * axlen, arrow_heads.m_PntVec, arrow_heads.m_NormVec );
+        MakeCircleArrow( cen, rotdir, rot_axlen, axlen, arrow_lines, arrow_heads );
 
         if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
         {
-            MakeCircleArrow( pmid, dir, 0.5 * axlen, 0.5 * axlen, m_ArrowLinesDO, m_ArrowHeadDO );
+            MakeCircleArrow( pmid, dir, 0.5 * axlen, 0.5 * axlen, arrow_lines, arrow_heads );
         }
 
 
 
+    }
+
+    arrow_heads.m_GeomID = placer->GetID() + "Arrows";
+    arrow_heads.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    arrow_heads.m_LineWidth = 1.0;
+    arrow_heads.m_Type = DrawObj::VSP_SHADED_TRIS;
+
+    for ( int i = 0; i < 4; i++ )
+    {
+        arrow_heads.m_MaterialInfo.Ambient[i] = 0.2f;
+        arrow_heads.m_MaterialInfo.Diffuse[i] = 0.1f;
+        arrow_heads.m_MaterialInfo.Specular[i] = 0.7f;
+        arrow_heads.m_MaterialInfo.Emission[i] = 0.0f;
+    }
+    arrow_heads.m_MaterialInfo.Diffuse[3] = 0.5f;
+    arrow_heads.m_MaterialInfo.Shininess = 5.0f;
+
+    arrow_lines.m_GeomID = placer->GetID() + "ALines";
+    arrow_lines.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    arrow_lines.m_LineWidth = 2.0;
+    arrow_lines.m_Type = DrawObj::VSP_LINES;
+}
+
+void PropGeom::SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec )
+{
+    bool visible = placer->ShowsMarkers();
+    for ( int i = 0; i < ( int )marker_vec.size(); i++ )
+    {
+        marker_vec[i].m_Visible = visible;
     }
 }
 
@@ -678,6 +728,9 @@ void PropGeom::UpdateHighlightDrawObj()
     relTrans.affineInverse();
     relTrans.matMult( m_ModelMatrix.data() );
     relTrans.postMult( m_AttachMatrix.data() );
+
+    // The flip goes innermost.
+    relTrans.matMult( GetFlipMat().data() );
 
     Matrix4d invRelTrans = relTrans;
     invRelTrans.affineInverse();
@@ -751,29 +804,6 @@ void PropGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
     m_HighlightBladeDrawObj.m_Type = DrawObj::VSP_LINES;
     draw_obj_vec.push_back( &m_HighlightBladeDrawObj );
 
-    m_ArrowHeadDO.m_GeomID = m_ID + "Arrows";
-    m_ArrowHeadDO.m_Visible = ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || m_Vehicle->IsGeomActive( m_ID );
-    m_ArrowHeadDO.m_LineWidth = 1.0;
-    m_ArrowHeadDO.m_Type = DrawObj::VSP_SHADED_TRIS;
-
-    for ( int i = 0; i < 4; i++ )
-    {
-        m_ArrowHeadDO.m_MaterialInfo.Ambient[i] = 0.2f;
-        m_ArrowHeadDO.m_MaterialInfo.Diffuse[i] = 0.1f;
-        m_ArrowHeadDO.m_MaterialInfo.Specular[i] = 0.7f;
-        m_ArrowHeadDO.m_MaterialInfo.Emission[i] = 0.0f;
-    }
-    m_ArrowHeadDO.m_MaterialInfo.Diffuse[3] = 0.5f;
-    m_ArrowHeadDO.m_MaterialInfo.Shininess = 5.0f;
-
-    m_ArrowLinesDO.m_GeomID = m_ID + "ALines";
-    m_ArrowLinesDO.m_Visible = ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || m_Vehicle->IsGeomActive( m_ID );
-    m_ArrowLinesDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_ArrowLinesDO.m_LineWidth = 2.0;
-    m_ArrowLinesDO.m_Type = DrawObj::VSP_LINES;
-
-    draw_obj_vec.push_back( &m_ArrowLinesDO );
-    draw_obj_vec.push_back( &m_ArrowHeadDO );
 }
 
 void PropGeom::ChangeID( const string &id )
@@ -2609,9 +2639,10 @@ void PropGeom::UpdatePreTess()
 
 string PropGeom::BuildBEMResults()
 {
-    // Calculate prop center and normal vector
-    vec3d cen = m_ModelMatrix.xform( vec3d( 0, 0, 0 ) );
-    vec3d norm = m_ModelMatrix.xform( vec3d( -1.0, 0, 0 ) ) - cen;
+    // Calculate prop center and normal vector, where the shape is
+    Matrix4d shape_mat = GetShapeMatrix();
+    vec3d cen = shape_mat.xform( vec3d( 0, 0, 0 ) );
+    vec3d norm = shape_mat.xform( vec3d( -1.0, 0, 0 ) ) - cen;
 
     int n = m_TessU();
 
@@ -2857,7 +2888,7 @@ PCurve* PropGeom::GetPCurve( int curveid )
     return nullptr;
 }
 
-void PropGeom::WriteAirfoilFiles( FILE* meta_fid )
+void PropGeom::WriteAirfoilFiles( FILE* meta_fid, const string &name, const string &id )
 {
     // This function writes out the coordinate/control point data for all untwisted unit length airfoils.
     //  Special considerations need to be taken for PropGeoms because the interpolated airfoils do
@@ -2867,6 +2898,18 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid )
     if ( !veh || !meta_fid || m_MainSurfVec.size() == 0 )
     {
         return;
+    }
+
+    // File names come from name and id, so a Clone names the files after itself.
+    string geom_name = name;
+    string geom_id = id;
+    if ( geom_name.empty() )
+    {
+        geom_name = m_Name;
+    }
+    if ( geom_id.empty() )
+    {
+        geom_id = m_ID;
     }
 
     // Adjust Tessellation
@@ -2928,11 +2971,11 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid )
 
     for ( size_t j = 0; j < m_TessU(); j++ )
     {
-        string af_file_name = m_Name + "_";
+        string af_file_name = geom_name + "_";
 
         if ( veh->m_AFAppendGeomIDFlag() )
         {
-            af_file_name += ( m_ID + "_" );
+            af_file_name += ( geom_id + "_" );
         }
 
         af_file_name += to_string( foil_cnt );
@@ -2957,8 +3000,8 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid )
 
         fprintf( meta_fid, "########################################\n" );
         fprintf( meta_fid, "Airfoil File Name, %s\n", af_file_name.c_str() );
-        fprintf( meta_fid, "Geom Name, %s\n", m_Name.c_str() );
-        fprintf( meta_fid, "Geom ID, %s\n", m_ID.c_str() );
+        fprintf( meta_fid, "Geom Name, %s\n", geom_name.c_str() );
+        fprintf( meta_fid, "Geom ID, %s\n", geom_id.c_str() );
         fprintf( meta_fid, "Airfoil Index, %d\n", foil_cnt );
         fprintf( meta_fid, "XSec Flag, %d\n", xsec_flag );
 
@@ -3076,34 +3119,6 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid )
     }
 }
 
-vector< TMesh* > PropGeom::CreateTMeshVec( bool skipnegflipnormal, const int & n_ref ) const
-{
-    vector< TMesh* > TMeshVec;
-
-    if ( m_ExportMainSurf )
-    {
-        TMeshVec = Geom::CreateTMeshVec( m_MainSurfVec, skipnegflipnormal, n_ref );
-    }
-    else
-    {
-        TMeshVec = Geom::CreateTMeshVec( skipnegflipnormal, n_ref );
-    }
-
-    return TMeshVec;
-}
-
-const VspSurf* PropGeom::GetSurfPtr( int indx ) const
-{
-    if ( m_ExportMainSurf )
-    {
-        return Geom::GetMainSurfPtr( indx );
-    }
-    else
-    {
-        return Geom::GetSurfPtr( indx );
-    }
-}
-
 void PropGeom::ApproxCubicAllPCurves()
 {
     for ( int i = 0; i < NUM_PROP_PCURVE; i++ )
@@ -3162,6 +3177,31 @@ void PropGeom::ResetThickness()
     }
 
     m_ThickCurve.SetCurve( rvec, tcvec, PCHIP );
+}
+
+// The innermost cross section is the hub.
+bool PropGeom::GetRotorHubDiameter( double &hubdia ) const
+{
+    XSecSurf* xsecsurf = const_cast< PropGeom* >( this )->GetXSecSurf( 0 );
+    if ( !xsecsurf )
+    {
+        return false;
+    }
+
+    XSec* xsec = xsecsurf->FindXSec( 0 );
+    if ( !xsec || xsec->GetType() != vsp::XSEC_PROP )
+    {
+        return false;
+    }
+
+    PropXSec* prop_xsec = dynamic_cast< PropXSec* >( xsec );
+    if ( !prop_xsec )
+    {
+        return false;
+    }
+
+    hubdia = 2.0 * prop_xsec->m_RadiusFrac.GetResult();  // radius to diameter
+    return true;
 }
 
 double PropGeom::GetR0()

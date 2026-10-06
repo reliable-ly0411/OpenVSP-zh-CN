@@ -7,7 +7,14 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include <chrono>
+#include <thread>
+#include <mutex>
+#include <functional>
+#include <atomic>
+#include <exception>
 #include "SurfaceIntersectionMgr.h"
+#include "ResultsMgr.h"
 #include "VspUtil.h"
 #include "SubSurfaceMgr.h"
 #include "StringUtil.h"
@@ -16,6 +23,7 @@
 #include "ModeMgr.h"
 
 #include "eli/geom/intersect/intersect_surface.hpp"
+#include "eli/geom/intersect/minimum_distance_curve.hpp"
 
 #include "MeshAnalysis.h"
 
@@ -344,26 +352,280 @@ SurfaceIntersectionSingleton::SurfaceIntersectionSingleton() : ParmContainer()
 
     m_MessageName = "SurfIntersectMessage";
 
+    m_ProgressTotal = 0;
+    m_ProgressDone = 0;
+
+    // A mesh belongs to the model it was built from, so it has to go when that model does.
+    m_RenewListener.SetMgr( this );
+    m_RenewListener.Register( "MeshRenew" );
+
 #ifdef DEBUG_CFD_MESH
     m_DebugDir  = string( "MeshDebug/" );
     MakeDirectory( m_DebugDir );
     m_DebugFile = fopen( "MeshDebug/log.txt", "w" );
     m_DebugDraw = false;
+
+    m_DebugSurfCnt = 0;
+    m_DebugSortedUWFile = nullptr;
+    m_DebugMeshUWFile = nullptr;
+    m_DebugTriMeshFile = nullptr;
 #endif
 
 }
+
+#ifdef DEBUG_CFD_MESH
+
+// Start a fresh pass over the surfaces.
+//
+// Anything still open belongs to a pass that did not finish -- a run that threw, or one whose
+// last surface failed to triangulate -- so it is finished off here rather than left to be
+// written into by the new pass.
+void SurfaceIntersectionSingleton::BeginDebugSurfFiles()
+{
+    EndDebugSurfFiles();
+
+    // Made again each pass rather than once when the manager was built.  The path is
+    // relative, and the working directory can move under a long lived process, in which case
+    // every file below would silently fail to open.
+    MakeDirectory( m_DebugDir );
+
+    m_DebugSurfCnt = 0;
+}
+
+// Finish the master scripts, if a pass opened any.
+//
+// They are closed here, at the end of the pass, rather than when the surface count reaches
+// the last surface.  The count is not to be trusted for this: a surface that fails to
+// triangulate never increments it, so the last surface need not be the one that carries the
+// final number, and nothing would close the files at all.
+void SurfaceIntersectionSingleton::EndDebugSurfFiles()
+{
+    if ( m_DebugSortedUWFile )
+    {
+        fprintf( m_DebugSortedUWFile, "figure(1)\n" );
+        fprintf( m_DebugSortedUWFile, "axis off\n" );
+        fprintf( m_DebugSortedUWFile, "axis equal\n" );
+        fprintf( m_DebugSortedUWFile, "hold off\n" );
+
+        fclose( m_DebugSortedUWFile );
+        m_DebugSortedUWFile = nullptr;
+    }
+
+    if ( m_DebugMeshUWFile )
+    {
+        fprintf( m_DebugMeshUWFile, "figure(1)\n" );
+        fprintf( m_DebugMeshUWFile, "axis off\n" );
+        fprintf( m_DebugMeshUWFile, "axis equal\n" );
+        fprintf( m_DebugMeshUWFile, "hold off\n" );
+
+        fclose( m_DebugMeshUWFile );
+        m_DebugMeshUWFile = nullptr;
+    }
+
+    if ( m_DebugTriMeshFile )
+    {
+        for ( int ifig = 2 ; ifig <= 4 ; ifig++ )
+        {
+            fprintf( m_DebugTriMeshFile, "figure(%d)\n", ifig );
+            fprintf( m_DebugTriMeshFile, "axis off\n" );
+            fprintf( m_DebugTriMeshFile, "axis equal\n" );
+            fprintf( m_DebugTriMeshFile, "hold off\n" );
+        }
+
+        fclose( m_DebugTriMeshFile );
+        m_DebugTriMeshFile = nullptr;
+    }
+}
+
+#endif
 
 SurfaceIntersectionSingleton::~SurfaceIntersectionSingleton()
 {
     CleanUp();
 
 #ifdef DEBUG_CFD_MESH
+    EndDebugSurfFiles();
+
     if ( m_DebugFile )
     {
         fclose( m_DebugFile );
+        m_DebugFile = nullptr;
     }
 #endif
 
+}
+
+// Where AddIntersectionSeg puts what it makes.  Set for the length of one piece of the
+// intersection, so a piece's output stays together whichever thread ran it.
+static thread_local IsectOutput *tl_isect_out = nullptr;
+
+// How many threads the mesher may use: what the machine says it can run at once, never less
+// than one.
+int SurfaceIntersectionSingleton::MeshThreadCount()
+{
+    int nthread = ( int )std::thread::hardware_concurrency();
+
+    if ( nthread < 1 )
+    {
+        nthread = 1;
+    }
+
+    return nthread;
+}
+
+// How many threads a stage of nitem independent pieces should use.
+int SurfaceIntersectionSingleton::StageThreadCount( int nitem )
+{
+    int nthread = 1;
+
+    if ( GetSettingsPtr()->m_ParallelMeshFlag )
+    {
+        nthread = MeshThreadCount();
+    }
+
+    if ( nthread > nitem )
+    {
+        nthread = nitem;
+    }
+
+    if ( nthread < 1 )
+    {
+        nthread = 1;
+    }
+
+    return nthread;
+}
+
+// Run body( i ) for every i below n.  A thread takes the next piece that has not been started
+// rather than a fixed share handed out up front, because one piece can cost many times what
+// another does and a fixed split would leave threads idle waiting on the slowest share.
+void SurfaceIntersectionSingleton::RunIndexed( int n, int nthread, const std::function< void( int ) > &body )
+{
+    // The first exception a work item threw, if any.  One that escaped a thread would end the
+    // process, so a worker keeps it here instead and the caller is given it once the threads
+    // are back -- the same thing that happens on the one-thread path.
+    std::exception_ptr err;
+
+    if ( nthread > 1 )
+    {
+        std::atomic< int > next( 0 );
+        vector < std::thread > pool;
+        std::mutex errmutex;
+
+        try
+        {
+            for ( int t = 0 ; t < nthread ; t++ )
+            {
+                pool.push_back( std::thread( [&]()
+                {
+                    while ( true )
+                    {
+                        int i = next++;
+
+                        if ( i >= n )
+                        {
+                            break;
+                        }
+
+                        try
+                        {
+                            body( i );
+                        }
+                        catch ( ... )
+                        {
+                            std::lock_guard< std::mutex > errlock( errmutex );
+
+                            if ( !err )
+                            {
+                                err = std::current_exception();
+                            }
+
+                            // Hand out no more work.  The items already running finish.
+                            next = n;
+                        }
+                    }
+                } ) );
+            }
+        }
+        catch ( ... )
+        {
+            // Starting a thread failed partway through.  The ones already running still have
+            // to be joined below, or their destructors end the process too.
+            next = n;
+            err = std::current_exception();
+        }
+
+        for ( int t = 0 ; t < ( int )pool.size() ; t++ )
+        {
+            pool[t].join();
+        }
+    }
+    else
+    {
+        for ( int i = 0 ; i < n ; i++ )
+        {
+            body( i );
+        }
+    }
+
+    if ( err )
+    {
+        std::rethrow_exception( err );
+    }
+}
+
+// The ASCII export writers spend most of their time turning numbers into text: on the larger
+// test models that formatting is a third of the whole mesh run.  It depends on nothing but the
+// item being written, so it can be done on several threads as long as the results reach the
+// file in the order the items came in.
+//
+// Only one wave of chunks is in flight at a time, so a mesh whose text runs to a gigabyte is
+// never held in memory.
+void SurfaceIntersectionSingleton::WriteChunked( FILE* fp, int n,
+        const std::function< void( int, int, string & ) > &body )
+{
+    if ( !fp || n <= 0 )
+    {
+        return;
+    }
+
+    // Large enough that a chunk is worth handing to a thread, small enough that the chunks in
+    // flight are a few megabytes between them.
+    const int chunkitems = 2048;
+
+    int nchunk = ( n + chunkitems - 1 ) / chunkitems;
+    int nthread = StageThreadCount( nchunk );
+
+    vector < string > chunk( nthread );
+
+    for ( int c0 = 0 ; c0 < nchunk ; c0 += nthread )
+    {
+        int nwave = nchunk - c0;
+
+        if ( nwave > nthread )
+        {
+            nwave = nthread;
+        }
+
+        RunIndexed( nwave, nwave, [&]( int k )
+        {
+            int ibeg = ( c0 + k ) * chunkitems;
+            int iend = ibeg + chunkitems;
+
+            if ( iend > n )
+            {
+                iend = n;
+            }
+
+            chunk[k].clear();
+            body( ibeg, iend, chunk[k] );
+        } );
+
+        for ( int k = 0 ; k < nwave ; k++ )
+        {
+            fwrite( chunk[k].data(), 1, chunk[k].size(), fp );
+        }
+    }
 }
 
 void SurfaceIntersectionSingleton::IntersectSurfaces()
@@ -413,7 +675,13 @@ void SurfaceIntersectionSingleton::IntersectSurfaces()
 
     if ( m_SurfVec.size() == 0 )
     {
+        // Nothing was selected.  Worth saying out loud: the meshing set defaults to the
+        // shown set and a run hides every Geom when it has taken their surfaces, so a
+        // second run in a row finds nothing and would otherwise write empty files and
+        // report success.  addOutputText reaches the screen only.
         addOutputText( "No Surfaces To Mesh\n" );
+        printf( "No Surfaces To Mesh\n" );
+        RecordResults();
         m_MeshInProgress = false;
         MessageMgr::getInstance().Send( "ScreenMgr", "UpdateAllScreens" );
         return;
@@ -425,11 +693,15 @@ void SurfaceIntersectionSingleton::IntersectSurfaces()
     // addOutputText( "Intersect\n" ); // Output in intersect() itself.
     Intersect();
 
-    addOutputText( "Binary Adaptation Curve Approximation\n" );
-    BinaryAdaptIntCurves();
+    RecordIntCurves();
+
+    addOutputText( "Adapt Curves for Trimmed CAD\n" );
+    BuildChainCADCurves();
 
     addOutputText( "Exporting Files\n" );
     ExportFiles();
+
+    RecordResults();
 
     UpdateDrawObjs();
 
@@ -437,6 +709,91 @@ void SurfaceIntersectionSingleton::IntersectSurfaces()
 
     m_MeshInProgress = false;
     MessageMgr::getInstance().Send( "ScreenMgr", "UpdateAllScreens" );
+}
+
+string SurfaceIntersectionSingleton::SplitStitchSurfaces( const string &file_name, bool step_flag, int set, int degen_set,
+                                                          bool use_mode, const string &mode_id )
+{
+    // The run in progress owns the surfaces and curves
+    if ( m_MeshInProgress )
+    {
+        return "Surface Intersection is running";
+    }
+
+    m_MeshInProgress = true;
+
+    TransferMeshSettings();
+
+    // The sets asked for, in place of those the Surface Intersection settings hold
+    m_IntersectSettings.m_SelectedSetIndex = set;
+    m_IntersectSettings.m_SelectedDegenSetIndex = degen_set;
+    m_IntersectSettings.m_UseMode = use_mode;
+    m_IntersectSettings.m_ModeID = mode_id;
+
+    // Every piece of each surface kept apart.  Split and join rejoins a wing's round tip cap
+    // into one patch whose border meets itself, which cannot be stitched.
+    m_IntersectSettings.m_SplitJoinSurfsFlag = false;
+
+    vector< XferSurf > xfersurfs;
+    FetchSurfs( xfersurfs );
+
+    // A negative component cuts nothing here, so it is a body like any other, facing out
+    for ( int i = 0 ; i < ( int )xfersurfs.size() ; i++ )
+    {
+        if ( xfersurfs[i].m_SurfCfdType == vsp::CFD_NEGATIVE )
+        {
+            xfersurfs[i].m_SurfCfdType = vsp::CFD_NORMAL;
+        }
+    }
+
+    CleanUp();
+
+    LoadSurfs( xfersurfs );
+
+    CleanMergeSurfs( /* skip_duplicate_removal */ false );
+
+    IdentifyCompIDNames();
+
+    if ( m_SurfVec.size() == 0 )
+    {
+        CleanUp();
+        m_MeshInProgress = false;
+        return "No surfaces to export";
+    }
+
+    // Match the border curves, which stitches each body back together from its pieces.  No
+    // wakes: the bodies are written as they are.
+    MatchBorderCurves();
+
+    // The borders are the only curves
+    LoadBorderCurves();
+    SplitBorderCurves();
+    BuildCurves();
+
+    // Nothing is intersected, so no curve lies inside another body
+    BuildNURBSCurvesVec( false );
+
+    string delim = StringUtil::get_delim( GetSettingsPtr()->m_CADLabelDelim );
+
+    if ( step_flag )
+    {
+        WriteSTEPFile( file_name, GetSettingsPtr()->m_CADLenUnit, GetSettingsPtr()->m_STEPTol,
+                       GetSettingsPtr()->m_STEPMergePoints, GetSettingsPtr()->m_CADLabelID,
+                       GetSettingsPtr()->m_CADLabelSurfNo, GetSettingsPtr()->m_CADLabelSplitNo,
+                       GetSettingsPtr()->m_CADLabelName, delim, GetSettingsPtr()->m_STEPRepresentation );
+    }
+    else
+    {
+        WriteIGESFile( file_name, GetSettingsPtr()->m_CADLenUnit, GetSettingsPtr()->m_CADLabelID,
+                       GetSettingsPtr()->m_CADLabelSurfNo, GetSettingsPtr()->m_CADLabelSplitNo,
+                       GetSettingsPtr()->m_CADLabelName, delim );
+    }
+
+    CleanUp();
+
+    m_MeshInProgress = false;
+
+    return string();
 }
 
 void SurfaceIntersectionSingleton::LimitedIntersectSurfaces( const vector < string > & geomvec, vector < vector < vec3d > > & ptchains, vector < vector < vec3d > > & uwchains )
@@ -497,6 +854,148 @@ void SurfaceIntersectionSingleton::LimitedIntersectSurfaces( const vector < stri
 
     m_MeshInProgress = false;
     MessageMgr::getInstance().Send( "ScreenMgr", "UpdateAllScreens" );
+}
+
+void MeshRenewListener::MessageCallback( const MessageBase* from, const MessageData& data )
+{
+    if ( m_Mgr && data.m_String == "Renew" )
+    {
+        m_Mgr->RenewMesh();
+    }
+}
+
+// Everything built from the vehicle's geometry goes.  The intersection and meshing managers
+// outlive any one model, so without this a mesh -- and everything drawn from it -- survives
+// into a model it has nothing to do with.
+void SurfaceIntersectionSingleton::RecordResults()
+{
+    m_LastResultID = string();
+
+    Results* res = ResultsMgr.CreateResults( "SurfaceIntersection", "Surface intersection results." );
+
+    if ( !res )
+    {
+        return;
+    }
+
+    m_LastResultID = res->GetID();
+
+    res->Add( new NameValData( "Num_Surfs", GetNumSurfs(), "Number of surfaces the intersection ran on." ) );
+    res->Add( new NameValData( "Num_Chains", GetNumChains(), "Number of intersection curves found." ) );
+    res->Add( new NameValData( "Num_Curve_Pnts", GetNumCurvePnts(), "Number of raw intersection points over all the intersection curves." ) );
+
+    // Each curve's raw points, one after another, and how many belong to each
+    vector < int > npnt_vec( m_RawCurveAVec.size() );
+    vector < vec3d > pnt_vec;
+    pnt_vec.reserve( GetNumCurvePnts() );
+    for ( int i = 0 ; i < ( int )m_RawCurveAVec.size() ; i++ )
+    {
+        npnt_vec[i] = ( int )m_RawCurveAVec[i].size();
+        pnt_vec.insert( pnt_vec.end(), m_RawCurveAVec[i].begin(), m_RawCurveAVec[i].end() );
+    }
+
+    res->Add( new NameValData( "Curve_Num_Pnts", npnt_vec, "Number of raw points on each intersection curve." ) );
+    res->Add( new NameValData( "Curve_Pnts", pnt_vec, "Raw points of every intersection curve, curve after curve." ) );
+}
+
+int SurfaceIntersectionSingleton::GetNumCurvePnts() const
+{
+    int npnt = 0;
+
+    for ( int i = 0 ; i < ( int )m_RawCurveAVec.size() ; i++ )
+    {
+        npnt += ( int )m_RawCurveAVec[i].size();
+    }
+
+    return npnt;
+}
+
+void SurfaceIntersectionSingleton::RenewMesh()
+{
+    CleanUp();
+}
+
+// addOutputText appends to one buffer, so calls coming from several surfaces at once have to
+// be kept from overlapping.
+void SurfaceIntersectionSingleton::ReportProgress( const string &str, int output_type )
+{
+    static std::mutex outmutex;
+    std::lock_guard< std::mutex > lock( outmutex );
+
+    addOutputText( str, output_type );
+}
+
+void SurfaceIntersectionSingleton::BeginProgress( const string &label, int n, int output_type )
+{
+    m_ProgressLabel = label;
+    m_ProgressTotal = n;
+    m_ProgressDone = 0;
+
+    StepProgress( output_type );
+}
+
+// Draw the bar at a given count.  The line is redrawn in place, so every call has to write the
+// same width -- a shorter line would leave the tail of the previous one behind.  The counts only
+// ever grow, so the width is stable as long as the last draw uses the total.
+void SurfaceIntersectionSingleton::DrawProgress( int done, char term, int output_type )
+{
+    const int nbar = 24;
+    int nfill = ( nbar * done ) / m_ProgressTotal;
+
+    char bar[nbar + 1];
+    for ( int i = 0; i < nbar; i++ )
+    {
+        if ( i < nfill )
+        {
+            bar[i] = '=';
+        }
+        else
+        {
+            bar[i] = ' ';
+        }
+    }
+    bar[nbar] = '\0';
+
+    char str[256];
+    snprintf( str, sizeof( str ), "%-16s [%s] %d/%d%c", m_ProgressLabel.c_str(), bar, done, m_ProgressTotal, term );
+
+    ReportProgress( str, output_type );
+}
+
+void SurfaceIntersectionSingleton::StepProgress( int output_type )
+{
+    if ( output_type == QUIET_OUTPUT || m_ProgressTotal <= 0 )
+    {
+        return;
+    }
+
+    DrawProgress( m_ProgressDone, '\r', output_type );
+}
+
+// Count one finished piece of work, and redraw only on every stride'th, for a stage with too
+// many pieces to draw each one.
+void SurfaceIntersectionSingleton::StepProgressEvery( int stride, int output_type )
+{
+    int done = ++m_ProgressDone;
+
+    if ( done % stride == 0 )
+    {
+        StepProgress( output_type );
+    }
+}
+
+void SurfaceIntersectionSingleton::EndProgress( int output_type )
+{
+    if ( output_type == QUIET_OUTPUT || m_ProgressTotal <= 0 )
+    {
+        return;
+    }
+
+    // Threads redraw as they finish, so the last one to land is not necessarily the highest
+    // count.  Draw the finished bar once here so the stage always ends showing all of its work.
+    DrawProgress( m_ProgressTotal, '\n', output_type );
+
+    m_ProgressTotal = 0;
 }
 
 void SurfaceIntersectionSingleton::CleanUp()
@@ -563,16 +1062,28 @@ void SurfaceIntersectionSingleton::CleanUp()
     m_IPatchADrawLines.clear();
     m_IPatchBDrawLines.clear();
 
-    // Clean up DrawObj's
-    m_IsectCurveDO = DrawObj();
-    m_IsectPtsDO = DrawObj();
-    m_BorderCurveDO = DrawObj();
-    m_BorderPtsDO = DrawObj();
+    m_ChainCADVec.clear();
 
+    // Clean up DrawObj's
     m_RawIsectCurveDO = DrawObj();
     m_RawIsectPtsDO = DrawObj();
+    for ( int k = 0; k < NUM_CUBIC; k++ )
+    {
+        m_CubicCurveDO[k] = DrawObj();
+        m_CubicEndPtsDO[k] = DrawObj();
+        m_CubicCtrlPtsDO[k] = DrawObj();
+    }
     m_RawBorderCurveDO = DrawObj();
     m_RawBorderPtsDO = DrawObj();
+
+    // The curves that bound one patch rather than two.  Emptied with the rest: UpdateDrawObjs
+    // adds to these rather than rebuilding them, so anything left here is drawn again on top
+    // of the next mesh.
+    m_RawNonManifoldCurveDO = DrawObj();
+    m_RawNonManifoldPtsDO = DrawObj();
+
+    m_RawPatchJoinCurveDO = DrawObj();
+    m_RawPatchJoinPtsDO = DrawObj();
 
     m_ApproxPlanesDO = DrawObj();
 
@@ -582,6 +1093,13 @@ void SurfaceIntersectionSingleton::CleanUp()
     m_IPatchBDO.clear();
 
 }
+
+static void RegisterSurfaceIntersectionAnalysis()
+{
+    SurfaceIntersectionMgr.RegisterAnalysis();
+}
+
+static AnalysisRegistrar g_SurfaceIntersectionRegistrar( RegisterSurfaceIntersectionAnalysis );
 
 void SurfaceIntersectionSingleton::RegisterAnalysis()
 {
@@ -705,10 +1223,12 @@ void SurfaceIntersectionSingleton::addOutputText( string str, int output_type )
 
 void SurfaceIntersectionSingleton::FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs )
 {
-    m_Vehicle->FetchXFerSurfs( geomvec, xfersurfs );
+    m_Vehicle->FetchXFerSurfs( geomvec, xfersurfs, 0, GetSettingsPtr()->m_SplitJoinSurfsFlag );
 }
 
-void SurfaceIntersectionSingleton::FetchSurfs( vector< XferSurf > &xfersurfs )
+// n_ref asks each Geom for that many levels of tessellation refinement on the lines its
+// surfaces carry along.  Only the POGS surface output wants anything but the default.
+void SurfaceIntersectionSingleton::FetchSurfs( vector< XferSurf > &xfersurfs, int n_ref )
 {
     int normal_set = GetSettingsPtr()->m_SelectedSetIndex;
     int degen_set = GetSettingsPtr()->m_SelectedDegenSetIndex;
@@ -724,7 +1244,8 @@ void SurfaceIntersectionSingleton::FetchSurfs( vector< XferSurf > &xfersurfs )
         }
     }
 
-    m_Vehicle->FetchXFerSurfs( normal_set, degen_set, xfersurfs );
+    m_Vehicle->FetchXFerSurfs( normal_set, degen_set, xfersurfs, n_ref,
+                               GetSettingsPtr()->m_SplitJoinSurfsFlag );
 }
 
 void SurfaceIntersectionSingleton::LoadSurfs( vector< XferSurf > &xfersurfs, double scale, int start_surf_id )
@@ -796,6 +1317,9 @@ void SurfaceIntersectionSingleton::LoadSurfs( vector< XferSurf > &xfersurfs, dou
         surfPtr->SetCompID( cid );
         surfPtr->SetUnmergedCompID( cid );
         surfPtr->SetSurfID( start_surf_id + i );
+        surfPtr->SetUWTess( xfersurfs[i].m_UTess, xfersurfs[i].m_WTess );
+        surfPtr->SetUWRegions( xfersurfs[i].m_UWRegions );
+        surfPtr->SetJoinLines( xfersurfs[i].m_JoinLines );
         surfPtr->GetSurfCore()->BuildPatches( surfPtr );
         m_SurfVec.push_back( surfPtr );
     }
@@ -863,7 +1387,16 @@ void SurfaceIntersectionSingleton::CleanMergeSurfs(  bool skip_duplicate_removal
         {
             int compA = m_SurfVec[s]->GetCompID();
             int compB = m_SurfVec[t]->GetCompID();
-            if ( compA != compB && m_SurfVec[s]->BorderMatch( m_SurfVec[t] ) )
+
+            // Surfaces whose boxes do not come near each other cannot share a border, and BorderMatch is
+            // expensive enough to be worth not asking.
+            if ( compA == compB ||
+                 !Compare( m_SurfVec[s]->GetBBox(), m_SurfVec[t]->GetBBox(), 1.0e-6 ) )
+            {
+                continue;
+            }
+
+            if ( m_SurfVec[s]->BorderMatch( m_SurfVec[t] ) )
             {
                 // Only merge like-type surfaces.  I.e. normal, negative, etc.
                 if ( m_SurfVec[s]->GetSurfaceCfdType() == m_SurfVec[t]->GetSurfaceCfdType() )
@@ -902,10 +1435,35 @@ void SurfaceIntersectionSingleton::DeleteDuplicateSurfs()
         delflag[i] = false;
     }
 
-    for ( int s = 0 ; s < nsurf - 1 ; s++ )
+    // Two surfaces can only be duplicates if they occupy the same box.  SurfMatch copies the
+    // other surface eight times over, once for each way round it might be turned, so pairs that
+    // cannot possibly match are worth turning away before it is asked.
+    double bbtol = 1.0e-6;
+
+    for ( int s = 0 ; s + 1 < nsurf ; s++ )
     {
+        BndBox &bbs = m_SurfVec[s]->GetBBox();
+
         for ( int t = s + 1 ; t < nsurf ; t++ )
         {
+            BndBox &bbt = m_SurfVec[t]->GetBBox();
+
+            bool samebox = true;
+
+            for ( int k = 0; k < 3 && samebox; k++ )
+            {
+                if ( std::abs( bbs.GetMin( k ) - bbt.GetMin( k ) ) > bbtol ||
+                     std::abs( bbs.GetMax( k ) - bbt.GetMax( k ) ) > bbtol )
+                {
+                    samebox = false;
+                }
+            }
+
+            if ( !samebox )
+            {
+                continue;
+            }
+
             if ( m_SurfVec[s]->GetSurfCore()->SurfMatch( m_SurfVec[t]->GetSurfCore() ) )
             {
                 delflag[s] = true;
@@ -930,29 +1488,340 @@ void SurfaceIntersectionSingleton::DeleteDuplicateSurfs()
     m_SurfVec = keepSurf;
 }
 
+// Where a patch has been put back together out of two, a side of it is one curve while the
+// patches across from it still have two: the join it was made across is an edge on that
+// side.  Curves pair off one to one, so the long one is cut where the short ones meet and
+// the pieces pair as they should.  The cut adds no edge of its own -- it puts a break where
+// the patch across from it already breaks.
+static vec3d SCurvePnt( SCurve* c, double t )
+{
+    vec3d uw = c->CompPntUW( t );
+    return c->GetSurf()->CompPnt( uw.x(), uw.y() );
+}
+
+// The side of its surface a border curve runs along, as the surface's own exact curve over just
+// the stretch the border curve covers, and where along the side that stretch starts and ends.
+// The side is cut to the stretch because a side that comes back on itself passes every point
+// twice, and the search must land on this curve's pass.
+struct SCurveSide
+{
+    piecewise_curve_type m_Crv;
+    double m_S0 = 0.0;
+    double m_S1 = 0.0;
+};
+
+// False for a curve that does not run along a side of its surface.
+static bool GetSCurveSide( SCurve* c, SCurveSide &side )
+{
+    Bezier_curve border;
+    c->GetBorderCurve( border );
+
+    piecewise_curve_type crv = border.GetCurve();
+
+    if ( crv.number_segments() == 0 )
+    {
+        return false;
+    }
+
+    vec3d uw0 = c->CompPntUW( 0.0 );
+    vec3d uw1 = c->CompPntUW( 1.0 );
+
+    // A side of constant u runs in w, and one of constant w runs in u.
+    if ( std::abs( uw0.x() - uw1.x() ) < 1.0e-12 )
+    {
+        side.m_S0 = uw0.y();
+        side.m_S1 = uw1.y();
+    }
+    else
+    {
+        side.m_S0 = uw0.x();
+        side.m_S1 = uw1.x();
+    }
+
+    double lo = min( side.m_S0, side.m_S1 );
+    double hi = max( side.m_S0, side.m_S1 );
+
+    piecewise_curve_type before, after;
+
+    crv.split( before, after, lo );
+    after.split( side.m_Crv, before, hi );
+
+    return side.m_Crv.number_segments() > 0;
+}
+
+// Where along the curve the point p lies, or a negative number if it does not lie on it.
+static double FindOnSCurve( const SCurveSide &side, const vec3d &p, double tol )
+{
+    curve_point_type pt;
+    pt << p.x(), p.y(), p.z();
+
+    double s;
+    double d = eli::geom::intersect::minimum_distance( s, side.m_Crv, pt );
+
+    if ( d > tol )
+    {
+        return -1.0;
+    }
+
+    return ( s - side.m_S0 ) / ( side.m_S1 - side.m_S0 );
+}
+
+// What matching needs of one border curve: its two ends, its side, and a box around it.  They
+// depend only on the curve, so they are worked out once and kept rather than again for every
+// curve it is tried against.
+//
+// The box turns a point away before it is searched for.  A Bezier stays inside the hull of its
+// control points, so a box around the side's, grown by the tolerance, holds every point that
+// could be found on the curve.
+struct SCurveTake
+{
+    vec3d m_End0;
+    vec3d m_End1;
+    bool m_HasSide = false;
+    SCurveSide m_Side;
+    BndBox m_Box;
+};
+
+static void TakeSCurve( SCurve* c, double tol, SCurveTake &take )
+{
+    take.m_End0 = SCurvePnt( c, 0.0 );
+    take.m_End1 = SCurvePnt( c, 1.0 );
+    take.m_HasSide = GetSCurveSide( c, take.m_Side );
+
+    take.m_Box.Reset();
+
+    if ( take.m_HasSide )
+    {
+        piecewise_curve_type::bounding_box_type bbox;
+        take.m_Side.m_Crv.get_bounding_box( bbox );
+
+        take.m_Box.Update( vec3d( bbox.get_max() ) );
+        take.m_Box.Update( vec3d( bbox.get_min() ) );
+        take.m_Box.Expand( tol );
+    }
+}
+
+void SurfaceIntersectionSingleton::SplitBordersToMatch()
+{
+    double tol = 1.0e-5;
+    bool changed = true;
+    int guard = 0;
+    const int guardmax = 1000;
+
+    // Every curve, taken once.  There is one pass for every cut made, and a cut only ever changes
+    // the curves of the surface being cut, so they are taken here and that one surface's are
+    // taken again when it changes.
+    vector< vector< SCurveTake > > takes( m_SurfVec.size() );
+
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        vector< SCurve* > &cv = m_SurfVec[i]->GetSCurveVec();
+
+        takes[i].resize( cv.size() );
+
+        for ( int c = 0 ; c < ( int )cv.size() ; c++ )
+        {
+            TakeSCurve( cv[c], tol, takes[i][c] );
+        }
+    }
+
+    while ( changed && guard < guardmax )
+    {
+        changed = false;
+        guard++;
+
+        for ( int i = 0 ; i < ( int )m_SurfVec.size() && !changed ; i++ )
+        {
+            vector< SCurve* > &cva = m_SurfVec[i]->GetSCurveVec();
+
+            for ( int a = 0 ; a < ( int )cva.size() && !changed ; a++ )
+            {
+                vec3d a0 = takes[i][a].m_End0;
+                vec3d a1 = takes[i][a].m_End1;
+
+                for ( int j = 0 ; j < ( int )m_SurfVec.size() && !changed ; j++ )
+                {
+                    if ( j == i )
+                    {
+                        continue;
+                    }
+
+                    vector< SCurve* > &cvb = m_SurfVec[j]->GetSCurveVec();
+
+                    for ( int b = 0 ; b < ( int )cvb.size() && !changed ; b++ )
+                    {
+                        vec3d b0 = takes[j][b].m_End0;
+                        vec3d b1 = takes[j][b].m_End1;
+
+                        // One end of the short curve has to sit on an end of the long one,
+                        // and its other end somewhere along the middle of it.
+                        vec3d far_end;
+                        bool shares = false;
+
+                        if ( dist( b0, a0 ) < tol || dist( b0, a1 ) < tol )
+                        {
+                            far_end = b1;
+                            shares = true;
+                        }
+                        else if ( dist( b1, a0 ) < tol || dist( b1, a1 ) < tol )
+                        {
+                            far_end = b0;
+                            shares = true;
+                        }
+
+                        if ( !shares || dist( far_end, a0 ) < tol || dist( far_end, a1 ) < tol )
+                        {
+                            continue;
+                        }
+
+                        if ( !takes[i][a].m_HasSide || !takes[i][a].m_Box.CheckPnt( far_end ) )
+                        {
+                            continue;
+                        }
+
+                        double t = FindOnSCurve( takes[i][a].m_Side, far_end, tol );
+
+                        if ( t < 0.01 || t > 0.99 )
+                        {
+                            continue;
+                        }
+
+                        // Both pieces stay on the line the curve was on
+                        const ParmLine line = cva[a]->GetParmLine();
+
+                        vec3d uw0 = line.OnLine( cva[a]->CompPntUW( 0.0 ) );
+                        vec3d uwt = line.OnLine( cva[a]->CompPntUW( t ) );
+                        vec3d uw1 = line.OnLine( cva[a]->CompPntUW( 1.0 ) );
+
+                        vector< vec3d > pnts( 2 );
+                        SCurve* c0 = new SCurve( m_SurfVec[i] );
+                        pnts[0] = uw0;
+                        pnts[1] = uwt;
+                        c0->InterpolateLinear( pnts );
+                        c0->PromoteTo( 3 );
+                        c0->SetParmLine( line );
+
+                        SCurve* c1 = new SCurve( m_SurfVec[i] );
+                        pnts[0] = uwt;
+                        pnts[1] = uw1;
+                        c1->InterpolateLinear( pnts );
+                        c1->PromoteTo( 3 );
+                        c1->SetParmLine( line );
+
+                        delete cva[a];
+                        cva[a] = c0;
+                        cva.push_back( c1 );
+
+                        // Only this surface's curves moved; take them again.
+                        takes[i].resize( cva.size() );
+                        TakeSCurve( cva[a], tol, takes[i][a] );
+                        TakeSCurve( cva.back(), tol, takes[i].back() );
+
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // One cut per pass, so a model that needs many takes many.  Running out says the
+    // boundaries were not all brought into agreement, which shows up much later as borders
+    // that never matched, so say it here where it can still be tied to a cause.
+    if ( guard >= guardmax )
+    {
+        addOutputText( "\tWarning: gave up matching border curves after " +
+                       to_string( guardmax ) + " passes.\n" );
+    }
+}
+
 void SurfaceIntersectionSingleton::BuildGrid()
 {
+    MatchBorderCurves();
 
+    //==== Build Wake Surfaces (If Defined) ====//
+    WakeMgr.CreateWakesAppendBorderCurves( m_ICurveVec, GetGridDensityPtr() );
+    WakeMgr.AppendWakeSurfs( m_SurfVec );
+}
+
+void SurfaceIntersectionSingleton::MatchBorderCurves()
+{
     int i, j;
     vector< SCurve* > scurve_vec;
+
     for ( i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
         m_SurfVec[i]->FindBorderCurves();
+    }
+
+    SplitBordersToMatch();
+
+    for ( i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
         m_SurfVec[i]->LoadSCurves( scurve_vec );
     }
 
-    for ( i = 0 ; i < ( int )scurve_vec.size() ; i++ )
+    // Every border curve against every other, which is quadratic, and the costly part of a
+    // comparison is putting each curve into xyz.  Convert each one once, and let a bounding box
+    // turn away the pairs that cannot possibly meet before anything is compared point by point.
+    int nsc = ( int )scurve_vec.size();
+
+    vector< Bezier_curve > xyzcrvs( nsc );
+    vector< BndBox > crvboxes( nsc );
+
+    for ( i = 0 ; i < nsc ; i++ )
     {
-        for ( j = i + 1 ; j < ( int )scurve_vec.size() ; j++ )
+        xyzcrvs[i] = scurve_vec[i]->GetUWCrv();
+        xyzcrvs[i].UWCurveToXYZCurve( scurve_vec[i]->GetSurf() );
+        xyzcrvs[i].GetBBox( crvboxes[i] );
+    }
+
+    // A border curve is matched once.  The first pass pieces each surface of the model back
+    // together from the patches it was split into.  The second pairs what is left across
+    // surfaces, which is where coincident surfaces were deleted and two bodies close each
+    // other off; bodies that only touch, like the two root caps of a symmetric wing, stay
+    // closed on their own.
+    for ( int pass = 0 ; pass < 2 ; pass++ )
+    {
+        for ( i = 0 ; i < nsc ; i++ )
         {
-            ICurve* icrv = new ICurve;
-            if ( icrv->Match( scurve_vec[i], scurve_vec[j] ) )
+            for ( j = i + 1 ; j < nsc ; j++ )
             {
-                m_ICurveVec.push_back( icrv );
-            }
-            else
-            {
-                delete icrv;
+                if ( scurve_vec[i]->GetICurve() )
+                {
+                    break;
+                }
+
+                if ( scurve_vec[j]->GetICurve() )
+                {
+                    continue;
+                }
+
+                if ( pass == 0 && scurve_vec[i]->GetSurf()->GetUnmergedCompID() != scurve_vec[j]->GetSurf()->GetUnmergedCompID() )
+                {
+                    continue;
+                }
+
+                if ( !Compare( crvboxes[i], crvboxes[j], 1.0e-5 ) )
+                {
+                    continue;
+                }
+
+                ICurve* icrv = new ICurve;
+                if ( icrv->Match( scurve_vec[i], scurve_vec[j], xyzcrvs[i], xyzcrvs[j] ) )
+                {
+                    m_ICurveVec.push_back( icrv );
+
+                    // A backwards match turns the second curve around, so the copy held for it is
+                    // no longer the curve it names.  Take it again before it is compared to
+                    // anything else.
+                    xyzcrvs[j] = scurve_vec[j]->GetUWCrv();
+                    xyzcrvs[j].UWCurveToXYZCurve( scurve_vec[j]->GetSurf() );
+                    xyzcrvs[j].GetBBox( crvboxes[j] );
+                }
+                else
+                {
+                    delete icrv;
+                }
             }
         }
     }
@@ -971,12 +1840,8 @@ void SurfaceIntersectionSingleton::BuildGrid()
         }
     }
 
-    //==== Build Wake Surfaces (If Defined) ====//
-    WakeMgr.CreateWakesAppendBorderCurves( m_ICurveVec, GetGridDensityPtr() );
-    WakeMgr.AppendWakeSurfs( m_SurfVec );
-
 #ifdef DEBUG_CFD_MESH
-    fprintf( m_DebugFile, "SurfaceIntersectionSingleton::BuildGrid \n" );
+    fprintf( m_DebugFile, "SurfaceIntersectionSingleton::MatchBorderCurves \n" );
     fprintf( m_DebugFile, "  Num unmatched SCurves = %d \n", num_unmatched );
 
     for ( i = 0 ; i < ( int )m_ICurveVec.size() ; i++ )
@@ -989,23 +1854,6 @@ void SurfaceIntersectionSingleton::BuildGrid()
 
 void SurfaceIntersectionSingleton::ExportFiles()
 {
-    if ( GetSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_SRF_FILE_NAME ) )
-    {
-        WriteSurfsIntCurves( GetSettingsPtr()->GetExportFileName( vsp::INTERSECT_SRF_FILE_NAME ) );
-    }
-
-    if ( GetSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_CURV_FILE_NAME ) )
-    {
-        WriteGridToolCurvFile( GetSettingsPtr()->GetExportFileName( vsp::INTERSECT_CURV_FILE_NAME ),
-                               GetSettingsPtr()->m_ExportRawFlag );
-    }
-
-    if ( GetSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_PLOT3D_FILE_NAME ) )
-    {
-        WritePlot3DFile( GetSettingsPtr()->GetExportFileName( vsp::INTERSECT_PLOT3D_FILE_NAME ),
-                         GetSettingsPtr()->m_ExportRawFlag );
-    }
-
     if ( GetSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_IGES_FILE_NAME ) || GetSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_STEP_FILE_NAME ) )
     {
         BuildNURBSCurvesVec(); // Note: Must be called before BuildNURBSSurfMap
@@ -1028,303 +1876,6 @@ void SurfaceIntersectionSingleton::ExportFiles()
                        GetSettingsPtr()->m_STEPTol, GetSettingsPtr()->m_STEPMergePoints,
                        GetSettingsPtr()->m_CADLabelID, GetSettingsPtr()->m_CADLabelSurfNo, GetSettingsPtr()->m_CADLabelSplitNo,
                        GetSettingsPtr()->m_CADLabelName, delim, GetSettingsPtr()->m_STEPRepresentation );
-    }
-}
-
-void SurfaceIntersectionSingleton::WriteSurfsIntCurves( const string &filename )
-{
-    FILE* fp = fopen( filename.c_str(), "w" );
-    if ( fp )
-    {
-        unordered_map< int, vector< int > > compMap;
-        for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i ++ )
-        {
-            int surfId = m_SurfVec[i]->GetSurfID();
-            int compId = m_SurfVec[i]->GetCompID();
-
-            compMap[compId].push_back( surfId );
-        }
-
-        fprintf( fp, "BEGIN Component_List\n" );
-
-        fprintf( fp, "%d		// Number of Components \n", ( int )compMap.size() );
-
-        unordered_map< int, vector< int > > :: iterator iter;
-
-        for ( iter = compMap.begin() ; iter != compMap.end() ; ++iter )
-        {
-            int compId = iter->first;
-            vector< int > idVec = iter->second;
-            fprintf( fp, "BEGIN Component\n" );
-            fprintf( fp, "%d		// Comp ID \n",       compId );
-            fprintf( fp, "%d		// Num Surfs \n", ( int )idVec.size() );
-            for ( int i = 0 ; i < ( int )idVec.size() ; i++ )
-            {
-                fprintf( fp, "%d		// Surf ID \n",   idVec[i] );
-            }
-            fprintf( fp, "END Component\n" );
-        }
-        fprintf( fp, "END Component_List\n" );
-
-        fprintf( fp, "BEGIN Surface_List\n" );
-        fprintf( fp, "%d		// Number of Cubic Bezier Surfaces \n", ( int )m_SurfVec.size() );
-        for ( int s = 0 ; s < ( int )m_SurfVec.size() ; s++ )
-        {
-            fprintf( fp, "BEGIN Surface\n" );
-            Surf* surfPtr = m_SurfVec[s];
-            fprintf( fp, "%d		// Surface ID \n",    surfPtr->GetSurfID() );
-            fprintf( fp, "%d		// Comp ID \n",       surfPtr->GetCompID() );
-
-            surfPtr->GetSurfCore()->WriteSurf( fp );
-
-            fprintf( fp, "END Surface\n" );
-        }
-        fprintf( fp, "END Surface_List\n" );
-
-
-        vector< ISegChain* > border_curves;
-        vector< ISegChain* > intersect_curves;
-        list< ISegChain* >::iterator c;
-        for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
-        {
-            if ( ( *c )->m_BorderFlag )
-            {
-                border_curves.push_back( ( *c ) );
-            }
-            else
-            {
-                intersect_curves.push_back( ( *c ) );
-            }
-        }
-
-        fprintf( fp, "BEGIN Border_Curve_List\n" );
-
-        fprintf( fp, "%d		// Number of Border_Curves \n", ( int )border_curves.size() );
-
-        for ( int i = 0 ; i < ( int )border_curves.size() ; i++ )
-        {
-            fprintf( fp, "BEGIN Border_Curve\n" );
-
-            Surf* surfA =  border_curves[i]->m_SurfA;
-            Surf* surfB =  border_curves[i]->m_SurfB;
-
-            fprintf( fp, "%d		// Surface A ID \n", surfA->GetSurfID() );
-            fprintf( fp, "%d		// Surface B ID \n", surfB->GetSurfID() );
-
-            vector< IPnt* > ipntVec( border_curves[i]->m_ISegDeque.size() );
-
-            for ( int j = 0 ; j < ( int )border_curves[i]->m_ISegDeque.size() ; j++ )
-            {
-                ipntVec[j] = border_curves[i]->m_ISegDeque[j]->m_IPnt[0];
-            }
-            ipntVec.push_back( border_curves[i]->m_ISegDeque.back()->m_IPnt[1] );
-
-            if ( ! GetSettingsPtr()->m_XYZIntCurveFlag )
-            {
-                fprintf( fp, "%d		// Number of Border Points (Au, Aw, Bu, Bw) \n", ( int )ipntVec.size() );
-            }
-            else
-            {
-                fprintf( fp, "%d		// Number of Border Points (Au, Aw, Bu, Bw, X, Y, Z) \n", ( int )ipntVec.size() );
-            }
-
-            for ( int j = 0 ; j < ( int )ipntVec.size() ; j++ )
-            {
-                Puw* pwA = ipntVec[j]->GetPuw( surfA );
-                Puw* pwB = ipntVec[j]->GetPuw( surfB );
-
-                if ( ! GetSettingsPtr()->m_XYZIntCurveFlag )
-                {
-                    fprintf( fp, "%d    %16.16lf, %16.16lf, %16.16lf, %16.16lf \n", j,
-                             pwA->m_UW.x(), pwA->m_UW.y(), pwB->m_UW.x(), pwB->m_UW.y() );
-                }
-                else
-                {
-                    vec3d pA = surfA->CompPnt( pwA->m_UW.x(), pwA->m_UW.y() );
-                    vec3d pB = surfB->CompPnt( pwB->m_UW.x(), pwB->m_UW.y() );
-                    vec3d p = ( pA + pB ) * 0.5;
-
-                    fprintf( fp, "%d    %16.16lf, %16.16lf, %16.16lf, %16.16lf, %16.16lf, %16.16lf, %16.16lf \n", j,
-                             pwA->m_UW.x(), pwA->m_UW.y(), pwB->m_UW.x(), pwB->m_UW.y(),
-                             p.x(), p.y(), p.z() );
-                }
-            }
-            fprintf( fp, "END Border_Curve\n" );
-        }
-        fprintf( fp, "END Border_Curve_List\n" );
-
-
-        fprintf( fp, "BEGIN IntersectCurve_List\n" );
-
-        fprintf( fp, "%d		// Number of Intersect_Curves \n", ( int )intersect_curves.size() );
-
-        for ( int i = 0 ; i < ( int )intersect_curves.size() ; i++ )
-        {
-            fprintf( fp, "BEGIN Intersect_Curve\n" );
-
-            Surf* surfA =  intersect_curves[i]->m_SurfA;
-            Surf* surfB =  intersect_curves[i]->m_SurfB;
-
-            fprintf( fp, "%d		// Surface A ID \n", surfA->GetSurfID() );
-            fprintf( fp, "%d		// Surface B ID \n", surfB->GetSurfID() );
-
-            vector< IPnt* > ipntVec( intersect_curves[i]->m_ISegDeque.size() );
-
-            for ( int j = 0 ; j < ( int )intersect_curves[i]->m_ISegDeque.size() ; j++ )
-            {
-                ipntVec[j] = intersect_curves[i]->m_ISegDeque[j]->m_IPnt[0];
-            }
-            ipntVec.push_back( intersect_curves[i]->m_ISegDeque.back()->m_IPnt[1] );
-
-            if ( ! GetSettingsPtr()->m_XYZIntCurveFlag )
-            {
-                fprintf( fp, "%d		// Number of Intersect Points (Au, Aw, Bu, Bw) \n", ( int )ipntVec.size() );
-            }
-            else
-            {
-                fprintf( fp, "%d		// Number of Intersect Points (Au, Aw, Bu, Bw, X, Y, Z) \n", ( int )ipntVec.size() );
-            }
-
-            for ( int j = 0 ; j < ( int )ipntVec.size() ; j++ )
-            {
-                Puw* pwA = ipntVec[j]->GetPuw( surfA );
-                Puw* pwB = ipntVec[j]->GetPuw( surfB );
-
-                if ( ! GetSettingsPtr()->m_XYZIntCurveFlag )
-                {
-                    fprintf( fp, "%d    %16.16lf, %16.16lf, %16.16lf, %16.16lf \n", j,
-                             pwA->m_UW.x(), pwA->m_UW.y(), pwB->m_UW.x(), pwB->m_UW.y() );
-                }
-                else
-                {
-                    vec3d pA = surfA->CompPnt( pwA->m_UW.x(), pwA->m_UW.y() );
-                    vec3d pB = surfB->CompPnt( pwB->m_UW.x(), pwB->m_UW.y() );
-                    vec3d p = ( pA + pB ) * 0.5;
-
-                    fprintf( fp, "%d    %16.16lf, %16.16lf, %16.16lf, %16.16lf, %16.16lf, %16.16lf, %16.16lf \n", j,
-                             pwA->m_UW.x(), pwA->m_UW.y(), pwB->m_UW.x(), pwB->m_UW.y(),
-                             p.x(), p.y(), p.z() );
-                }
-            }
-            fprintf( fp, "END Intersect_Curve\n" );
-        }
-
-
-        fprintf( fp, "END IntersectCurve_List\n" );
-
-
-        fclose( fp );
-    }
-
-}
-
-void SurfaceIntersectionSingleton::WriteGridToolCurvFile( const string &filename, bool rawflag )
-{
-    FILE* fp = fopen( filename.c_str(), "w" );
-    if ( fp )
-    {
-        int ncurve = 0;
-        if ( rawflag )
-        {
-            ncurve = m_RawCurveAVec.size();
-        }
-        else
-        {
-            ncurve = m_BinAdaptCurveAVec.size();
-        }
-
-        int indx = 0;
-        for ( indx = 0; indx < ncurve; indx++ )
-        {
-            // Assume A and B curves are coincident -- just print A curve.
-            vector<vec3d> ptvec;
-
-            if ( rawflag )
-            {
-                ptvec = m_RawCurveAVec[ indx ];
-            }
-            else
-            {
-                ptvec = m_BinAdaptCurveAVec[ indx ];
-            }
-
-            fprintf( fp, "%zu\n", ptvec.size() );
-
-            for ( int i = 0; i < ptvec.size(); i++ )
-            {
-                const vec3d& pt = ptvec[i];
-                fprintf( fp, "%21.15e %21.15e %21.15e\n", pt.x(), pt.y(), pt.z() );
-            }
-
-        }
-        fclose( fp );
-    }
-}
-
-void SurfaceIntersectionSingleton::WritePlot3DFile( const string &filename, bool rawflag )
-{
-    FILE* fp = fopen( filename.c_str(), "w" );
-    if ( fp )
-    {
-        int nchain = 0;
-        vector < vector < vec3d > > *allpts;
-
-        // Assume A and B curves are coincident -- just print A curve.
-        if ( rawflag )
-        {
-            nchain = m_RawCurveAVec.size();
-            allpts = &m_RawCurveAVec;
-        }
-        else
-        {
-            nchain = m_BinAdaptCurveAVec.size();
-            allpts = &m_BinAdaptCurveAVec;
-        }
-
-        WritePlot3DCurveBlocks( fp, *allpts );
-
-        fclose( fp );
-    }
-}
-
-// Write a set of curves as Plot3D multiple grid blocks.  Every block is a curve, so it
-// is i indexed only -- the j and k dimensions are 1 -- and each block's points are
-// written as all of x, then all of y, then all of z.
-void SurfaceIntersectionSingleton::WritePlot3DCurveBlocks( FILE* fp, const vector < vector < vec3d > > &curve_vec )
-{
-    if ( !fp )
-    {
-        return;
-    }
-
-    int ncurve = curve_vec.size();
-
-    fprintf( fp, " %d\n", ncurve );
-
-    for ( int icurve = 0; icurve < ncurve; icurve++ )
-    {
-        fprintf( fp, " %zu 1 1\n", curve_vec[icurve].size() );
-    }
-
-    for ( int icurve = 0; icurve < ncurve; icurve++ )
-    {
-        for ( int i = 0; i < curve_vec[icurve].size(); i++ )
-        {
-            fprintf( fp, "%25.17e ", curve_vec[icurve][i].x() );
-        }
-        fprintf( fp, "\n" );
-
-        for ( int i = 0; i < curve_vec[icurve].size(); i++ )
-        {
-            fprintf( fp, "%25.17e ", curve_vec[icurve][i].y() );
-        }
-        fprintf( fp, "\n" );
-
-        for ( int i = 0; i < curve_vec[icurve].size(); i++ )
-        {
-            fprintf( fp, "%25.17e ", curve_vec[icurve][i].z() );
-        }
-        fprintf( fp, "\n" );
     }
 }
 
@@ -1412,8 +1963,16 @@ void SurfaceIntersectionSingleton::WriteIGESFile( const string& filename, int le
             label.append( to_string( m_NURBSSurfVec[si].m_SurfID ) );
         }
 
+        // A surface no complete loop bounds is no face, as in STEP; written anyway it would be
+        // a whole untrimmed surface
+        if ( !m_NURBSSurfVec[si].HasClosedExtLoop() )
+        {
+            printf( "ERROR: No complete IGES boundary on surface %d, which is left out\n", m_NURBSSurfVec[si].m_SurfID );
+            continue;
+        }
+
         DLL_IGES_ENTITY_128 isurf = m_NURBSSurfVec[si].WriteIGESSurf( &iges, label.c_str() );
-        
+
         m_NURBSSurfVec[si].WriteIGESLoops( &iges, isurf, label.c_str() );
     }
 
@@ -1426,17 +1985,6 @@ void SurfaceIntersectionSingleton::WriteSTEPFile( const string& filename, int le
 {
     STEPutil step( len_unit, tol );
 
-    // Identify the SdaiB_spline_curve_with_knots. This must come before BuildNURBSSurfMap for STEP files, or the 
-    // edge pointer will not be transferred between surfaces
-    for ( size_t i = 0; i < m_NURBSCurveVec.size(); i++ )
-    {
-        // Don't write subsurface or structural entity intersections as STEP edges (surface splitting along these curve types not supported)
-        if ( !m_NURBSCurveVec[i].m_SubSurfFlag && m_NURBSCurveVec[i].m_SurfA_Type != vsp::CFD_STRUCTURE )
-        {
-            m_NURBSCurveVec[i].WriteSTEPEdge( &step, to_string(i), merge_pnts ); // TODO: Improve STEP Edge Naming
-        }
-    }
-
     BuildNURBSSurfMap();
 
     if ( m_NURBSSurfVec.size() == 0 )
@@ -1445,11 +1993,12 @@ void SurfaceIntersectionSingleton::WriteSTEPFile( const string& filename, int le
         return;
     }
 
-    // Identify the unique sets of intersected components
-    vector < vector < int > > comp_id_group_vec = GetCompIDGroupVec();
+    STEP_Topology topo( m_NURBSCurveVec, m_NURBSSurfVec );
 
-    vector < vector < SdaiAdvanced_face* > > adv_vec( comp_id_group_vec.size() );
-    unordered_map < string, vector < SdaiSurface* > > geom_surf_label_map;
+    // Every surface is written before any face, so an edge can be placed on both of its surfaces
+    // whichever face asks for it first
+    vector < SdaiSurface* > surf_vec( m_NURBSSurfVec.size() );
+    vector < string > label_vec( m_NURBSSurfVec.size() );
 
     for ( size_t si = 0; si < m_NURBSSurfVec.size(); si++ )
     {
@@ -1499,112 +2048,86 @@ void SurfaceIntersectionSingleton::WriteSTEPFile( const string& filename, int le
             label.append( to_string( m_NURBSSurfVec[si].m_SurfID ) );
         }
 
-        SdaiSurface* surf = m_NURBSSurfVec[si].WriteSTEPSurf( &step, label, merge_pnts );
-        geom_surf_label_map[label].push_back( surf );
+        surf_vec[si] = m_NURBSSurfVec[si].WriteSTEPSurf( &step, label, merge_pnts );
+        label_vec[si] = label;
 
-        int comp_id = current_surf->GetCompID();
-
-        for ( size_t j = 0; j < comp_id_group_vec.size(); j++ )
-        {
-            if ( std::count( comp_id_group_vec[j].begin(), comp_id_group_vec[j].end(), comp_id ) )
-            {
-                vector < SdaiAdvanced_face* > adv = m_NURBSSurfVec[si].WriteSTEPLoops( &step, surf, label, merge_pnts );
-                adv_vec[j].insert( adv_vec[j].end(), adv.begin(), adv.end() );
-            }
-        }
+        topo.SetSurf( m_NURBSSurfVec[si].m_SurfID, surf_vec[si] );
     }
 
-    unordered_map < string, vector < SdaiSurface* > >::iterator it;
+    // The faces of normal and negative surfaces, which can bound a solid, and the rest
+    vector < SdaiAdvanced_face* > adv_vec[2];
+    vector < int > face_vec[2];
 
-    for ( it = geom_surf_label_map.begin(); it != geom_surf_label_map.end(); ++it )
+    for ( size_t si = 0; si < m_NURBSSurfVec.size(); si++ )
     {
-        SdaiGeometric_set* gset = (SdaiGeometric_set*)step.registry->ObjCreate( "GEOMETRIC_SET" );
-        step.instance_list->Append( (SDAI_Application_instance*)gset, completeSE );
-        gset->name_( "'" + ( *it ).first + "'" );
-
-        for ( size_t i = 0; i < ( *it ).second.size(); i++ )
+        int type = m_NURBSSurfVec[si].m_SurfType;
+        int ikind = 1;
+        if ( type == vsp::CFD_NORMAL || type == vsp::CFD_NEGATIVE )
         {
-            gset->elements_()->AddNode( new EntityNode( (SDAI_Application_instance*)( *it ).second[i] ) );
+            ikind = 0;
+        }
+
+        vector < int > ids;
+        vector < SdaiAdvanced_face* > adv = m_NURBSSurfVec[si].WriteSTEPLoops( &step, &topo, surf_vec[si], ids, label_vec[si], merge_pnts );
+        adv_vec[ikind].insert( adv_vec[ikind].end(), adv.begin(), adv.end() );
+        face_vec[ikind].insert( face_vec[ikind].end(), ids.begin(), ids.end() );
+    }
+
+    // Each kind in shells of faces joined through the edges they share: one body is one shell,
+    // however its components were grouped, and bodies that do not touch are shells apart
+    vector < vector < SdaiAdvanced_face* > > shell_vec;
+    vector < bool > closed_vec;
+    int nopen = 0;
+
+    for ( int ikind = 0; ikind < 2; ikind++ )
+    {
+        vector < vector < int > > shells;
+        vector < bool > closed;
+        topo.Shells( face_vec[ikind], shells, closed );
+
+        for ( size_t s = 0; s < shells.size(); s++ )
+        {
+            vector < SdaiAdvanced_face* > shell;
+            for ( size_t k = 0; k < shells[s].size(); k++ )
+            {
+                shell.push_back( adv_vec[ikind][ shells[s][k] ] );
+            }
+
+            if ( ikind == 0 && !closed[s] )
+            {
+                nopen++;
+            }
+
+            shell_vec.push_back( shell );
+            closed_vec.push_back( closed[s] );
         }
     }
 
-    // TODO: Don't include transparent and structure surfaces in BREP?
+    if ( topo.GetMaxEndGap() > tol )
+    {
+        char str[256];
+        snprintf( str, sizeof( str ), "Warning: STEP curve ends lie up to %g from their shared vertex, more than the tolerance %g\n",
+                  topo.GetMaxEndGap(), tol );
+        addOutputText( str );
+    }
 
     if ( representation == vsp::STEP_SHELL )
     {
-        step.RepresentManifoldShell( adv_vec );
+        step.RepresentManifoldShell( shell_vec, closed_vec );
     }
     else
     {
-        step.RepresentBREPSolid( adv_vec );
+        if ( nopen > 0 )
+        {
+            char str[256];
+            snprintf( str, sizeof( str ), "Warning: %d STEP shells are not closed, and are written as surfaces instead of solids\n", nopen );
+            addOutputText( str );
+        }
+
+        step.RepresentBREPSolid( shell_vec, closed_vec );
     }
 
     step.WriteFile( filename );
-}
-
-vector < vector < int > > SurfaceIntersectionSingleton::GetCompIDGroupVec()
-{
-    // Identify the unique sets of intersected components
-    unordered_map < int, vector < int > > intersection_comp_id_map;
-    list< ISegChain* >::iterator i_seg;
-
-    for ( i_seg = m_ISegChainList.begin(); i_seg != m_ISegChainList.end(); ++i_seg )
-    {
-        int comp_A_id = ( *i_seg )->m_SurfA->GetCompID();
-        int comp_B_id = ( *i_seg )->m_SurfB->GetCompID();
-
-        if ( !std::count( intersection_comp_id_map[comp_A_id].begin(), intersection_comp_id_map[comp_A_id].end(), comp_B_id ) )
-        {
-            intersection_comp_id_map[comp_A_id].push_back( comp_B_id );
-        }
-
-        if ( !std::count( intersection_comp_id_map[comp_B_id].begin(), intersection_comp_id_map[comp_B_id].end(), comp_A_id ) )
-        {
-            intersection_comp_id_map[comp_B_id].push_back( comp_A_id );
-        }
-    }
-
-    unordered_map< int, vector < int > >::iterator i_map;
-    vector < vector < int > > comp_id_group_vec;
-
-    for ( i_map = intersection_comp_id_map.begin(); i_map != intersection_comp_id_map.end(); ++i_map )
-    {
-        if ( comp_id_group_vec.size() == 0 )
-        {
-            comp_id_group_vec.push_back( i_map->second );
-            continue;
-        }
-
-        bool matched = false;
-        int group_index = -1;
-
-        for ( size_t i = 0; i < i_map->second.size(); ++i )
-        {
-            if ( !matched )
-            {
-                for ( size_t j = 0; j < comp_id_group_vec.size(); ++j )
-                {
-                    if ( std::count( comp_id_group_vec[j].begin(), comp_id_group_vec[j].end(), i_map->second[i] ) )
-                    {
-                        matched = true;
-                        group_index = j;
-                        break;
-                    }
-                }
-            }
-            else if ( !std::count( comp_id_group_vec[group_index].begin(), comp_id_group_vec[group_index].end(), i_map->second[i] ) )
-            {
-                comp_id_group_vec[group_index].push_back( i_map->second[i] );
-            }
-        }
-
-        if ( !matched )
-        {
-            comp_id_group_vec.push_back( i_map->second );
-        }
-    }
-
-    return comp_id_group_vec;
 }
 
 void SurfaceIntersectionSingleton::BuildNURBSSurfMap()
@@ -1624,6 +2147,7 @@ void SurfaceIntersectionSingleton::BuildNURBSSurfMap()
 
         nurbs_surf.m_SurfType = m_SurfVec[si]->GetSurfaceCfdType();
         nurbs_surf.m_WakeFlag = m_SurfVec[si]->GetWakeFlag();
+        nurbs_surf.m_FlipFlag = m_SurfVec[si]->GetFlipFlag();
 
         // Identify all border and intersection NURBS curves on the surface
         vector < NURBS_Curve > nurbs_curve_vec = nurbs_surf.MatchNURBSCurves( m_NURBSCurveVec );
@@ -1656,7 +2180,7 @@ void SurfaceIntersectionSingleton::BuildNURBSSurfMap()
     }
 }
 
-void SurfaceIntersectionSingleton::BuildNURBSCurvesVec()
+void SurfaceIntersectionSingleton::BuildNURBSCurvesVec( bool classify, bool cad )
 {
     // Only define the NURBS curves once to help avoid tolerance errors
     m_NURBSCurveVec.clear();
@@ -1673,73 +2197,48 @@ void SurfaceIntersectionSingleton::BuildNURBSCurvesVec()
 
     list< ISegChain* >::iterator i_seg;
 
+    bool cached = cad && m_ChainCADVec.size() == m_ISegChainList.size();
+
+    int icurve = 0;
+    int ichain = -1;
     for ( i_seg = m_ISegChainList.begin(); i_seg != m_ISegChainList.end(); ++i_seg )
     {
+        ichain++;
+
+        // A patch join is a crease for the mesher inside one surface, which the surface
+        // carries exactly already
+        if ( ( *i_seg )->m_PatchJoinFlag )
+        {
+            continue;
+        }
+
         bool internal_flag = false, ss_flag = false, wake_flag = false;
-
-        // Check if the curve is interenal or external
-        // Identify test point
-        vec3d cp;
-        if ( ( *i_seg )->m_ISegDeque.size() <= 2 )
-        {
-            // Take midpoint of first segment
-            cp = ( ( *i_seg )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt + ( *i_seg )->m_ISegDeque[0]->m_IPnt[1]->m_Pnt ) / 2.0;
-        }
-        else
-        {
-            // Identify point approximately halfway on border curve
-            cp = ( *i_seg )->m_ISegDeque[( *i_seg )->m_ISegDeque.size() / 2]->m_IPnt[0]->m_Pnt;
-        }
-
-        // Check 3 directions and take majority result
-        vec3d xep = cp + vec3d( x_dist, 1.0e-4, 1.0e-4 );
-        vec3d yep = cp + vec3d( 1.0e-4, y_dist, 1.0e-4 );
-        vec3d zep = cp + vec3d( 1.0e-4, 1.0e-4, z_dist );
-
-        vector< double > x_vec, y_vec, z_vec;
-
-        // Check if the curve is inside any component by checking the number of intersections from 3 vectors
-        // beginning at the midpoint of the curve. Checking 3 vectors prevents a false positive or negative
-        // from a vector that exactly aligns with another curve
-        for ( size_t j = 0; j < m_NumComps; j++ )
-        {
-            if ( j == ( *i_seg )->m_SurfA->GetCompID() || j == ( *i_seg )->m_SurfB->GetCompID() )
-            {
-                continue;
-            }
-
-            for ( size_t i = 0; i < m_SurfVec.size(); i++ )
-            {
-                if ( ( m_SurfVec[i]->GetCompID() == j ) && ( m_SurfVec[i]->GetSurfaceCfdType() == vsp::CFD_NORMAL || 
-                                                             m_SurfVec[i]->GetSurfaceCfdType() == vsp::CFD_NEGATIVE ) )
-                {
-                    m_SurfVec[i]->IntersectLineSeg( cp, xep, x_vec );
-                    m_SurfVec[i]->IntersectLineSeg( cp, yep, y_vec );
-                    m_SurfVec[i]->IntersectLineSeg( cp, zep, z_vec );
-                }
-            }
-
-            bool x_in = x_vec.size() % 2 == 1;
-            bool y_in = y_vec.size() % 2 == 1;
-            bool z_in = z_vec.size() % 2 == 1;
-
-            if ( ( x_in && y_in ) || ( x_in && z_in ) || ( y_in && z_in ) )
-            {
-                // Odd -> curve is inside
-                internal_flag = true;
-                break;
-            }
-        }
-
         bool in_negative = false;
 
-        if ( internal_flag )
+        if ( classify )
         {
-            x_vec.clear();
-            y_vec.clear();
-            z_vec.clear();
+            // Check if the curve is interenal or external
+            // Identify test point
+            vec3d cp;
+            if ( ( *i_seg )->m_ISegDeque.size() <= 2 )
+            {
+                // Take midpoint of first segment
+                cp = ( ( *i_seg )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt + ( *i_seg )->m_ISegDeque[0]->m_IPnt[1]->m_Pnt ) / 2.0;
+            }
+            else
+            {
+                // Identify point approximately halfway on border curve
+                cp = ( *i_seg )->m_ISegDeque[( *i_seg )->m_ISegDeque.size() / 2]->m_IPnt[0]->m_Pnt;
+            }
 
-            // Check if inside a negative component
+            // Check 3 directions and take majority result
+            vec3d xep = cp + vec3d( x_dist, 1.0e-4, 1.0e-4 );
+            vec3d yep = cp + vec3d( 1.0e-4, y_dist, 1.0e-4 );
+            vec3d zep = cp + vec3d( 1.0e-4, 1.0e-4, z_dist );
+
+            // Check if the curve is inside any component by checking the number of intersections from 3 vectors
+            // beginning at the midpoint of the curve. Checking 3 vectors prevents a false positive or negative
+            // from a vector that exactly aligns with another curve
             for ( size_t j = 0; j < m_NumComps; j++ )
             {
                 if ( j == ( *i_seg )->m_SurfA->GetCompID() || j == ( *i_seg )->m_SurfB->GetCompID() )
@@ -1747,9 +2246,13 @@ void SurfaceIntersectionSingleton::BuildNURBSCurvesVec()
                     continue;
                 }
 
+                // Each component's crossings are counted on their own
+                vector< double > x_vec, y_vec, z_vec;
+
                 for ( size_t i = 0; i < m_SurfVec.size(); i++ )
                 {
-                    if ( ( m_SurfVec[i]->GetCompID() == j ) && m_SurfVec[i]->GetSurfaceCfdType() == vsp::CFD_NEGATIVE )
+                    if ( ( m_SurfVec[i]->GetCompID() == j ) && ( m_SurfVec[i]->GetSurfaceCfdType() == vsp::CFD_NORMAL || 
+                                                                 m_SurfVec[i]->GetSurfaceCfdType() == vsp::CFD_NEGATIVE ) )
                     {
                         m_SurfVec[i]->IntersectLineSeg( cp, xep, x_vec );
                         m_SurfVec[i]->IntersectLineSeg( cp, yep, y_vec );
@@ -1764,8 +2267,43 @@ void SurfaceIntersectionSingleton::BuildNURBSCurvesVec()
                 if ( ( x_in && y_in ) || ( x_in && z_in ) || ( y_in && z_in ) )
                 {
                     // Odd -> curve is inside
-                    in_negative = true;
+                    internal_flag = true;
                     break;
+                }
+            }
+
+            if ( internal_flag )
+            {
+                // Check if inside a negative component
+                for ( size_t j = 0; j < m_NumComps; j++ )
+                {
+                    if ( j == ( *i_seg )->m_SurfA->GetCompID() || j == ( *i_seg )->m_SurfB->GetCompID() )
+                    {
+                        continue;
+                    }
+
+                    vector< double > x_vec, y_vec, z_vec;
+
+                    for ( size_t i = 0; i < m_SurfVec.size(); i++ )
+                    {
+                        if ( ( m_SurfVec[i]->GetCompID() == j ) && m_SurfVec[i]->GetSurfaceCfdType() == vsp::CFD_NEGATIVE )
+                        {
+                            m_SurfVec[i]->IntersectLineSeg( cp, xep, x_vec );
+                            m_SurfVec[i]->IntersectLineSeg( cp, yep, y_vec );
+                            m_SurfVec[i]->IntersectLineSeg( cp, zep, z_vec );
+                        }
+                    }
+
+                    bool x_in = x_vec.size() % 2 == 1;
+                    bool y_in = y_vec.size() % 2 == 1;
+                    bool z_in = z_vec.size() % 2 == 1;
+
+                    if ( ( x_in && y_in ) || ( x_in && z_in ) || ( y_in && z_in ) )
+                    {
+                        // Odd -> curve is inside
+                        in_negative = true;
+                        break;
+                    }
                 }
             }
         }
@@ -1782,6 +2320,10 @@ void SurfaceIntersectionSingleton::BuildNURBSCurvesVec()
         }
 
         NURBS_Curve nurbs_curve;
+        if ( cached )
+        {
+            nurbs_curve = m_ChainCADVec[ ichain ];
+        }
 
         nurbs_curve.m_BorderFlag = ( *i_seg )->m_BorderFlag;
         nurbs_curve.m_InternalFlag = internal_flag;
@@ -1792,8 +2334,21 @@ void SurfaceIntersectionSingleton::BuildNURBSCurvesVec()
         nurbs_curve.m_SurfB_Type = ( *i_seg )->m_SurfB->GetSurfaceCfdType();
         nurbs_curve.m_SurfA_ID = ( *i_seg )->m_SurfA->GetSurfID();
         nurbs_curve.m_SurfB_ID = ( *i_seg )->m_SurfB->GetSurfID();
+        nurbs_curve.m_CurveID = icurve;
+        icurve++;
 
-        nurbs_curve.InitNURBSCurve( ( *i_seg )->m_ACurve, GetSettingsPtr()->m_RelCurveTol );
+        if ( cached )
+        {
+            // Built already, for drawing
+        }
+        else if ( cad )
+        {
+            nurbs_curve.InitCAD( ( *i_seg )->m_ACurve, ( *i_seg )->m_BCurve, GetSettingsPtr()->m_STEPTol );
+        }
+        else
+        {
+            nurbs_curve.InitPolyline( ( *i_seg )->m_ACurve, ( *i_seg )->m_BCurve, GetSettingsPtr()->m_RelCurveTol );
+        }
 
         m_NURBSCurveVec.push_back( nurbs_curve );
     }
@@ -1808,27 +2363,104 @@ void SurfaceIntersectionSingleton::BuildCurves()
     }
 }
 
+// Intersect every pair of surfaces, in two passes.
+//
+// The first pass decides which pairs are worth the patch work.  It has to run on one thread:
+// deciding involves projecting one surface's border curves onto the other, and an evaluation
+// writes scratch buffers that belong to the surface, so two threads asking about the same
+// It is also the cheap pass.
+//
+// The second pass walks the patch trees, which is the expensive part and touches the surfaces
+// only through their control points.  Pairs are handed out one at a time rather than in fixed
+// shares, because on a real model nearly every pair is rejected on its bounding box and the
+// few that survive are not evenly spread.  Each pair writes into its own bucket; the buckets
+// are folded back in pair order, so the result does not depend on which thread ran what.
+void SurfaceIntersectionSingleton::IntersectPairs()
+{
+    char str[256];
+
+    int n = ( int )m_SurfVec.size();
+
+    vector < pair < int, int > > work;
+
+    BeginProgress( "Intersect scan", n, VOCAL_OUTPUT );
+
+    for ( int i = 0 ; i < n ; i++ )
+    {
+        for ( int j = i + 1 ; j < n ; j++ )
+        {
+            if ( m_SurfVec[i]->IntersectPrepare( m_SurfVec[j], this ) )
+            {
+                work.push_back( pair< int, int >( i, j ) );
+            }
+        }
+
+        m_ProgressDone++;
+        StepProgress( VOCAL_OUTPUT );
+    }
+
+    EndProgress( VOCAL_OUTPUT );
+
+    // One piece of work for each patch of a pair's first surface, rather than one for the pair:
+    // a single pair can cost as much as all the others together, and as one piece it would
+    // leave every other thread waiting on it.  The pieces are taken in order and their output
+    // gathered in that order, so the result is the same however they are run.
+    vector < pair < int, int > > piece;
+    vector < int > patch_vec;
+
+    for ( int k = 0 ; k < ( int )work.size() ; k++ )
+    {
+        m_SurfVec[ work[k].first ]->FindIntersectPatches( m_SurfVec[ work[k].second ], patch_vec );
+
+        for ( int i = 0 ; i < ( int )patch_vec.size() ; i++ )
+        {
+            piece.push_back( pair< int, int >( k, patch_vec[i] ) );
+        }
+    }
+
+    int nwork = ( int )piece.size();
+
+    vector < IsectOutput > out( nwork );
+
+    int nthread = StageThreadCount( nwork );
+
+    BeginProgress( "Intersect", nwork, VOCAL_OUTPUT );
+
+    RunIndexed( nwork, nthread, [&]( int k )
+    {
+        tl_isect_out = &out[k];
+
+        const pair < int, int > &surfs = work[ piece[k].first ];
+        m_SurfVec[ surfs.first ]->IntersectPatch( piece[k].second, m_SurfVec[ surfs.second ], this );
+
+        tl_isect_out = nullptr;
+
+        m_ProgressDone++;
+        StepProgress( VOCAL_OUTPUT );
+    } );
+
+    EndProgress( VOCAL_OUTPUT );
+
+    for ( int k = 0 ; k < nwork ; k++ )
+    {
+        m_DelPuwVec.insert( m_DelPuwVec.end(), out[k].m_Puws.begin(), out[k].m_Puws.end() );
+        m_DelIPntVec.insert( m_DelIPntVec.end(), out[k].m_IPnts.begin(), out[k].m_IPnts.end() );
+        m_AllIPnts.insert( m_AllIPnts.end(), out[k].m_IPnts.begin(), out[k].m_IPnts.end() );
+        m_IPatchADrawLines.insert( m_IPatchADrawLines.end(), out[k].m_PatchADraw.begin(), out[k].m_PatchADraw.end() );
+        m_IPatchBDrawLines.insert( m_IPatchBDrawLines.end(), out[k].m_PatchBDraw.begin(), out[k].m_PatchBDraw.end() );
+    }
+}
+
 void SurfaceIntersectionSingleton::Intersect()
 {
     char str[256];
     int n = m_SurfVec.size();
 
-    if ( GetSettingsPtr()->m_IntersectSubSurfs ) BuildSubSurfIntChains();
+    // Always called; the switch is applied inside, to the user's subsurfaces only.
+    BuildSubSurfIntChains();
 
     //==== Quad Tree Intersection - Intersection Segments Get Loaded at AddIntersectionSeg ===//
-    for ( int i = 0 ; i < n; i++ )
-    {
-        for ( int j = i + 1; j < n; j++ )
-        {
-            snprintf( str, sizeof( str ), "Intersect %3d/%3d %s vs. %3d %s                                           \r", i + 1, n, m_SurfVec[i]->GetDisplayName().c_str(),
-                                                                                             j + 1, m_SurfVec[j]->GetDisplayName().c_str());
-            addOutputText( str );
-
-            m_SurfVec[i]->Intersect( m_SurfVec[j], this );
-        }
-        snprintf( str, sizeof( str ), "Intersect %3d/%3d %s                                                      \n", i + 1, n, m_SurfVec[i]->GetDisplayName().c_str() );
-        addOutputText( str );
-    }
+    IntersectPairs();
 
     // WriteISegs();
 
@@ -1870,7 +2502,106 @@ void SurfaceIntersectionSingleton::Intersect()
     // DebugWriteChains( "BuildCurves", false );
 }
 
-void SurfaceIntersectionSingleton::AddIntersectionSeg( const SurfPatch& pA, const SurfPatch& pB, const vec3d & ip0, const vec3d & ip1 )
+// The edge of triangle tri of patch p, corners q, that point pnt is nearest, and how near it is
+static double NearestEdge( const vec3d &pnt, const SurfPatch &p, const vec3d q[4], int tri, IPntEdge &edge )
+{
+    // Tri 1 is corners 0 2 3, tri 2 is corners 0 1 2.  Corner 0 is (umin, wmin), 1 (umax, wmin),
+    // 2 (umax, wmax), 3 (umin, wmax); the diagonal runs from 0 to 2.
+    const int tri1[3][2] = { { 0, 2 }, { 2, 3 }, { 3, 0 } };
+    const int tri2[3][2] = { { 0, 1 }, { 1, 2 }, { 0, 2 } };
+    const int ( *ends )[2] = tri1;
+    if ( tri == 2 )
+    {
+        ends = tri2;
+    }
+
+    double best = 1.0e300;
+    for ( int i = 0; i < 3; i++ )
+    {
+        const vec3d &c0 = q[ ends[i][0] ];
+        const vec3d &c1 = q[ ends[i][1] ];
+        vec3d d = c1 - c0;
+        double dd = dot( d, d );
+        double t = 0.0;
+        if ( dd > 0.0 )
+        {
+            t = std::min( std::max( dot( pnt - c0, d ) / dd, 0.0 ), 1.0 );
+        }
+        double dst = dist( pnt, c0 + d * t );
+
+        if ( dst >= best )
+        {
+            continue;
+        }
+        best = dst;
+
+        edge = IPntEdge();
+        edge.m_SurfID = p.get_surf_ptr()->GetSurfID();
+
+        int a = ends[i][0];
+        int b = ends[i][1];
+        double du = p.get_u_max() - p.get_u_min();
+        double dw = p.get_w_max() - p.get_w_min();
+
+        if ( a == 0 && b == 2 )
+        {
+            edge.m_Kind = IPntEdge::DIAGONAL;
+            edge.m_Val[0] = p.get_u_min();
+            edge.m_Val[1] = p.get_u_max();
+            edge.m_Val[2] = p.get_w_min();
+            edge.m_Val[3] = p.get_w_max();
+            edge.m_Side = tri;
+            edge.m_Along = t;
+        }
+        else if ( a == 0 && b == 1 )
+        {
+            edge.m_Kind = IPntEdge::W_LINE;
+            edge.m_Val[0] = p.get_w_min();
+            edge.m_Side = 1;
+            edge.m_Along = p.get_u_min() + t * du;
+        }
+        else if ( a == 2 && b == 3 )
+        {
+            edge.m_Kind = IPntEdge::W_LINE;
+            edge.m_Val[0] = p.get_w_max();
+            edge.m_Side = -1;
+            edge.m_Along = p.get_u_max() - t * du;
+        }
+        else if ( a == 1 && b == 2 )
+        {
+            edge.m_Kind = IPntEdge::U_LINE;
+            edge.m_Val[0] = p.get_u_max();
+            edge.m_Side = -1;
+            edge.m_Along = p.get_w_min() + t * dw;
+        }
+        else
+        {
+            edge.m_Kind = IPntEdge::U_LINE;
+            edge.m_Val[0] = p.get_u_min();
+            edge.m_Side = 1;
+            edge.m_Along = p.get_w_max() - t * dw;
+        }
+    }
+    return best;
+}
+
+// The edge a segment's end lies on: of the two triangles it was found between, the edge nearest it
+static IPntEdge FindEdge( const vec3d &pnt, const SurfPatch &pA, const vec3d qa[4], int triA,
+                          const SurfPatch &pB, const vec3d qb[4], int triB )
+{
+    IPntEdge ea, eb;
+    double da = NearestEdge( pnt, pA, qa, triA, ea );
+    double db = NearestEdge( pnt, pB, qb, triB, eb );
+
+    if ( da <= db )
+    {
+        return ea;
+    }
+    return eb;
+}
+
+void SurfaceIntersectionSingleton::AddIntersectionSeg( const SurfPatch& pA, const SurfPatch& pB, const vec3d & ip0, const vec3d & ip1,
+                                                       const vec3d qa[4], const vec3d qb[4], int triA, int triB )
 {
     double d = dist_squared( ip0, ip1 );
     if ( d < DBL_EPSILON )
@@ -1965,63 +2696,33 @@ void SurfaceIntersectionSingleton::AddIntersectionSeg( const SurfPatch& pA, cons
     pB.find_closest_uw( ip1, plane_uwB1.v, proj_uwB1.v );
 
     Puw* puwA0 = new Puw( pA.get_surf_ptr(), proj_uwA0 );
-    m_DelPuwVec.push_back( puwA0 );
+    tl_isect_out->m_Puws.push_back( puwA0 );
 
     Puw* puwB0 = new Puw( pB.get_surf_ptr(), proj_uwB0 );
-    m_DelPuwVec.push_back( puwB0 );
+    tl_isect_out->m_Puws.push_back( puwB0 );
 
     IPnt* ipnt0 = new IPnt( puwA0, puwB0 );
     ipnt0->m_Pnt = ip0;
-    m_DelIPntVec.push_back( ipnt0 );
+    ipnt0->m_Edge = FindEdge( ip0, pA, qa, triA, pB, qb, triB );
+    tl_isect_out->m_IPnts.push_back( ipnt0 );
 
     Puw* puwA1 = new Puw( pA.get_surf_ptr(), proj_uwA1 );
-    m_DelPuwVec.push_back( puwA1 );
+    tl_isect_out->m_Puws.push_back( puwA1 );
 
     Puw* puwB1 = new Puw( pB.get_surf_ptr(), proj_uwB1 );
-    m_DelPuwVec.push_back( puwB1 );
+    tl_isect_out->m_Puws.push_back( puwB1 );
 
     IPnt* ipnt1 = new IPnt( puwA1, puwB1 );
     ipnt1->m_Pnt = ip1;
-    m_DelIPntVec.push_back( ipnt1 );
+    ipnt1->m_Edge = FindEdge( ip1, pA, qa, triA, pB, qb, triB );
+    tl_isect_out->m_IPnts.push_back( ipnt1 );
 
     // Identify rectangles to represent final patches
-    m_IPatchADrawLines.push_back( pA.GetPatchDrawLines() );
-    m_IPatchBDrawLines.push_back( pB.GetPatchDrawLines() );
+    tl_isect_out->m_PatchADraw.push_back( pA.GetPatchDrawLines() );
+    tl_isect_out->m_PatchBDraw.push_back( pB.GetPatchDrawLines() );
 
     new ISeg( pA.get_surf_ptr(), pB.get_surf_ptr(), ipnt0, ipnt1 );
-
-    m_AllIPnts.push_back( ipnt0 );
-    m_AllIPnts.push_back( ipnt1 );
-
-#ifdef DEBUG_CFD_MESH
-
-    static bool onetime = true;
-    static int ipntcnt = 0;
-    static double max_dist = 0.0;
-    if ( onetime )
-    {
-        fprintf( m_DebugFile, "CfdMeshMgr::AddIntersectionSeg \n" );
-        onetime = false;
-    }
-
-    double dA0 = dist( ip0, puwA0->m_Surf->CompPnt( puwA0->m_UW.x(), puwA0->m_UW.y() ) );
-    double dB0 = dist( ip0, puwB0->m_Surf->CompPnt( puwB0->m_UW.x(), puwB0->m_UW.y() ) );
-
-    double dA1 = dist( ip1, puwA0->m_Surf->CompPnt( puwA1->m_UW.x(), puwA1->m_UW.y() ) );
-    double dB1 = dist( ip1, puwB0->m_Surf->CompPnt( puwB1->m_UW.x(), puwB1->m_UW.y() ) );
-
-    double total_d = dA0 + dB0 + dA1 + dB1;
-
-    if ( total_d > max_dist )
-    {
-        max_dist = total_d;
-        fprintf( m_DebugFile, "  Proj Pnt Dist = %f    %d \n", max_dist, ipntcnt );
-    }
-    ipntcnt++;
-
-#endif
 }
-
 
 ISeg* SurfaceIntersectionSingleton::CreateSurfaceSeg(  Surf* surfA, vec2d & uwA0, vec2d & uwA1, Surf* surfB, vec2d & uwB0, vec2d & uwB1   )
 {
@@ -2098,8 +2799,106 @@ void SurfaceIntersectionSingleton::WriteISegs()
 #endif
 }
 
+// Partner each intersection point with the one across the triangle edge it lies on.  Points are
+// taken by the two surfaces they are on and by their edge, in order along it: each crossing of
+// the edge by the curve leaves one point on either side, which are partners.
+struct IPntEdgeEntry
+{
+    int m_SurfLo, m_SurfHi;
+    IPnt* m_IPnt;
+
+    bool SameEdge( const IPntEdgeEntry &o ) const
+    {
+        const IPntEdge &a = m_IPnt->m_Edge;
+        const IPntEdge &b = o.m_IPnt->m_Edge;
+        return m_SurfLo == o.m_SurfLo && m_SurfHi == o.m_SurfHi && a.m_SurfID == b.m_SurfID && a.m_Kind == b.m_Kind &&
+               a.m_Val[0] == b.m_Val[0] && a.m_Val[1] == b.m_Val[1] && a.m_Val[2] == b.m_Val[2] && a.m_Val[3] == b.m_Val[3];
+    }
+
+    bool operator<( const IPntEdgeEntry &o ) const
+    {
+        const IPntEdge &a = m_IPnt->m_Edge;
+        const IPntEdge &b = o.m_IPnt->m_Edge;
+        if ( m_SurfLo != o.m_SurfLo ) return m_SurfLo < o.m_SurfLo;
+        if ( m_SurfHi != o.m_SurfHi ) return m_SurfHi < o.m_SurfHi;
+        if ( a.m_SurfID != b.m_SurfID ) return a.m_SurfID < b.m_SurfID;
+        if ( a.m_Kind != b.m_Kind ) return a.m_Kind < b.m_Kind;
+        for ( int k = 0; k < 4; k++ )
+        {
+            if ( a.m_Val[k] != b.m_Val[k] ) return a.m_Val[k] < b.m_Val[k];
+        }
+        return a.m_Along < b.m_Along;
+    }
+};
+
+void SurfaceIntersectionSingleton::LinkIPntPartners()
+{
+    vector< IPntEdgeEntry > entries;
+    entries.reserve( m_AllIPnts.size() );
+
+    for ( size_t i = 0; i < m_AllIPnts.size(); i++ )
+    {
+        IPnt* ip = m_AllIPnts[i];
+        ip->m_Partner = nullptr;
+
+        if ( ip->m_Edge.m_Kind == IPntEdge::NONE || ip->m_Puws.size() != 2 )
+        {
+            continue;
+        }
+
+        int sa = ip->m_Puws[0]->m_Surf->GetSurfID();
+        int sb = ip->m_Puws[1]->m_Surf->GetSurfID();
+
+        IPntEdgeEntry e;
+        e.m_SurfLo = std::min( sa, sb );
+        e.m_SurfHi = std::max( sa, sb );
+        e.m_IPnt = ip;
+        entries.push_back( e );
+    }
+
+    std::sort( entries.begin(), entries.end() );
+
+    // Neighbors along an edge on opposite sides of it, close enough together for one crossing of
+    // the edge: within ten times the longer of their segments.  Anything else is left to the
+    // search.
+    size_t i = 0;
+    while ( i + 1 < entries.size() )
+    {
+        IPnt* a = entries[i].m_IPnt;
+        IPnt* b = entries[i + 1].m_IPnt;
+
+        bool partners = false;
+        if ( entries[i].SameEdge( entries[i + 1] ) && a->m_Edge.m_Side != b->m_Edge.m_Side )
+        {
+            double seglen = 0.0;
+            if ( !a->m_Segs.empty() )
+            {
+                seglen = std::max( seglen, dist( a->m_Segs[0]->m_IPnt[0]->m_Pnt, a->m_Segs[0]->m_IPnt[1]->m_Pnt ) );
+            }
+            if ( !b->m_Segs.empty() )
+            {
+                seglen = std::max( seglen, dist( b->m_Segs[0]->m_IPnt[0]->m_Pnt, b->m_Segs[0]->m_IPnt[1]->m_Pnt ) );
+            }
+            partners = dist( a->m_Pnt, b->m_Pnt ) <= 10.0 * seglen;
+        }
+
+        if ( partners )
+        {
+            a->m_Partner = b;
+            b->m_Partner = a;
+            i += 2;
+        }
+        else
+        {
+            i++;
+        }
+    }
+}
+
 void SurfaceIntersectionSingleton::BuildChains()
 {
+    LinkIPntPartners();
+
     PntNodeCloud i_pnt_cloud;
 
     for ( size_t i = 0; i < m_AllIPnts.size(); i++ )
@@ -2294,7 +3093,7 @@ void SurfaceIntersectionSingleton::RefineChains()
     }
 }
 
-void SurfaceIntersectionSingleton::RefineISegChainSeg( ISegChain* c, IPnt* ipnt )
+void SurfaceIntersectionSingleton::RefineISegChainSeg( ISegChain* c, IPnt* ipnt, bool endpnt )
 {
     Puw* auw = ipnt->GetPuw( c->m_SurfA );
     Puw* buw = ipnt->GetPuw( c->m_SurfB );
@@ -2327,6 +3126,16 @@ void SurfaceIntersectionSingleton::RefineISegChainSeg( ISegChain* c, IPnt* ipnt 
         double uwtol = 1e-4;
         borderA = c->m_SurfA->GetSurfCore()->UWPointOnBorder( uA, wA, uwtol );
         borderB = c->m_SurfB->GetSurfCore()->UWPointOnBorder( uB, wB, uwtol );
+
+        // Only a chain's ends lie on a border.  Solved against the border, every interior point
+        // near one lands on the one place the border crosses the other surface, and a curve
+        // running into a border at a shallow angle collapses there into a run of points with
+        // the same u,w on both surfaces.
+        if ( !endpnt )
+        {
+            borderA = SurfCore::NOBNDY;
+            borderB = SurfCore::NOBNDY;
+        }
 
         if ( borderA == SurfCore::NOBNDY && borderB == SurfCore::NOBNDY )
         {
@@ -2462,11 +3271,13 @@ void SurfaceIntersectionSingleton::RefineISegChainSeg( ISegChain* c, IPnt* ipnt 
 void SurfaceIntersectionSingleton::RefineISegChain( ISegChain* c )
 {
 
-    RefineISegChainSeg( c, c->m_ISegDeque[0]->m_IPnt[0] );
+    int nseg = c->m_ISegDeque.size();
 
-    for ( int i = 0; i < (int)c->m_ISegDeque.size(); i++ )
+    RefineISegChainSeg( c, c->m_ISegDeque[0]->m_IPnt[0], true );
+
+    for ( int i = 0; i < nseg; i++ )
     {
-        RefineISegChainSeg( c, c->m_ISegDeque[i]->m_IPnt[1] );
+        RefineISegChainSeg( c, c->m_ISegDeque[i]->m_IPnt[1], i == nseg - 1 );
     }
 }
 
@@ -2494,12 +3305,27 @@ void SurfaceIntersectionSingleton::ExpandChain( ISegChain* chain, PNTree* PN_tre
 
         IPnt* matchIPnt = nullptr;
 
+        // The point across the edge this one lies on is the next along the curve, however far
+        // the two patches' flat approximations of it put them apart
+        bool by_partner = false;
+        IPnt* partner = testIPnt->m_Partner;
+        if ( partner && !partner->m_UsedFlag && partner->m_Puws.size() == 2 &&
+             partner->m_Puws[0]->m_Surf == testIPnt->m_Puws[0]->m_Surf &&
+             partner->m_Puws[1]->m_Surf == testIPnt->m_Puws[1]->m_Surf )
+        {
+            matchIPnt = partner;
+            by_partner = true;
+        }
+
         const double query_pt[3] = { testIPnt->m_Pnt.x(), testIPnt->m_Pnt.y(), testIPnt->m_Pnt.z() };
         size_t ret_index[num_results];
         double out_dist_sqr[num_results];
         nanoflann::KNNResultSet < double > resultSet( num_results );
         resultSet.init( ret_index, out_dist_sqr );
-        PN_tree->findNeighbors( resultSet, query_pt, nanoflann::SearchParams() );
+        if ( !by_partner )
+        {
+            PN_tree->findNeighbors( resultSet, query_pt, nanoflann::SearchParams() );
+        }
 
         for ( size_t i = 0; i < resultSet.size(); ++i )
         {
@@ -2526,7 +3352,7 @@ void SurfaceIntersectionSingleton::ExpandChain( ISegChain* chain, PNTree* PN_tre
         }
         else
         {
-            if ( firstIter && expandFront && ( dist( chain->m_ISegDeque.front()->m_IPnt[0]->m_Pnt, matchIPnt->m_Pnt ) > dist( chain->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, matchIPnt->m_Pnt ) ) )
+            if ( firstIter && expandFront && !by_partner && ( dist( chain->m_ISegDeque.front()->m_IPnt[0]->m_Pnt, matchIPnt->m_Pnt ) > dist( chain->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, matchIPnt->m_Pnt ) ) )
             {
                 // This segment's orientation needs to be reversed because expandFront was set true on the first iteration,
                 // but the back point is closer. 
@@ -2538,7 +3364,15 @@ void SurfaceIntersectionSingleton::ExpandChain( ISegChain* chain, PNTree* PN_tre
             firstIter = false;
 
             ISeg* seg = matchIPnt->m_Segs[0];
-            chain->AddSeg( seg, expandFront );
+            if ( by_partner )
+            {
+                // Joined through the partner, which is the end next to the chain
+                chain->AddSeg( seg, expandFront, matchIPnt );
+            }
+            else
+            {
+                chain->AddSeg( seg, expandFront );
+            }
             seg->m_IPnt[0]->m_UsedFlag = true;
             seg->m_IPnt[1]->m_UsedFlag = true;
         }
@@ -2845,6 +3679,8 @@ void SurfaceIntersectionSingleton::LoadBorderCurves()
 
         chain->m_SurfA = surfA;
         chain->m_SurfB = surfB;
+        chain->m_ALine = m_ICurveVec[i]->m_SCurve_A->GetParmLine();
+        chain->m_BLine = m_ICurveVec[i]->m_SCurve_B->GetParmLine();
 
         vector< vec3d > uwA = m_ICurveVec[i]->m_SCurve_A->GetUWTessPnts();
         vector< vec3d > uwB = m_ICurveVec[i]->m_SCurve_B->GetUWTessPnts();
@@ -2915,18 +3751,60 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
     {
         Surf* surf = m_SurfVec[s];
 
-        // Get all SubSurfaces for the specified geom
-        vector < SimpleSubSurface > ss_vec = GetSimpSubSurfs( surf->GetGeomID(), surf->GetMainSurfID(), surf->GetCompID() );
+        // Get all SubSurfaces for the specified geom.  The user's answer to the switch that
+        // turns subsurfaces off; the patch join seams do not, because they stand in for patch
+        // boundaries, which are always held.
+        vector < SimpleSubSurface > ss_vec;
+
+        if ( GetSettingsPtr()->m_IntersectSubSurfs )
+        {
+            ss_vec = GetSimpSubSurfs( surf->GetGeomID(), surf->GetMainSurfID(), surf->GetCompID() );
+        }
+
+        // The seams where the surface this patch came from was stitched back together.  A
+        // boundary between two patches is a crease the mesher must follow, and joining two
+        // pieces into one patch gives that up; these put it back.  FetchXFerSurf wrote them
+        // down as it made them, and as ordinary subsurfaces the clipping below puts each on
+        // the patch it belongs to and drops it from the rest.
+        const vector < pair < vec3d, vec3d > > &jvec = surf->GetJoinLines();
+
+        int njoin_start = ( int )ss_vec.size();
+
+        vector < ParmLine > jline_vec( jvec.size() );
+
+        for ( int i = 0 ; i < ( int )jvec.size() ; i++ )
+        {
+            SimpleSubSurface ss;
+            ss.SetAsFiniteLine( surf->GetGeomID(), surf->GetMainSurfID(),
+                                surf->GetName() + "_PatchJoin", jvec[i].first, jvec[i].second );
+            ss_vec.push_back( ss );
+
+            jline_vec[i] = ParmLine::Between( jvec[i].first.x(), jvec[i].first.y(),
+                                              jvec[i].second.x(), jvec[i].second.y() );
+        }
+
+        // A patch is not always a plain piece of the Geom's surface -- an end cap or a
+        // trailing edge is built from two pieces of it, and may carry them reversed.
+        // Subsurfaces are drawn in the Geom's parameters, so every piece has to be clipped
+        // and converted on its own.  For a patch that is a plain piece the region is the identity.
+        vector < UWRegion > regvec = surf->GetUWRegionsOrWhole();
 
         // Split SubSurfs
         for ( int ss = 0 ; ss < ( int ) ss_vec.size(); ss++ )
         {
-            ss_vec[ss].SplitSegsU( surf->GetSurfCore()->GetMinU() );
-            ss_vec[ss].SplitSegsU( surf->GetSurfCore()->GetMaxU() );
-            ss_vec[ss].SplitSegsW( surf->GetSurfCore()->GetMinW() );
-            ss_vec[ss].SplitSegsW( surf->GetSurfCore()->GetMaxW() );
+          for ( int ir = 0 ; ir < ( int )regvec.size() ; ir++ )
+          {
+            const UWRegion &reg = regvec[ir];
 
-            vector < vector< SSLineSeg > >& segsvec = ss_vec[ss].GetSplitSegs();
+            // Splitting modifies the subsurface, so each region starts from a fresh copy.
+            SimpleSubSurface ssurf = ss_vec[ss];
+
+            ssurf.SplitSegsU( reg.m_UMin );
+            ssurf.SplitSegsU( reg.m_UMax );
+            ssurf.SplitSegsW( reg.m_WMin );
+            ssurf.SplitSegsW( reg.m_WMax );
+
+            vector < vector< SSLineSeg > >& segsvec = ssurf.GetSplitSegs();
 
             for ( int i = 0; i < segsvec.size(); i++ )
             {
@@ -2935,7 +3813,7 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                 ISegChain* chain = nullptr;
 
                 bool new_chain = true;
-                bool is_poly = ss_vec[ss].GetPolyFlag();
+                bool is_poly = ssurf.GetPolyFlag();
 
                 // Build Intersection Chains
                 for ( int ls = 0; ls < ( int )segs.size(); ls++ )
@@ -2944,7 +3822,7 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                     {
                         if ( chain->Valid() )
                         {
-                            if ( ss_vec[ss].m_CreateBeamElements )
+                            if ( ssurf.m_CreateBeamElements )
                             {
                                 chain->m_SSIntersectIndex = ss; // Identify FeaSubSurfaceIndex
                             }
@@ -2963,6 +3841,22 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                         chain = new ISegChain;
                         chain->m_SurfA = surf;
                         chain->m_SurfB = surf;
+                        chain->m_PatchJoinFlag = ( ss >= njoin_start );
+                        if ( chain->m_PatchJoinFlag )
+                        {
+                            // The seam's line, in the patch's parameters
+                            ParmLine line = jline_vec[ ss - njoin_start ];
+                            if ( line.m_Kind == ParmLine::U_CONST )
+                            {
+                                line.m_Val = reg.ToPatchU( line.m_Val );
+                            }
+                            else if ( line.m_Kind == ParmLine::W_CONST )
+                            {
+                                line.m_Val = reg.ToPatchW( line.m_Val );
+                            }
+                            chain->m_ALine = line;
+                            chain->m_BLine = line;
+                        }
                         if ( !is_poly )
                         {
                             new_chain = false;
@@ -2979,10 +3873,10 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                     double max_u, max_w, tol;
                     double min_u, min_w;
                     tol = 1e-6;
-                    min_u = surf->GetSurfCore()->GetMinU();
-                    min_w = surf->GetSurfCore()->GetMinW();
-                    max_u = surf->GetSurfCore()->GetMaxU();
-                    max_w = surf->GetSurfCore()->GetMaxW();
+                    min_u = reg.m_UMin;
+                    min_w = reg.m_WMin;
+                    max_u = reg.m_UMax;
+                    max_w = reg.m_WMax;
 
                     if ( uw_pnt0[0] < min_u - FLT_EPSILON || uw_pnt0[1] < min_w - FLT_EPSILON || uw_pnt1[0] < min_u - FLT_EPSILON || uw_pnt1[1] < min_w - FLT_EPSILON )
                     {
@@ -2997,9 +3891,10 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                     if ( ((std::abs( uw_pnt0[0]-max_u ) < tol && std::abs( uw_pnt1[0]-max_u ) < tol) ||
                             (std::abs( uw_pnt0[1]-max_w ) < tol && std::abs( uw_pnt1[1]-max_w ) < tol) ||
                             (std::abs( uw_pnt0[0]-min_u ) < tol && std::abs( uw_pnt1[0]-min_u ) < tol) ||
-                            (std::abs( uw_pnt0[1]-min_w ) < tol && std::abs( uw_pnt1[1]-min_w ) < tol))
-                            && is_poly  )
+                            (std::abs( uw_pnt0[1]-min_w ) < tol && std::abs( uw_pnt1[1]-min_w ) < tol)) )
                     {
+                        // A segment along the patch's own edge repeats the border curve there,
+                        // and two curves on one line cannot both be held by the triangulator.
                         new_chain = true;
                         continue; // Skip if both end points are on the same edge of the surface
                     }
@@ -3016,6 +3911,14 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                     for ( int p = 1 ; p < num_sects ; p++ )
                     {
                         uw_pnts[p] = vec2d( uw_pnt0[0] + delta_u * p, uw_pnt0[1] + delta_w * p );
+                    }
+
+                    // Everything above was in the Geom's parameters.  From here on the
+                    // surface is asked about its own.
+                    for ( int p = 0 ; p < ( int ) uw_pnts.size() ; p++ )
+                    {
+                        uw_pnts[p] = vec2d( reg.ToPatchU( uw_pnts[p][0] ),
+                                            reg.ToPatchW( uw_pnts[p][1] ) );
                     }
 
                     for ( int p = 1 ; p < ( int ) uw_pnts.size() ; p++ )
@@ -3047,7 +3950,7 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                 {
                     if ( chain->Valid() )
                     {
-                        if ( ss_vec[ss].m_CreateBeamElements )
+                        if ( ssurf.m_CreateBeamElements )
                         {
                             chain->m_SSIntersectIndex = ss; // Identify FeaSubSurfaceIndex
                         }
@@ -3061,6 +3964,7 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                     }
                 }
             }
+          }
         }
     }
 }
@@ -3084,15 +3988,17 @@ void SurfaceIntersectionSingleton::SplitBorderCurves()
         {
             for ( int i = 0 ; i < ( int )splitPnts.size() ; i++ )
             {
-                Puw* uwA = splitPnts[i]->GetPuw( ( *c )->m_SurfA );
-                Puw* uwB = splitPnts[i]->GetPuw( ( *c )->m_SurfB );
-                if ( uwA )
+                Puw* uw = splitPnts[i]->GetPuw( ( *c )->m_SurfA );
+                if ( !uw )
                 {
-                    ( *c )->AddBorderSplit( uwA );
+                    uw = splitPnts[i]->GetPuw( ( *c )->m_SurfB );
                 }
-                else if ( uwB )
+
+                // Only a chain end on this surface's border splits it.  An end on the border of
+                // the other surface the chain meets can lie within reach of this one.
+                if ( uw && uw->m_Surf->GetSurfCore()->UWPointOnBorder( uw->m_UW[0], uw->m_UW[1], 1.0e-4 ) != SurfCore::NOBNDY )
                 {
-                    ( *c )->AddBorderSplit( uwB );
+                    ( *c )->AddBorderSplit( uw );
                 }
             }
         }
@@ -3707,6 +4613,8 @@ void SurfaceIntersectionSingleton::BuildIntChain( const string &id, vector < vec
                 Bezier_curve xyzcrvA = matchCurve->GetUWCrv();
                 xyzcrvA.TessAdaptXYZ( *( matchCurve->GetSurf() ), ptvec, .1, 8, uvec );
 
+                RemoveRepeatedPnts( ptvec, uvec );
+
                 for ( int i = 0 ; i < ( int )uvec.size() ; i++ )
                 {
                     uwvec.push_back( xyzcrvA.CompPnt( uvec[ i ] ) );
@@ -3766,74 +4674,76 @@ void SurfaceIntersectionSingleton::BuildIntChain( const string &id, vector < vec
     uwchains = keepuwvec;
 }
 
-void SurfaceIntersectionSingleton::BinaryAdaptIntCurves()
+void SurfaceIntersectionSingleton::RecordIntCurves()
 {
-    m_BinAdaptCurveAVec.clear();
-    m_BinAdaptCurveBVec.clear();
     m_RawCurveAVec.clear();
     m_RawCurveBVec.clear();
     m_BorderCurveFlagVec.clear();
+    m_PatchJoinFlagVec.clear();
+    m_NonManifoldCurveFlagVec.clear();
 
     list<ISegChain *>::iterator c;
     for ( c = m_ISegChainList.begin(); c != m_ISegChainList.end(); ++c )
     {
         m_BorderCurveFlagVec.push_back( (*c)->m_BorderFlag );
+        m_PatchJoinFlagVec.push_back( (*c)->m_PatchJoinFlag );
 
-        vector<vec3d> ptvec;
+        // Valence: two distinct parents is a curve between two patches; the same surface
+        // on both sides means it bounds only one, and the mesh is not manifold along it.
+        m_NonManifoldCurveFlagVec.push_back(
+                (*c)->m_ACurve.GetSurf() == (*c)->m_BCurve.GetSurf() );
+
         vector<vec3d> rawptvec;
 
         Bezier_curve xyzcrvA = (*c)->m_ACurve.GetUWCrv();
-        xyzcrvA.TessAdaptXYZ( *(*c)->m_ACurve.GetSurf(), ptvec, GetSettingsPtr()->m_RelCurveTol, 16 );
-
-        m_BinAdaptCurveAVec.push_back( ptvec );
-
         xyzcrvA.UWCurveToXYZCurve( (*c)->m_ACurve.GetSurf() );
         xyzcrvA.GetControlPoints( rawptvec );
 
         m_RawCurveAVec.push_back( rawptvec );
 
-
-        ptvec.clear();
         rawptvec.clear();
         Bezier_curve xyzcrvB = (*c)->m_BCurve.GetUWCrv();
-        xyzcrvB.TessAdaptXYZ( *(*c)->m_BCurve.GetSurf(), ptvec, GetSettingsPtr()->m_RelCurveTol, 16 );
-
-        m_BinAdaptCurveBVec.push_back( ptvec );
-
         xyzcrvB.UWCurveToXYZCurve( (*c)->m_BCurve.GetSurf() );
         xyzcrvB.GetControlPoints( rawptvec );
 
         m_RawCurveBVec.push_back( rawptvec );
+    }
+}
 
+void SurfaceIntersectionSingleton::BuildChainCADCurves()
+{
+    m_ChainCADVec.clear();
+    m_ChainCADVec.resize( m_ISegChainList.size() );
+
+    int ichain = 0;
+    list<ISegChain *>::iterator c;
+    for ( c = m_ISegChainList.begin(); c != m_ISegChainList.end(); ++c )
+    {
+        NURBS_Curve &crv = m_ChainCADVec[ ichain ];
+        ichain++;
+
+        // A patch join runs along a parameter line of its surface, as a border does, and is
+        // drawn as that line
+        crv.m_BorderFlag = ( *c )->m_BorderFlag || ( *c )->m_PatchJoinFlag;
+        crv.m_SurfA_ID = ( *c )->m_SurfA->GetSurfID();
+        crv.m_SurfB_ID = ( *c )->m_SurfB->GetSurfID();
+
+        crv.InitCAD( ( *c )->m_ACurve, ( *c )->m_BCurve, GetSettingsPtr()->m_STEPTol );
     }
 }
 
 void SurfaceIntersectionSingleton::UpdateDrawObjs()
 {
+    // One color for each kind of curve, from the Okabe-Ito palette: each dark enough to read on
+    // white, and told apart with red-green color blindness
+    vec3d isect_color( 0.84, 0.37, 0 );
+    vec3d border_color( 0, 0.45, 0.70 );
+    vec3d join_color( 0, 0.62, 0.45 );
+
     // Draw ISegChains
-    m_IsectCurveDO.m_GeomID = GetID() + "ISECTCURVE";
-    m_IsectCurveDO.m_Type = DrawObj::VSP_LINES;
-    m_IsectCurveDO.m_LineColor = vec3d(0, 0, 1);
-    m_IsectCurveDO.m_LineWidth = 2.0;
-
-    m_IsectPtsDO.m_GeomID = GetID() + "ISECTPTS";
-    m_IsectPtsDO.m_Type = DrawObj::VSP_POINTS;
-    m_IsectPtsDO.m_PointColor = vec3d(0, 0, 0);
-    m_IsectPtsDO.m_PointSize = 10.0;
-
-    m_BorderCurveDO.m_GeomID = GetID() + "BORDERCURVE";
-    m_BorderCurveDO.m_Type = DrawObj::VSP_LINES;
-    m_BorderCurveDO.m_LineColor = vec3d(0, 1, 0);
-    m_BorderCurveDO.m_LineWidth = 2.0;
-
-    m_BorderPtsDO.m_GeomID = GetID() + "BORDERPTS";
-    m_BorderPtsDO.m_Type = DrawObj::VSP_POINTS;
-    m_BorderPtsDO.m_PointColor = vec3d(0, 0, 0);
-    m_BorderPtsDO.m_PointSize = 10.0;
-
     m_RawIsectCurveDO.m_GeomID = GetID() + "RAWISECTCURVE";
     m_RawIsectCurveDO.m_Type = DrawObj::VSP_LINES;
-    m_RawIsectCurveDO.m_LineColor = vec3d(1, 0, 1);
+    m_RawIsectCurveDO.m_LineColor = isect_color;
     m_RawIsectCurveDO.m_LineWidth = 2.0;
 
     m_RawIsectPtsDO.m_GeomID = GetID() + "RAWISECTPTS";
@@ -3843,8 +4753,88 @@ void SurfaceIntersectionSingleton::UpdateDrawObjs()
 
     m_RawBorderCurveDO.m_GeomID = GetID() + "RAWBORDERCURVE";
     m_RawBorderCurveDO.m_Type = DrawObj::VSP_LINES;
-    m_RawBorderCurveDO.m_LineColor = vec3d(1, 1, 0);
+    m_RawBorderCurveDO.m_LineColor = border_color;
     m_RawBorderCurveDO.m_LineWidth = 2.0;
+
+    // Curves that bound one patch rather than two, drawn apart from the rest, so a surface
+    // laid against itself can be seen where it happens.
+    m_RawNonManifoldCurveDO.m_GeomID = GetID() + "RAWNONMANIFOLDCURVE";
+    m_RawNonManifoldCurveDO.m_Type = DrawObj::VSP_LINES;
+    m_RawNonManifoldCurveDO.m_LineColor = vec3d( 0, 0, 0 );
+    m_RawNonManifoldCurveDO.m_LineWidth = 3.0;
+
+    m_RawNonManifoldPtsDO.m_GeomID = GetID() + "RAWNONMANIFOLDPTS";
+    m_RawNonManifoldPtsDO.m_Type = DrawObj::VSP_POINTS;
+    m_RawNonManifoldPtsDO.m_PointColor = vec3d( 0, 0, 0 );
+    m_RawNonManifoldPtsDO.m_PointSize = 12.0;
+
+    m_RawPatchJoinCurveDO.m_GeomID = GetID() + "RAWPATCHJOINCURVE";
+    m_RawPatchJoinCurveDO.m_Type = DrawObj::VSP_LINES;
+    m_RawPatchJoinCurveDO.m_LineColor = join_color;
+    m_RawPatchJoinCurveDO.m_LineWidth = 2.0;
+
+    m_RawPatchJoinPtsDO.m_GeomID = GetID() + "RAWPATCHJOINPTS";
+    m_RawPatchJoinPtsDO.m_Type = DrawObj::VSP_POINTS;
+    m_RawPatchJoinPtsDO.m_PointColor = vec3d( 0.5, 0.5, 0.5 );
+    m_RawPatchJoinPtsDO.m_PointSize = 10.0;
+
+    const char* cubic_name[ NUM_CUBIC ] = { "ISECT", "BORDER", "JOIN" };
+    vec3d cubic_color[ NUM_CUBIC ] = { isect_color, border_color, join_color };
+
+    for ( int k = 0; k < NUM_CUBIC; k++ )
+    {
+        m_CubicCurveDO[k].m_GeomID = GetID() + "CUBICCURVE" + cubic_name[k];
+        m_CubicCurveDO[k].m_Type = DrawObj::VSP_LINES;
+        m_CubicCurveDO[k].m_LineColor = cubic_color[k];
+        m_CubicCurveDO[k].m_LineWidth = 2.0;
+
+        m_CubicEndPtsDO[k].m_GeomID = GetID() + "CUBICENDPTS" + cubic_name[k];
+        m_CubicEndPtsDO[k].m_Type = DrawObj::VSP_POINTS;
+        m_CubicEndPtsDO[k].m_PointColor = vec3d( 0, 0, 0 );
+        m_CubicEndPtsDO[k].m_PointSize = 10.0;
+
+        m_CubicCtrlPtsDO[k].m_GeomID = GetID() + "CUBICCTRLPTS" + cubic_name[k];
+        m_CubicCtrlPtsDO[k].m_Type = DrawObj::VSP_POINTS;
+        m_CubicCtrlPtsDO[k].m_PointColor = vec3d( 0.5, 0.5, 0.5 );
+        m_CubicCtrlPtsDO[k].m_PointSize = 7.0;
+    }
+
+    // Each curve drawn as the polyline its trimming loops are built from, with the ends of its
+    // segments and its inner control points
+    for ( size_t c = 0; c < m_ChainCADVec.size(); c++ )
+    {
+        const NURBS_Curve &crv = m_ChainCADVec[c];
+        const vector < vec3d > &cp = crv.m_CADPntVec;
+        int deg = crv.m_CADDeg;
+
+        int k = CUBIC_ISECT;
+        if ( m_PatchJoinFlagVec[c] )
+        {
+            k = CUBIC_JOIN;
+        }
+        else if ( m_BorderCurveFlagVec[c] )
+        {
+            k = CUBIC_BORDER;
+        }
+
+        for ( size_t i = 1; i < crv.m_PntVec.size(); i++ )
+        {
+            m_CubicCurveDO[k].m_PntVec.push_back( crv.m_PntVec[i - 1] );
+            m_CubicCurveDO[k].m_PntVec.push_back( crv.m_PntVec[i] );
+        }
+
+        for ( size_t i = 0; i < cp.size(); i++ )
+        {
+            if ( i % deg == 0 )
+            {
+                m_CubicEndPtsDO[k].m_PntVec.push_back( cp[i] );
+            }
+            else
+            {
+                m_CubicCtrlPtsDO[k].m_PntVec.push_back( cp[i] );
+            }
+        }
+    }
 
     m_RawBorderPtsDO.m_GeomID = GetID() + "RAWBORDERPTS";
     m_RawBorderPtsDO.m_Type = DrawObj::VSP_POINTS;
@@ -3853,65 +4843,37 @@ void SurfaceIntersectionSingleton::UpdateDrawObjs()
 
     for ( int indx = 0; indx < m_RawCurveAVec.size(); indx++ )
     {
-        DrawObj *curveDO;
-        DrawObj *ptsDO;
         DrawObj *rawcurveDO;
         DrawObj *rawptsDO;
 
-        if ( m_BorderCurveFlagVec[indx] )
+        if ( m_PatchJoinFlagVec[indx] )
         {
-            curveDO = &m_BorderCurveDO;
-            ptsDO = &m_BorderPtsDO;
-            rawcurveDO = & m_RawBorderCurveDO;
+            rawcurveDO = &m_RawPatchJoinCurveDO;
+            rawptsDO = &m_RawPatchJoinPtsDO;
+        }
+        else if ( m_NonManifoldCurveFlagVec[indx] )
+        {
+            rawcurveDO = &m_RawNonManifoldCurveDO;
+            rawptsDO = &m_RawNonManifoldPtsDO;
+        }
+        else if ( m_BorderCurveFlagVec[indx] )
+        {
+            rawcurveDO = &m_RawBorderCurveDO;
             rawptsDO = &m_RawBorderPtsDO;
         }
         else
         {
-            curveDO = &m_IsectCurveDO;
-            ptsDO = &m_IsectPtsDO;
             rawcurveDO = &m_RawIsectCurveDO;
-            rawptsDO = & m_RawIsectPtsDO;
+            rawptsDO = &m_RawIsectPtsDO;
         }
 
+        const vector < vec3d > *rawcrv[2] = { &m_RawCurveAVec[ indx ], &m_RawCurveBVec[ indx ] };
+
+        for ( int k = 0; k < 2; k++ )
         {
-            vector<vec3d> ptvec;
-            vector<vec3d> rawptvec;
+            const vector < vec3d > &rawptvec = *rawcrv[k];
 
-            ptvec = m_BinAdaptCurveAVec[ indx ];
-
-            rawptvec = m_RawCurveAVec[ indx ];
-
-            ptsDO->m_PntVec.insert( ptsDO->m_PntVec.end(), ptvec.begin(), ptvec.end() );
             rawptsDO->m_PntVec.insert( rawptsDO->m_PntVec.end(), rawptvec.begin(), rawptvec.end() );
-
-            for ( int j = 1; j < ptvec.size(); j++ )
-            {
-                curveDO->m_PntVec.push_back( ptvec[j - 1] );
-                curveDO->m_PntVec.push_back( ptvec[j] );
-            }
-
-            for ( int j = 1; j < rawptvec.size(); j++ )
-            {
-                rawcurveDO->m_PntVec.push_back( rawptvec[j - 1] );
-                rawcurveDO->m_PntVec.push_back( rawptvec[j] );
-            }
-
-
-            ptvec.clear();
-            rawptvec.clear();
-
-            ptvec = m_BinAdaptCurveBVec[ indx ];
-
-            rawptvec = m_RawCurveBVec[ indx ];
-
-            ptsDO->m_PntVec.insert( ptsDO->m_PntVec.end(), ptvec.begin(), ptvec.end() );
-            rawptsDO->m_PntVec.insert( rawptsDO->m_PntVec.end(), rawptvec.begin(), rawptvec.end() );
-
-            for ( int j = 1; j < ptvec.size(); j++ )
-            {
-                curveDO->m_PntVec.push_back( ptvec[j - 1] );
-                curveDO->m_PntVec.push_back( ptvec[j] );
-            }
 
             for ( int j = 1; j < rawptvec.size(); j++ )
             {
@@ -3922,25 +4884,41 @@ void SurfaceIntersectionSingleton::UpdateDrawObjs()
     }
 
     // Normal Vec is not required, load placeholder.
-    m_IsectCurveDO.m_NormVec = m_IsectCurveDO.m_PntVec;
-    m_IsectPtsDO.m_NormVec = m_IsectPtsDO.m_PntVec;
-    m_BorderCurveDO.m_NormVec = m_BorderCurveDO.m_PntVec;
-    m_BorderPtsDO.m_NormVec = m_BorderPtsDO.m_PntVec;
-
     m_RawIsectCurveDO.m_NormVec = m_RawIsectCurveDO.m_PntVec;
     m_RawIsectPtsDO.m_NormVec = m_RawIsectPtsDO.m_PntVec;
     m_RawBorderCurveDO.m_NormVec = m_RawBorderCurveDO.m_PntVec;
     m_RawBorderPtsDO.m_NormVec = m_RawBorderPtsDO.m_PntVec;
 
-    m_IsectCurveDO.m_GeomChanged = true;
-    m_IsectPtsDO.m_GeomChanged = true;
-    m_BorderCurveDO.m_GeomChanged = true;
-    m_BorderPtsDO.m_GeomChanged = true;
+    for ( int k = 0; k < NUM_CUBIC; k++ )
+    {
+        m_CubicCurveDO[k].m_NormVec = m_CubicCurveDO[k].m_PntVec;
+        m_CubicEndPtsDO[k].m_NormVec = m_CubicEndPtsDO[k].m_PntVec;
+        m_CubicCtrlPtsDO[k].m_NormVec = m_CubicCtrlPtsDO[k].m_PntVec;
+    }
+
+    m_RawPatchJoinCurveDO.m_NormVec = m_RawPatchJoinCurveDO.m_PntVec;
+    m_RawPatchJoinPtsDO.m_NormVec = m_RawPatchJoinPtsDO.m_PntVec;
+
+    m_RawNonManifoldCurveDO.m_NormVec = m_RawNonManifoldCurveDO.m_PntVec;
+    m_RawNonManifoldPtsDO.m_NormVec = m_RawNonManifoldPtsDO.m_PntVec;
 
     m_RawIsectCurveDO.m_GeomChanged = true;
     m_RawIsectPtsDO.m_GeomChanged = true;
     m_RawBorderCurveDO.m_GeomChanged = true;
     m_RawBorderPtsDO.m_GeomChanged = true;
+
+    for ( int k = 0; k < NUM_CUBIC; k++ )
+    {
+        m_CubicCurveDO[k].m_GeomChanged = true;
+        m_CubicEndPtsDO[k].m_GeomChanged = true;
+        m_CubicCtrlPtsDO[k].m_GeomChanged = true;
+    }
+
+    m_RawPatchJoinCurveDO.m_GeomChanged = true;
+    m_RawPatchJoinPtsDO.m_GeomChanged = true;
+
+    m_RawNonManifoldCurveDO.m_GeomChanged = true;
+    m_RawNonManifoldPtsDO.m_GeomChanged = true;
 
     //=====  Visualizatino tools for SurfaceINtersectionMgr debugging =====//
     if ( false ) // Set to true to turn visualization tools ON
@@ -4027,22 +5005,6 @@ void SurfaceIntersectionSingleton::LoadDrawObjs( vector< DrawObj* > &draw_obj_ve
         return;
     }
 
-    m_IsectCurveDO.m_Visible = GetSettingsPtr()->m_DrawIsectFlag &&
-                               GetSettingsPtr()->m_DrawCurveFlag &&
-                               GetSettingsPtr()->m_DrawBinAdaptFlag;
-
-    m_IsectPtsDO.m_Visible = GetSettingsPtr()->m_DrawIsectFlag &&
-                             GetSettingsPtr()->m_DrawPntsFlag &&
-                             GetSettingsPtr()->m_DrawBinAdaptFlag;
-
-    m_BorderCurveDO.m_Visible = GetSettingsPtr()->m_DrawBorderFlag &&
-                                GetSettingsPtr()->m_DrawCurveFlag &&
-                                GetSettingsPtr()->m_DrawBinAdaptFlag;
-
-    m_BorderPtsDO.m_Visible = GetSettingsPtr()->m_DrawBorderFlag &&
-                              GetSettingsPtr()->m_DrawPntsFlag &&
-                              GetSettingsPtr()->m_DrawBinAdaptFlag;
-
     m_RawIsectCurveDO.m_Visible = GetSettingsPtr()->m_DrawIsectFlag &&
                                   GetSettingsPtr()->m_DrawCurveFlag &&
                                   GetSettingsPtr()->m_DrawRawFlag;
@@ -4055,18 +5017,60 @@ void SurfaceIntersectionSingleton::LoadDrawObjs( vector< DrawObj* > &draw_obj_ve
                                    GetSettingsPtr()->m_DrawCurveFlag &&
                                    GetSettingsPtr()->m_DrawRawFlag;
 
+    bool kind_flag[ NUM_CUBIC ] = { GetSettingsPtr()->m_DrawIsectFlag,
+                                    GetSettingsPtr()->m_DrawBorderFlag,
+                                    GetSettingsPtr()->m_DrawJoinFlag };
+
+    for ( int k = 0; k < NUM_CUBIC; k++ )
+    {
+        m_CubicCurveDO[k].m_Visible = kind_flag[k] &&
+                                      GetSettingsPtr()->m_DrawCurveFlag &&
+                                      GetSettingsPtr()->m_DrawCubicFlag;
+
+        m_CubicEndPtsDO[k].m_Visible = kind_flag[k] &&
+                                       GetSettingsPtr()->m_DrawPntsFlag &&
+                                       GetSettingsPtr()->m_DrawCubicFlag;
+
+        m_CubicCtrlPtsDO[k].m_Visible = m_CubicEndPtsDO[k].m_Visible;
+    }
+
+    m_RawPatchJoinCurveDO.m_Visible = GetSettingsPtr()->m_DrawJoinFlag &&
+                                      GetSettingsPtr()->m_DrawCurveFlag &&
+                                      GetSettingsPtr()->m_DrawRawFlag;
+
+    m_RawPatchJoinPtsDO.m_Visible = GetSettingsPtr()->m_DrawJoinFlag &&
+                                    GetSettingsPtr()->m_DrawPntsFlag &&
+                                    GetSettingsPtr()->m_DrawRawFlag;
+
     m_RawBorderPtsDO.m_Visible = GetSettingsPtr()->m_DrawBorderFlag &&
                                  GetSettingsPtr()->m_DrawPntsFlag &&
                                  GetSettingsPtr()->m_DrawRawFlag;
 
-    draw_obj_vec.push_back( &m_IsectCurveDO );
-    draw_obj_vec.push_back( &m_IsectPtsDO );
-    draw_obj_vec.push_back( &m_BorderCurveDO );
-    draw_obj_vec.push_back( &m_BorderPtsDO );
+    // A curve that bounds one patch rather than two may be either an intersection or a
+    // border, so it follows whichever of the two is being shown.
+    bool anycrv = GetSettingsPtr()->m_DrawIsectFlag || GetSettingsPtr()->m_DrawBorderFlag;
+
+    m_RawNonManifoldCurveDO.m_Visible = anycrv &&
+                                        GetSettingsPtr()->m_DrawCurveFlag &&
+                                        GetSettingsPtr()->m_DrawRawFlag;
+
+    m_RawNonManifoldPtsDO.m_Visible = anycrv &&
+                                      GetSettingsPtr()->m_DrawPntsFlag &&
+                                      GetSettingsPtr()->m_DrawRawFlag;
 
     draw_obj_vec.push_back( &m_RawIsectCurveDO );
+    for ( int k = 0; k < NUM_CUBIC; k++ )
+    {
+        draw_obj_vec.push_back( &m_CubicCurveDO[k] );
+        draw_obj_vec.push_back( &m_CubicEndPtsDO[k] );
+        draw_obj_vec.push_back( &m_CubicCtrlPtsDO[k] );
+    }
     draw_obj_vec.push_back( &m_RawIsectPtsDO );
     draw_obj_vec.push_back( &m_RawBorderCurveDO );
+    draw_obj_vec.push_back( &m_RawNonManifoldCurveDO );
+    draw_obj_vec.push_back( &m_RawNonManifoldPtsDO );
+    draw_obj_vec.push_back( &m_RawPatchJoinCurveDO );
+    draw_obj_vec.push_back( &m_RawPatchJoinPtsDO );
     draw_obj_vec.push_back( &m_RawBorderPtsDO );
 
     //=====  Visualizatino tools for SurfaceINtersectionMgr debugging =====//
@@ -4177,8 +5181,9 @@ void SurfaceIntersectionSingleton::UpdateDisplaySettings()
 
         GetSettingsPtr()->m_DrawBorderFlag = m_Vehicle->GetISectSettingsPtr()->m_DrawBorderFlag.Get();
         GetSettingsPtr()->m_DrawIsectFlag = m_Vehicle->GetISectSettingsPtr()->m_DrawIsectFlag.Get();
+        GetSettingsPtr()->m_DrawJoinFlag = m_Vehicle->GetISectSettingsPtr()->m_DrawJoinFlag.Get();
         GetSettingsPtr()->m_DrawRawFlag = m_Vehicle->GetISectSettingsPtr()->m_DrawRawFlag.Get();
-        GetSettingsPtr()->m_DrawBinAdaptFlag = m_Vehicle->GetISectSettingsPtr()->m_DrawBinAdaptFlag.Get();
+        GetSettingsPtr()->m_DrawCubicFlag = m_Vehicle->GetISectSettingsPtr()->m_DrawCubicFlag.Get();
         GetSettingsPtr()->m_DrawCurveFlag = m_Vehicle->GetISectSettingsPtr()->m_DrawCurveFlag.Get();
         GetSettingsPtr()->m_DrawPntsFlag = m_Vehicle->GetISectSettingsPtr()->m_DrawPntsFlag.Get();
 

@@ -27,6 +27,7 @@
 #include "Viewport.h"
 #include "Background.h"
 #include <FL/fl_ask.H>
+#include "CloneDeleteDialog.h"
 #include "ManageCORScreen.h"
 #include "ManageGeomScreen.h"
 #include "ManageViewScreen.h"
@@ -549,7 +550,7 @@ void MainVSPScreen::ActionCB( void * data )
     }
     else if ( data == &m_CutMenuItem )
     {
-        VehicleMgr.GetVehicle()->CutActiveGeomVec();
+        DeleteOrCutActiveGeomVec( VehicleMgr.GetVehicle(), true );
     }
     else if ( data == &m_CopyMenuItem )
     {
@@ -561,7 +562,7 @@ void MainVSPScreen::ActionCB( void * data )
     }
     else if ( data == &m_DeleteMenuItem )
     {
-        VehicleMgr.GetVehicle()->DeleteActiveGeomVec();
+        DeleteOrCutActiveGeomVec( VehicleMgr.GetVehicle(), false );
     }
     else if ( data == &m_SelAllMenuItem )
     {
@@ -702,7 +703,7 @@ void MainVSPScreen::ActionCB( void * data )
         const string localization_about =
             string( "OpenVSP 简体中文汉化版\n" ) +
             "软件版本：" + VSPVERSION4 + "\n"
-            "汉化版本：3.53.0-Codex-AI-zh-CN\n"
+            "汉化版本：3.54.0-Codex-AI-zh-CN-auto.db6c6fe8f4ec\n"
             "汉化仓库：https://github.com/reliable-ly0411/OpenVSP-zh-CN\n\n"
             "【声明】本中文本地化由 OpenAI Codex AI 生成并维护。\n"
             "汉化内容包括界面、动态标签、命令行帮助及离线帮助文档。\n\n"

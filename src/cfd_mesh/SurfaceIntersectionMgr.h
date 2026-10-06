@@ -58,6 +58,8 @@
 #define DEBUG_CFD_MESH
 #endif
 
+#include <atomic>
+#include <functional>
 #include "Surf.h"
 #include "Mesh.h"
 #include "SCurve.h"
@@ -66,6 +68,7 @@
 #include "GridDensity.h"
 #include "BezierCurve.h"
 #include "Vehicle.h"
+#include "MessageMgr.h"
 #include "MeshCommonSettings.h"
 #include "SimpleSubSurface.h"
 #include "SimpleMeshSettings.h"
@@ -193,6 +196,72 @@ protected:
 
 #define WakeMgr WakeMgrSingleton::getInstance()
 
+// What one surface pair's patch intersection produced.  Pairs are worked side by side, so each
+// keeps its own output and they are folded into the manager's lists in pair order afterwards --
+// which is the order the plain loop over pairs would have built them in.
+class IsectOutput
+{
+public:
+    vector< Puw* > m_Puws;
+    vector< IPnt* > m_IPnts;
+    vector< vector< vec3d > > m_PatchADraw;
+    vector< vector< vec3d > > m_PatchBDraw;
+};
+
+class SurfaceIntersectionSingleton;
+
+// Offers one analysis to AnalysisMgr when it asks for the meshing ones.
+//
+// AnalysisMgr lives in the geometry core, which cannot see this library and must not, so it
+// cannot name these analyses itself.  It asks; these answer.  One sits beside each manager, so
+// an analysis is offered exactly when the manager that runs it is built into the program.
+//
+// Made when the program loads, because a caller may only ever ask what analyses exist without
+// meshing anything.  It must not touch its manager until asked: the managers are built on
+// first use, and building one at load time would drag the vehicle up with it.
+class AnalysisRegistrar : public MessageBase
+{
+public:
+    AnalysisRegistrar( void ( *reg )() )
+    {
+        m_Register = reg;
+        Register( "RegisterAnalyses" );
+    }
+
+    void MessageCallback( const MessageBase* from, const MessageData& data ) override
+    {
+        if ( m_Register && data.m_String == "Register" )
+        {
+            m_Register();
+        }
+    }
+
+protected:
+    void ( *m_Register )();
+};
+
+
+// Hears that the vehicle has been emptied.  A listener rather than a call, because the
+// geometry core cannot see this library -- which is the case MessageMgr exists for.
+class MeshRenewListener : public MessageBase
+{
+public:
+    MeshRenewListener()
+    {
+        m_Mgr = nullptr;
+    }
+
+    void SetMgr( SurfaceIntersectionSingleton *mgr )
+    {
+        m_Mgr = mgr;
+    }
+
+    void MessageCallback( const MessageBase* from, const MessageData& data ) override;
+
+protected:
+    SurfaceIntersectionSingleton *m_Mgr;
+};
+
 class SurfaceIntersectionSingleton : public ParmContainer
 {
 protected:
@@ -210,9 +279,46 @@ public:
     ~SurfaceIntersectionSingleton() override;
     virtual void CleanUp();
 
+    // Throw away everything built from the vehicle's geometry.  Sent when the vehicle is
+    // emptied, by a new file or by one loaded over the top of this one.
+    virtual void RenewMesh();
+
     virtual void RegisterAnalysis();
 
     virtual void IntersectSurfaces();
+
+    // Split each surface along its feature lines, leave out the degenerate pieces, stitch the
+    // pieces back together along their matched borders, and write the bodies to STEP (or IGES)
+    // without intersecting them.  Uses the Surface Intersection settings for units, tolerances,
+    // labels and demotion; the sets and mode are given, split and join is off, and there are no
+    // wakes.  Returns why nothing was written, or an empty string.
+    virtual string SplitStitchSurfaces( const string &file_name, bool step_flag, int set, int degen_set,
+                                        bool use_mode, const string &mode_id );
+
+    // What the last run produced, for a caller that wants the numbers rather than the files.
+    int GetNumSurfs() const
+    {
+        return ( int )m_SurfVec.size();
+    }
+
+    int GetNumChains() const
+    {
+        return ( int )m_ISegChainList.size();
+    }
+
+    // Raw intersection points over all the intersection curves.
+    int GetNumCurvePnts() const;
+
+    // The same numbers as a Results entry, so a scripted run can read what the intersection
+    // found rather than parse the files it wrote.  Written by every run.
+    virtual void RecordResults();
+
+    const string& GetLastResultID() const
+    {
+        return m_LastResultID;
+    }
+
+    string m_LastResultID;
 
     virtual void LimitedIntersectSurfaces( const vector < string > & geomvec, vector < vector < vec3d > > & ptchains, vector < vector < vec3d > > & uwchains );
 
@@ -233,15 +339,12 @@ public:
     virtual void UpdateDisplaySettings();
 
     virtual void FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs );
-    virtual void FetchSurfs( vector< XferSurf > &xfersurfs );
+    virtual void FetchSurfs( vector< XferSurf > &xfersurfs, int n_ref = 0 );
+
     virtual void LoadSurfs( vector< XferSurf > &xfersurfs, double scale = 1.0, int start_surf_id = 0 );
 
     virtual void CleanMergeSurfs( bool skip_duplicate_removal );
 
-    virtual void WriteSurfsIntCurves( const string &filename  );
-    virtual void WriteGridToolCurvFile( const string &filename, bool rawflag );
-    virtual void WritePlot3DFile( const string &filename, bool rawflag );
-    virtual void WritePlot3DCurveBlocks( FILE* fp, const vector < vector < vec3d > > &curve_vec );
     virtual void WriteIGESFile( const string &filename, int len_unit,
                                 bool label_id = false, bool label_surf_num = false, bool label_split_num = false,
                                 bool label_name = false, const string &label_delim = "" );
@@ -256,24 +359,34 @@ public:
     virtual int FindSurfIndx( int surf_id ); // Find surface given surf ID
 
     virtual void DeleteDuplicateSurfs();
+    virtual void SplitBordersToMatch();
     virtual void BuildGrid();
+
+    // Match each border curve with the one it meets, stitching the surfaces' pieces together
+    void MatchBorderCurves();
 
     enum { QUIET_OUTPUT, VOCAL_OUTPUT, };
 
     virtual void Intersect();
 
 //  virtual void AddISeg( Surf* sA, Surf* sB, vec2d & sAuw0, vec2d & sAuw1,  vec2d & sBuw0, vec2d & sBuw1 );
-    virtual void AddIntersectionSeg( const SurfPatch& pA, const SurfPatch& pB, const vec3d & ip0, const vec3d & ip1 );
+    // A segment of the intersection of patches pA and pB, found between triangle triA of pA's
+    // corners qa and triangle triB of pB's corners qb (1 is corners 0 2 3, 2 is corners 0 1 2)
+    virtual void AddIntersectionSeg( const SurfPatch& pA, const SurfPatch& pB, const vec3d & ip0, const vec3d & ip1,
+                                     const vec3d qa[4], const vec3d qb[4], int triA, int triB );
 //  virtual ISeg* CreateSurfaceSeg( Surf* sPtr, vec3d & p0, vec3d & p1, vec2d & uw0, vec2d & uw1 );
     virtual ISeg* CreateSurfaceSeg( Surf* surfA, vec2d & uwA0, vec2d & uwA1, Surf* surfB, vec2d & uwB0, vec2d & uwB1  );
 
     virtual void WriteISegs();
+    // Partner each intersection point with the one across the triangle edge it lies on
+    virtual void LinkIPntPartners();
+
     virtual void BuildChains();
     virtual void CleanChains();
     virtual void CleanChain( ISegChain* c );
     virtual void RefineChains();
 
-    void RefineISegChainSeg( ISegChain* c, IPnt* ipnt );
+    void RefineISegChainSeg( ISegChain* c, IPnt* ipnt, bool endpnt );
     void RefineISegChain( ISegChain* c );
 
     virtual void ExpandChain( ISegChain* chain, PNTree* PN_tree );
@@ -283,7 +396,11 @@ public:
 
     virtual void BuildIntChain( const string &id, vector < vector < vec3d > > & ptchains, vector < vector < vec3d > > & uwchains );
 
-    virtual void BinaryAdaptIntCurves();
+    // Keep each chain's raw points and what kind of curve it is
+    virtual void RecordIntCurves();
+
+    // Build each chain's curve as it is written to trimmed CAD, once, for drawing and export
+    virtual void BuildChainCADCurves();
 
     virtual void MergeInteriorChainIPnts();
 
@@ -342,10 +459,56 @@ public:
     FILE* m_DebugFile;
     string m_DebugDir;
 
+    // The per surface debug scripts are numbered within one pass over the surfaces, and the
+    // master scripts that run them are opened on first use and closed when the pass ends.
+    //
+    // All of this used to be function static inside Mesh::InitMesh, which meant it belonged
+    // to the process rather than to the run.  A second meshing run carried on numbering where
+    // the first left off, so the master scripts were never reopened, and the condition that
+    // closed them -- the surface count reaching the last surface -- could still come true and
+    // write to a file that was already closed.
+    int m_DebugSurfCnt;
+    FILE* m_DebugSortedUWFile;
+    FILE* m_DebugMeshUWFile;
+    FILE* m_DebugTriMeshFile;
+
+    void BeginDebugSurfFiles();
+    void EndDebugSurfFiles();
+
     bool m_DebugDraw;
     vector< vector< vec3d > > m_DebugCurves;
     vector< vec3d > m_DebugColors;
 #endif
+
+    // A count of finished work, for a stage whose pieces come back in whatever order the
+    // threads happen to finish them.  Which piece finished is not worth reporting when the
+    // order is arbitrary; how much is left is, and it says plainly that the run is moving.
+    void ReportProgress( const string &str, int output_type );
+    void DrawProgress( int done, char term, int output_type );
+
+    void BeginProgress( const string &label, int n, int output_type );
+    void StepProgress( int output_type );
+    void StepProgressEvery( int stride, int output_type );
+    void EndProgress( int output_type );
+
+    string m_ProgressLabel;
+    std::atomic< int > m_ProgressDone;
+    int m_ProgressTotal;
+
+    void IntersectPairs();
+
+    // How many threads the mesher may use, and how a stage of independent pieces is run
+    // across them.  These live here rather than with the CFD mesher because the intersection
+    // stage needs them too.
+    static int MeshThreadCount();
+    int StageThreadCount( int nitem );
+    void RunIndexed( int n, int nthread, const std::function< void( int ) > &body );
+
+    // Write n items to fp, formatting them on several threads and writing them out in order.
+    // body( ibeg, iend, out ) appends items [ibeg,iend) to out, and must depend on nothing
+    // but those items.  The chunks go to the file in order, so the result is byte for byte
+    // the file the plain loop wrote.
+    void WriteChunked( FILE* fp, int n, const std::function< void( int, int, string & ) > &body );
 
     virtual SimpleMeshCommonSettings* GetSettingsPtr()
     {
@@ -378,12 +541,11 @@ protected:
 
     // Convert each ISegChain into a NURBS curve. The curves are labeled as border 
     // curves or intersection curves. For border curves, a test is performed to 
-    // determine if they are outside or inside another surface.
-    void BuildNURBSCurvesVec();
-
-    // Function to get all groups of component IDs. Components that are joined by intersection
-    // curves make up a group. 
-    vector < vector < int > > GetCompIDGroupVec();
+    // determine if they are outside or inside another surface, unless classify is false.
+    // cad builds each curve as it is written to trimmed CAD; otherwise each is only an
+    // adapted polyline.
+    // Where m_ChainCADVec holds the chains, cad reuses their curves.
+    void BuildNURBSCurvesVec( bool classify = true, bool cad = true );
 
     Vehicle* m_Vehicle;
 
@@ -411,11 +573,14 @@ protected:
 
     vector< vector< vec3d > > debugRayIsect;
 
-    vector < vector < vec3d > > m_BinAdaptCurveAVec;
-    vector < vector < vec3d > > m_BinAdaptCurveBVec;
+    // A chain whose two parents are the same surface is matched to itself: the surface is
+    // laid against itself along it, and it bounds one patch rather than two.
+    vector < bool > m_NonManifoldCurveFlagVec;
+
     vector < vector < vec3d > > m_RawCurveAVec;
     vector < vector < vec3d > > m_RawCurveBVec;
     vector < bool > m_BorderCurveFlagVec;
+    vector < bool > m_PatchJoinFlagVec;
 
     SimpleIntersectSettings m_IntersectSettings;
 
@@ -430,21 +595,36 @@ protected:
     // m_ISegChainList translated to a vector of NURBS curves
     vector < NURBS_Curve > m_NURBSCurveVec;
 
+    // Each chain of m_ISegChainList as it is written to trimmed CAD, patch joins included, built
+    // by BuildChainCADCurves for as long as the chains last
+    vector < NURBS_Curve > m_ChainCADVec;
+
     unordered_map < int, string > m_CompIDNameMap;
 
     string m_WakeGeomID;
 
 private:
 
-    DrawObj m_IsectCurveDO;
-    DrawObj m_IsectPtsDO;
-    DrawObj m_BorderCurveDO;
-    DrawObj m_BorderPtsDO;
+    MeshRenewListener m_RenewListener;
 
     DrawObj m_RawIsectCurveDO;
     DrawObj m_RawIsectPtsDO;
     DrawObj m_RawBorderCurveDO;
     DrawObj m_RawBorderPtsDO;
+
+    DrawObj m_RawNonManifoldCurveDO;
+    DrawObj m_RawNonManifoldPtsDO;
+
+    // The creases left inside a patch where split and join put pieces together
+    DrawObj m_RawPatchJoinCurveDO;
+    DrawObj m_RawPatchJoinPtsDO;
+
+    // The exact curves, the ends of their segments, and their inner control points, for each
+    // kind of curve: intersection, border, and patch join
+    enum { CUBIC_ISECT, CUBIC_BORDER, CUBIC_JOIN, NUM_CUBIC };
+    DrawObj m_CubicCurveDO[ NUM_CUBIC ];
+    DrawObj m_CubicEndPtsDO[ NUM_CUBIC ];
+    DrawObj m_CubicCtrlPtsDO[ NUM_CUBIC ];
 
     DrawObj m_ApproxPlanesDO;
 

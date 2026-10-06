@@ -105,6 +105,9 @@ protected:
 
     ToggleButton m_ConvertToQuadsToggle;
 
+    ToggleButton m_ParallelMesh;
+    ToggleButton m_SplitJoinSurfs;
+
     //===== Display Tab Items =====//
 
     ToggleButton m_ShowSourcesAndWakePreview;
@@ -118,13 +121,14 @@ protected:
 
     ToggleButton m_ColorByTag;
     ToggleButton m_ColorByReason;
+    ToggleButton m_ColorByQualityAngle;
+    ToggleButton m_ColorByQualityLength;
     ToggleRadioGroup m_ColorByToggleGroup;
 
     ToggleButton m_DrawIsect;
     ToggleButton m_DrawBorder;
+    ToggleButton m_DrawJoin;
 
-    ToggleButton m_ShowRaw;
-    ToggleButton m_ShowBinAdapt;
     SliderAdjRangeInput m_RelCurveTolSlider;
 
     ToggleButton m_ShowCurve;
@@ -157,6 +161,8 @@ protected:
     ToggleButton m_KeyFile;
     ToggleButton m_TkeyFile;
     ToggleButton m_VspgeomFile;
+    ToggleButton m_PogsFile;
+    Counter m_PogsNRefCounter;
 
     TriggerButton m_SelectStlFile;
     TriggerButton m_SelectPolyFile;
@@ -168,6 +174,7 @@ protected:
     TriggerButton m_SelectKeyFile;
     TriggerButton m_SelectTkeyFile;
     TriggerButton m_SelectVspgeomFile;
+    TriggerButton m_SelectPogsFile;
 
     StringOutput m_StlOutput;
     StringOutput m_PolyOutput;
@@ -179,6 +186,7 @@ protected:
     StringOutput m_KeyOutput;
     StringOutput m_TkeyOutput;
     StringOutput m_VspgeomOutput;
+    StringOutput m_PogsOutput;
 
     //===== Sources Tab Items =====//
 

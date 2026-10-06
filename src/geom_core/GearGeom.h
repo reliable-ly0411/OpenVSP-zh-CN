@@ -13,6 +13,7 @@
 
 #include "Geom.h"
 #include "XSec.h"
+#include "GeomInterface.h"
 
 class Bogie : public ParmContainer
 {
@@ -33,6 +34,7 @@ public:
     void DeactivateMechXForms();
     void ComposeStowAttachMatrix();
     void ComposeMechAttachMatrix();
+    void FlipAttachMatrix( Matrix4d &attach_mat ) const;
     void BuildRetractMatrix( Matrix4d &ret_mat, vec3d &knee_pt, vec3d &knee_ax, double k, int isymm ) const;
     void UpdateRetract();
     void BackCalculateRetract();
@@ -42,8 +44,10 @@ public:
 
     void Scale( double s );
 
-    void UpdateDrawObj( const Matrix4d &relTrans );
-    void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
+    // Its suspension travel, retraction axis and motion, and strut, placed by relTrans and
+    // appended to dobj_vec in that order.  Each is named from id_prefix and this bogie's ID.
+    void BuildDrawObjs( const Matrix4d &relTrans, const string &id_prefix, vector< DrawObj > &dobj_vec );
+    enum { BOGIE_AXIS, BOGIE_AXIS_CIRCLE, BOGIE_AXIS_ARROW, BOGIE_STRUT, BOGIE_TRAVEL_LINES, BOGIE_TRAVEL_POINTS, NUM_BOGIE_DRAWOBJS };
 
     virtual xmlNodePtr EncodeXml( xmlNodePtr & node );
     virtual xmlNodePtr DecodeXml( xmlNodePtr & node );
@@ -244,6 +248,7 @@ public:
     Matrix4d m_MechSymmTransform;
     Matrix4d m_MechAttachMatrix;
     Matrix4d m_GearModelMatrix;
+    Matrix4d m_GearFlipMat;
 
     VspCurve m_TireProfile;
     VspSurf m_TireSurface;
@@ -266,20 +271,12 @@ public:
     bool m_TireDirty;
     bool m_TireTessDirty;
 
-    DrawObj m_SuspensionTravelLinesDO;
-    DrawObj m_SuspensionTravelPointsDO;
-
     vec3d m_StrutAttachPt;
     vec3d m_Axis;
     vec3d m_StowPivotPt;
     vector < vec3d > m_PivotPtVec;
     vector < vec3d > m_KneePtVec;
     vector < vec3d > m_KneeAxVec;
-
-    DrawObj m_AxisDO;
-    DrawObj m_AxisCircleDO;
-    DrawObj m_AxisArrowDO;
-    DrawObj m_StrutDO;
 
     // Bogie
     BoolParm m_Symmetrical;
@@ -465,8 +462,137 @@ public:
 };
 
 
+//==== Where a landing gear meets the ground ====//
+// Implemented by GearGeom and by a Clone standing in for one.  Queries are in the Geom's own
+// frame, so a Clone can forward them; the InWorld forms place them with the asked Geom's matrix.
+class GearContactRole : virtual public GeomInterface
+{
+public:
+    // The behavior type this role belongs to; checked by Geom::CastTo.
+    static int BehaviorType()   { return GEAR_GEOM_TYPE; }
+
+    virtual ~GearContactRole()   {}
+
+    //==== In the gear's own frame ====//
+    virtual void BuildOnePtBasis( const string &cp1, int isymm1, int suspension1, int tire1,
+                                  double thetabogie, double thetawheel, double thetaroll, Matrix4d &mat, vec3d &p1 ) = 0;
+
+    virtual void BuildTwoPtBasis( const string &cp1, int isymm1, int suspension1, int tire1,
+                                  const string &cp2, int isymm2, int suspension2, int tire2,
+                                  double thetabogie, Matrix4d &mat, vec3d &p1, vec3d &p2 ) = 0;
+
+    virtual void BuildThreePtBasis( const string &cp1, int isymm1, int suspension1, int tire1,
+                                    const string &cp2, int isymm2, int suspension2, int tire2,
+                                    const string &cp3, int isymm3, int suspension3, int tire3,
+                                    Matrix4d &mat ) = 0;
+
+    virtual void BuildThreePtOffAxisBasis( const string &cp1, int isymm1, int suspension1, int tire1,
+                                    const string &cp2, int isymm2, int suspension2, int tire2,
+                                    const string &cp3, int isymm3, int suspension3, int tire3,
+                                    double mainoffset,
+                                    Matrix4d &mat ) = 0;
+
+    virtual bool GetTwoPtPivot( const string &cp1, int isymm1, int suspension1,
+                                    const string &cp2, int isymm2, int suspension2,
+                                    vec3d &ptaxis, vec3d &axis ) const = 0;
+
+    virtual bool GetTwoPtAftAxleAxis( const string &cp1, int isymm1, int suspension1,
+                                      const string &cp2, int isymm2, int suspension2,
+                                      double thetabogie, vec3d &ptaxis, vec3d &axis ) const = 0;
+
+    virtual bool GetTwoPtFwdAxleAxis( const string &cp1, int isymm1, int suspension1,
+                                      const string &cp2, int isymm2, int suspension2,
+                                      double thetabogie, vec3d &ptaxis, vec3d &axis ) const = 0;
+
+    virtual bool GetTwoPtMeanContactPtNormal( const string &cp1, int isymm1, int suspension1, int tire1,
+                                              const string &cp2, int isymm2, int suspension2, int tire2,
+                                              double thetabogie, vec3d &pt, vec3d &normal, vec3d &p1, vec3d &p2, bool &usepivot, double &mintheta, double &maxtheta ) const = 0;
+
+    virtual bool GetTwoPtAftContactPtNormal( const string &cp1, int isymm1, int suspension1, int tire1,
+                                             const string &cp2, int isymm2, int suspension2, int tire2,
+                                             double thetabogie, double thetawheel, vec3d &pt, vec3d &normal, vec3d &p1, vec3d &p2 ) const = 0;
+
+    virtual bool GetTwoPtFwdContactPtNormal( const string &cp1, int isymm1, int suspension1, int tire1,
+                                             const string &cp2, int isymm2, int suspension2, int tire2,
+                                             double thetabogie, double thetawheel, vec3d &pt, vec3d &normal, vec3d &p1, vec3d &p2 ) const = 0;
+
+    virtual bool GetTwoPtSideContactPtsNormal( const string &cp1, int isymm1, int suspension1, int tire1,
+                                               const string &cp2, int isymm2, int suspension2, int tire2,
+                                               vec3d &p1, vec3d &p2, vec3d &normal ) const = 0;
+
+    virtual bool GetOnePtSideContactPtAxisNormal( const string &cp1, int isymm1, int suspension1, int tire1,
+                                                  double thetabogie, double thetawheel, double thetaroll, vec3d &p1, vec3d &axis, vec3d &normal, int &ysign ) const = 0;
+
+    virtual bool GetPtNormal( const string &cp1, int isymm1, int suspension1, int tire1,
+                              const string &cp2, int isymm2, int suspension2, int tire2,
+                              const string &cp3, int isymm3, int suspension3, int tire3,
+                              vec3d &pt, vec3d &normal ) const = 0;
+
+    virtual bool GetSteerAngle( const string &cp1, const string &cp2, const string &cp3, int &isteer, double &steerangle ) const = 0;
+
+    virtual void GetNominalPtNormal( vec3d &pt, vec3d &normal ) const = 0;
+
+    virtual void GetCG( vec3d &cgnom, vector < vec3d > &cgbounds ) const = 0;
+
+    virtual bool GetContactPointVecNormal( const string &cp1, int isymm1, int suspension1, int tire1,
+                                           const string &cp2, int isymm2, int suspension2, int tire2,
+                                           const string &cp3, int isymm3, int suspension3, int tire3,
+                                           vector < vec3d > &ptvec, vec3d &normal ) const = 0;
+
+    virtual Bogie* GetBogie( const string &id ) const = 0;
+    virtual vector < Bogie* > GetBogieVec() = 0;
+
+    virtual int GetGearModelLenUnits() const = 0;
+
+    //==== The same queries, in world coordinates ====//
+    bool GetTwoPtPivotInWorld( const string &cp1, int isymm1, int suspension1,
+                               const string &cp2, int isymm2, int suspension2,
+                               vec3d &ptaxis, vec3d &axis ) const;
+
+    bool GetTwoPtAftAxleAxisInWorld( const string &cp1, int isymm1, int suspension1,
+                                     const string &cp2, int isymm2, int suspension2,
+                                     double thetabogie, vec3d &ptaxis, vec3d &axis ) const;
+
+    bool GetTwoPtFwdAxleAxisInWorld( const string &cp1, int isymm1, int suspension1,
+                                     const string &cp2, int isymm2, int suspension2,
+                                     double thetabogie, vec3d &ptaxis, vec3d &axis ) const;
+
+    bool GetTwoPtMeanContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                             const string &cp2, int isymm2, int suspension2, int tire2,
+                                             double thetabogie, vec3d &pt, vec3d &normal, bool &usepivot, double &mintheta, double &maxtheta ) const;
+
+    bool GetTwoPtAftContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                            const string &cp2, int isymm2, int suspension2, int tire2,
+                                            double thetabogie, double thetawheel, vec3d &pt, vec3d &normal ) const;
+
+    bool GetTwoPtFwdContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                            const string &cp2, int isymm2, int suspension2, int tire2,
+                                            double thetabogie, double thetawheel, vec3d &pt, vec3d &normal ) const;
+
+    bool GetTwoPtSideContactPtsNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                              const string &cp2, int isymm2, int suspension2, int tire2,
+                                              vec3d &p1, vec3d &p2, vec3d &normal ) const;
+
+    bool GetOnePtSideContactPtAxisNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                                 double thetabogie, double thetawheel, double thetaroll, vec3d &p1, vec3d &axis, vec3d &normal, int &ysign ) const;
+
+    bool GetPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                             const string &cp2, int isymm2, int suspension2, int tire2,
+                             const string &cp3, int isymm3, int suspension3, int tire3,
+                             vec3d &pt, vec3d &normal ) const;
+
+    void GetNominalPtNormalInWorld( vec3d &pt, vec3d &normal ) const;
+
+    void GetCGInWorld( vec3d &cgnom, vector < vec3d > &cgbounds ) const;
+
+    bool GetContactPointVecNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                          const string &cp2, int isymm2, int suspension2, int tire2,
+                                          const string &cp3, int isymm3, int suspension3, int tire3,
+                                          vector < vec3d > &ptvec, vec3d &normal ) const;
+};
+
 //==== Pod Geom ====//
-class GearGeom : public Geom
+class GearGeom : public Geom, public GearContactRole
 {
 public:
     GearGeom( Vehicle* vehicle_ptr );
@@ -499,7 +625,11 @@ public:
     void DelBogie( const int &i );
     void DelBogie( const string &id );
 
-    virtual void UpdateBBox();
+    virtual void UpdateMainBBox();
+
+    // The Geom's position stands in for the ground plane, which is left out of the main box.
+    virtual bool PlacedBBoxIncludesOrigin() const                 { return true; }
+
     virtual bool IsModelScaleSensitive()        { return m_AutoPlaneFlag(); }
 
     virtual void BuildOnePtBasis( const string &cp1, int isymm1, int suspension1, int tire1,
@@ -558,56 +688,21 @@ public:
 
     virtual bool GetSteerAngle( const string &cp1, const string &cp2, const string &cp3, int &isteer, double &steerangle ) const;
 
-    virtual bool GetTwoPtPivotInWorld( const string &cp1, int isymm1, int suspension1,
-                                           const string &cp2, int isymm2, int suspension2,
-                                           vec3d &ptaxis, vec3d &axis ) const;
+    virtual void GetNominalPtNormal( vec3d &pt, vec3d &normal ) const;
 
-    virtual bool GetTwoPtAftAxleAxisInWorld( const string &cp1, int isymm1, int suspension1,
-                                             const string &cp2, int isymm2, int suspension2,
-                                             double thetabogie, vec3d &ptaxis, vec3d &axis ) const;
+    virtual void GetCG( vec3d &cgnom, vector < vec3d > &cgbounds ) const;
 
-    virtual bool GetTwoPtFwdAxleAxisInWorld( const string &cp1, int isymm1, int suspension1,
-                                             const string &cp2, int isymm2, int suspension2,
-                                             double thetabogie, vec3d &ptaxis, vec3d &axis ) const;
-
-    virtual bool GetTwoPtMeanContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                     const string &cp2, int isymm2, int suspension2, int tire2,
-                                                     double thetabogie, vec3d &pt, vec3d &normal, bool &usepivot, double &mintheta, double &maxtheta ) const;
-
-    virtual bool GetTwoPtAftContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                    const string &cp2, int isymm2, int suspension2, int tire2,
-                                                    double thetabogie, double thetawheel, vec3d &pt, vec3d &normal ) const;
-
-    virtual bool GetTwoPtFwdContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                    const string &cp2, int isymm2, int suspension2, int tire2,
-                                                    double thetabogie, double thetawheel, vec3d &pt, vec3d &normal ) const;
-
-    virtual bool GetTwoPtSideContactPtsNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                      const string &cp2, int isymm2, int suspension2, int tire2,
-                                                      vec3d &p1, vec3d &p2, vec3d &normal ) const;
-
-    virtual bool GetOnePtSideContactPtAxisNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                         double thetabogie, double thetawheel, double thetaroll, vec3d &p1, vec3d &axis, vec3d &normal, int &ysign ) const;
-
-    virtual bool GetPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                     const string &cp2, int isymm2, int suspension2, int tire2,
-                                     const string &cp3, int isymm3, int suspension3, int tire3,
-                                     vec3d &pt, vec3d &normal ) const;
-
-    virtual void GetNominalPtNormalInWorld( vec3d &pt, vec3d &normal ) const;
-
-    virtual void GetCGInWorld( vec3d &cgnom, vector < vec3d > &cgbounds ) const;
 
     virtual bool GetContactPointVecNormal( const string &cp1, int isymm1, int suspension1, int tire1,
                                            const string &cp2, int isymm2, int suspension2, int tire2,
                                            const string &cp3, int isymm3, int suspension3, int tire3,
                                            vector < vec3d > &ptvec, vec3d &normal ) const;
 
-    virtual bool GetContactPointVecNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                  const string &cp2, int isymm2, int suspension2, int tire2,
-                                                  const string &cp3, int isymm3, int suspension3, int tire3,
-                                                  vector < vec3d > &ptvec, vec3d &normal ) const;
 
+    virtual int GetGearModelLenUnits() const
+    {
+        return m_ModelLenUnits();
+    }
     IntParm m_ModelLenUnits;
 
     BoolParm m_IncludeNominalGroundPlane;
@@ -649,8 +744,8 @@ protected:
     virtual void UpdateMainTessVec();
     virtual void UpdateTessVec();
     virtual void UpdateMainDegenGeomPreview();
-    virtual void UpdateDrawObj();
-    virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
+    virtual void BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec );
+    virtual void SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec );
 
     std::vector < Bogie * > m_Bogies;
     std::vector < int > m_BogieMainSurfIndex;
@@ -663,11 +758,8 @@ protected:
     vec3d m_MainMinCGPoint;
     vec3d m_MainMaxCGPoint;
 
-    vector < vec3d > m_NominalCGPointVec;
-    vector < SimpleFeatureTess > m_LimitsCGPointVec;
-
-    DrawObj m_CGNominalDrawObj;
-    DrawObj m_CGLimitsDrawObj;
+    // The markers after the bogies' own.
+    enum { GEAR_CG_NOMINAL, GEAR_CG_LIMITS, NUM_GEAR_CG_MARKERS };
 
 };
 

@@ -239,7 +239,9 @@ enum CFD_CONTROL_TYPE {     CFD_MIN_EDGE_LEN,	/*!< Minimum mesh edge length */
                             CFD_FAR_LOC_X,	/*!< Far field X location */
                             CFD_FAR_LOC_Y,	/*!< Far field Y location */
                             CFD_FAR_LOC_Z,	/*!< Far field Z location */
-                            CFD_SRF_XYZ_FLAG,	/*!< Flag to include X,Y,Z intersection curves in export files */
+                            CFD_SPLIT_JOIN_SURFS_FLAG,	/*!< Flag to cut wings and bodies into patches chosen for the feature they carry */
+                            CFD_PARALLEL_MESH_FLAG,	/*!< Flag to mesh on several threads */
+                            CFD_POGS_NUM_REFINE,	/*!< Number of tessellation refinements in the POGS surface files */
 };
 
 /*!
@@ -256,6 +258,7 @@ enum CFD_MESH_EXPORT_TYPE { CFD_STL_FILE_NAME,	/*!< STL export type */
                             CFD_TKEY_FILE_NAME,	/*!< TKEY export type */
                             CFD_FACET_FILE_NAME,	/*!< FACET export type */
                             CFD_VSPGEOM_FILE_NAME,	/*!< VSPGEOM export type */
+                            CFD_POGS_FILE_NAME,	/*!< POGS export type */
                             CFD_NUM_FILE_NAMES,	/*!< Number of CFD Mesh export file types */
 };
 
@@ -276,7 +279,9 @@ enum CFD_MESH_SOURCE_TYPE { POINT_SOURCE,	/*!< Point source */
 */
 /*! Enum that identifies how CFD and FEA meshes are colored. */
 enum CFD_VIS_TYPE { TAG,    /*!< Color mesh by tag value (component, subsurface, part, etc) */
-                    REASON    /*!< Color mesh by local edge length reason */
+                    REASON,    /*!< Color mesh by local edge length reason */
+                    QUALITY_ANGLE,    /*!< Color mesh by the smallest angle of each face */
+                    QUALITY_LENGTH    /*!< Color mesh by realized edge length over target edge length */
 };
 
 /*!
@@ -336,6 +341,16 @@ enum CHEVRON_W01_MODES { CHEVRON_W01_SE,	/*!< Start and End */
 /*!
 	\ingroup Enumerations
 */
+/*! Enum for what becomes of a Clone when the Geom it copies is deleted or cut. */
+enum CLONE_DELETE_TYPE { CLONE_DELETE_LEAVE_EMPTY,	/*!< Leave each Clone in place, copying nothing */
+                         CLONE_DELETE_WITH_ORIGINAL,	/*!< Delete or cut each Clone along with the Geom it copies */
+                         CLONE_DELETE_REPLACE,	/*!< Replace each Clone with a full copy of the Geom it copies */
+                         CLONE_DELETE_NUM_TYPES	/*!< Number of Clone delete types */
+};
+
+/*!
+	\ingroup Enumerations
+*/
 /*! Enum for Snap To collision error types. */
 enum COLLISION_ERRORS { COLLISION_OK,	/*!< No Error. */
                         COLLISION_INTERSECT_NO_SOLUTION,	/*!< Touching, no solution */
@@ -372,6 +387,7 @@ enum COMPUTATION_FILE_TYPE  {   NO_FILE_TYPE        = 0,	/*!< No export file typ
                                 CFD_PLOT3D_TYPE_DEPRECATED     = 1<<22,	
                                 CFD_VSPGEOM_TYPE    = 1<<23,	
                                 VSPAERO_VSPGEOM_TYPE = 1<<24,	
+                                CFD_POGS_TYPE    = 1<<25,
 };
 
 /*!
@@ -538,6 +554,7 @@ enum ERROR_CODE {   VSP_UNKNOWN = -1,	/*!< Unknown error */
                     VSP_DUPLICATE_NAME,	/*!< A duplicate name has been provided */
                     VSP_GUI_DEVICE_DEACTIVATED, /*!< A deactivated GUI device was touched */
                     VSP_COULD_NOT_CREATE_BACKGROUND3D,	/*!< Could not create and add Background3D */
+                    VSP_CLONE_ORIGINAL_LOST,	/*!< A Clone Geom no longer has the Geom it was copying */
                     VSP_NUM_ERROR_CODE	/*!< Total number of VSP error codes */
 };
 
@@ -580,7 +597,9 @@ enum EXPORT_TYPE {  EXPORT_FELISA,	/*!< FELISA export type (NOT IMPLEMENTED) */ 
                     EXPORT_SELIG_AIRFOIL,	/*!< Airfoil points (\\*.dat) export type */
                     EXPORT_BEZIER_AIRFOIL,	/*!< Airfoil curves (\\*.bz) export type */
                     EXPORT_IGES_STRUCTURE,	/*!< IGES structure (\\*.igs) export type */
-                    EXPORT_STEP_STRUCTURE	/*!< STEP structure (\\*.stp) export type */
+                    EXPORT_STEP_STRUCTURE,	/*!< STEP structure (\\*.stp) export type */
+                    EXPORT_STEP_STITCH,	/*!< Split and stitched STEP (\\*.stp) export type: each body's surfaces split along their feature lines and stitched back together, not intersected */
+                    EXPORT_IGES_STITCH	/*!< Split and stitched IGES (\\*.igs) export type: each body's surfaces split along their feature lines and stitched back together, not intersected */
 };
 
 /*!
@@ -627,9 +646,6 @@ enum FEA_EXPORT_TYPE { FEA_MASS_FILE_NAME,	/*!< FEA Mesh mass export type */
                        FEA_CALCULIX_FILE_NAME,	/*!< FEA Mesh Calculix export type */
                        FEA_STL_FILE_NAME,	/*!< FEA Mesh STL export type */
                        FEA_GMSH_FILE_NAME,	/*!< FEA Mesh GMSH export type */
-                       FEA_SRF_FILE_NAME,	/*!< FEA Mesh SRF export type */
-                       FEA_CURV_FILE_NAME,	/*!< FEA Mesh CURV export type */
-                       FEA_PLOT3D_FILE_NAME,	/*!< FEA Mesh PLOT3D export type */
                        FEA_IGES_FILE_NAME,	/*!< FEA Mesh trimmed IGES export type */
                        FEA_STEP_FILE_NAME,	/*!< FEA Mesh trimmed STEP export type */
                        FEA_NUM_FILE_NAMES	/*!< Number of FEA Mesh export type. */
@@ -974,6 +990,7 @@ enum GUI_GEOM_SCREEN { POD_GEOM_SCREEN,	/*!< Pod geom screen */
                        AUXILIARY_GEOM_SCREEN,	/*!< Auxiliary geom screen */
                        GEAR_GEOM_SCREEN,	/*!< Gear geom screen */
                        COBRA_GEOM_SCREEN,	/*!< Cobra body geom screen */
+                       CLONE_GEOM_SCREEN,	/*!< Clone geom screen */
                        NUM_GEOM_SCREENS,	/*!< Number of geom screens */
                        ALL_GEOM_SCREENS	/*!< All geom screens */
 };
@@ -994,6 +1011,7 @@ enum GUI_VSP_SCREEN { VSP_ADV_LINK_SCREEN,	/*!< Advanced linking screen */
                       VSP_BEM_OPTIONS_SCREEN,	/*!< Blade element method options screen */
                       VSP_CFD_MESH_SCREEN,	/*!< CFD Mesh screen */
                       VSP_CLIPPING_SCREEN,	/*!< Clipping screen */
+                      VSP_CLONE_NAME_SUFFIX_SCREEN,	/*!< Clone name suffix screen */
                       VSP_COMP_GEOM_SCREEN,	/*!< CompGeom screen */
                       VSP_COR_SCREEN,	/*!< Center of rotation screen */
                       VSP_CURVE_EDIT_SCREEN,	/*!< Curve edit screen */
@@ -1046,6 +1064,7 @@ enum GUI_VSP_SCREEN { VSP_ADV_LINK_SCREEN,	/*!< Advanced linking screen */
                       VSP_VSPAERO_SCREEN,	/*!< VSPAERO screen */
                       VSP_XSEC_SCREEN,	/*!< XSec screen */
                       VSP_WAVEDRAG_SCREEN,	/*!< Wave drag screen */
+                      VSP_SPLIT_STITCH_OPTIONS_SCREEN,	/*!< Split and stitched STEP and IGES options screen */
                       VSP_MAIN_SCREEN,   /*!< Main screen */ // Leave at end of list, helps draw after update.
                       VSP_NUM_SCREENS,	/*!< Number of screens */
                       VSP_ALL_SCREENS   /*!< Flag for all screens */
@@ -1080,10 +1099,7 @@ enum IMPORT_TYPE {  IMPORT_STL,	/*!< Stereolith (\\*.stl) import */
 	\ingroup Enumerations
 */
 /*! Enum for Surface Intersection export file types. */
-enum INTERSECT_EXPORT_TYPE { INTERSECT_SRF_FILE_NAME,	/*!< SRF intersection file type */
-                             INTERSECT_CURV_FILE_NAME,	/*!< CURV intersection file type */
-                             INTERSECT_PLOT3D_FILE_NAME,	/*!< PLOT3D intersection file type */
-                             INTERSECT_IGES_FILE_NAME,	/*!< IGES intersection file type */
+enum INTERSECT_EXPORT_TYPE { INTERSECT_IGES_FILE_NAME,	/*!< IGES intersection file type */
                              INTERSECT_STEP_FILE_NAME,	/*!< STEP intersection file type */
                              INTERSECT_NUM_FILE_NAMES	/*!< Number of surface intersection file types */
 };
@@ -1511,7 +1527,11 @@ enum SUBSURF_TYPE { SS_LINE,	/*!< Line sub-surface type */
 /*!
 	\ingroup Enumerations
 */
-/*! Enum that represents various symmetry types. */
+/*! Enum that represents various symmetry types (Sym_Planar_Flag, Sym_Axial_Flag in group Sym).
+    SYM_XY, SYM_XZ and SYM_YZ also name the planes in Flip_Flag (group Sym), which reflects a
+    Geom's shape about its own coordinate planes.  Its placement and its children are unchanged.
+    Flip_Flag has no effect on a Blank or Routing Geom; Conformal and Auxiliary Geoms take their
+    parent's.  See SetGeomCloneOriginal for how a Clone combines flips. */
 enum SYM_FLAG {  SYM_XY = ( 1 << 0 ),    /*!< XY planar symmetry. */
                  SYM_XZ = ( 1 << 1 ),	/*!< XZ planar symmetry. */
                  SYM_YZ = ( 1 << 2 ),	/*!< YZ planar symmetry. */

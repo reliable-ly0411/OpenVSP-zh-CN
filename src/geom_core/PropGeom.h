@@ -13,6 +13,7 @@
 
 
 #include "Geom.h"
+#include "GeomInterface.h"
 #include "XSec.h"
 #include "XSecCurve.h"
 #include "XSecSurf.h"
@@ -87,8 +88,27 @@ protected:
     double m_RefLenVal;
 };
 
+//==== A Geom that turns blades about an axis ====//
+// Implemented by PropGeom and by a Clone standing in for one.  What an auxiliary geom needs
+// for a tip path or a burst.
+class RotorRole : virtual public GeomInterface
+{
+public:
+    // The behavior type this role belongs to; checked by Geom::CastTo.
+    static int BehaviorType()   { return PROP_GEOM_TYPE; }
+
+    virtual double GetRotorDiameter() const = 0;
+    virtual double GetRotorR0() const = 0;
+
+    // Which way the blades turn.
+    virtual bool GetRotorReverseFlag() const = 0;
+
+    // The hub, if this rotor describes one; false otherwise.
+    virtual bool GetRotorHubDiameter( double &hubdia ) const = 0;
+};
+
 //==== Propeller Geom ====//
-class PropGeom : public GeomXSec
+class PropGeom : public GeomXSec, public RotorRole
 {
 public:
     PropGeom( Vehicle* vehicle_ptr );
@@ -97,6 +117,8 @@ public:
     virtual void UpdateDrawObj();
     virtual void UpdateHighlightDrawObj();
     virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
+    virtual void BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec );
+    virtual void SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec );
 
     virtual void ComputeCenter();
 
@@ -139,19 +161,27 @@ public:
 
     virtual PCurve* GetPCurve( int curveid );
 
-    virtual void WriteAirfoilFiles( FILE* meta_fid );
-
-    virtual vector< TMesh* > CreateTMeshVec( bool skipnegflipnormal, const int & n_ref = 0 ) const;
-
-    virtual void SetExportMainSurf( bool b )         { m_ExportMainSurf = b; }
-
-    virtual const VspSurf* GetSurfPtr( int indx ) const;
+    virtual void WriteAirfoilFiles( FILE* meta_fid, const string &name = string(), const string &id = string() );
 
     virtual void ApproxCubicAllPCurves();
 
     virtual void ResetThickness();
 
     virtual double GetR0();
+
+    virtual double GetRotorDiameter() const
+    {
+        return m_Diameter();
+    }
+    virtual double GetRotorR0() const
+    {
+        return const_cast< PropGeom* >( this )->GetR0();
+    }
+    virtual bool GetRotorReverseFlag() const
+    {
+        return m_ReverseFlag();
+    }
+    virtual bool GetRotorHubDiameter( double &hubdia ) const;
     virtual double UtoEta( const double &u, bool ignoreCap = false );
     virtual double EtatoU( const double &eta, bool ignoreCap = false );
 
@@ -261,8 +291,7 @@ protected:
 
     virtual void CalculateMeshMetrics();
 
-    DrawObj m_ArrowLinesDO;
-    DrawObj m_ArrowHeadDO;
+    enum { PROP_MARKER_LINES, PROP_MARKER_HEADS, NUM_PROP_MARKERS };
     BndBox m_MainBladeBBox;
     DrawObj m_HighlightBladeDrawObj;
 
@@ -274,8 +303,6 @@ protected:
     // tessellations can be assigned into existing buffers rather than cleared and reallocated.
     SimpleTess m_BladeTess;
     SimpleFeatureTess m_BladeFeatureTess;
-
-    bool m_ExportMainSurf;
 
     vector < double > m_UPseudo;
 

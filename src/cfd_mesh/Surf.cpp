@@ -17,6 +17,7 @@
 #include "IntersectPatch.h"
 #include "VspUtil.h"
 #include <cfloat>  //For DBL_EPSILON
+#include <set>
 #include "Vec3d.h"
 
 #ifdef DEBUG_CFD_MESH
@@ -69,6 +70,7 @@ Surf::Surf()
     m_FeaSymmIndex = -1;
     m_IgnoreSurfFlag = false;
     m_PlanarUWAspect = -1;
+    m_DistMapBuilt = false;
 }
 
 Surf::~Surf()
@@ -109,7 +111,90 @@ int Surf::UWPointOnBorder( double u, double w, double tol ) const
     return m_SurfCore.UWPointOnBorder( u, w, tol );
 }
 
-double Surf::TargetLen( double u, double w, double gap, double radfrac, int &reason )
+// A point can sit exactly on the seam between two regions, and the parameters carry rounding
+// from the splits that produced them, so the containment tests are given a little room.
+static const double uwregion_tol = 1.0e-8;
+
+int Surf::FindRegionPatchUW( double u, double w ) const
+{
+    for ( int i = 0; i < ( int )m_UWRegions.size(); i++ )
+    {
+        double ulo, uhi, wlo, whi;
+        m_UWRegions[i].PatchExtentU( ulo, uhi );
+        m_UWRegions[i].PatchExtentW( wlo, whi );
+
+        if ( u >= ulo - uwregion_tol && u <= uhi + uwregion_tol &&
+             w >= wlo - uwregion_tol && w <= whi + uwregion_tol )
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+vector < UWRegion > Surf::GetUWRegionsOrWhole() const
+{
+    if ( !m_UWRegions.empty() )
+    {
+        return m_UWRegions;
+    }
+
+    vector < UWRegion > rv( 1 );
+    rv[0].m_UMin = m_SurfCore.GetMinU();
+    rv[0].m_UMax = m_SurfCore.GetMaxU();
+    rv[0].m_WMin = m_SurfCore.GetMinW();
+    rv[0].m_WMax = m_SurfCore.GetMaxW();
+    return rv;
+}
+
+bool Surf::ToOriginalUW( double u, double w, double &uo, double &wo ) const
+{
+    if ( m_UWRegions.empty() )
+    {
+        uo = u;
+        wo = w;
+        return true;
+    }
+
+
+    int i = FindRegionPatchUW( u, w );
+
+    if ( i < 0 )
+    {
+        return false;
+    }
+
+    uo = m_UWRegions[i].ToOrigU( u );
+    wo = m_UWRegions[i].ToOrigW( w );
+    return true;
+}
+
+bool Surf::ToPatchUW( double uo, double wo, double &u, double &w ) const
+{
+    if ( m_UWRegions.empty() )
+    {
+        u = uo;
+        w = wo;
+        return true;
+    }
+
+    for ( int i = 0; i < ( int )m_UWRegions.size(); i++ )
+    {
+        const UWRegion &r = m_UWRegions[i];
+
+        if ( uo >= r.m_UMin - uwregion_tol && uo <= r.m_UMax + uwregion_tol &&
+             wo >= r.m_WMin - uwregion_tol && wo <= r.m_WMax + uwregion_tol )
+        {
+            u = r.ToPatchU( uo );
+            w = r.ToPatchW( wo );
+            return true;
+        }
+    }
+    return false;
+}
+
+// Also gives the point at u, w, which comes from the same surface evaluation.
+double Surf::TargetLen( double u, double w, double gap, double radfrac, int &reason, vec3d &pnt )
 {
     double k1, k2, ka, kg;
 
@@ -123,7 +208,7 @@ double Surf::TargetLen( double u, double w, double gap, double radfrac, int &rea
     double umin = m_SurfCore.GetMinU();
     double wmin = m_SurfCore.GetMinW();
 
-    m_SurfCore.CompCurvature( u, w, k1, k2, ka, kg );
+    m_SurfCore.CompPntCurvature( u, w, pnt, k1, k2, ka, kg );
 
     if( std::abs( k1 ) < tol ) // If zero curvature
     {
@@ -175,6 +260,14 @@ double Surf::TargetLen( double u, double w, double gap, double radfrac, int &rea
     return len;
 }
 
+// The number of points BuildTargetMap will lay on this surface.
+int Surf::GetTargetMapSize() const
+{
+    int nmapu = m_SurfCore.GetNumUPatches() * ( m_NumMap - 1 ) + 1;
+    int nmapw = m_SurfCore.GetNumWPatches() * ( m_NumMap - 1 ) + 1;
+    return nmapu * nmapw;
+}
+
 void Surf::BuildTargetMap( vector< MapSource* > &sources, int sid )
 {
     int npatchu = m_SurfCore.GetNumUPatches();
@@ -222,7 +315,8 @@ void Surf::BuildTargetMap( vector< MapSource* > &sources, int sid )
 
             int reason = vsp::NO_REASON;
             // apply curvature based limits
-            double curv_len = TargetLen( u, w, m_GridDensityPtr->GetMaxGap( limitFlag ), m_GridDensityPtr->GetRadFrac( limitFlag ), reason );
+            vec3d p;
+            double curv_len = TargetLen( u, w, m_GridDensityPtr->GetMaxGap( limitFlag ), m_GridDensityPtr->GetRadFrac( limitFlag ), reason, p );
             len = min( len, curv_len );
 
             // apply minimum edge length as safety on curvature
@@ -239,8 +333,6 @@ void Surf::BuildTargetMap( vector< MapSource* > &sources, int sid )
             len = max( len, m_GridDensityPtr->m_MinLen );
 
             // apply sources
-            vec3d p = m_SurfCore.CompPnt( u, w );
-
             // The last four parameters passed here (m_GeomID, m_MainSurfID, u, w)
             // represent a significant layering violation.  This is needed to allow
             // constant U/W line sources to do some evaluation in u,w space instead
@@ -288,17 +380,32 @@ bool indxcompare( const pair < double, pair < int, int > > &a, const pair < doub
 
 void Surf::WalkMap( int istart, int jstart, int kstart )
 {
-    static int iadd[] = { -1, 1,  0, 0 };
-    static int jadd[] = {  0, 0, -1, 1 };
+    static const int iadd[] = { -1, 1,  0, 0 };
+    static const int jadd[] = {  0, 0, -1, 1 };
 
-    vector < pair < int, int > > v;
+    const int nmapu = ( int )m_SrcMap.size();
+    const int nmapw = ( int )m_SrcMap[0].size();
+
+    // The seed cannot improve itself, so what is measured from it holds for the whole walk.
+    const vec3d pstart = m_SrcMap[istart][jstart].m_pt;
+    const double strstart = m_SrcMap[istart][jstart].m_str;
+    const double grm1 = m_GridDensityPtr->m_GrowRatio - 1.0;
+
+    int reason = m_SrcMap[istart][jstart].m_reason;
+    if ( reason < vsp::MIN_GROW_LIMIT )
+    {
+        reason += vsp::GROW_LIMIT_INCREMENT;
+    }
+
+    vector < pair < int, int > > &v = m_WalkStack;
+    v.clear();
 
     for( int i = 0; i < 4; i++ )
     {
         int inext = istart + iadd[i];
         int jnext = jstart + jadd[i];
 
-        if( inext < m_SrcMap.size() && inext >= 0 && jnext < m_SrcMap[0].size() && jnext >= 0 )
+        if( inext < nmapu && inext >= 0 && jnext < nmapw && jnext >= 0 )
         {
             v.push_back( make_pair( inext, jnext ) );
         }
@@ -306,40 +413,31 @@ void Surf::WalkMap( int istart, int jstart, int kstart )
 
     while ( !v.empty() )
     {
-        pair < int, int > p = v.back();
+        int icurrent = v.back().first;
+        int jcurrent = v.back().second;
         v.pop_back();
-        int icurrent = p.first;
-        int jcurrent = p.second;
 
-        if( m_SrcMap[ icurrent ][ jcurrent ].m_maxvisited < kstart )
+        MapSource &cell = m_SrcMap[ icurrent ][ jcurrent ];
+
+        if( cell.m_maxvisited < kstart )
         {
-            m_SrcMap[ icurrent ][ jcurrent ].m_maxvisited = kstart;
+            cell.m_maxvisited = kstart;
 
-            double targetstr = m_SrcMap[istart][jstart].m_str +
-                    ( m_SrcMap[ icurrent ][ jcurrent ].m_pt - m_SrcMap[istart][jstart].m_pt ).mag() *
-                    (m_GridDensityPtr->m_GrowRatio - 1.0);
+            double targetstr = strstart + ( cell.m_pt - pstart ).mag() * grm1;
 
-            if( m_SrcMap[ icurrent ][ jcurrent ].m_str > targetstr )
+            if( cell.m_str > targetstr )
             {
                 // Mark dominated as progress is made
-                m_SrcMap[ icurrent ][ jcurrent ].m_dominated = true;
-                m_SrcMap[ icurrent ][ jcurrent ].m_str = targetstr;
-
-                if ( m_SrcMap[istart][jstart].m_reason < vsp::MIN_GROW_LIMIT )
-                {
-                    m_SrcMap[ icurrent ][ jcurrent ].m_reason = m_SrcMap[istart][jstart].m_reason + vsp::GROW_LIMIT_INCREMENT;
-                }
-                else
-                {
-                    m_SrcMap[ icurrent ][ jcurrent ].m_reason = m_SrcMap[istart][jstart].m_reason;
-                }
+                cell.m_dominated = true;
+                cell.m_str = targetstr;
+                cell.m_reason = reason;
 
                 for( int i = 0; i < 4; i++ )
                 {
                     int inext = icurrent + iadd[i];
                     int jnext = jcurrent + jadd[i];
 
-                    if( inext < m_SrcMap.size() && inext >= 0 && jnext < m_SrcMap[0].size() && jnext >= 0 )
+                    if( inext < nmapu && inext >= 0 && jnext < nmapw && jnext >= 0 )
                     {
                         v.push_back( make_pair( inext, jnext ) );
                     }
@@ -362,8 +460,9 @@ void Surf::WalkMap( int istart, int jstart )
     // the four neighbours of every improved cell were pushed unconditionally,
     // so cells were popped and re-measured many times over.  The overload that
     // LimitTargetMap uses has always had this guard by way of m_maxvisited.
-    const size_t nmapw = m_SrcMap[0].size();
-    const size_t ncell = m_SrcMap.size() * nmapw;
+    const int nmapu = ( int )m_SrcMap.size();
+    const int nmapw = ( int )m_SrcMap[0].size();
+    const size_t ncell = ( size_t )nmapu * ( size_t )nmapw;
 
     if( m_WalkVisited.size() != ncell )
     {
@@ -378,55 +477,59 @@ void Surf::WalkMap( int istart, int jstart )
         m_WalkVisitID = 1;
     }
 
-    vector < pair < int, int > > v;
+    const unsigned int visitid = m_WalkVisitID;
+    unsigned int *visited = m_WalkVisited.data();
+
+    const vec3d pstart = m_SrcMap[istart][jstart].m_pt;
+    const double strstart = m_SrcMap[istart][jstart].m_str;
+    const double grm1 = m_GridDensityPtr->m_GrowRatio - 1.0;
+
+    int reason = m_SrcMap[istart][jstart].m_reason;
+    if ( reason < vsp::MIN_GROW_LIMIT )
+    {
+        reason += vsp::GROW_LIMIT_INCREMENT;
+    }
+
+    vector < pair < int, int > > &v = m_WalkStack;
+    v.clear();
 
     for( int i = 0; i < 4; i++ )
     {
         int inext = istart + iadd[i];
         int jnext = jstart + jadd[i];
 
-        if( inext < m_SrcMap.size() && inext >= 0 && jnext < m_SrcMap[0].size() && jnext >= 0 )
+        if( inext < nmapu && inext >= 0 && jnext < nmapw && jnext >= 0 )
         {
-            m_WalkVisited[ inext * nmapw + jnext ] = m_WalkVisitID;
+            visited[ ( size_t )inext * nmapw + jnext ] = visitid;
             v.push_back( make_pair( inext, jnext ) );
         }
     }
 
     while ( !v.empty() )
     {
-        pair < int, int > p = v.back();
+        int icurrent = v.back().first;
+        int jcurrent = v.back().second;
         v.pop_back();
-        int icurrent = p.first;
-        int jcurrent = p.second;
 
-        double targetstr = m_SrcMap[istart][jstart].m_str +
-                ( m_SrcMap[ icurrent ][ jcurrent ].m_pt - m_SrcMap[istart][jstart].m_pt ).mag() *
-                (m_GridDensityPtr->m_GrowRatio - 1.0);
+        MapSource &cell = m_SrcMap[ icurrent ][ jcurrent ];
 
+        double targetstr = strstart + ( cell.m_pt - pstart ).mag() * grm1;
 
-        if( m_SrcMap[ icurrent ][ jcurrent ].m_str > targetstr )
+        if( cell.m_str > targetstr )
         {
-            m_SrcMap[ icurrent ][ jcurrent ].m_str = targetstr;
-
-            if ( m_SrcMap[istart][jstart].m_reason < vsp::MIN_GROW_LIMIT )
-            {
-                m_SrcMap[ icurrent ][ jcurrent ].m_reason = m_SrcMap[istart][jstart].m_reason + vsp::GROW_LIMIT_INCREMENT;
-            }
-            else
-            {
-                m_SrcMap[ icurrent ][ jcurrent ].m_reason = m_SrcMap[istart][jstart].m_reason;
-            }
+            cell.m_str = targetstr;
+            cell.m_reason = reason;
 
             for( int i = 0; i < 4; i++ )
             {
                 int inext = icurrent + iadd[i];
                 int jnext = jcurrent + jadd[i];
 
-                if( inext < m_SrcMap.size() && inext >= 0 && jnext < m_SrcMap[0].size() && jnext >= 0 )
+                if( inext < nmapu && inext >= 0 && jnext < nmapw && jnext >= 0 )
                 {
-                    if( m_WalkVisited[ inext * nmapw + jnext ] != m_WalkVisitID )
+                    if( visited[ ( size_t )inext * nmapw + jnext ] != visitid )
                     {
-                        m_WalkVisited[ inext * nmapw + jnext ] = m_WalkVisitID;
+                        visited[ ( size_t )inext * nmapw + jnext ] = visitid;
                         v.push_back( make_pair( inext, jnext ) );
                     }
                 }
@@ -615,6 +718,11 @@ void Surf::UWtoTargetMapij( double u, double w, int &i, int &j )
 
 void Surf::ApplyES( const vec3d &uw, double t, int reason )
 {
+    ApplyESAtPnt( uw, m_SurfCore.CompPnt( uw.x(), uw.y() ), t, reason );
+}
+
+void Surf::ApplyESAtPnt( const vec3d &uw, const vec3d &p, double t, int reason )
+{
     double grm1 = m_GridDensityPtr->m_GrowRatio - 1.0;
     int nmapu = m_SrcMap.size();
     int nmapw = m_SrcMap[0].size();
@@ -623,8 +731,6 @@ void Surf::ApplyES( const vec3d &uw, double t, int reason )
     double u = uw.x();
     double w = uw.y();
     UWtoTargetMapij( u, w, ibase, jbase );
-
-    vec3d p = m_SurfCore.CompPnt( u, w );
 
     int iadd[] = { 0, 1, 0, 1 };
     int jadd[] = { 0, 0, 1, 1 };
@@ -672,83 +778,223 @@ vec2d Surf::ClosestUW( const vec3d & pnt_in ) const
     return vec2d( u, w );
 }
 
-void Surf::FindBorderCurves()
+// A pattern search for the least of the larger of the two distances, over a box of the
+// surface's parameters.  Derivative free, because the objective creases along the set where
+// the two distances are equal, which is where the answer lives.  Slower than solving for it,
+// but it cannot converge to the wrong stationary point.
+double Surf::SplitSearch( const vec3d & p0, const vec3d & p1,
+                          double ulo, double uhi, double wlo, double whi,
+                          double &u, double &w ) const
+{
+    vec3d p = m_SurfCore.CompPnt( u, w );
+    double best = max( dist( p, p0 ), dist( p, p1 ) );
+
+    double du = 0.25 * ( uhi - ulo );
+    double dw = 0.25 * ( whi - wlo );
+
+    for ( int iter = 0; iter < 40; iter++ )
+    {
+        bool moved = false;
+
+        for ( int k = 0; k < 4; k++ )
+        {
+            double tu = u;
+            double tw = w;
+
+            if ( k == 0 ) { tu = u + du; }
+            if ( k == 1 ) { tu = u - du; }
+            if ( k == 2 ) { tw = w + dw; }
+            if ( k == 3 ) { tw = w - dw; }
+
+            tu = clamp( tu, ulo, uhi );
+            tw = clamp( tw, wlo, whi );
+
+            vec3d tp = m_SurfCore.CompPnt( tu, tw );
+            double f = max( dist( tp, p0 ), dist( tp, p1 ) );
+
+            if ( f < best )
+            {
+                best = f;
+                u = tu;
+                w = tw;
+                moved = true;
+            }
+        }
+
+        if ( !moved )
+        {
+            du *= 0.5;
+            dw *= 0.5;
+
+            if ( du < 1.0e-7 && dw < 1.0e-7 )
+            {
+                break;
+            }
+        }
+    }
+
+    return best;
+}
+
+// Where to put the new point when an edge is split.
+//
+// Taking the midpoint of the two ends and projecting it to the surface assumes the midpoint
+// lies near the surface.  Across a wing tip, where an edge runs from the lower surface round
+// to the upper, it does not: the midpoint is inside the wing, and the nearest surface point to
+// it is back on the side the edge came from.  The split then produces a child edge nearly as
+// long as its parent, which is split again, and the mesher fills the tip with a hairball until
+// something gives way.
+//
+// What halves the edge is the point equidistant from its two ends, and of those the nearest.
+// Solving for it directly is quick -- a two by two system in u and w, see
+// Solving for it directly is quick -- a two by two system in u and w, see
+// eli/geom/intersect/equidistant_surface.hpp -- but it finds a stationary point of the
+// constrained problem, which is not always the one wanted.
+//
+// So solve first and check the answer.  A split that halves its edge is kept, and only one
+// Both are measured against the projection, which is kept where it beats them.
+vec2d Surf::SplitUW( const vec3d & p0, const vec3d & p1, const vec2d & uw0, const vec2d & uw1 ) const
+{
+    double u0 = 0.5 * ( uw0.x() + uw1.x() );
+    double w0 = 0.5 * ( uw0.y() + uw1.y() );
+
+    double ulo = min( uw0.x(), uw1.x() );
+    double uhi = max( uw0.x(), uw1.x() );
+    double wlo = min( uw0.y(), uw1.y() );
+    double whi = max( uw0.y(), uw1.y() );
+
+    double upad = 0.25 * ( uhi - ulo );
+    double wpad = 0.25 * ( whi - wlo );
+
+    ulo = max( ulo - upad, m_SurfCore.GetMinU() );
+    uhi = min( uhi + upad, m_SurfCore.GetMaxU() );
+    wlo = max( wlo - wpad, m_SurfCore.GetMinW() );
+    whi = min( whi + wpad, m_SurfCore.GetMaxW() );
+
+    // Seed on the straight line between the two ends in parameter space.  The equidistant
+    // point along that line always exists and is always found, and unlike the parametric
+    // midpoint it is already equidistant, which is most of what the solve is looking for.
+    double su = u0;
+    double sw = w0;
+    m_SurfCore.FindEquidistantOnLine( su, sw, p0, p1, uw0.x(), uw0.y(), uw1.x(), uw1.y() );
+
+    su = clamp( su, ulo, uhi );
+    sw = clamp( sw, wlo, whi );
+
+    double u = su;
+    double w = sw;
+    m_SurfCore.FindEquidistant( u, w, p0, p1, su, sw, ulo, uhi, wlo, whi );
+
+    vec3d pe = m_SurfCore.CompPnt( u, w );
+    double fe = max( dist( pe, p0 ), dist( pe, p1 ) );
+
+    double half = 0.5 * dist( p0, p1 );
+
+    // Did it halve the edge?  If it did, that is the answer.
+    //
+    // Both fallbacks below -- the search, and projecting the midpoint onto the surface -- are
+    // for the case where the solve did not.  Projecting is a second Newton solve as costly as
+    // the first, and the most it can win once the solve is already within five percent of a
+    // perfect halving is those five percent, which is not worth a solve to chase.
+    if ( fe > 1.05 * half )
+    {
+        double su = u0;
+        double sw = w0;
+        double fs = SplitSearch( p0, p1, ulo, uhi, wlo, whi, su, sw );
+
+        if ( fs < fe )
+        {
+            u = su;
+            w = sw;
+            fe = fs;
+        }
+
+        // Fall back on the projection where it does better.
+        vec3d pmid = ( p0 + p1 ) * 0.5;
+        double pu, pw;
+        m_SurfCore.FindNearest( pu, pw, pmid, u0, w0 );
+        vec3d pp = m_SurfCore.CompPnt( pu, pw );
+
+        if ( max( dist( pp, p0 ), dist( pp, p1 ) ) < fe )
+        {
+            return vec2d( pu, pw );
+        }
+    }
+
+    return vec2d( u, w );
+}
+
+// One side of the patch, from one corner of its parameter domain to the next.
+//
+// Where a patch has been put back together out of two pieces, the side along the join can come
+// back on itself: the surface reaches the same place from either half, so the side runs out and
+// back over one curve in space.  Cut in two at the turn, the halves are that curve from either
+// end and pair with each other, which is one edge of topology rather than the two an ordinary
+// cut would make.
+void Surf::AddBorderCurve( double ua, double wa, double ub, double wb )
 {
     double degen_tol = 1.0e-6;
 
-    //==== Load 4 Border Curves if Not Degenerate ====//
-    SCurve* scrv;
+    bool folded = true;
+    int nchk = 8;
+
+    for ( int i = 1; i < nchk; i++ )
+    {
+        double f = ( double )i / ( double )( 2 * nchk );
+
+        vec3d p0 = m_SurfCore.CompPnt( ua + f * ( ub - ua ), wa + f * ( wb - wa ) );
+        vec3d p1 = m_SurfCore.CompPnt( ub - f * ( ub - ua ), wb - f * ( wb - wa ) );
+
+        if ( dist( p0, p1 ) > degen_tol )
+        {
+            folded = false;
+            break;
+        }
+    }
+
+    int npiece = 1;
+    if ( folded )
+    {
+        npiece = 2;
+    }
+
+    vector< vec3d > pnts( 2 );
+
+    for ( int k = 0; k < npiece; k++ )
+    {
+        double f0 = ( double )k / ( double )npiece;
+        double f1 = ( double )( k + 1 ) / ( double )npiece;
+
+        pnts[0].set_xyz( ua + f0 * ( ub - ua ), wa + f0 * ( wb - wa ), 0 );
+        pnts[1].set_xyz( ua + f1 * ( ub - ua ), wa + f1 * ( wb - wa ), 0 );
+
+        SCurve* scrv = new SCurve( this );
+        scrv->InterpolateLinear( pnts );
+        scrv->SetParmLine( ParmLine::Between( ua, wa, ub, wb ) );
+        scrv->PromoteTo( 3 );  // Need to be cubic as intermediate points are checked for degeneracy.
+
+        if ( scrv->Length( 10 ) > degen_tol )
+        {
+            m_SCurveVec.push_back( scrv );
+        }
+        else
+        {
+            delete scrv;
+        }
+    }
+}
+
+void Surf::FindBorderCurves()
+{
     double min_u = m_SurfCore.GetMinU();
     double min_w = m_SurfCore.GetMinW();
     double max_u = m_SurfCore.GetMaxU();
     double max_w = m_SurfCore.GetMaxW();
 
-    vector< vec3d > pnts;
-    pnts.resize( 2 );
-
-    pnts[0].set_xyz( min_u, min_w, 0 );         // Inc U
-    pnts[1].set_xyz( max_u, min_w, 0 );
-
-    scrv = new SCurve( this );
-    scrv->InterpolateLinear( pnts );
-    scrv->PromoteTo( 3 );  // Need to be cubic as intermediate points are checked for degeneracy.
-
-    if ( scrv->Length( 10 ) > degen_tol )
-    {
-        m_SCurveVec.push_back( scrv );
-    }
-    else
-    {
-        delete scrv;
-    }
-
-    pnts[0].set_xyz( max_u, min_w, 0 );       // Inc W
-    pnts[1].set_xyz( max_u, max_w, 0 );
-
-    scrv = new SCurve( this );
-    scrv->InterpolateLinear( pnts );
-    scrv->PromoteTo( 3 );  // Need to be cubic as intermediate points are checked for degeneracy.
-
-    if ( scrv->Length( 10 ) > degen_tol )
-    {
-        m_SCurveVec.push_back( scrv );
-    }
-    else
-    {
-        delete scrv;
-    }
-
-    pnts[0].set_xyz( max_u, max_w, 0 );         // Dec U
-    pnts[1].set_xyz( min_u, max_w, 0 );
-
-    scrv = new SCurve( this );
-    scrv->InterpolateLinear( pnts );
-    scrv->PromoteTo( 3 );  // Need to be cubic as intermediate points are checked for degeneracy.
-
-    if ( scrv->Length( 10 ) > degen_tol )
-    {
-        m_SCurveVec.push_back( scrv );
-    }
-    else
-    {
-        delete scrv;
-    }
-
-    pnts[0].set_xyz( min_u, max_w,   0 );           // Dec W
-    pnts[1].set_xyz( min_u, min_w,   0 );
-
-    scrv = new SCurve( this );
-    scrv->InterpolateLinear( pnts );
-    scrv->PromoteTo( 3 );  // Need to be cubic as intermediate points are checked for degeneracy.
-
-    if ( scrv->Length( 10 ) > degen_tol )
-    {
-        m_SCurveVec.push_back( scrv );
-    }
-    else
-    {
-        delete scrv;
-    }
+    AddBorderCurve( min_u, min_w, max_u, min_w );       // Inc U
+    AddBorderCurve( max_u, min_w, max_u, max_w );       // Inc W
+    AddBorderCurve( max_u, max_w, min_u, max_w );       // Dec U
+    AddBorderCurve( min_u, max_w, min_u, min_w );       // Dec W
 }
 
 string Surf::GetDisplayName()
@@ -806,46 +1052,66 @@ void Surf::WriteSTL( const char* filename )
     m_Mesh.WriteSimpleSTL( filename );
 }
 
-void Surf::Intersect( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr )
+// Everything that has to happen before two surfaces' patch trees are worth intersecting, and
+// the answer to whether they are.  Kept apart from the patch work because it projects curves
+// onto the surface -- an evaluation, which writes the surface's own scratch buffers, so two
+// threads must never do it to the same surface at once.  It also adds curves of its own.
+bool Surf::IntersectPrepare( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr )
 {
-    int i;
-
     if ( surfPtr->GetCompID() == m_CompID )
     {
-        return;
+        return false;
     }
 
     if ( m_FeaSymmIndex >= 0 && surfPtr->GetFeaSymmIndex() >= 0 &&
          surfPtr->GetFeaSymmIndex() != m_FeaSymmIndex )
     {
-        return;
+        return false;
     }
 
     if ( !Compare( m_BBox, surfPtr->GetBBox() ) )
     {
-        return;
+        return false;
     }
     if ( BorderCurveOnSurface( surfPtr, MeshMgr ) )
     {
-        return;
+        return false;
     }
     if ( surfPtr->BorderCurveOnSurface( this, MeshMgr ) )
     {
-        return;
+        return false;
     }
 
-    vector< SurfPatch* > otherPatchVec = surfPtr->GetPatchVec();
-    for ( i = 0 ; i < ( int )m_PatchVec.size() ; i++ )
+    return true;
+}
+
+void Surf::FindIntersectPatches( Surf* surfPtr, vector < int > &patch_vec )
+{
+    patch_vec.clear();
+
+    for ( int i = 0 ; i < ( int )m_PatchVec.size() ; i++ )
+    {
         if ( Compare( *m_PatchVec[i]->get_bbox(), surfPtr->GetBBox() ) )
         {
-            for ( int j = 0 ; j < ( int )otherPatchVec.size() ; j++ )
-            {
-                if ( Compare( *m_PatchVec[i]->get_bbox(), *otherPatchVec[j]->get_bbox() ) )
-                {
-                    intersect( *m_PatchVec[i], *otherPatchVec[j], MeshMgr );
-                }
-            }
+            patch_vec.push_back( i );
         }
+    }
+}
+
+// Walk one patch's tree against the patches of surfPtr it meets.  This reaches the surfaces only
+// through their control points, and every patch it makes along the way comes from a pool that
+// belongs to the calling thread, so two threads may do this to the same surface at the same time.
+void Surf::IntersectPatch( int ipatch, Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr )
+{
+    const vector< SurfPatch* > &otherPatchVec = surfPtr->GetPatchVec();
+
+    for ( int j = 0 ; j < ( int )otherPatchVec.size() ; j++ )
+    {
+        if ( Compare( *m_PatchVec[ipatch]->get_bbox(), *otherPatchVec[j]->get_bbox() ) )
+        {
+            intersect( *m_PatchVec[ipatch], *otherPatchVec[j], MeshMgr );
+        }
+    }
 }
 
 void Surf::IntersectLineSeg( vec3d & p0, vec3d & p1, vector< double > & t_vals )
@@ -989,6 +1255,17 @@ void Surf::SetBBox( const vec3d &pmin, const vec3d &pmax )
 }
 
 
+// Order two mesh input points by where they are, not by where they happen to live in memory.
+// See the note in Surf::InitMesh.
+static bool UWPntIndexCompare( const pair< vec2d, IPnt* > &a, const pair< vec2d, IPnt* > &b )
+{
+    if ( a.first.x() != b.first.x() )
+    {
+        return a.first.x() < b.first.x();
+    }
+    return a.first.y() < b.first.y();
+}
+
 void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > &adduw, SurfaceIntersectionSingleton *MeshMgr )
 {
     //==== Store Only One Instance of each IPnt ====//
@@ -1003,17 +1280,53 @@ void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > 
 
     vector < vec2d > uwPntVec;
 
-    set< IPnt* >::iterator ip;
-    for ( ip = ipntSet.begin() ; ip != ipntSet.end() ; ++ip )
+    // A set of pointers iterates in heap address order, and that moves from one run to the
+    // next.  This loop hands each point its index, and the constraint segments below are
+    // written in terms of those indices, so the entire input to the triangulator would change
+    // shape between two runs of the same model.  That alone makes a run impossible to reproduce;
+    // it also matters because both triangulators are sensitive to the order they are fed, to the
+    // point of occasionally failing on one ordering and not another.
+    //
+    // Order the points by where they are instead.  The result is the same set of points,
+    // always in the same sequence, for the same geometry.
+    vector < pair < vec2d, IPnt* > > ipnts;
+    ipnts.reserve( ipntSet.size() );
+
+    for ( set< IPnt* >::iterator ip = ipntSet.begin() ; ip != ipntSet.end() ; ++ip )
     {
-        vec2d uw = ( *ip )->GetPuw( this )->m_UW;
+        ipnts.push_back( pair< vec2d, IPnt* >( ( *ip )->GetPuw( this )->m_UW, *ip ) );
+    }
+
+    sort( ipnts.begin(), ipnts.end(), UWPntIndexCompare );
+
+    // Where each intersection point sits in uwPntVec.  A point belongs to a chain, and a chain
+    // is handed to both the surfaces it lies between, so this numbering is the surface's own
+    // and is kept here rather than on the point.
+    unordered_map< IPnt*, int > pntindex;
+    pntindex.reserve( ipnts.size() );
+
+    // A point is taken to be one already numbered only where the two are close in 3D as well as
+    // in u,w, to the tolerance MergeBorderEndPoints joins chain ends with.
+    double tol3d = -1.0;
+    SimpleGridDensity* gd = MeshMgr->GetGridDensityPtr();
+    if ( gd )
+    {
+        tol3d = gd->m_MinLen / 100.0;
+    }
+    vector < vec3d > pntVec;
+
+    for ( int k = 0 ; k < ( int )ipnts.size() ; k++ )
+    {
+        vec2d uw = ipnts[k].first;
+        IPnt *ipt = ipnts[k].second;
+        vec3d p = CompPnt( uw[0], uw[1] );
 
         int min_id = -1;
         double min_dist = 1.0;
         for ( int i = 0 ; i < ( int )uwPntVec.size() ; i++ )
         {
             double d = dist( uwPntVec[i], uw );
-            if ( d < min_dist )
+            if ( d < min_dist && ( tol3d < 0.0 || dist( pntVec[i], p ) < tol3d ) )
             {
                 min_dist = d;
                 min_id = i;
@@ -1022,12 +1335,13 @@ void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > 
 
         if ( min_dist < 1.0e-4 )
         {
-            ( *ip )->m_Index = min_id;
+            pntindex[ ipt ] = min_id;
         }
         else
         {
             uwPntVec.push_back( uw );
-            ( *ip )->m_Index = uwPntVec.size() - 1;
+            pntVec.push_back( p );
+            pntindex[ ipt ] = ( int )uwPntVec.size() - 1;
         }
     }
 
@@ -1045,8 +1359,8 @@ void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > 
         int nhalf = 0.5 * ( n - 1 )  + 1;
         for ( int j = 0 ; j < nhalf - 1; j++ )
         {
-            seg.m_Index[0] = chains[i]->m_TessVec[2 * j]->m_Index;
-            seg.m_Index[1] = chains[i]->m_TessVec[2 * (j + 1)]->m_Index;
+            seg.m_Index[0] = pntindex[ chains[i]->m_TessVec[2 * j] ];
+            seg.m_Index[1] = pntindex[ chains[i]->m_TessVec[2 * (j + 1)] ];
             seg.m_UWmid = chains[i]->m_TessVec[2 * j + 1]->GetPuw( this )->m_UW;
 
             seg.m_P[0] = chains[i]->m_TessVec[2 * j]->m_Pnt;
@@ -1057,7 +1371,7 @@ void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > 
         }
     }
 
-    // Remove duplicate constraint segments — same pair of point indices in either order.
+    // Remove duplicate constraint segments -- same pair of point indices in either order.
     // Duplicates arise when two chains share a boundary and both contribute the same edge.
     // Duplicates appear to be harmless, but removing them is cheap insurance.
     {
@@ -1092,11 +1406,45 @@ void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > 
 }
 
 
+// OpenABF builds a half edge mesh, and that needs every directed edge to belong to at most one
+// face.  A grid whose rows collapse -- a patch that runs to a point, or one made by laying a
+// cap against itself -- can offer the same directed edge twice.
+//
+// OpenABF answers some of those with an exception, which is caught below.  It does not answer
+// this one: where it decides a face has to be wound the other way, it swaps the edges it has
+// collected for their pairs but leaves the face's head pointing at the edge it abandoned.
+// That edge is never given a next, so walking the face reads through a null pointer instead of
+// throwing, and the program goes down.  The check has to happen here, before the face is
+// offered.
+//
+// Returns false, and records nothing, for a face that would reuse a directed edge.
+static bool ManifoldFace( std::set< std::pair< int, int > > &used, int a, int b, int c )
+{
+    std::pair< int, int > e0( a, b ), e1( b, c ), e2( c, a );
+
+    if ( used.count( e0 ) > 0 || used.count( e1 ) > 0 || used.count( e2 ) > 0 )
+    {
+        return false;
+    }
+
+    used.insert( e0 );
+    used.insert( e1 );
+    used.insert( e2 );
+
+    return true;
+}
+
 void Surf::BuildDistMap()
 {
 #ifdef DEBUG_CFD_MESH
     static int cnt = 0;
 #endif
+
+    if ( m_DistMapBuilt )
+    {
+        return;
+    }
+    m_DistMapBuilt = true;
 
     if ( m_PlanarUWAspect > 0 )
     {
@@ -1179,6 +1527,15 @@ void Surf::BuildDistMap()
         }
     }
 
+    // A patch that runs to a point at one end -- a wing that closes on its spine -- samples
+    // to a grid whose rows collapse, and the triangles built from it can ask for a third face
+    // along an edge.  There is no flattening one of those, and asking for it walks off the
+    // end of the mesh, so notice and give up on the map instead.  Without it the mesher
+    // spaces points by the surface's own parameter, as it does for a planar patch.
+    bool badface = false;
+    int nrefuse = 0;
+    std::set< std::pair< int, int > > usededge;
+
     for ( i = 0 ; i < nump - 1; i++ )
     {
         for ( j = 0; j < nump - 1; j++ )
@@ -1190,21 +1547,69 @@ void Surf::BuildDistMap()
             i2 = pnCloud.GetNodeUsedIndex( ptindx[ i ][ j + 1 ] );
             i3 = pnCloud.GetNodeUsedIndex( ptindx[ i + 1 ][ j + 1 ] );
 
+            // A patch that runs to a point at one end -- a wing that closes on its spine --
+            // samples to a grid whose rows collapse, and the triangles built from it can ask
+            // for a third face along an edge.  Leave those out rather than let the throw take
+            // the program down; what is left still stands in for the surface well enough to
+            // space points on it.
             if ( (i0 != i1) && (i0 != i2) && (i1 != i2) )
             {
-                mesh->insert_face( i0, i1, i2 );
+                if ( ManifoldFace( usededge, i0, i1, i2 ) )
+                {
+                    try { mesh->insert_face( i0, i1, i2 ); }
+                    catch ( const std::exception & ) { badface = true; }
+                }
+                else
+                {
+                    nrefuse++;
+                }
             }
 
             if ( (i1 != i3) && (i1 != i2) && (i3 != i2) )
             {
-                mesh->insert_face( i1, i3, i2 );
+                if ( ManifoldFace( usededge, i1, i3, i2 ) )
+                {
+                    try { mesh->insert_face( i1, i3, i2 ); }
+                    catch ( const std::exception & ) { badface = true; }
+                }
+                else
+                {
+                    nrefuse++;
+                }
             }
         }
     }
 
+    // Flattening can fail outright on a grid like that.  Without the map the mesher spaces
+    // points by the surface's own parameter, which is what it does for a planar patch, so
+    // give up on the map rather than on the surface.
+    // Faces left out are not on their own a reason to give up.  A grid that repeats points
+    // loses the faces built on them, and what remains often still flattens; only a flattener
+    // that actually fails costs the map.
+    if ( nrefuse > 0 )
+    {
+        printf( "Surface %s: %d of the distance map grid's faces are not 2-manifold and were "
+                "left out.\n", GetDisplayName().c_str(), nrefuse );
+    }
 
-    ABF::Compute( mesh );
-    LSCM::Compute( mesh );
+    if ( badface )
+    {
+        printf( "Surface %s: the flattener refused a face; spacing points by surface "
+                "parameter instead.\n", GetDisplayName().c_str() );
+        return;
+    }
+
+    try
+    {
+        ABF::Compute( mesh );
+        LSCM::Compute( mesh );
+    }
+    catch ( const std::exception &e )
+    {
+        printf( "Surface %s: could not flatten the distance map grid (%s); spacing points by "
+                "surface parameter instead.\n", GetDisplayName().c_str(), e.what() );
+        return;
+    }
 
     vector< vector< double > > smat( nump, vector< double > ( nump, -1.0 ) );
     vector< vector< double > > tmat( nump, vector< double > ( nump, -1.0 ) );
@@ -1247,16 +1652,19 @@ void Surf::BuildDistMap()
 
         FILE *fp = fopen( str, "w" );
 
-        WriteMatDoubleM writeMatDouble;
+        if ( fp )
+        {
+            WriteMatDoubleM writeMatDouble;
 
-        writeMatDouble.write( fp, smat, string( "smat" ), nump, nump );
+            writeMatDouble.write( fp, smat, string( "smat" ), nump, nump );
 
-        writeMatDouble.write( fp, tmat, string( "tmat" ), nump, nump );
+            writeMatDouble.write( fp, tmat, string( "tmat" ), nump, nump );
 
-        fprintf( fp, "figure(2)\n" );
-        fprintf( fp, "plot( smat, tmat, smat', tmat' );\n" );
+            fprintf( fp, "figure(2)\n" );
+            fprintf( fp, "plot( smat, tmat, smat', tmat' );\n" );
 
-        fclose( fp );
+            fclose( fp );
+        }
     }
 
     cnt++;
@@ -1276,12 +1684,44 @@ void Surf::UtoIndexFrac( const double &u, int &indx, double &frac )
     frac = clamp( frac, 0.0, 1.0 );
 }
 
-vec2d Surf::GetST( const vec2d &uw )
+// The aspect to map U and W through when there is no ST map to use.
+//
+// A planar patch never builds one and says what its aspect is.  A patch whose map had to be
+// abandoned -- a grid whose rows collapse, or one OpenABF could not flatten -- has no aspect
+// of its own, so it falls back on its parameter extents.  Either way the mesher ends up
+// spacing points by the surface's own parameter, which is what giving up on the map means.
+//
+// Returns a negative number when the map is there and should be used instead.
+double Surf::LinearSTAspect() const
 {
     if ( m_PlanarUWAspect > 0 )
     {
+        return m_PlanarUWAspect;
+    }
+
+    if ( !m_STMap.empty() )
+    {
+        return -1.0;
+    }
+
+    double dw = m_SurfCore.GetMaxW() - m_SurfCore.GetMinW();
+
+    if ( dw > 0.0 )
+    {
+        return ( m_SurfCore.GetMaxU() - m_SurfCore.GetMinU() ) / dw;
+    }
+
+    return 1.0;
+}
+
+vec2d Surf::GetST( const vec2d &uw )
+{
+    double asp = LinearSTAspect();
+
+    if ( asp > 0 )
+    {
         vec2d st;
-        st.set_xy( m_PlanarUWAspect * uw.x(), uw.y() );
+        st.set_xy( asp * uw.x(), uw.y() );
         return st;
     }
 
@@ -1440,10 +1880,12 @@ void Surf::FindSTBox( const vec2d &st, int &i_match, int &j_match )
 
 vec2d Surf::GetUW( const vec2d &st )
 {
-    if ( m_PlanarUWAspect > 0 )
+    double asp = LinearSTAspect();
+
+    if ( asp > 0 )
     {
         vec2d uw;
-        uw.set_xy( st.x() / m_PlanarUWAspect, st.y() );
+        uw.set_xy( st.x() / asp, st.y() );
         return uw;
     }
 
@@ -1479,6 +1921,8 @@ vec2d Surf::GetUW( const vec2d &st )
 
 void Surf::CleanupDistMap()
 {
+    m_DistMapBuilt = false;
+
     if ( m_PlanarUWAspect > 0 )
     {
         return;
@@ -1486,6 +1930,101 @@ void Surf::CleanupDistMap()
 
     m_UWMap.Cleanup();
     m_STMap.clear();
+}
+
+// Twice the signed area of a, b, c.
+static double Orient2D( const vec2d &a, const vec2d &b, const vec2d &c )
+{
+    return ( b.x() - a.x() ) * ( c.y() - a.y() ) - ( b.y() - a.y() ) * ( c.x() - a.x() );
+}
+
+void Surf::FindCrossingTessSegs( const vector< ISegChain* > &chains, vector< pair< ISegChain*, int > > &segs )
+{
+    BuildDistMap();
+
+    struct TSeg
+    {
+        vec2d m_A, m_B;          // In the triangulator's parameters
+        vec2d m_UWA, m_UWB;      // In this surface's, where InitMesh merges points
+        double m_XMin, m_XMax, m_YMin, m_YMax;
+        ISegChain* m_Chain;
+        int m_Index;
+    };
+
+    vector< TSeg > tsegs;
+    for ( int i = 0 ; i < ( int )chains.size() ; i++ )
+    {
+        const deque< IPnt* > &tv = chains[i]->m_TessVec;
+        int n = tv.size();
+        int nhalf = 0.5 * ( n - 1 ) + 1;
+        for ( int j = 0 ; j < nhalf - 1; j++ )
+        {
+            TSeg s;
+            s.m_UWA = tv[ 2 * j ]->GetPuw( this )->m_UW;
+            s.m_UWB = tv[ 2 * ( j + 1 ) ]->GetPuw( this )->m_UW;
+            s.m_A = GetST( s.m_UWA );
+            s.m_B = GetST( s.m_UWB );
+            s.m_XMin = min( s.m_A.x(), s.m_B.x() );
+            s.m_XMax = max( s.m_A.x(), s.m_B.x() );
+            s.m_YMin = min( s.m_A.y(), s.m_B.y() );
+            s.m_YMax = max( s.m_A.y(), s.m_B.y() );
+            s.m_Chain = chains[i];
+            s.m_Index = j;
+            tsegs.push_back( s );
+        }
+    }
+
+    sort( tsegs.begin(), tsegs.end(), []( const TSeg &a, const TSeg &b ) { return a.m_XMin < b.m_XMin; } );
+
+    // InitMesh treats two points this close in u,w as one.
+    const double mergetol = 1.0e-4;
+
+    set< pair< ISegChain*, int > > found;
+
+    for ( int i = 0 ; i < ( int )tsegs.size() ; i++ )
+    {
+        const TSeg &p = tsegs[i];
+        for ( int k = i + 1 ; k < ( int )tsegs.size() && tsegs[k].m_XMin <= p.m_XMax ; k++ )
+        {
+            const TSeg &q = tsegs[k];
+            if ( q.m_YMin > p.m_YMax || q.m_YMax < p.m_YMin )
+            {
+                continue;
+            }
+
+            // Which ends the two segments share, as InitMesh will number them.
+            bool aa = dist( p.m_UWA, q.m_UWA ) < mergetol;
+            bool ab = dist( p.m_UWA, q.m_UWB ) < mergetol;
+            bool ba = dist( p.m_UWB, q.m_UWA ) < mergetol;
+            bool bb = dist( p.m_UWB, q.m_UWB ) < mergetol;
+            int nshared = aa + ab + ba + bb;
+
+            // Only a proper crossing: the triangulator handles a segment that touches or runs
+            // along another, by splitting it at the vertex it meets.
+            bool bad = false;
+
+            if ( nshared == 0 )
+            {
+                double d1 = Orient2D( p.m_A, p.m_B, q.m_A );
+                double d2 = Orient2D( p.m_A, p.m_B, q.m_B );
+                double d3 = Orient2D( q.m_A, q.m_B, p.m_A );
+                double d4 = Orient2D( q.m_A, q.m_B, p.m_B );
+
+                if ( d1 * d2 < 0.0 && d3 * d4 < 0.0 )
+                {
+                    bad = true;
+                }
+            }
+
+            if ( bad )
+            {
+                found.insert( pair< ISegChain*, int >( p.m_Chain, p.m_Index ) );
+                found.insert( pair< ISegChain*, int >( q.m_Chain, q.m_Index ) );
+            }
+        }
+    }
+
+    segs.assign( found.begin(), found.end() );
 }
 
 bool Surf::ValidUW( vec2d & uw, double slop ) const
@@ -1594,9 +2133,14 @@ void Surf::Subtag( bool tag_subs )
             center = ( pnts[face.ind0] + pnts[face.ind1] + pnts[face.ind2] ) * 1 / 3.0;
         }
 
+        // As in CfdMeshMgrSingleton::Subtag -- the centre is in this patch's parameters
+        // and the subsurface was drawn in the Geom's.
+        double uo, wo;
+        bool onsurf = ToOriginalUW( center.x(), center.y(), uo, wo );
+
         for ( int s = 0 ; s < ( int ) s_surfs.size() ; s++ )
         {
-            if ( s_surfs[s]->Subtag( vec3d( center.x(), center.y(), 0 ) ) )
+            if ( onsurf && s_surfs[s]->Subtag( vec3d( uo, wo, 0 ) ) )
             {
                 face.m_Tags.push_back( s_surfs[s]->m_Tag );
             }

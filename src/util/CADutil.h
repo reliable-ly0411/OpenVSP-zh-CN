@@ -27,6 +27,7 @@
 #include <SdaiHeaderSchema.h>
 #include <schema.h>
 #include "SdaiCONFIG_CONTROL_DESIGN.h"
+#include <memory>
 #include <string>
 
 #include <api/dll_iges.h>
@@ -59,16 +60,21 @@ public:
     void  WriteFile( const string &fname );
     SdaiCartesian_point * MakePoint( const double & x, const double & y, const double & z );
 
+    // A point in the parameter space of a surface
+    SdaiCartesian_point * MakePoint2D( const double & u, const double & v );
+
     Registry * registry;
     InstMgr * instance_list;
 
     // Functions for STEP file representation
-    void RepresentBREPSolid( vector < vector < SdaiAdvanced_face* > > adv_vec, const string& label = "" );
-    void RepresentManifoldShell( vector < vector < SdaiAdvanced_face* > > adv_vec, const string& label = "" );
-    void RepresentUntrimmedSurfs( const vector < SdaiB_spline_surface_with_knots* > &surf_vec, const string& label = "" );
+    // Each shell of faces as a solid where closed_vec says it is closed, and in a surface model where not
+    void RepresentBREPSolid( const vector < vector < SdaiAdvanced_face* > > &adv_vec, const vector < bool > &closed_vec,
+                             const string& label = "" );
 
-    // Create a STEP planar surface. The surface will extend infinitely if it is not bounded
-    SdaiSurface* MakePlane( const vec3d &center, const vec3d &norm, const vec3d &tangent, const string& label );
+    // Each shell of faces in a surface model, closed where closed_vec says so
+    void RepresentManifoldShell( const vector < vector < SdaiAdvanced_face* > > &adv_vec, const vector < bool > &closed_vec,
+                                 const string& label = "" );
+    void RepresentUntrimmedSurfs( const vector < SdaiB_spline_surface_with_knots* > &surf_vec, const string& label = "" );
 
     // Convert a piecewise Bezier surface to a NURBS surface and add it to the STEP file. Additional options
     // are included to use Nanoflann to merge points that are close together
@@ -78,24 +84,46 @@ public:
     // of STEP edge curves.
     SdaiVertex_point* MakeVertex( const vec3d &vertex );
 
-    // Convert a set of input control points to a NURBS curve and write to the STEP file. Additional options
-    // are included to use Nanoflann to merge points that are close together
-    SdaiB_spline_curve_with_knots* MakeCurve( const vector < vec3d > &cp_vec, const int& deg, const string& label = "", bool closed_curve = false, bool mergepnts = false, double merge_tol = 1e-8 );
+    // Write a piecewise Bezier curve to the STEP file as a B-spline: cp_vec holds the control points of
+    // every segment, sharing the points where segments meet, and break_vec the parameter at each
+    // segment end.  Additional options are included to use Nanoflann to merge points that are close together
+    SdaiB_spline_curve_with_knots* MakeCurve( const vector < vec3d > &cp_vec, int deg, const vector < double > &break_vec, const string& label = "",
+                                              bool closed_curve = false, bool mergepnts = false, double merge_tol = 1e-8 );
 
     // Write a curve defined from the given control points to the STEP file. This function is mainly
     // available for sub-surface lines and the intersection of FEA Parts with each other.
-    void MakeSurfaceCurve( vector < vec3d > cp_vec, const int& deg, const string& label = "", bool mergepnts = false, double merge_tol = 1e-8 );
+    void MakeSurfaceCurve( const vector < vec3d > &cp_vec, int deg, const vector < double > &break_vec, const string& label = "",
+                           bool mergepnts = false, double merge_tol = 1e-8 );
+
+    // Write a curve in the parameter space of a surface as a PCURVE: a piecewise Bezier curve of degree deg
+    // through the (u, v) held in the x and y of uv_vec, laid out as MakeCurve takes a curve
+    SdaiPcurve* MakePCurve( SdaiSurface* surf, const vector < vec3d > &uv_vec, int deg, const vector < double > &break_vec );
+
+    // Write a curve together with the pcurves that place it on its surfaces, as a SURFACE_CURVE
+    SdaiSurface_curve* MakeCurveOnSurfaces( SdaiCurve* curve, const vector < SdaiPcurve* > &pcurve_vec, const string& label = "" );
 
 protected:
 
     STEPfile * sfile;
     InstMgr * header_instances;
 
+    // Named after the file when it is written
+    SdaiFile_name * file_name;
+    SdaiProduct * product;
+
     STEPcomplex * context;
     SdaiShape_representation * shape_rep;
     SdaiProduct_definition_shape* pshape;
 
+    // Context for curves in the parameter space of a surface, made when first needed
+    STEPcomplex * param_context;
+
     STEPcomplex * Geometric_Context( const vsp::LEN_UNITS & len, const vsp::ANG_UNITS & angle, const char * tolstr );
+
+    STEPcomplex * Parametric_Context();
+
+    // Knots of a clamped piecewise Bezier curve of degree deg, from the parameter at each segment end
+    void SetKnots( SdaiB_spline_curve_with_knots* curve, int deg, const vector < double > &break_vec );
 
 
     SdaiDirection * MakeDirection( const double & x, const double & y, const double & z );
@@ -120,34 +148,51 @@ public:
 
     void WriteFile( const string &fname, bool overwrite = true );
 
-    // Identify the NURBS knot vector for a curve or direction of a surface given its degree and number of patches
-    void IGESKnots( int deg, int npatch, vector< double >& knot );
+    // Identify the NURBS knot vector for a piecewise Bezier curve, or one direction of a piecewise
+    // Bezier surface, given its degree and the parameter at each segment end
+    void IGESKnots( int deg, const vector < double > &break_vec, vector< double >& knot );
 
     // Write a Bezier surface to the IGES model by extracting the Bezier parameters and converting to a NURBS surface
     DLL_IGES_ENTITY_128 MakeSurf( piecewise_surface_type& s, const string& label );
 
-    // Bound a parent NURBS surface (entity 128) with an input control point vector
-    DLL_IGES_ENTITY_144 MakeLoop( DLL_IGES_ENTITY_128& parent_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec, const string& label );
+    // Bound a parent NURBS surface (entity 128) with a loop of curves, in model space and, where
+    // uv_vec is not empty, in the surface's parameters
+    DLL_IGES_ENTITY_144 MakeLoop( DLL_IGES_ENTITY_128& parent_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec,
+                                  const vector < DLL_IGES_ENTITY_126* > &uv_vec, CURVE_CREATION creation, const string& label );
 
-    DLL_IGES_ENTITY_126 MakeCurve( const vector < vec3d > &cp_vec, int deg, const string& label );
+    // Write a piecewise Bezier curve as a NURBS curve, laid out as STEPutil::MakeCurve takes it
+    DLL_IGES_ENTITY_126 MakeCurve( const vector < vec3d > &cp_vec, int deg, const vector < double > &break_vec, const string& label );
 
-    // Create a hole in a trimmed IGES surface (entity 144) at the given control point vector
-    void MakeCutout( DLL_IGES_ENTITY_128& parent_surf, DLL_IGES_ENTITY_144& trimmed_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec, const string& label );
+    // Write a curve in the parameter space of a surface: a piecewise Bezier curve of degree deg
+    // through the (u, v) held in the x and y of uv_vec, laid out as MakeCurve takes a curve
+    DLL_IGES_ENTITY_126 MakeCurve2D( const vector < vec3d > &uv_vec, int deg, const vector < double > &break_vec );
+
+    // Create a hole in a trimmed IGES surface (entity 144), bounded as MakeLoop bounds it
+    void MakeCutout( DLL_IGES_ENTITY_128& parent_surf, DLL_IGES_ENTITY_144& trimmed_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec,
+                     const vector < DLL_IGES_ENTITY_126* > &uv_vec, CURVE_CREATION creation, const string& label );
 
 protected:
 
-    // Add an IGES bounding curve (entity 142) to a parent NURBS surface at the given control point vector
-    DLL_IGES_ENTITY_142 MakeBound( DLL_IGES_ENTITY_128& parent_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec, const string& label );
+    // Add an IGES bounding curve (entity 142) to a parent NURBS surface, as MakeLoop bounds it.
+    // creation says how its curves were made.
+    DLL_IGES_ENTITY_142 MakeBound( DLL_IGES_ENTITY_128& parent_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec,
+                                   const vector < DLL_IGES_ENTITY_126* > &uv_vec, CURVE_CREATION creation, const string& label );
 
     // Add a label to any DLL_IGES_ENTITY
     void AddLabel( DLL_IGES_ENTITY& entity, const string& label );
 
     DLL_IGES model;
 
+    // The color every model space curve is drawn in, made with the first
+    std::unique_ptr < DLL_IGES_ENTITY_314 > curve_color;
+
 };
 
 // Extract the control points and patch data from a surface so that an equivalent NURBS
 // surface can be defined.
+// Text as a STEP string, quoted and escaped
+string STEPString( const string &text );
+
 void ExtractCPts( piecewise_surface_type& s, vector< vector< int > >& ptindxs, vector< vec3d >& allPntVec, 
                   piecewise_surface_type::index_type& maxu, piecewise_surface_type::index_type& maxv,
                   piecewise_surface_type::index_type& nupatch, piecewise_surface_type::index_type& nvpatch,

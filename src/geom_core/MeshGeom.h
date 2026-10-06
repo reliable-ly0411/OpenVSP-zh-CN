@@ -21,12 +21,73 @@
 
 #include "Vec2d.h"
 #include "Geom.h"
+#include "GeomInterface.h"
 #include "VspUtil.h"
 #include "ResultsMgr.h"
 #include <set>
 #include <unordered_map>
 
-class MeshGeom : public Geom
+//==== A Geom whose shape is a mesh of triangles ====//
+// Implemented by MeshGeom.  Triangles are kept in the Geom's own frame and placed on output,
+// so a Clone can borrow them.  The shared output code lives here.
+class TMeshRole : virtual public GeomInterface
+{
+public:
+    // The behavior type this role belongs to; checked by Geom::CastTo.
+    static int BehaviorType()   { return MESH_GEOM_TYPE; }
+
+    virtual ~TMeshRole()   {}
+
+    //==== What each implementation answers for itself ====//
+    // The triangles, in this Geom's own frame.
+    virtual const vector< TMesh* > & GetTMeshVecInSelf() const = 0;
+    // A fresh copy, owned by the caller.
+    virtual vector< TMesh* > CreateTMeshVecInSelf( bool skipnegflipnormal, const int &n_ref ) const = 0;
+
+    // Where this Geom stands them.
+    virtual Matrix4d GetTMeshTransMat() const = 0;
+    // The shape's own scaling, not part of the placement.  A Clone applies it too.
+    virtual Matrix4d GetTMeshScaleMat() const = 0;
+
+    // Which DrawObj draws each tag combination.  Owned by the mesh's Geom, not SubSurfaceMgr,
+    // whose global map the last meshing run rebuilds.
+    virtual const map< vector < int >, int > & GetTMeshSingleTagMap() const = 0;
+
+    // Colour wheel start for the first subsurface tag; zero is red.
+    virtual int GetTMeshColorStartDegree() const = 0;
+
+    // The slices cut through the mesh, in the Geom's own frame, and which of the two is shown.
+    virtual const vector< TMesh* > & GetTMeshSliceVec() const = 0;
+    virtual bool GetTMeshViewMeshFlag() const = 0;
+    virtual bool GetTMeshViewSliceFlag() const = 0;
+
+protected:
+    // Placed copies of the triangles, for analyses.  Attributes come from geom_ptr.
+    vector< TMesh* > BuildTMeshVec( const Geom* geom_ptr ) const;
+
+    // Fill draw objects from the placed triangles: one per mesh, or one per tag when tags are shown.
+    void BuildTMeshDrawObjs( const vector< TMesh* > &tmesh_vec, bool bytag,
+                             vector< DrawObj > &draw_obj_vec ) const;
+
+    // The triangles' extent, placed.
+    void BuildTMeshBndBox( BndBox &bbox ) const;
+
+    // The mesh written as stereolithography triangles, placed.
+    void WriteTMeshStl( FILE* file_id ) const;
+
+    // The mesh in degenerate form, one entry per mesh, named and parented as geom_ptr.
+    void BuildTMeshDegenGeom( Geom* geom_ptr, vector< DegenGeom > &dgs ) const;
+
+public:
+    // Pick the primitive for draw objects holding loose triangles; the usual Geom route picks a
+    // structured mesh, which draws nothing.
+    static void SetTriDrawObjTypes( vector< DrawObj > &draw_obj_vec, int drawtype );
+
+    // Colour one draw object per subsurface tag, going round the colour wheel.
+    static void SetTagDrawObjColors( vector< DrawObj > &draw_obj_vec, int startdegree, int num_uniq_tags );
+};
+
+class MeshGeom : public Geom, public TMeshRole
 {
 private:
     int m_BigEndianFlag;
@@ -125,6 +186,46 @@ public:
 
     virtual vector< TMesh* > CreateTMeshVec( bool skipnegflipnormal, const int & n_ref = 0 ) const;
     virtual Matrix4d GetTotalTransMat() const;
+
+    virtual vector< TMesh* > CreateTMeshVecInSelf( bool skipnegflipnormal, const int &n_ref ) const;
+
+    virtual const vector< TMesh* > & GetTMeshVecInSelf() const
+    {
+        return m_TMeshVec;
+    }
+    virtual Matrix4d GetTMeshTransMat() const
+    {
+        return GetTotalTransMat();
+    }
+
+    virtual Matrix4d GetTMeshScaleMat() const
+    {
+        return m_ScaleMatrix;
+    }
+
+    virtual const vector< TMesh* > & GetTMeshSliceVec() const
+    {
+        return m_SliceVec;
+    }
+
+    virtual bool GetTMeshViewMeshFlag() const
+    {
+        return m_ViewMeshFlag();
+    }
+
+    virtual bool GetTMeshViewSliceFlag() const
+    {
+        return m_ViewSliceFlag();
+    }
+    virtual int GetTMeshColorStartDegree() const
+    {
+        return m_StartColorDegree();
+    }
+
+    virtual const map< vector < int >, int > & GetTMeshSingleTagMap() const
+    {
+        return m_SingleTagMap;
+    }
 
 protected:
 

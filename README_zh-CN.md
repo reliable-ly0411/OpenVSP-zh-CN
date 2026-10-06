@@ -4,8 +4,8 @@
 > OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，仍属于 NASA/OpenVSP
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
-- 当前软件版本：OpenVSP 3.53.0
-- 当前汉化版本：`3.53.0-Codex-AI-zh-CN`
+- 当前软件版本：OpenVSP 3.54.0
+- 当前汉化版本：`3.54.0-Codex-AI-zh-CN-auto.db6c6fe8f4ec`
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -97,6 +97,15 @@ cmake --build build --target package --config Release --parallel 2
 同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
 
 ## 未发布
+
+- 首次同步 3.54.0 时人工解决几何体名称显示冲突，保留中文显示及上游克隆自动名称的
+  编辑限制。新上游功能尚未逐页补译，自动构建不作为 GUI 验收结论。
+- 自动同步逻辑已通过 5 项真实 Git 集成测试及 actionlint 校验，覆盖双父历史、工作流策略
+  保留、重复运行、代码冲突停止和主分支并发更新保护。
+
+- 自动同步官方 OpenVSP 3.54.0：`fbf9afc31d3b` → `db6c6fe8f4ec`。
+  [上游变更](https://github.com/OpenVSP/OpenVSP/compare/fbf9afc31d3bf337a75253e403423cb8c8dd86dc...db6c6fe8f4eca27d7517f4ae0b2078abdd3fd927)；
+  保留现有汉化，新增界面可能仍含英文；双平台验证以本次 Actions 结果为准，GUI 未人工验收。
 
 - 上游检查改为自动合并、双平台构建通过后同步主分支，沿用每周一计划并支持手动运行。
   同步与构建在同一工作流内衔接，保留 Git 历史、已有标签和构建失败时的候选分支。

@@ -28,19 +28,31 @@ public:
 
     BoolParm m_DrawMeshFlag;
     BoolParm m_ColorFacesFlag;
-    BoolParm m_ColorTagReason;
+
+    // Remesh the surfaces on several threads.  Off makes a run easier to profile and to
+    // compare against, and the result is the same either way.
+    BoolParm m_ParallelMeshFlag;
+
+    // Cut a wing or a body into patches chosen for the feature it carries -- a trailing edge,
+    // a leading edge, an end cap, one side of a body -- joining pieces across a seam where a
+    // feature spans one.  Off hands each surface to the mesher whole and lets the general
+    // feature-line splitter cut it.
+    BoolParm m_SplitJoinSurfsFlag;
+
+    // What the face colors mean: vsp::CFD_VIS_TYPE.  The saved name still says Flag, so old files
+    // still find it.
+    IntParm m_ColorTagReason;
 
     BoolParm m_DrawSourceWakeFlag;
 
     BoolParm m_DrawBorderFlag;
     BoolParm m_DrawIsectFlag;
-    BoolParm m_DrawRawFlag;
-    BoolParm m_DrawBinAdaptFlag;
+
+    // Draw the creases left inside a patch where split and join put pieces together
+    BoolParm m_DrawJoinFlag;
+
     BoolParm m_DrawCurveFlag;
     BoolParm m_DrawPntsFlag;
-
-    Parm m_RelCurveTol;
-    BoolParm m_ExportRawFlag;
 
     BoolParm m_IntersectSubSurfs;
 
@@ -58,7 +70,6 @@ public:
     BoolParm m_STEPMergePoints;
     IntParm m_STEPRepresentation;
 
-    IntParm m_CADLenUnit;
     BoolParm m_CADLabelID;
     BoolParm m_CADLabelName;
     BoolParm m_CADLabelSurfNo;
@@ -96,7 +107,15 @@ public:
     BoolParm m_UseMode;
     string m_ModeID;
 
-    BoolParm m_XYZIntCurveFlag;
+    // Trimmed CAD files are written in model units, so the unit is the user's to declare.
+    IntParm m_CADLenUnit;
+
+    // Draw the raw intersection curves; the meshers always draw theirs
+    BoolParm m_DrawRawFlag;
+
+    // Draw each curve as it is written to trimmed CAD, with the ends and control points of its
+    // segments
+    BoolParm m_DrawCubicFlag;
 
 protected:
 
@@ -164,6 +183,9 @@ public:
     BoolParm m_DrawBadFlag;
     BoolParm m_DrawWakeFlag;
 
+    IntParm m_POGSNRef;
+    Parm m_RelCurveTol;
+
     IntParm m_SelectedSetIndex;
     IntParm m_SelectedDegenSetIndex;
 
@@ -171,7 +193,6 @@ public:
     string m_ModeID;
 
     BoolParm m_ExportFileFlags[vsp::CFD_NUM_FILE_NAMES];
-    BoolParm m_XYZIntCurveFlag;
 
 protected:
 
@@ -209,7 +230,6 @@ public:
     BoolParm m_DrawNodesFlag;
     BoolParm m_DrawBCNodesFlag;
     BoolParm m_DrawElementOrientVecFlag;
-    BoolParm m_XYZIntCurveFlag;
 
     IntParm m_NodeOffset;
     IntParm m_ElementOffset;

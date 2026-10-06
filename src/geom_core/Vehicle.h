@@ -146,9 +146,29 @@ public:
     void DeleteActiveGeomVec();
     void CopyActiveGeomVec();
     void DeleteGeomVec( const vector<string> & del_vec );
+
+    // As above, first handling each Clone of the removed Geoms per clone_delete
+    // (vsp::CLONE_DELETE_TYPE) while the originals still exist.
+    void CutActiveGeomVec( int clone_delete );
+    void DeleteActiveGeomVec( int clone_delete );
+    void DeleteGeomVec( const vector<string> & del_vec, int clone_delete );
+
+    // Clones of these Geoms that are not themselves in the list.
+    vector< string > FindClonesOf( const vector<string> & geom_id_vec );
+
+    // FindClonesOf, followed recursively through Clones of Clones.
+    vector< string > FindAllClonesOf( const vector<string> & geom_id_vec );
+
+    // A Clone of each, keeping the hierarchy among them.  Returns the new IDs.
+    vector< string > CloneGeomVec( const vector<string> & geom_id_vec, const string & name_suffix = "_Clone" );
+
+    // Swaps a Clone for a full copy of the Geom it shows, keeping the Clone's ID, name and
+    // place in the tree.  Returns that ID, or an empty string on failure.
+    string ReplaceCloneGeom( const string & clone_id );
     void AddTopGeomID( const string & geom_id, const string &insert_after_id = string() );
     void RemoveTopGeomID( const string & geom_id );
     void CutGeomVec( const vector<string> & cut_vec );
+    void CutGeomVec( const vector<string> & cut_vec, int clone_delete );
     void RemoveGeomVecFromHierarchy( const vector<string> & cut_vec );
     void DeleteClipBoard();
     vector< string > PasteClipboard();
@@ -200,6 +220,7 @@ public:
 
     bool ExistMesh( int set );
     bool ExistType( int set, int geomtype );
+    bool ExistGeomType( int set, int geomtype );
 
     vector < string > GetPtCloudGeoms();
 
@@ -252,7 +273,7 @@ public:
     string WriteNascartFiles( const string & file_name, int write_set, int subsFlag, bool useMode, const string &modeID );
     string WriteGmshFile( const string & file_name, int write_set, int subsFlag, bool useMode, const string &modeID );
     void WriteX3DFile( const string & file_name, int write_set, bool useMode, const string &modeID );
-    static void WriteX3DMaterial( xmlNodePtr node, Material * material );
+    static void WriteX3DMaterial( xmlNodePtr node, const Material * material );
     void WriteX3DViewpoints( xmlNodePtr node );
 
     static void WriteX3DViewpointProps( xmlNodePtr node, const string &orients, const string &cents, const string &posits, const string &sfov, const string &name );
@@ -280,6 +301,7 @@ public:
     void WriteVehProjectionLinesDXF( FILE * file_name, const BndBox &dxfbox );
     void WriteVehProjectionLinesSVG( xmlNodePtr root, const BndBox &svgbox );
 
+    vector < vec3d > ControlSurfaceHingeLine( const string & id, int isurf );
     void WriteControlSurfaceFile( const string & file_name, const vector < string > &gidvec, const vector < int > &partvec, const vector < int > &surfvec, vector < string > &all_fnames );
 
     vector< vector < vec3d > > GetVehProjectionLines( int view, const vec3d &offset );
@@ -293,8 +315,8 @@ public:
         return m_VehProjectVec3d[dir_index];
     }
 
-    void FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs );
-    void FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &xfersurfs );
+    void FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs, int n_ref = 0, bool splitjoin = true );
+    void FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &xfersurfs, int n_ref = 0, bool splitjoin = true );
     //==== Computation File Names ====//
     string getExportFileName( int type );
     void setExportFileName( int type, const string &f_name );
@@ -368,6 +390,13 @@ public:
     virtual void SetXSecLineColor( const vec3d &color )        { m_XSecLineColor = color; }
 
     double ComputeStructuresScaleFactor();
+
+    // The length unit of the structures' analysis unit system, or -1.
+    int GetStructLenUnit();
+
+    // The length unit the structures' own geometry is in: the model's, when it is known, and
+    // otherwise the analysis unit, which the structures then take the model to be in.
+    int GetStructGeomLenUnit();
 
     // ===== Getter for Blank NameValData ==== //
     NameValData* GetBlankNvd()
@@ -516,6 +545,8 @@ public:
 
     // DesignVarMgr
     IntParm m_WorkingXDDMType;
+    Parm m_WorkingDVMin;
+    Parm m_WorkingDVMax;
 
     // FitModelMgr
     BoolParm m_SelectOneFlag;
@@ -699,6 +730,10 @@ private:
     // Erase and free a Geom without touching the hierarchy.  Only DeleteGeomVec calls this,
     // after RemoveGeomVecFromHierarchy has detached it.
     void DeleteGeom( const string & geom_id );
+
+    // Handles each Clone of these Geoms per clone_delete.  Returns these plus any Clones to
+    // delete with them.
+    vector< string > SettleClonesOf( const vector<string> & geom_id_vec, int clone_delete );
 
 
     void Wype();

@@ -44,6 +44,7 @@ Background3DMgr.cpp
 BlankGeom.cpp
 BORGeom.cpp
 ClippingMgr.cpp
+CloneGeom.cpp
 CobraGeom.cpp
 ConformalGeom.cpp
 CustomGeom.cpp
@@ -54,6 +55,7 @@ FeaStructure.cpp
 FitModelMgr.cpp
 FuselageGeom.cpp
 GearGeom.cpp
+GeomInterface.cpp
 Geom.cpp
 GeometryAnalysisMgr.cpp
 GeomCoreTestSuite.cpp
@@ -127,6 +129,7 @@ Background3DMgr.h
 BlankGeom.h
 BORGeom.h
 ClippingMgr.h
+CloneGeom.h
 CobraGeom.h
 Color.h
 ColorMgr.h
@@ -140,6 +143,7 @@ FemaleGeomDataReduced.h
 FitModelMgr.h
 FuselageGeom.h
 GearGeom.h
+GeomInterface.h
 Geom.h
 GeometryAnalysisMgr.h
 GeomCoreTestSuite.h

@@ -3448,6 +3448,56 @@ void TMesh::copy( TMesh* m )
     }
 }
 
+// A copy of another mesh with a matrix applied as it is copied.  When flipnormal is set (the
+// matrix reflects), two corners of each triangle are swapped so the winding agrees with the
+// outward normal.  The caller passes flipnormal rather than it being read off the determinant.
+void TMesh::copyPlaced( TMesh* m, const Matrix4d &mat, bool flipnormal )
+{
+    CopyAttributes( m );
+    m_TVec.clear();
+    m_NVec.clear();
+
+    m_AreaCenter = mat.xform( m_AreaCenter );
+
+    for ( int i = 0 ; i < ( int )m->m_TVec.size() ; i++ )
+    {
+        TTri* tri = new TTri( this );
+        tri->m_N0   = new TNode();
+        tri->m_N1   = new TNode();
+        tri->m_N2   = new TNode();
+
+        tri->m_Norm    = mat.xformnorm( m->m_TVec[i]->m_Norm );
+        tri->m_iQuad    = m->m_TVec[i]->m_iQuad;
+        tri->m_jref     = m->m_TVec[i]->m_jref;
+        tri->m_kref     = m->m_TVec[i]->m_kref;
+        tri->m_ID    = m->m_TVec[i]->m_ID;
+        tri->m_Tags = m->m_TVec[i]->m_Tags;
+        tri->m_GeomID = m->m_TVec[i]->m_GeomID;
+        tri->m_Density = m->m_TVec[i]->m_Density;
+
+        // Swap two corners when the matrix reflects; UW pairs move with their corners.
+        TNode* src1 = m->m_TVec[i]->m_N1;
+        TNode* src2 = m->m_TVec[i]->m_N2;
+        if ( flipnormal )
+        {
+            std::swap( src1, src2 );
+        }
+
+        tri->m_N0->m_Pnt = mat.xform( m->m_TVec[i]->m_N0->m_Pnt );
+        tri->m_N1->m_Pnt = mat.xform( src1->m_Pnt );
+        tri->m_N2->m_Pnt = mat.xform( src2->m_Pnt );
+
+        tri->m_N0->m_UWPnt = m->m_TVec[i]->m_N0->m_UWPnt;
+        tri->m_N1->m_UWPnt = src1->m_UWPnt;
+        tri->m_N2->m_UWPnt = src2->m_UWPnt;
+
+        m_TVec.push_back( tri );
+        m_NVec.push_back( tri->m_N0 );
+        m_NVec.push_back( tri->m_N1 );
+        m_NVec.push_back( tri->m_N2 );
+    }
+}
+
 void TMesh::copyFewerNodes( TMesh* m )
 {
     CopyAttributes( m );
@@ -5313,7 +5363,7 @@ void TMesh::WriteIgnoredSTLTris( FILE* file_id, Matrix4d XFormMat )
 }
 
 //==== Write STL Tris =====//
-void TMesh::WriteSTLTris( FILE* file_id, Matrix4d XFormMat )
+void TMesh::WriteSTLTris( FILE* file_id, Matrix4d XFormMat, bool flipnormal )
 {
     int t, s;
     vec3d norm;
@@ -5333,6 +5383,13 @@ void TMesh::WriteSTLTris( FILE* file_id, Matrix4d XFormMat )
                     v0 = XFormMat.xform( tri->m_SplitVec[s]->m_N0->m_Pnt );
                     v1 = XFormMat.xform( tri->m_SplitVec[s]->m_N1->m_Pnt );
                     v2 = XFormMat.xform( tri->m_SplitVec[s]->m_N2->m_Pnt );
+
+                    // A reflecting matrix reverses the winding, so swap two vertices; the normal
+                    // below is computed from them.
+                    if ( flipnormal )
+                    {
+                        std::swap( v1, v2 );
+                    }
 
                     d21 = v2 - v1;
 
@@ -5360,6 +5417,11 @@ void TMesh::WriteSTLTris( FILE* file_id, Matrix4d XFormMat )
                 v1 = XFormMat.xform( tri->m_N1->m_Pnt );
                 v2 = XFormMat.xform( tri->m_N2->m_Pnt );
 
+                if ( flipnormal )
+                {
+                    std::swap( v1, v2 );
+                }
+
                 d21 = v2 - v1;
 
                 if ( d21.mag() > 0.000001 )
@@ -5379,7 +5441,6 @@ void TMesh::WriteSTLTris( FILE* file_id, Matrix4d XFormMat )
         }
     }
 }
-
 void TMesh::WriteInsideMStlTris( FILE* file_id, Matrix4d XFormMat, int minside )
 {
     int t, s;

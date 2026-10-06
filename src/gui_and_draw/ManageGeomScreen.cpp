@@ -6,6 +6,9 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "ManageGeomScreen.h"
+#include "CloneDeleteDialog.h"
+#include "CloneGeom.h"
+#include "CloneNameSuffixScreen.h"
 #include "ScreenMgr.h"
 #include "StlHelper.h"
 #include "HingeGeom.h"
@@ -15,7 +18,7 @@ using namespace vsp;
 
 
 //==== Constructor ====//
-ManageGeomScreen::ManageGeomScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 275, 645, "Geom Browser" )
+ManageGeomScreen::ManageGeomScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 275, 671, "Geom Browser" )
 {
     m_FLTK_Window->callback( staticCloseCB, this );
     ((VSP_Window*)m_FLTK_Window)->SetKeyCallback( staticScreenCB, this );
@@ -31,7 +34,7 @@ ManageGeomScreen::ManageGeomScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 275, 64
 
     m_MainLayout.AddX( 5 );
     m_MainLayout.AddY( 25 );
-    m_MainLayout.AddSubGroupLayout( m_HeadLayout, m_MainLayout.GetRemainX() - 5, 50 );
+    m_MainLayout.AddSubGroupLayout( m_HeadLayout, m_MainLayout.GetRemainX() - 5, 70 );
     m_MainLayout.AddY( 70 );
     m_MainLayout.SetX( 0 );
     m_MainLayout.AddSubGroupLayout( m_BodyLayout, m_MainLayout.GetRemainX() - 5, m_MainLayout.GetRemainY() );
@@ -93,6 +96,8 @@ ManageGeomScreen::ManageGeomScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 275, 64
     m_GeomBrowser->item_labelsize( fontsize );
 
     m_RightLayout.AddButton( m_DeleteButton, "Delete" );
+    m_RightLayout.AddYGap();
+    m_RightLayout.AddButton( m_CloneButton, "Clone" );
     m_RightLayout.AddYGap();
     m_RightLayout.AddDividerBox( "Clipboard" );
     m_RightLayout.AddButton( m_CopyButton, "Copy" );
@@ -379,7 +384,7 @@ void ManageGeomScreen::LoadBrowser()
                 }
 
                 // Is this geom a HINGE? Change its child lines to double style
-                HingeGeom* hPtr = dynamic_cast < HingeGeom* > ( gPtr );
+                JointRole* hPtr = Geom::CastTo < JointRole > ( gPtr );
                 if ( hPtr )
                 {
                     geom_tree_item->SetChildVConnLine( TREE_LINE_CONN::STYLE_DOUBLE );
@@ -388,7 +393,7 @@ void ManageGeomScreen::LoadBrowser()
                 if ( parent_ptr )
                 {
                     // Is this geom ATTACHED to a hinge? Change its attachment lines to double style
-                    HingeGeom* parent_hPtr = dynamic_cast < HingeGeom* > ( parent_ptr );
+                    JointRole* parent_hPtr = Geom::CastTo < JointRole > ( parent_ptr );
                     if ( parent_hPtr )
                     {
                         geom_tree_item->SetHConnLine( TREE_LINE_CONN::STYLE_DOUBLE );
@@ -438,6 +443,16 @@ void ManageGeomScreen::LoadBrowser()
                     label_color = fl_lighter( label_color );
                 }
                 geom_tree_item->labelcolor( label_color );
+
+                // Italics mark an automatic name, which the browser will not rename.
+                if ( gPtr->NameIsAutomatic() )
+                {
+                    geom_tree_item->labelfont( FL_HELVETICA_ITALIC );
+                }
+                else
+                {
+                    geom_tree_item->labelfont( FL_HELVETICA );
+                }
 
                 // Close item if display children flag false
                 if ( !gPtr->m_GuiDraw.GetDisplayChildrenFlag() )
@@ -500,6 +515,10 @@ vector< string > ManageGeomScreen::GetSelectedBrowserItems()
 void ManageGeomScreen::LoadActiveGeomOutput()
 {
     vector< string > activeVec = m_VehiclePtr->GetActiveGeomVec();
+
+    // Re-enabled on every load; deactivated below for an automatic name.
+    m_ActiveGeomInput.Activate();
+
     if ( m_VehSelected )
     {
         const string display_name = VSPTranslate( m_VehiclePtr->GetName() );
@@ -512,6 +531,12 @@ void ManageGeomScreen::LoadActiveGeomOutput()
         {
             const string display_name = VSPTranslate( gptr->GetName() );
             m_ActiveGeomInput.Update( display_name.c_str() );
+
+            // 翻译仅作用于显示；保留上游对克隆自动名称的编辑限制。
+            if ( gptr->NameIsAutomatic() )
+            {
+                m_ActiveGeomInput.Deactivate();
+            }
         }
     }
     else if ( activeVec.size() > 1 )
@@ -906,6 +931,13 @@ void ManageGeomScreen::SetGeomDisplayChoice( int type )
     vector< Geom* > geom_vec = m_VehiclePtr->FindGeomVec( geom_id_vec );
     for ( int i = 0; i < (int)geom_vec.size(); i++ )
     {
+        // A Clone with an original takes its display type from it.
+        CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( geom_vec[i] );
+        if ( clone_ptr && clone_ptr->GetOriginalGeom() )
+        {
+            continue;
+        }
+
         if ( geom_vec[i] && type <= vsp::DISPLAY_TYPE::DISPLAY_DEGEN_CAMBER )
         {
             geom_vec[i]->m_GuiDraw.SetDisplayType( type );
@@ -990,6 +1022,7 @@ void ManageGeomScreen::CreateScreens()
     m_GeomScreenVec[vsp::AUXILIARY_GEOM_SCREEN] = new AuxiliaryGeomScreen( m_ScreenMgr );
     m_GeomScreenVec[vsp::GEAR_GEOM_SCREEN] = new GearScreen( m_ScreenMgr );
     m_GeomScreenVec[vsp::COBRA_GEOM_SCREEN] = new CobraScreen( m_ScreenMgr );
+    m_GeomScreenVec[vsp::CLONE_GEOM_SCREEN] = new CloneScreen( m_ScreenMgr );
 
     for ( int i = 0 ; i < ( int )m_GeomScreenVec.size() ; i++ )
     {
@@ -1097,6 +1130,13 @@ void ManageGeomScreen::CallBack( Fl_Widget *w )
                 }
             }
 
+            // Re-check: the name may have become automatic while the popup was open.
+            Geom* g = dynamic_cast< Geom* >( pc );
+            if ( g && g->NameIsAutomatic() )
+            {
+                pc = nullptr;
+            }
+
             if ( pc )
             {
                 string pc_name = m_GeomBrowser->GetPopupValue();
@@ -1131,6 +1171,12 @@ void ManageGeomScreen::CallBack( Fl_Widget *w )
                 {
                     pc = m_VehiclePtr->FindGeom( m_SelVec[0] );
                 }
+            }
+
+            Geom* g = dynamic_cast< Geom* >( pc );
+            if ( g && g->NameIsAutomatic() )
+            {
+                pc = nullptr;
             }
 
             if ( pc )
@@ -1184,11 +1230,25 @@ void ManageGeomScreen::GuiDeviceCallBack( GuiDevice* device )
     }
     else if ( device == &m_CutButton )
     {
-        m_VehiclePtr->CutActiveGeomVec();
+        DeleteOrCutActiveGeomVec( m_VehiclePtr, true );
     }
     else if ( device == &m_DeleteButton )
     {
-        m_VehiclePtr->DeleteActiveGeomVec();
+        DeleteOrCutActiveGeomVec( m_VehiclePtr, false );
+    }
+    else if ( device == &m_CloneButton )
+    {
+        // Ask for one name suffix for the whole selection before cloning.
+        vector< string > sel_vec = m_VehiclePtr->GetActiveGeomVec();
+        if ( !sel_vec.empty() )
+        {
+            CloneNameSuffixScreen* suffix_screen =
+                dynamic_cast< CloneNameSuffixScreen* >( m_ScreenMgr->GetScreen( vsp::VSP_CLONE_NAME_SUFFIX_SCREEN ) );
+            if ( suffix_screen )
+            {
+                suffix_screen->SetupAndShow( sel_vec );
+            }
+        }
     }
     else if ( device == &m_CopyButton )
     {

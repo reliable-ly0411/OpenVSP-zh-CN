@@ -20,6 +20,7 @@
 #include "MapSource.h"
 #include "SurfCore.h"
 #include "TwoDNN.h"
+#include "XferSurf.h"
 
 #include <cassert>
 
@@ -41,6 +42,9 @@ class ISegChain;
 // 1e-9 Compromise that still caused some issues.
 // Fixed problem of not using averaged points along intersections, so those points should now match to machine
 // precision and this tolerance should be able to be much smaller.
+// Read as a squared distance by IndexPntNodes and the searches beside it, so what is applied
+// is 1e-6: points closer together than that are one point.  The figures in the note above are
+// distances, which is not what this number is.
 #define PT_MERGE_TOL 1e-12
 
 //////////////////////////////////////////////////////////////////////
@@ -70,8 +74,9 @@ public:
         return &m_SurfCore;
     }
 
-    double TargetLen( double u, double w, double gap, double radfrac, int &reason );
+    double TargetLen( double u, double w, double gap, double radfrac, int &reason, vec3d &pnt );
     void BuildTargetMap( vector< MapSource* > &sources, int sid );
+    int GetTargetMapSize() const;
     void WalkMap( int istart, int jstart, int kstart );
     void WalkMap( int istart, int jstart );
 
@@ -83,9 +88,23 @@ public:
 
     void ApplyES( const vec3d &uw, double t, int reason );
 
+    // The same, for a caller that already knows where uw lands in space.  The point is only
+    // used to measure how far the map's corners are from it, and evaluating the surface for
+    // it again is the most expensive thing this routine does.
+    void ApplyESAtPnt( const vec3d &uw, const vec3d &p, double t, int reason );
+
     vec2d ClosestUW( const vec3d & pnt_in, double guess_u, double guess_w ) const;
     vec2d ClosestUW( const vec3d & pnt_in ) const;
 
+    // The UW of a point to split an edge at: the nearest point on the surface that is
+    // equidistant from the edge's two ends.  See the definition for why the midpoint will
+    // not do.
+    vec2d SplitUW( const vec3d & p0, const vec3d & p1, const vec2d & uw0, const vec2d & uw1 ) const;
+    double SplitSearch( const vec3d & p0, const vec3d & p1,
+                        double ulo, double uhi, double wlo, double whi,
+                        double &u, double &w ) const;
+
+    void AddBorderCurve( double ua, double wa, double ub, double wb );
     void FindBorderCurves();
 
     void SetGridDensityPtr( SimpleGridDensity*  gp )
@@ -141,7 +160,7 @@ public:
     {
         m_SurfID = id;
     }
-    int  GetSurfID()
+    int  GetSurfID() const
     {
         return m_SurfID;
     }
@@ -174,6 +193,7 @@ public:
     // void Draw();
 
     void LoadSCurves( vector< SCurve* > & scurve_vec );
+    vector< SCurve* >& GetSCurveVec()  { return m_SCurveVec; }
     void BuildGrid();
 
     void WriteSTL( const char* filename );
@@ -183,13 +203,20 @@ public:
         return &m_Mesh;
     }
 
-    void Intersect( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr );
+    bool IntersectPrepare( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr );
+    // The patches whose boxes meet surfPtr's, which are the only ones IntersectPatch has work for
+    void FindIntersectPatches( Surf* surfPtr, vector < int > &patch_vec );
+    void IntersectPatch( int ipatch, Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr );
     void IntersectLineSeg( vec3d & p0, vec3d & p1, vector< double > & t_vals );
 
     bool BorderCurveOnSurface( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr );
     void PlaneBorderCurveIntersect( Surf* surfPtr, SCurve* brdPtr, SurfaceIntersectionSingleton *MeshMgr );
 
     BndBox& GetBBox()
+    {
+        return m_BBox;
+    }
+    const BndBox& GetBBox() const
     {
         return m_BBox;
     }
@@ -210,6 +237,10 @@ public:
 
     void BuildDistMap();
     void CleanupDistMap();
+
+    // The segments InitMesh would hand the triangulator from these chains that cross once taken
+    // to the parameters it works in.  Each is named as ( chain, segment index ) for SplitTessSeg.
+    void FindCrossingTessSegs( const vector< ISegChain* > &chains, vector< pair< ISegChain*, int > > &segs );
     vec2d GetST( const vec2d &uw );
     vec2d GetUW( const vec2d &st );
 
@@ -356,6 +387,61 @@ public:
         return m_BaseTag;
     }
 
+    // Tessellation lines inherited from the parent Geom, in this surface's parameter
+    // space.  Empty for surfaces that were not fetched from a Geom.
+    void SetUWTess( const vector < double > &utess, const vector < double > &wtess )
+    {
+        m_UTess = utess;
+        m_WTess = wtess;
+    }
+    const vector < double > & GetUTess() const
+    {
+        return m_UTess;
+    }
+    const vector < double > & GetWTess() const
+    {
+        return m_WTess;
+    }
+
+    // Where this surface's parameters came from on the Geom it was cut out of.  Things that
+    // were written against the Geom's surface -- subsurfaces, structured tessellation, wake
+    // attachment, fixed points -- have to be asked for in those parameters, not these.
+    void SetUWRegions( const vector < UWRegion > &rv )
+    {
+        m_UWRegions = rv;
+    }
+
+    // See XferSurf::m_JoinLines.
+    void SetJoinLines( const vector < pair < vec3d, vec3d > > &jv )
+    {
+        m_JoinLines = jv;
+    }
+    const vector < pair < vec3d, vec3d > > & GetJoinLines() const
+    {
+        return m_JoinLines;
+    }
+    const vector < UWRegion > & GetUWRegions() const
+    {
+        return m_UWRegions;
+    }
+
+    // This surface's parameters to the Geom's.  False if the point is not in any region,
+    // which should not happen for a point on this surface.
+    bool ToOriginalUW( double u, double w, double &uo, double &wo ) const;
+
+    // The Geom's parameters to this surface's.  False if the point does not land on this
+    // surface at all -- which is the common case, and is how a caller decides whether a
+    // subsurface or a tessellation line touches this patch.
+    bool ToPatchUW( double uo, double wo, double &u, double &w ) const;
+
+    // The region a point of this surface belongs to, or -1.
+    int FindRegionPatchUW( double u, double w ) const;
+
+    // The regions, or one identity region covering the whole surface when none were
+    // recorded.  Wake and far field surfaces were not cut from a Geom, so their own
+    // parameters are the only ones they have.
+    vector < UWRegion > GetUWRegionsOrWhole() const;
+
     void SetIgnoreSurfFlag( bool flag )
     {
         m_IgnoreSurfFlag = flag;
@@ -376,7 +462,8 @@ public:
 
     void Subtag( bool tag_subs );
 
-    friend double refine_intersect_pt( const vec3d& pt, Surf *sA, vec2d &uwA, Surf *sB, vec2d &uwB );
+    friend bool refine_intersect_pt( const vec3d& pt, Surf *sA, vec2d &uwA, Surf *sB, vec2d &uwB );
+    friend bool refine_intersect_pt_held( const vec3d& pt, Surf *sA, vec2d &uwA, Surf *sB, vec2d &uwB, int held );
 
 protected:
 
@@ -401,6 +488,12 @@ protected:
 
     bool m_IgnoreSurfFlag; // Flag to ignore the surface after intersected
 
+    vector < double > m_UTess;
+    vector < double > m_WTess;
+
+    vector < UWRegion > m_UWRegions;
+    vector < pair < vec3d, vec3d > > m_JoinLines;
+
     int m_SurfCfdType;
     int m_SurfVspType;
     bool m_ThickSurf;
@@ -408,6 +501,11 @@ protected:
     int m_CopyIndex;
 
     double m_PlanarUWAspect;
+
+    // Whether BuildDistMap has run since CleanupDistMap.
+    bool m_DistMapBuilt;
+
+    double LinearSTAspect() const;
 
     SurfCore m_SurfCore;
 
@@ -428,6 +526,9 @@ protected:
     // cleared so a walk costs nothing to set up.
     vector< unsigned int > m_WalkVisited;
     unsigned int m_WalkVisitID;
+
+    // Cells waiting to be looked at by WalkMap, kept so each walk does not allocate.
+    vector < pair < int, int > > m_WalkStack;
 
     void UtoIndexFrac( const double &u, int &indx, double &frac );
 

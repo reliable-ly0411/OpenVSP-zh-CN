@@ -466,23 +466,34 @@ int MeshGeom::ReadBinInt( FILE* fptr )
 }
 
 //==== Write STL File ====//
+void TMeshRole::WriteTMeshStl( FILE* file_id ) const
+{
+    const vector< TMesh* > &tmesh_vec = GetTMeshVecInSelf();
+    Matrix4d mat = GetTMeshTransMat();
+
+    // The matrix may carry a flip, which reverses the winding.
+    bool flipnormal = GetRoleShapeFlipNormal();
+
+    for ( int m = 0; m < ( int )tmesh_vec.size(); m++ )
+    {
+        tmesh_vec[m]->WriteSTLTris( file_id, mat, flipnormal );
+    }
+}
+
 void MeshGeom::WriteStl( FILE* file_id )
 {
     int m;
 
     if ( m_ViewMeshFlag() )
     {
-        for (m = 0; m < (int) m_TMeshVec.size(); m++)
-        {
-            m_TMeshVec[m]->WriteSTLTris(file_id, GetTotalTransMat());
-        }
+        WriteTMeshStl( file_id );
     }
 
     if ( m_ViewSliceFlag() )
     {
         for (m = 0; m < (int) m_SliceVec.size(); m++)
         {
-            m_SliceVec[m]->WriteSTLTris(file_id, GetTotalTransMat());
+            m_SliceVec[m]->WriteSTLTris( file_id, GetTotalTransMat(), GetFlipReversesNormal() );
         }
     }
 }
@@ -848,6 +859,7 @@ void MeshGeom::WritePovRay( FILE* fid, int comp_num )
     string name = GetName();
     StringUtil::change_space_to_underscore( name );
     Matrix4d transMat = GetTotalTransMat();
+    bool flipnormal = GetFlipReversesNormal();
 
     fprintf( fid, "#declare %s_%d = mesh { \n", name.c_str(), comp_num );
 
@@ -862,6 +874,10 @@ void MeshGeom::WritePovRay( FILE* fid, int comp_num )
             v0 = transMat.xform( tri->m_N0->m_Pnt );
             v1 = transMat.xform( tri->m_N1->m_Pnt );
             v2 = transMat.xform( tri->m_N2->m_Pnt );
+            if ( flipnormal )
+            {
+                std::swap( v1, v2 );
+            }
             d21 = v2 - v1;
 
             if ( d21.mag() > 0.000001 )
@@ -884,6 +900,7 @@ void MeshGeom::WriteX3D( xmlNodePtr node )
     xmlSetProp( set_node, BAD_CAST "solid", BAD_CAST "true" );
     xmlSetProp( set_node, BAD_CAST "creaseAngle", BAD_CAST "0.5"  );
     Matrix4d transMat = GetTotalTransMat();
+    bool flipnormal = GetFlipReversesNormal();
 
     string indstr, crdstr;
     int offset = 0;
@@ -900,6 +917,10 @@ void MeshGeom::WriteX3D( xmlNodePtr node )
             v0 = transMat.xform( tri->m_N0->m_Pnt );
             v1 = transMat.xform( tri->m_N1->m_Pnt );
             v2 = transMat.xform( tri->m_N2->m_Pnt );
+            if ( flipnormal )
+            {
+                std::swap( v1, v2 );
+            }
             d21 = v2 - v1;
 
             if ( d21.mag() > 0.000001 )
@@ -966,6 +987,205 @@ void MeshGeom::UpdateTagMap()
     }
 }
 
+
+//==== TMeshRole: shared by MeshGeom and a Clone of one ====//
+
+vector< TMesh* > TMeshRole::BuildTMeshVec( const Geom* geom_ptr ) const
+{
+    const vector< TMesh* > &tmesh_vec = GetTMeshVecInSelf();
+
+    // Placed as it is copied, so a flip gets the winding right in one pass.
+    Matrix4d mat = GetTMeshTransMat();
+    bool flipnormal = GetRoleShapeFlipNormal();
+
+    vector< TMesh* > ret_tmesh_vec;
+    ret_tmesh_vec.resize( tmesh_vec.size() );
+    for ( int i = 0 ; i < ( int )tmesh_vec.size() ; i++ )
+    {
+        ret_tmesh_vec[i] = new TMesh();
+        ret_tmesh_vec[i]->copyPlaced( tmesh_vec[i], mat, flipnormal );
+        ret_tmesh_vec[i]->LoadGeomAttributes( geom_ptr );
+    }
+
+    return ret_tmesh_vec;
+}
+
+void TMeshRole::SetTagDrawObjColors( vector< DrawObj > &draw_obj_vec, int startdegree, int num_uniq_tags )
+{
+    // Go round the colour wheel ncstep times, offset slightly from ncgrp basic colours.  The
+    // step is set by the number of tags, not the number of draw objects.
+    const int ncgrp = 6;
+    // At least one step, so a mesh with no tags at all does not divide by zero.
+    const int ncstep = std::max( ( int )ceil( ( double )num_uniq_tags / ( double )ncgrp ), 1 );
+    const double nctodeg = 360.0 / ( ncgrp * ncstep );
+
+    for ( int i = 0 ; i < ( int )draw_obj_vec.size() ; i++ )
+    {
+        // Note, ( i / ncgrp ) uses integer division resulting in floor.
+        double deg = startdegree + ( ( i % ncgrp ) * ncstep + ( i / ncgrp ) ) * nctodeg;
+
+        if ( deg > 360 )
+        {
+            deg = ( int )deg % 360;
+        }
+
+        vec3d rgb = draw_obj_vec[i].ColorWheel( deg );
+        rgb.normalize();
+
+        draw_obj_vec[i].m_MaterialInfo.Ambient[0] = ( float )rgb.x() / 5.0f;
+        draw_obj_vec[i].m_MaterialInfo.Ambient[1] = ( float )rgb.y() / 5.0f;
+        draw_obj_vec[i].m_MaterialInfo.Ambient[2] = ( float )rgb.z() / 5.0f;
+        draw_obj_vec[i].m_MaterialInfo.Ambient[3] = ( float )1.0f;
+
+        draw_obj_vec[i].m_MaterialInfo.Diffuse[0] = 0.4f + ( float )rgb.x() / 10.0f;
+        draw_obj_vec[i].m_MaterialInfo.Diffuse[1] = 0.4f + ( float )rgb.y() / 10.0f;
+        draw_obj_vec[i].m_MaterialInfo.Diffuse[2] = 0.4f + ( float )rgb.z() / 10.0f;
+        draw_obj_vec[i].m_MaterialInfo.Diffuse[3] = 1.0f;
+
+        draw_obj_vec[i].m_MaterialInfo.Specular[0] = 0.04f + 0.7f * ( float )rgb.x();
+        draw_obj_vec[i].m_MaterialInfo.Specular[1] = 0.04f + 0.7f * ( float )rgb.y();
+        draw_obj_vec[i].m_MaterialInfo.Specular[2] = 0.04f + 0.7f * ( float )rgb.z();
+        draw_obj_vec[i].m_MaterialInfo.Specular[3] = 1.0f;
+
+        draw_obj_vec[i].m_MaterialInfo.Emission[0] = ( float )rgb.x() / 20.0f;
+        draw_obj_vec[i].m_MaterialInfo.Emission[1] = ( float )rgb.y() / 20.0f;
+        draw_obj_vec[i].m_MaterialInfo.Emission[2] = ( float )rgb.z() / 20.0f;
+        draw_obj_vec[i].m_MaterialInfo.Emission[3] = 1.0f;
+
+        draw_obj_vec[i].m_MaterialInfo.Shininess = 32.0f;
+
+        draw_obj_vec[i].m_LineColor = rgb;
+    }
+}
+
+void TMeshRole::SetTriDrawObjTypes( vector< DrawObj > &draw_obj_vec, int drawtype )
+{
+    for ( int i = 0 ; i < ( int )draw_obj_vec.size() ; i++ )
+    {
+        switch ( drawtype )
+        {
+        case vsp::DRAW_TYPE::GEOM_DRAW_WIRE:
+            draw_obj_vec[i].m_Type = DrawObj::VSP_WIRE_TRIS;
+            break;
+
+        case vsp::DRAW_TYPE::GEOM_DRAW_HIDDEN:
+            draw_obj_vec[i].m_Type = DrawObj::VSP_WIRE_HIDDEN_TRIS;
+            break;
+
+        case vsp::DRAW_TYPE::GEOM_DRAW_SHADE:
+            draw_obj_vec[i].m_Type = DrawObj::VSP_SHADED_TRIS;
+            break;
+
+        case vsp::DRAW_TYPE::GEOM_DRAW_NONE:
+            draw_obj_vec[i].m_Type = DrawObj::VSP_SHADED_TRIS;
+            draw_obj_vec[i].m_Visible = false;
+            break;
+
+        // Triangles carry no texture coordinates, so these are shaded instead.
+        case vsp::DRAW_TYPE::GEOM_DRAW_TEXTURE:
+            draw_obj_vec[i].m_Type = DrawObj::VSP_SHADED_TRIS;
+            break;
+        }
+    }
+}
+
+void TMeshRole::BuildTMeshBndBox( BndBox &bbox ) const
+{
+    bbox.Reset();
+
+    const vector< TMesh* > &tmesh_vec = GetTMeshVecInSelf();
+    Matrix4d trans = GetTMeshTransMat();
+
+    for ( int i = 0 ; i < ( int )tmesh_vec.size() ; i++ )
+    {
+        tmesh_vec[i]->UpdateBBox( bbox, trans );
+    }
+}
+
+void TMeshRole::BuildTMeshDrawObjs( const vector< TMesh* > &tmesh_vec, bool bytag,
+                                    vector< DrawObj > &draw_obj_vec ) const
+{
+    Matrix4d trans = GetTMeshTransMat();
+
+    // Normals turn but do not move, so the translation is taken back off.
+    vec3d zeroV = trans.xform( vec3d( 0.0, 0.0, 0.0 ) );
+
+    if ( !bytag )
+    {
+        draw_obj_vec.resize( tmesh_vec.size(), DrawObj() );
+
+        for ( int m = 0 ; m < ( int )tmesh_vec.size() ; m++ )
+        {
+            int num_tris = tmesh_vec[m]->m_TVec.size();
+            vector< TTri* > &tris = tmesh_vec[m]->m_TVec;
+
+            draw_obj_vec[m].m_PntVec.resize( num_tris * 3 );
+            draw_obj_vec[m].m_NormVec.resize( num_tris * 3 );
+
+            int pi = 0;
+            for ( int t = 0 ; t < num_tris ; t++ )
+            {
+                draw_obj_vec[m].m_PntVec[pi]     = trans.xform( tris[t]->m_N0->m_Pnt );
+                draw_obj_vec[m].m_PntVec[pi + 1] = trans.xform( tris[t]->m_N1->m_Pnt );
+                draw_obj_vec[m].m_PntVec[pi + 2] = trans.xform( tris[t]->m_N2->m_Pnt );
+
+                vec3d norm = trans.xform( tris[t]->m_Norm ) - zeroV;
+                norm.normalize();
+                draw_obj_vec[m].m_NormVec[pi]     = norm;
+                draw_obj_vec[m].m_NormVec[pi + 1] = norm;
+                draw_obj_vec[m].m_NormVec[pi + 2] = norm;
+
+                pi += 3;
+            }
+        }
+    }
+    else
+    {
+        // One draw object per tag combination, so each subsurface is coloured separately.  The map
+        // is the mesh owner's, not SubSurfaceMgr's global one, which the last meshing run rebuilds.
+        const map< vector< int >, int > &tagMap = GetTMeshSingleTagMap();
+        map< vector< int >, int >::const_iterator mit;
+
+        draw_obj_vec.resize( tagMap.size() );
+        for ( int i = 0; i < ( int )draw_obj_vec.size(); i++ )
+        {
+            draw_obj_vec[i].m_PntVec.clear();
+            draw_obj_vec[i].m_NormVec.clear();
+        }
+
+        for ( int m = 0 ; m < ( int )tmesh_vec.size() ; m++ )
+        {
+            int num_tris = tmesh_vec[m]->m_TVec.size();
+            vector< TTri* > &tris = tmesh_vec[m]->m_TVec;
+
+            for ( int t = 0 ; t < num_tris ; t++ )
+            {
+                mit = tagMap.find( tris[t]->m_Tags );
+                if ( mit == tagMap.end() || mit->second < 0 || mit->second >= ( int )draw_obj_vec.size() )
+                {
+                    continue;
+                }
+                DrawObj* d_obj = &draw_obj_vec[ mit->second ];
+
+                d_obj->m_PntVec.push_back( trans.xform( tris[t]->m_N0->m_Pnt ) );
+                d_obj->m_PntVec.push_back( trans.xform( tris[t]->m_N1->m_Pnt ) );
+                d_obj->m_PntVec.push_back( trans.xform( tris[t]->m_N2->m_Pnt ) );
+
+                vec3d norm = trans.xform( tris[t]->m_Norm ) - zeroV;
+                norm.normalize();
+                d_obj->m_NormVec.push_back( norm );
+                d_obj->m_NormVec.push_back( norm );
+                d_obj->m_NormVec.push_back( norm );
+            }
+        }
+    }
+
+    for ( int i = 0 ; i < ( int )draw_obj_vec.size(); i++ )
+    {
+        draw_obj_vec[i].m_GeomChanged = true;
+    }
+}
+
 void MeshGeom::UpdateDrawObj()
 {
     // Add in SubSurfaces to TMeshVec if m_DrawSubSurfs is true
@@ -1020,8 +1240,9 @@ void MeshGeom::UpdateDrawObj()
     }
 
 
+    // Turned by the transform that places the points, then normalised.
     Matrix4d trans = GetTotalTransMat();
-    vec3d zeroV = m_ModelMatrix.xform( vec3d( 0.0, 0.0, 0.0 ) );
+    vec3d zeroV = trans.xform( vec3d( 0.0, 0.0, 0.0 ) );
 
     if ( m_ViewMeshFlag.Get() )
     {
@@ -1039,7 +1260,8 @@ void MeshGeom::UpdateDrawObj()
                     m_WireShadeDrawObj_vec[m].m_PntVec[pi] = trans.xform( tris[t]->m_N0->m_Pnt );
                     m_WireShadeDrawObj_vec[m].m_PntVec[pi + 1] = trans.xform( tris[t]->m_N1->m_Pnt );
                     m_WireShadeDrawObj_vec[m].m_PntVec[pi + 2] = trans.xform( tris[t]->m_N2->m_Pnt );
-                    vec3d norm =  m_ModelMatrix.xform( tris[t]->m_Norm ) - zeroV;
+                    vec3d norm =  trans.xform( tris[t]->m_Norm ) - zeroV;
+                    norm.normalize();
                     m_WireShadeDrawObj_vec[m].m_NormVec[pi] = norm;
                     m_WireShadeDrawObj_vec[m].m_NormVec[pi + 1] = norm;
                     m_WireShadeDrawObj_vec[m].m_NormVec[pi + 2] = norm;
@@ -1063,7 +1285,8 @@ void MeshGeom::UpdateDrawObj()
                     m_WireShadeDrawObj_vec[m + add_ind].m_PntVec[pi] = trans.xform( tris[t]->m_N0->m_Pnt );
                     m_WireShadeDrawObj_vec[m + add_ind].m_PntVec[pi + 1] = trans.xform( tris[t]->m_N1->m_Pnt );
                     m_WireShadeDrawObj_vec[m + add_ind].m_PntVec[pi + 2] = trans.xform( tris[t]->m_N2->m_Pnt );
-                    vec3d norm =  m_ModelMatrix.xform( tris[t]->m_Norm ) - zeroV;
+                    vec3d norm =  trans.xform( tris[t]->m_Norm ) - zeroV;
+                    norm.normalize();
                     m_WireShadeDrawObj_vec[m + add_ind].m_NormVec[pi] = norm;
                     m_WireShadeDrawObj_vec[m + add_ind].m_NormVec[pi + 1] = norm;
                     m_WireShadeDrawObj_vec[m + add_ind].m_NormVec[pi + 2] = norm;
@@ -1093,7 +1316,8 @@ void MeshGeom::UpdateDrawObj()
                     d_obj->m_PntVec.push_back( trans.xform( tris[t]->m_N0->m_Pnt ) );
                     d_obj->m_PntVec.push_back( trans.xform( tris[t]->m_N1->m_Pnt ) );
                     d_obj->m_PntVec.push_back( trans.xform( tris[t]->m_N2->m_Pnt ) );
-                    vec3d norm =  m_ModelMatrix.xform( tris[t]->m_Norm ) - zeroV;
+                    vec3d norm =  trans.xform( tris[t]->m_Norm ) - zeroV;
+                    norm.normalize();
                     d_obj->m_NormVec.push_back( norm );
                     d_obj->m_NormVec.push_back( norm );
                     d_obj->m_NormVec.push_back( norm );
@@ -1129,7 +1353,8 @@ void MeshGeom::UpdateDrawObj()
                 m_WireShadeDrawObj_vec[draw_ind].m_PntVec[pi] = trans.xform( tris[t]->m_N0->m_Pnt );
                 m_WireShadeDrawObj_vec[draw_ind].m_PntVec[pi + 1] = trans.xform( tris[t]->m_N1->m_Pnt );
                 m_WireShadeDrawObj_vec[draw_ind].m_PntVec[pi + 2] = trans.xform( tris[t]->m_N2->m_Pnt );
-                vec3d norm =  m_ModelMatrix.xform( tris[t]->m_Norm ) - zeroV;
+                vec3d norm =  trans.xform( tris[t]->m_Norm ) - zeroV;
+                norm.normalize();
                 m_WireShadeDrawObj_vec[draw_ind].m_NormVec[pi] = norm;
                 m_WireShadeDrawObj_vec[draw_ind].m_NormVec[pi + 1] = norm;
                 m_WireShadeDrawObj_vec[draw_ind].m_NormVec[pi + 2] = norm;
@@ -1188,80 +1413,13 @@ void MeshGeom::UpdateDrawObj()
 
 void MeshGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
 {
-    // At least one, so a mesh with no triangles at all does not divide by zero below.
-    int num_uniq_tags = std::max( ( int )m_SingleTagMap.size(), 1 );
-
-    // Calculate constants for color sequence.
-    const int ncgrp = 6; // Number of basic colors
-    const int ncstep = (int)ceil((double)num_uniq_tags/(double)ncgrp);
-    const double nctodeg = 360.0/(ncgrp*ncstep);
-
     Geom::LoadDrawObjs( draw_obj_vec );
-    for ( int i = 0 ; i < ( int )m_WireShadeDrawObj_vec.size() ; i++ )
+    if ( m_DrawType() == MeshGeom::DRAW_TAGS && m_GuiDraw.GetDispSubSurfFlag() )
     {
-        if ( m_DrawType() == MeshGeom::DRAW_TAGS && m_GuiDraw.GetDispSubSurfFlag() )
-        {
-            // Color sequence -- go around color wheel ncstep times with slight
-            // offset from ncgrp basic colors.
-            // Note, (cnt/ncgrp) uses integer division resulting in floor.
-            double deg = m_StartColorDegree() + ( ( i % ncgrp ) * ncstep + ( i / ncgrp ) ) * nctodeg;
-
-            if ( deg > 360 )
-            {
-                deg = (int)deg % 360;
-            }
-
-            vec3d rgb = m_WireShadeDrawObj_vec[i].ColorWheel( deg );
-            rgb.normalize();
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Ambient[0] = (float)rgb.x()/5.0f;
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Ambient[1] = (float)rgb.y()/5.0f;
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Ambient[2] = (float)rgb.z()/5.0f;
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Ambient[3] = (float)1.0f;
-
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Diffuse[0] = 0.4f + (float)rgb.x()/10.0f;
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Diffuse[1] = 0.4f + (float)rgb.y()/10.0f;
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Diffuse[2] = 0.4f + (float)rgb.z()/10.0f;
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Diffuse[3] = 1.0f;
-
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Specular[0] = 0.04f + 0.7f * (float)rgb.x();
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Specular[1] = 0.04f + 0.7f * (float)rgb.y();
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Specular[2] = 0.04f + 0.7f * (float)rgb.z();
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Specular[3] = 1.0f;
-
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Emission[0] = (float)rgb.x()/20.0f;
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Emission[1] = (float)rgb.y()/20.0f;
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Emission[2] = (float)rgb.z()/20.0f;
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Emission[3] = 1.0f;
-
-            m_WireShadeDrawObj_vec[i].m_MaterialInfo.Shininess = 32.0f;
-
-            m_WireShadeDrawObj_vec[i].m_LineColor = rgb;
-        }
-        switch( m_GuiDraw.GetDrawType() )
-        {
-        case vsp::DRAW_TYPE::GEOM_DRAW_WIRE:
-            m_WireShadeDrawObj_vec[i].m_Type = DrawObj::VSP_WIRE_TRIS;
-            break;
-
-        case vsp::DRAW_TYPE::GEOM_DRAW_HIDDEN:
-            m_WireShadeDrawObj_vec[i].m_Type = DrawObj::VSP_WIRE_HIDDEN_TRIS;
-            break;
-
-        case vsp::DRAW_TYPE::GEOM_DRAW_SHADE:
-            m_WireShadeDrawObj_vec[i].m_Type = DrawObj::VSP_SHADED_TRIS;
-            break;
-
-        case vsp::DRAW_TYPE::GEOM_DRAW_NONE:
-            m_WireShadeDrawObj_vec[i].m_Type = DrawObj::VSP_SHADED_TRIS;
-            m_WireShadeDrawObj_vec[i].m_Visible = false;
-            break;
-
-        // Does not support Texture Mapping.  Render Shaded instead.
-        case vsp::DRAW_TYPE::GEOM_DRAW_TEXTURE:
-            m_WireShadeDrawObj_vec[i].m_Type = DrawObj::VSP_SHADED_TRIS;
-            break;
-        }
+        SetTagDrawObjColors( m_WireShadeDrawObj_vec, m_StartColorDegree(), m_SingleTagMap.size() );
     }
+
+    SetTriDrawObjTypes( m_WireShadeDrawObj_vec, m_GuiDraw.GetDrawType() );
 }
 
 //==== Create And Load Tris into Results Data Structures ====//
@@ -1304,13 +1462,22 @@ void MeshGeom::CreateGeomResults( Results* res )
         vector< int > id0_vec;
         vector< int > id1_vec;
         vector< int > id2_vec;
+        bool flipnormal = GetFlipReversesNormal();
         for ( int t = 0 ; t < ( int )trivec.size() ; t++ )
         {
             TTri* ttri = trivec[t];
 
             id0_vec.push_back( ttri->m_N0->m_ID );
-            id1_vec.push_back( ttri->m_N1->m_ID );
-            id2_vec.push_back( ttri->m_N2->m_ID );
+            if ( flipnormal )
+            {
+                id1_vec.push_back( ttri->m_N2->m_ID );
+                id2_vec.push_back( ttri->m_N1->m_ID );
+            }
+            else
+            {
+                id1_vec.push_back( ttri->m_N1->m_ID );
+                id2_vec.push_back( ttri->m_N2->m_ID );
+            }
         }
         res->Add( new NameValData( "Num_Tris", ( int )trivec.size(), "Number of indexed tris." ) );
         res->Add( new NameValData( "Tri_Index0", id0_vec, "Index of triangle node zero." ) );
@@ -2214,11 +2381,13 @@ void MeshGeom::WaterTightCheck( FILE* fid )
     m_TMeshVec.push_back( oneMesh );
 }
 
-void MeshGeom::CreateDegenGeom( vector<DegenGeom> &dgs, bool preview, const int & n_ref )
+void TMeshRole::BuildTMeshDegenGeom( Geom* geom_ptr, vector< DegenGeom > &dgs ) const
 {
-    unsigned int num_meshes = m_TMeshVec.size();
+    unsigned int num_meshes = GetTMeshVecInSelf().size();
 
     dgs.resize( num_meshes );
+
+    Matrix4d trans = GetTMeshTransMat();
 
     for ( int i = 0; i < num_meshes; i++ )
     {
@@ -2226,13 +2395,11 @@ void MeshGeom::CreateDegenGeom( vector<DegenGeom> &dgs, bool preview, const int 
 
         degenGeom.setType( DegenGeom::MESH_TYPE );
 
-        degenGeom.setParentGeom( this );
+        degenGeom.setParentGeom( geom_ptr );
         degenGeom.setSurfNum( i );
         degenGeom.setFlipNormal( false );
         degenGeom.setMainSurfInd( 0 );
         degenGeom.setSymCopyInd( 0 );
-
-        Matrix4d trans = GetTotalTransMat();
 
         vector < double > tmatvec( 16 );
         for ( int j = 0; j < 16; j++ )
@@ -2243,11 +2410,17 @@ void MeshGeom::CreateDegenGeom( vector<DegenGeom> &dgs, bool preview, const int 
 
         degenGeom.setNumXSecs( 0 );
         degenGeom.setNumPnts( 0 );
-        degenGeom.setName( GetName() );
+        degenGeom.setName( geom_ptr->GetName() );
     }
 }
 
-vector<TMesh*> MeshGeom::CreateTMeshVec( bool skipnegflipnormal, const int & n_ref ) const
+void MeshGeom::CreateDegenGeom( vector<DegenGeom> &dgs, bool preview, const int & n_ref )
+{
+    BuildTMeshDegenGeom( this, dgs );
+}
+
+// The mesh as it is held, with no placement in it.
+vector<TMesh*> MeshGeom::CreateTMeshVecInSelf( bool skipnegflipnormal, const int & n_ref ) const
 {
     vector<TMesh*> retTMeshVec;
     retTMeshVec.resize( m_TMeshVec.size() );
@@ -2258,11 +2431,12 @@ vector<TMesh*> MeshGeom::CreateTMeshVec( bool skipnegflipnormal, const int & n_r
         retTMeshVec[i]->LoadGeomAttributes( this );
     }
 
-    // Apply Transformations
-    Matrix4d TransMat = GetTotalTransMat();
-    TransformMeshVec( retTMeshVec, TransMat );
-
     return retTMeshVec;
+}
+
+vector<TMesh*> MeshGeom::CreateTMeshVec( bool skipnegflipnormal, const int & n_ref ) const
+{
+    return BuildTMeshVec( this );
 }
 
 //==== Get Total Transformation Matrix from Original Points ====//
@@ -2270,6 +2444,7 @@ Matrix4d MeshGeom::GetTotalTransMat() const
 {
     Matrix4d retMat;
     retMat.initMat( m_ScaleMatrix );
+    retMat.postMult( GetFlipMat() );
     retMat.postMult( m_ModelMatrix );
 
     return retMat;

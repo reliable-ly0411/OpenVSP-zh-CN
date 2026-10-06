@@ -54,7 +54,7 @@ enum { BASE_GEOM_TYPE, XFORM_GEOM_TYPE, GEOM_GEOM_TYPE, POD_GEOM_TYPE, FUSELAGE_
        PT_CLOUD_GEOM_TYPE, PROP_GEOM_TYPE, HINGE_GEOM_TYPE, CONFORMAL_GEOM_TYPE,
        ELLIPSOID_GEOM_TYPE, BOR_GEOM_TYPE, WIRE_FRAME_GEOM_TYPE, HUMAN_GEOM_TYPE,
        ROUTING_GEOM_TYPE, AUXILIARY_GEOM_TYPE, GEAR_GEOM_TYPE, NGON_GEOM_TYPE,
-       COBRA_GEOM_TYPE, NUM_GEOM_TYPE
+       COBRA_GEOM_TYPE, CLONE_GEOM_TYPE, NUM_GEOM_TYPE
      };
 
 class GeomType
@@ -124,6 +124,17 @@ public:
     void SetMaterial( const std::string &name, double ambi[], double diff[], double spec[], double emis[], double shin );
     void SetMaterial( const std::string &name );
 
+    // Display state, as opposed to appearance.  Not Parms and mostly not saved, so a Geom
+    // replacing another copies them here.  Colour, material and textures are copied elsewhere.
+    void CopyDisplaySettings( GeomGuiDraw & from )
+    {
+        m_DisplayType = from.GetDisplayType();
+        m_DrawType = from.GetDrawType();
+        m_DisplayChildrenFlag = from.GetDisplayChildrenFlag();
+        m_DispSubSurfFlag = from.GetDispSubSurfFlag();
+        m_DispFeatureFlag = from.GetDispFeatureFlag();
+    }
+
     void SetDisplayChildrenFlag( bool f )
     {
         m_DisplayChildrenFlag = f;
@@ -145,6 +156,10 @@ public:
         return &m_ColorMgr;
     }
     Material * getMaterial()
+    {
+        return &m_Material;
+    }
+    const Material * getMaterial() const
     {
         return &m_Material;
     }
@@ -186,7 +201,7 @@ public:
     virtual ~GeomBase();                        // Destructor
 
     // Only used internally.  Do not need to move to API.
-    enum { NONE, XFORM, TESS, SURF, HIGHLIGHT, GLOBAL_SCALE };
+    enum { NONE, XFORM, TESS, SURF, HIGHLIGHT, GLOBAL_SCALE, APPEARANCE, NAME, SUBSURF };
 
     virtual GeomType GetType()
     {
@@ -195,6 +210,48 @@ public:
     virtual void SetType( const GeomType & type )
     {
         m_Type = type;
+    }
+
+    // What this Geom behaves like: its own type, unless it stands in for another Geom.
+    // GetType says what it is (GUI screen, file, browser) and must not be redirected; ask this
+    // when the question is what the Geom does.  Overrides must keep the const, or they become
+    // a separate overload that callers never reach.
+    virtual int GetBehaviorType() const
+    {
+        return m_Type.m_Type;
+    }
+
+    // The Geom whose behaviour this one stands in for, or itself.  Positions read from it are
+    // that Geom's, not this one's: use it for what a Geom is, not where it is.
+    virtual Geom* GetBehaviorGeom() = 0;
+
+    // A Geom's role interface (joint, landing gear, rotor, mesh, ...), or null if it has none
+    // or geom_ptr is null.
+    //
+    //     JointRole* joint = Geom::CastTo< JointRole >( parent );
+    //
+    // A plain dynamic_cast is not enough: a Clone implements every role, so the behaviour type
+    // must also match the one the role names.
+    template < typename T >
+    static T* CastTo( GeomBase* geom_ptr )
+    {
+        if ( !geom_ptr || geom_ptr->GetBehaviorType() != T::BehaviorType() )
+        {
+            return nullptr;
+        }
+
+        return dynamic_cast< T* >( geom_ptr );
+    }
+
+    template < typename T >
+    static const T* CastTo( const GeomBase* geom_ptr )
+    {
+        if ( !geom_ptr || geom_ptr->GetBehaviorType() != T::BehaviorType() )
+        {
+            return nullptr;
+        }
+
+        return dynamic_cast< const T* >( geom_ptr );
     }
 
     virtual void Update( bool fullupdate = true ) = 0;
@@ -258,9 +315,42 @@ public:
     bool m_FeaDirty;
     bool m_GlobalScaleDirty;
 
+    // Name, colours and the subsurface list are not Parms, so changes to them are flagged here
+    // and passed on like the other flags.
+    bool m_AppearanceDirty;
+    bool m_UpdateAppearance;
+    bool m_NameDirty;
+    bool m_UpdateName;
+    bool m_SubSurfDirty;
+    bool m_UpdateSubSurf;
+
     void SetDirtyFlag( int dflag );
 
+    // Renaming is not a Parm change, so this sets m_NameDirty.
+    virtual void SetName( const string& name, bool removeslashes = true );
+
+    // The textures to draw this Geom with.  A Clone returns its original's rather than keeping
+    // a copy.  Read only; the Texture editor works on the Geom's own list.
+    virtual TextureMgr* GetDrawTextureMgr()
+    {
+        return m_GuiDraw.getTextureMgr();
+    }
+
+    // Whether this Geom generates its own name.  Such a name is overwritten every update, so
+    // the Geom Browser refuses to rename it and shows it in italics.
+    virtual bool NameIsAutomatic() const
+    {
+        return false;
+    }
+
     virtual bool IsModelScaleSensitive() { return false; }
+
+    // Whether this Geom's origin belongs in its placed bounding box.  True for a landing gear,
+    // whose ground plane is sized from the model box, so the origin stands in for it.
+    virtual bool PlacedBBoxIncludesOrigin() const
+    {
+        return false;
+    }
 
 protected:
 
@@ -313,7 +403,7 @@ public:
     }
 
 
-    Matrix4d getModelMatrix()
+    Matrix4d getModelMatrix() const
     {
         return m_ModelMatrix;
     }
@@ -407,12 +497,46 @@ public:
     virtual void LoadMainDrawObjs( vector< DrawObj* > & draw_obj_vec );
     virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
 
+    //==== Markers ====//
+    // Drawn to show function rather than shape -- a propeller's thrust and rotation, a hinge's
+    // axes, an engine's stations.  Built with the placement, symmetry, flip and ID of placer,
+    // which is this Geom or a Clone of it.  Editing highlights are not markers.
+    virtual void BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec )
+    {
+        marker_vec.clear();
+    }
+
+    // Which markers placer shows.  Run at every draw, since selection changes without an update.
+    virtual void SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec )    {}
+
+    // The Geom whose markers this Geom draws: itself, or the Geom it stands in for.
+    virtual Geom* GetMarkerGeom()
+    {
+        return this;
+    }
+
+    // Whether the markers are what is picked (a Blank's axes, a hinge's frame), so they load
+    // with the main draw objects.
+    virtual bool LoadsMarkersAsMain()
+    {
+        return false;
+    }
+
+    // Shown with the feature lines, or when this Geom is selected.
+    bool ShowsMarkers();
+
+    // Reflects draw objects through this Geom's flip, for markers built from directions that
+    // placement alone does not reflect.  Shaded triangles are rewound.
+    void FlipDrawObjs( const vector< DrawObj* > &dobj_vec );
+
     virtual void SetColor( double r, double g, double b );
     virtual vec3d GetColor() const;
 
     virtual void SetMaterialToDefault();
     virtual void SetMaterial( const std::string &name, double ambi[], double diff[], double spec[], double emis[], double shin );
-    virtual Material * GetMaterial();
+    // Read only.  Changes go through SetMaterial so they are announced.
+    virtual const Material * GetMaterial() const;
+    virtual void SetMaterial( const Material &mat );
 
     virtual bool GetSetFlag( int index ) const;
     virtual vector< bool > GetSetFlags()
@@ -448,6 +572,28 @@ public:
     virtual void GetMainSurfVecCopy( vector<VspSurf> &surf_vec ) const
     {
         surf_vec = m_MainSurfVec;
+    }
+
+    virtual void GetMainTessVecCopy( vector <SimpleTess> &tess_vec ) const
+    {
+        tess_vec = m_MainTessVec;
+    }
+
+    virtual void GetMainFeatureTessVecCopy( vector <SimpleFeatureTess> &tess_vec ) const
+    {
+        tess_vec = m_MainFeatureTessVec;
+    }
+
+    virtual void GetMainDegenGeomPreviewCopy( vector< DegenGeom > & degen_vec ) const
+    {
+         degen_vec = m_MainDegenGeomPreviewVec;
+    }
+
+    // Whether capping changed each main surface.  A Clone copies these with the capped surfaces.
+    virtual void GetCapSuccessCopy( vector< bool > & umin_vec, vector< bool > & umax_vec ) const
+    {
+        umin_vec = m_CapUMinSuccess;
+        umax_vec = m_CapUMaxSuccess;
     }
     virtual int GetNumSymFlags() const;
     virtual int GetNumTotalSurfs() const;
@@ -513,6 +659,7 @@ public:
 
     virtual vec3d CompPnt01(const int &indx, const double &u, const double &w);
     virtual void GetUWTess01( const int &indx, vector < double > &u, vector < double > &w );
+    virtual void GetUWTessSurf( const int &indx, vector < double > &u, vector < double > &w, const int &n_ref = 0 );
 
     virtual vec3d CompTanU( const int &indx, const double &u, const double &w );
     virtual vec3d CompTanW( const int &indx, const double &u, const double &w );
@@ -568,8 +715,40 @@ public:
 
     virtual int GetSymFlag() const;
 
+    // Reflection about the coordinate planes of the shape's own frame, applied before placement
+    // and symmetry, so the shape flips while the Geom stays put.  Planes use m_SymPlanFlag bits.
+    virtual Matrix4d GetFlipMat() const;
+
+    // Whether the flip reverses the shape (an odd number of planes).
+    virtual bool GetFlipReversesNormal() const;
+
+    // Planes the shape is reflected about.  A Clone adds its original's.
+    virtual int GetFlipFlag() const;
+
+    // How many of the three planes the flip reflects about.
+    int GetNumFlipPlanes() const;
+
+    // False for a Blank, which only places its children, and a route, which runs through
+    // points on other Geoms.
+    virtual bool FlipApplies() const;
+
+    // The placement with the flip applied.  Use it to take shape-frame results to world; the
+    // model matrix places the Geom and its children and has no flip.
+    Matrix4d GetShapeMatrix() const;
+
+    // Surface tessellation.  Public so a Clone can defer to its original's scheme.
+    virtual void GetUWTess( const VspSurf &surf, bool capUMinSuccess, bool capUMaxSuccess, bool degen, vector< double > &utess, vector< double > &vtess, const int & n_ref = 0 ) const;
+
+    virtual void UpdateTesselate( const VspSurf &surf, bool capUMinSuccess, bool capUMaxSuccess, bool degen, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms, vector< vector< vec3d > > &uw_pnts, const int & n_ref = 0 ) const;
+
+    virtual void UpdateSplitTesselate( const VspSurf &surf, bool capUMinSuccess, bool capUMaxSuccess, vector< vector< vector< vec3d > > > &pnts, vector< vector< vector< vec3d > > > &norms ) const;
+
     virtual vector< TMesh* > CreateTMeshVec( bool skipnegflipnormal, const int & n_ref = 0 ) const;
     vector< TMesh* > CreateTMeshVec( const vector<VspSurf> &surf_vec, bool skipnegflipnormal, const int & n_ref = 0 ) const;
+
+    // Set during an export that wants one propeller blade rather than the whole rotor.  On Geom
+    // rather than PropGeom so a Clone of a propeller answers the same.
+    void SetExportMainSurf( bool b )                 { m_ExportMainSurf = b; }
 
     virtual BndBox GetBndBox() const
     {
@@ -588,7 +767,21 @@ public:
         return m_BBox != m_ScaleIndependentBBox;
     }
 
-    virtual void WriteAirfoilFiles( FILE* meta_fid );
+    virtual Geom* GetBehaviorGeom()
+    {
+        return this;
+    }
+
+    // The two boxes before symmetry and placement, so a Clone can lay out its own from them.
+    virtual void GetMainBBoxes( BndBox &main_box, BndBox &scale_independent_main_box ) const
+    {
+        main_box = m_MainBBox;
+        scale_independent_main_box = m_ScaleIndependentMainBBox;
+    }
+
+    // name and id label the files; empty means this Geom's own.  A Clone of a wing or propeller
+    // has its original write the shape under the Clone's name and ID.
+    virtual void WriteAirfoilFiles( FILE* meta_fid, const string &name = string(), const string &id = string() );
     virtual void WriteBezierAirfoil( const string & file_name, double foilsurf_u_location );
     virtual void WriteSeligAirfoil( const string & file_name, double foilsurf_u_location );
     virtual vector < vec3d > GetAirfoilCoordinates( double foilsurf_u_location );
@@ -679,6 +872,9 @@ public:
     IntParm m_SymAxFlag;
     IntParm m_SymRotN; // Number Axial Symmetric Objects
 
+    // Which planes the shape is shown reflected about.
+    IntParm m_FlipFlag;
+
     //==== Mass Properties ====//
     IntParm  m_MassPrior;
     Parm     m_Density;
@@ -765,6 +961,15 @@ public:
     {
         return m_MainSourceVec;
     }
+    // A number no other update of any Geom has had, taken at the Geom's last update
+    long long GetUpdateStamp() const
+    {
+        return m_UpdateStamp;
+    }
+
+    // Removes the sources past index n and returns them.  Lets a Clone take the default sources
+    // its original adds.
+    virtual void TakeCfdMeshSourcesAfter( int n, vector< BaseSource* > & source_vec );
     virtual vector< BaseSimpleSource* > GetCfdMeshSimpSourceVec()
     {
         return m_SimpSourceVec;
@@ -839,12 +1044,13 @@ public:
 protected:
 
     bool m_UpdateBlock;
+    long long m_UpdateStamp;
 
     virtual void UpdateSurf() = 0;
     // Cap the first ncap main surfaces (ncap < 0 means all of them).  Capping fewer than all is
     // used by Geoms whose main surfaces are copies of one computed surface (e.g. prop blades),
     // so only the single source surface needs capping before it is duplicated.
-    void UpdateEndCaps( int ncap = -1 );
+    virtual void UpdateEndCaps( int ncap = -1 );
     virtual void UpdateEngine()   {};
     virtual void UpdateFeatureLines();
     virtual void UpdateLCurve();
@@ -855,6 +1061,9 @@ protected:
     virtual void UpdateCopyXFormParms() {};
     virtual void UpdateCopySurfParms() {};
     virtual void UpdateCopyTessParms() {};
+    virtual void UpdateCopyAppearance() {};
+    virtual void UpdateCopyName() {};
+    virtual void UpdateCopySubSurfs() {};
 
     // T must have methods .FlipNormal() and .Transform( Matrix4d )
     template <typename T>
@@ -872,10 +1081,17 @@ protected:
         dest.resize( num_surf );
         if ( m_TransMatVec.size() == num_surf )
         {
+            // Symmetry reverses each copy relative to the main one; a flip reverses every copy.
+            bool reversed = GetFlipReversesNormal();
+
             for ( int i = 0; i < num_surf; ++i )
             {
                 dest[ i ] = source[ m_MainSurfIndxVec[i] ];
                 if ( m_FlipNormalVec[ i ] != m_FlipNormalVec[ m_MainSurfIndxVec[ i ] ] )
+                {
+                    dest[ i ].FlipNormal();
+                }
+                if ( reversed )
                 {
                     dest[ i ].FlipNormal();
                 }
@@ -916,10 +1132,19 @@ protected:
     virtual void UpdateGrandChildren( Geom* grandparent, bool fullupdate );
     virtual void UpdateChildren( bool fullupdate );
     virtual void UpdateStepChildren( bool fullupdate );
-    virtual void UpdateBBox( int istart, const BndBox & start_box );
     virtual void UpdateBBox();
+
+    // Fills the two main boxes.  A surface sized from the model box is not scale independent
+    // and goes in the first box only.
+    virtual void UpdateMainBBox();
+
+    // One main box laid out by this Geom's symmetry and placement.
+    virtual BndBox PlaceMainBBox( const BndBox & main_box ) const;
+
     virtual void UpdateDrawObj();
     virtual void UpdateHighlightDrawObj()    {};
+    virtual void UpdateMarkerDrawObj();
+    virtual void LoadMarkerDrawObjs( vector< DrawObj* > & draw_obj_vec );
 
     virtual void UpdatePreTess()   {};
 
@@ -929,14 +1154,11 @@ protected:
     virtual void UpdateMainDegenGeomPreview();
     virtual void UpdateDegenGeomPreview();
 
-    virtual void GetUWTess( const VspSurf &surf, bool capUMinSuccess, bool capUMaxSuccess, bool degen, vector< double > &utess, vector< double > &vtess, const int & n_ref = 0 ) const;
-
-    virtual void UpdateTesselate( const VspSurf &surf, bool capUMinSuccess, bool capUMaxSuccess, bool degen, vector< vector< vec3d > > &pnts, vector< vector< vec3d > > &norms, vector< vector< vec3d > > &uw_pnts, const int & n_ref = 0 ) const;
-
-    virtual void UpdateSplitTesselate( const VspSurf &surf, bool capUMinSuccess, bool capUMaxSuccess, vector< vector< vector< vec3d > > > &pnts, vector< vector< vector< vec3d > > > &norms ) const;
-
     vector<VspSurf> m_MainSurfVec;
     vector<VspSurf> m_SurfVec;
+
+    // Hand out m_MainSurfVec where m_SurfVec would normally go.  See SetExportMainSurf.
+    bool m_ExportMainSurf;
     vector<int> m_MainSurfIndxVec;
     vector< vector< int > > m_SurfSymmMap;
     vector<int> m_SurfCopyIndx;
@@ -953,6 +1175,7 @@ protected:
     vector<DrawObj> m_DegenSurfDrawObj_vec;
     vector<DrawObj> m_DegenCamberPlateDrawObj_vec;
     vector<DrawObj> m_DegenSubSurfDrawObj_vec;
+    vector<DrawObj> m_MarkerDrawObj_vec;
 
     vector <SimpleTess> m_MainTessVec;
     vector <SimpleTess> m_TessVec;
@@ -961,6 +1184,10 @@ protected:
 
     vector< DegenGeom > m_MainDegenGeomPreviewVec;
     vector< DegenGeom > m_DegenGeomPreviewVec;
+
+    // Before symmetry and placement.
+    BndBox m_MainBBox;
+    BndBox m_ScaleIndependentMainBBox;
 
     BndBox m_BBox;
     // Similar to m_BBox, but it omits surfaces that automatically scale with the model size.  These include

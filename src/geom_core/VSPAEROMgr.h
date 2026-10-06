@@ -17,6 +17,7 @@
 #include "ProcessUtil.h"
 #include "StringUtil.h"
 
+#include <atomic>
 #include <vector>
 #include <string>
 using std::string;
@@ -27,11 +28,14 @@ class VspAeroControlSurf
 public:
     VspAeroControlSurf();
 
+    bool isMatch( const VspAeroControlSurf &cs ) const;
+
     string fullName;
     string parentGeomId;
     string SSID;
     bool isGrouped;
     unsigned int iReflect;      // mapping index to which reflected sub surface
+    bool isHinge;
 };
 
 class PropDriverGroup : public DriverGroup
@@ -153,8 +157,8 @@ public:
     virtual xmlNodePtr DecodeXml( xmlNodePtr & node );
 
     // Subsurface Manipulation
-    void AddSubSurface( const VspAeroControlSurf &control_surf );
-    void RemoveSubSurface( const string & ssid, int reflec_num );
+    void AddControlSurface( const VspAeroControlSurf &control_surf );
+    void RemoveControlSurface( const VspAeroControlSurf &control_surf );
 
     void SetGroupDisplaySuffix( int num );
 
@@ -254,7 +258,6 @@ public:
     void UpdateAutoTimeStep();
     void CleanCompleteControlSurfVec();
     void UpdateCompleteControlSurfVec();         // initializes one group per surface
-    void UpdateActiveControlSurfVec();
     void UpdateBBox( vector < DrawObj* > & draw_obj_vec );
     void UpdateHighlighted( vector < DrawObj* > & draw_obj_vec );
 
@@ -269,7 +272,7 @@ public:
     vector <RotorDisk*> GetRotorDiskVec()                      { return m_RotorDiskVec; };
     bool ExistRotorDisk() const                                { return !m_RotorDiskVec.empty(); }
 
-    vector < VspAeroControlSurf > GetActiveCSVec()          { return m_ActiveControlSurfaceVec; }
+    vector < VspAeroControlSurf > * GetActiveCSVecPtr();
     vector < VspAeroControlSurf > GetCompleteCSVec()        { return m_CompleteControlSurfaceVec; }
     vector < VspAeroControlSurf > GetAvailableCSVec();
     int GetCurrentCSGroupIndex() const                            { return m_CurrentCSGroupIndex; }
@@ -552,14 +555,20 @@ public:
 
     bool m_StopBeforeRun;
 
-    ProcessUtil m_SolverProcess; 
+    // True from just before the GUI launches the solver thread until that thread
+    // completes.  While set, the solver thread owns this manager's state -- the
+    // GUI must not call Update() or otherwise mutate the manager, and the solver
+    // thread relies on the state prepared on the GUI thread at launch.
+    std::atomic< bool > m_SolverThreadActive;
+
+    ProcessUtil m_SolverProcess;
     ProcessUtil m_SlicerThread;
 
 protected:
     void GetSweepVectors( vector<double> &alphaVec, vector<double> &betaVec, vector<double> &machVec, vector<double> &recrefVec ) const;
 
-    bool m_SolverProcessKill;
-    bool m_SlicerProcessKill;
+    std::atomic< bool > m_SolverProcessKill;
+    std::atomic< bool > m_SlicerProcessKill;
 
     // helper functions for VSPAERO files
     void ReadHistoryFile( const string &filename, vector <string> &res_id_vector, double recref ) const;
@@ -591,7 +600,6 @@ private:
 
     vector< RotorDisk* > m_RotorDiskVec;
     vector< VspAeroControlSurf > m_CompleteControlSurfaceVec;   // list of all control and rectangle sub-surfaces in the model selected as control surfaces
-    vector < VspAeroControlSurf > m_ActiveControlSurfaceVec;
     vector< ControlSurfaceGroup* > m_ControlSurfaceGroupVec;
     vector < CpSlice* > m_CpSliceVec;
     vector < UnsteadyGroup* > m_UnsteadyGroupVec;

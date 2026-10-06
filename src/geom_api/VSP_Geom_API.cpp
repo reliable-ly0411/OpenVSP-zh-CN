@@ -26,6 +26,7 @@
 #include "FeaMeshMgr.h"
 #include "FitModelMgr.h"
 #include "GeometryAnalysisMgr.h"
+#include "HingeGeom.h"
 #include "LinkMgr.h"
 #include "Link.h"
 #include "main.h"
@@ -46,6 +47,7 @@
 #include "VehicleMgr.h"
 #include "VKTAirfoil.h"
 #include "VSP_Geom_API.h"
+#include "CloneGeom.h"
 #include "VSPAEROMgr.h"
 #include "LightMgr.h"
 #include "VspUtil.h"
@@ -219,13 +221,6 @@ int GetAndResetUpdateCount()
     return (int) UpdateCountMgr.GetAndResetUpdateCount();
 }
 
-void RegisterCFDMeshAnalyses()
-{
-    SurfaceIntersectionMgr.RegisterAnalysis();
-    CfdMeshMgr.RegisterAnalysis();
-    FeaMeshMgr.RegisterAnalysis();
-}
-
 //===================================================================//
 //===============       File I/O Functions        ===================//
 //===================================================================//
@@ -342,6 +337,20 @@ std::string ImportFile( const std::string & file_name, int file_type, const std:
 
 std::string ExportFile( const std::string & file_name, int thick_set, int file_type, int subsFlag, int thin_set, bool useMode, const std::string &modeID )
 {
+    if ( file_type == EXPORT_STEP_STITCH || file_type == EXPORT_IGES_STITCH )
+    {
+        std::string err = SurfaceIntersectionMgr.SplitStitchSurfaces( file_name, file_type == EXPORT_STEP_STITCH, thick_set, thin_set,
+                                                                      useMode, modeID );
+        if ( !err.empty() )
+        {
+            ErrorMgr.AddError( VSP_FILE_WRITE_FAILURE, "ExportFile::" + err + ", " + file_name + " not written" );
+            return std::string();
+        }
+
+        ErrorMgr.NoError();
+        return std::string();
+    }
+
     std::string mesh_id = GetVehicle()->ExportFile( file_name, thick_set, thin_set, subsFlag, file_type, useMode, modeID );
 
     ErrorMgr.NoError();
@@ -370,17 +379,20 @@ void SetBEMPropID( const std::string & prop_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "SetBEMPropID::Can't Find Geom " + prop_id );
         return;
     }
-    else if ( geom_ptr->GetType().m_Type != PROP_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != PROP_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_PTR, "SetBEMPropID::Geom is not a propeller " + prop_id );
         return;
     }
 
-    PropGeom* prop_ptr = dynamic_cast <PropGeom*> ( geom_ptr );
-    if ( prop_ptr )
+    PropGeom* behavior_prop = dynamic_cast <PropGeom*> ( geom_ptr->GetBehaviorGeom() );
+    if ( !behavior_prop )
     {
-        veh->m_BEMPropID = prop_id;
+        ErrorMgr.AddError( VSP_INVALID_PTR, "SetBEMPropID::Geom is not a propeller " + prop_id );
+        return;
     }
+
+    veh->m_BEMPropID = prop_id;
 }
 
 //===================================================================//
@@ -421,6 +433,12 @@ int GetNumDesignVars()
 void AddDesignVar( const std::string & parm_id, int type )
 {
     DesignVarMgr.AddVar( parm_id, type );
+    ErrorMgr.NoError();
+}
+
+void AddDesignVarLimits( const string & parm_id, int type, double lowerlimit, double upperlimit )
+{
+    DesignVarMgr.AddVar( parm_id, type, lowerlimit, upperlimit );
     ErrorMgr.NoError();
 }
 
@@ -495,6 +513,8 @@ std::string GetComputationFileName( int file_type )
         return GetVehicle()->GetCfdSettingsPtr()->GetExportFileName( CFD_TKEY_FILE_NAME );
     if ( file_type == CFD_VSPGEOM_TYPE )
         return GetVehicle()->GetCfdSettingsPtr()->GetExportFileName( CFD_VSPGEOM_FILE_NAME );
+    if ( file_type == CFD_POGS_TYPE )
+        return GetVehicle()->GetCfdSettingsPtr()->GetExportFileName( CFD_POGS_FILE_NAME );
 
     std::string ret = GetVehicle()->getExportFileName( file_type );
 
@@ -526,6 +546,8 @@ void SetComputationFileName( int file_type, const std::string & file_name )
         GetVehicle()->GetCfdSettingsPtr()->SetExportFileName( file_name, CFD_TKEY_FILE_NAME );
     if ( file_type == CFD_VSPGEOM_TYPE )
         GetVehicle()->GetCfdSettingsPtr()->SetExportFileName( file_name, CFD_VSPGEOM_FILE_NAME );
+    if ( file_type == CFD_POGS_TYPE )
+        GetVehicle()->GetCfdSettingsPtr()->SetExportFileName( file_name, CFD_POGS_FILE_NAME );
 
     ErrorMgr.NoError();
 }
@@ -681,8 +703,12 @@ double GetCFDMeshVal( int type )
         ret = GetVehicle()->GetCfdSettingsPtr()->m_FarYLocation();
     else if ( type == CFD_FAR_LOC_Z )
         ret = GetVehicle()->GetCfdSettingsPtr()->m_FarZLocation();
-    else if ( type == CFD_SRF_XYZ_FLAG )
-        ret = GetVehicle()->GetCfdSettingsPtr()->m_XYZIntCurveFlag();
+    else if ( type == CFD_SPLIT_JOIN_SURFS_FLAG )
+        ret = GetVehicle()->GetCfdSettingsPtr()->m_SplitJoinSurfsFlag();
+    else if ( type == CFD_PARALLEL_MESH_FLAG )
+        ret = GetVehicle()->GetCfdSettingsPtr()->m_ParallelMeshFlag();
+    else if ( type == CFD_POGS_NUM_REFINE )
+        ret = GetVehicle()->GetCfdSettingsPtr()->m_POGSNRef();
     else
     {
         ErrorMgr.AddError( VSP_CANT_FIND_TYPE, "GetCFDMeshVal::Can't Find Type " + to_string( ( long long )type ) );
@@ -741,8 +767,12 @@ void SetCFDMeshVal( int type, double val )
         GetVehicle()->GetCfdSettingsPtr()->m_FarYLocation = val;
     else if ( type == CFD_FAR_LOC_Z )
         GetVehicle()->GetCfdSettingsPtr()->m_FarZLocation = val;
-    else if ( type == CFD_SRF_XYZ_FLAG )
-        GetVehicle()->GetCfdSettingsPtr()->m_XYZIntCurveFlag = ToBool(val);
+    else if ( type == CFD_SPLIT_JOIN_SURFS_FLAG )
+        GetVehicle()->GetCfdSettingsPtr()->m_SplitJoinSurfsFlag = ToBool(val);
+    else if ( type == CFD_PARALLEL_MESH_FLAG )
+        GetVehicle()->GetCfdSettingsPtr()->m_ParallelMeshFlag = ToBool(val);
+    else if ( type == CFD_POGS_NUM_REFINE )
+        GetVehicle()->GetCfdSettingsPtr()->m_POGSNRef = val;
     else
     {
         ErrorMgr.AddError( VSP_CANT_FIND_TYPE, "SetCFDMeshVal::Can't Find Type " + to_string( ( long long )type ) );
@@ -823,6 +853,12 @@ void AddCFDSource( int type, const std::string & geom_id, int surf_index,
     if ( !geom_ptr )
     {
         ErrorMgr.AddError( VSP_INVALID_PTR, "AddCFDSource::Can't Find Geom " + geom_id );
+        return;
+    }
+
+    if ( surf_index < 0 || surf_index >= geom_ptr->GetNumMainSurfs() )
+    {
+        ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, "AddCFDSource::Geom " + geom_id + " has no main surface " + to_string( surf_index ) );
         return;
     }
 
@@ -1073,6 +1109,8 @@ void ComputeCFDMesh( int set, int degenset, int file_export_types )
         veh->GetCfdSettingsPtr()->SetFileExportFlag( CFD_TKEY_FILE_NAME, true );
     if ( file_export_types & CFD_VSPGEOM_TYPE )
         veh->GetCfdSettingsPtr()->SetFileExportFlag( CFD_VSPGEOM_FILE_NAME, true );
+    if ( file_export_types & CFD_POGS_TYPE )
+        veh->GetCfdSettingsPtr()->SetFileExportFlag( CFD_POGS_FILE_NAME, true );
 
     veh->GetCfdSettingsPtr()->m_SelectedSetIndex = set;
     veh->GetCfdSettingsPtr()->m_SelectedDegenSetIndex = degenset;
@@ -1275,7 +1313,13 @@ std::vector < std::string > GetActiveCSNameVec( int CSGroupIndex )
 
     VSPAEROMgr.Update();
 
-    std::vector < VspAeroControlSurf > active_cs_vec = VSPAEROMgr.GetActiveCSVec();
+    if ( !VSPAEROMgr.GetActiveCSVecPtr() )
+    {
+        ErrorMgr.AddError( VSP_INVALID_INPUT_VAL, "GetActiveCSNameVec::invalid group index" );
+        return std::vector < std::string >();
+    }
+
+    std::vector < VspAeroControlSurf > active_cs_vec = *VSPAEROMgr.GetActiveCSVecPtr();
     std::vector < std::string > return_vec( active_cs_vec.size() );
 
     for ( size_t i = 0; i < return_vec.size(); i++ )
@@ -1396,7 +1440,14 @@ void RemoveSelectedFromCSGroup( const std::vector <int> &selected, int CSGroupIn
     }
 
     VSPAEROMgr.SetCurrentCSGroupIndex( CSGroupIndex );
-    int max_cs_index = VSPAEROMgr.GetActiveCSVec().size();
+
+    if ( !VSPAEROMgr.GetActiveCSVecPtr() )
+    {
+        ErrorMgr.AddError( VSP_INVALID_INPUT_VAL, "RemoveSelectedFromCSGroup::invalid group index" );
+        return;
+    }
+
+    int max_cs_index = VSPAEROMgr.GetActiveCSVecPtr()->size();
 
     if ( selected.size() == 0 || selected.size() > max_cs_index )
     {
@@ -2614,6 +2665,15 @@ void SetGeomDisplayType(const std::string &geom_id, int type)
         ErrorMgr.AddError( VSP_INVALID_PTR, "SetGeomDisplayType::Can't Find Geom " + geom_id );
         return;
     }
+
+    CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( geom_ptr );
+    if ( clone_ptr && clone_ptr->GetOriginalGeom() )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "SetGeomDisplayType::Geom " + geom_id +
+                           " is a Clone -- it is shown the way the Geom it copies is" );
+        return;
+    }
+
     geom_ptr->m_GuiDraw.SetDisplayType( type );
     geom_ptr->SetDirtyFlag( GeomBase::TESS );
     geom_ptr->SetLateUpdateFlag( true );
@@ -2673,7 +2733,7 @@ std::string GetGeomMaterialName( const std::string &geom_id )
         return std::string();
     }
 
-    Material *mat = geom_ptr->GetMaterial();
+    const Material *mat = geom_ptr->GetMaterial();
     if ( !mat )
     {
         ErrorMgr.AddError( VSP_INVALID_PTR, "GetGeomMaterialName::Geom " + geom_id + " has no material" );
@@ -2932,34 +2992,91 @@ void UpdateGeom( const std::string & geom_id )
 }
 
 
-void DeleteGeom( const std::string & geom_id )
+// Validate clone_delete before anything is removed.
+static bool ValidCloneDelete( int clone_delete, const std::string & caller )
 {
-    Vehicle* veh = GetVehicle();
-
-    veh->DeleteGeomVec( { geom_id } );
-
-    ErrorMgr.NoError();
+    if ( clone_delete < 0 || clone_delete >= CLONE_DELETE_NUM_TYPES )
+    {
+        ErrorMgr.AddError( VSP_INVALID_INPUT_VAL, caller + "::Clone delete type " + to_string( clone_delete ) + " is not a CLONE_DELETE_TYPE" );
+        return false;
+    }
+    return true;
 }
 
-void DeleteGeomVec( const std::vector< std::string > & del_vec )
+// Reports VSP_CLONE_ORIGINAL_LOST for each Clone left empty, including failed replacements.
+// Leaves the call flagged if anything else was reported.
+static void ReportClonesOf( Vehicle* veh, const std::vector< std::string > & clone_vec, int n_errors_before )
+{
+    for ( int i = 0; i < ( int )clone_vec.size(); i++ )
+    {
+        CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( veh->FindGeom( clone_vec[i] ) );
+        if ( clone_ptr && clone_ptr->GetOriginalID().empty() )
+        {
+            ErrorMgr.AddError( VSP_CLONE_ORIGINAL_LOST, "Error:  " + clone_ptr->GetOriginalLostMessage() );
+        }
+    }
+
+    if ( ErrorMgr.GetNumTotalErrors() == n_errors_before )
+    {
+        ErrorMgr.NoError();
+    }
+}
+
+static void DeleteGeoms( const std::vector< std::string > & del_vec, int clone_delete, const std::string & caller )
 {
     Vehicle* veh = GetVehicle();
 
-    veh->DeleteGeomVec( del_vec );
+    if ( !ValidCloneDelete( clone_delete, caller ) )
+    {
+        return;
+    }
 
-    ErrorMgr.NoError();
+    int n_errors_before = ErrorMgr.GetNumTotalErrors();
+    std::vector< std::string > clone_vec = veh->FindClonesOf( del_vec );
+
+    veh->DeleteGeomVec( del_vec, clone_delete );
+
+    ReportClonesOf( veh, clone_vec, n_errors_before );
+}
+
+void DeleteGeom( const std::string & geom_id, int clone_delete )
+{
+    DeleteGeoms( { geom_id }, clone_delete, "DeleteGeom" );
+}
+
+void DeleteGeomVec( const std::vector< std::string > & del_vec, int clone_delete )
+{
+    DeleteGeoms( del_vec, clone_delete, "DeleteGeomVec" );
 }
 
 /// Cut geometry and place it in the clipboard.  The clipboard is cleared before
 /// the cut geom is placed there.
-void CutGeomToClipboard( const std::string & geom_id )
+void CutGeomToClipboard( const std::string & geom_id, int clone_delete )
 {
     Vehicle* veh = GetVehicle();
 
+    if ( !ValidCloneDelete( clone_delete, "CutGeomToClipboard" ) )
+    {
+        return;
+    }
+
+    int n_errors_before = ErrorMgr.GetNumTotalErrors();
+    std::vector< std::string > clone_vec = veh->FindClonesOf( { geom_id } );
+
     veh->SetActiveGeom( geom_id );
-    veh->CutActiveGeomVec();
+    veh->CutActiveGeomVec( clone_delete );
+
+    ReportClonesOf( veh, clone_vec, n_errors_before );
+}
+
+std::vector< std::string > FindGeomClones( const std::vector< std::string > & geom_id_vec )
+{
+    Vehicle* veh = GetVehicle();
+
+    std::vector< std::string > clone_vec = veh->FindClonesOf( geom_id_vec );
 
     ErrorMgr.NoError();
+    return clone_vec;
 }
 
 /// Copy geometry and place it in the clipboard.  The clipboard is cleared before
@@ -3097,7 +3214,20 @@ void SetGeomName( const std::string & geom_id, const std::string & name )
         ErrorMgr.AddError( VSP_INVALID_PTR, "SetGeomName::Can't Find Geom " + geom_id );
         return;
     }
+
+    // A self-naming Geom would overwrite this on its next update, so refuse, as the GUI does.
+    if ( geom_ptr->NameIsAutomatic() )
+    {
+        ErrorMgr.AddError( VSP_INVALID_ID, "SetGeomName::Geom " + geom_id +
+                           " names itself and would write over this on its next update" );
+        return;
+    }
+
     geom_ptr->SetName( name );
+
+    // A name is not a Parm, so update here for Clones named after this Geom.
+    Update();
+
     ErrorMgr.NoError();
 }
 
@@ -3115,6 +3245,203 @@ std::string GetGeomName( const std::string & geom_id )
     ret_name = geom_ptr->GetName();
     ErrorMgr.NoError();
     return ret_name;
+}
+
+void SetGeomCloneOriginal( const std::string & clone_id, const std::string & original_id )
+{
+    Vehicle* veh = GetVehicle();
+    Geom* geom_ptr = veh->FindGeom( clone_id );
+    if ( !geom_ptr )
+    {
+        ErrorMgr.AddError( VSP_INVALID_PTR, "SetGeomCloneOriginal::Can't Find Geom " + clone_id );
+        return;
+    }
+
+    CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( geom_ptr );
+    if ( !clone_ptr )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "SetGeomCloneOriginal::Geom " + clone_id + " is not a Clone" );
+        return;
+    }
+
+    // An empty ID clears the original; the Clone shows nothing but keeps the Parms it copied.
+    if ( original_id.empty() )
+    {
+        clone_ptr->SetOriginalID( original_id );
+        ErrorMgr.NoError();
+        return;
+    }
+
+    Geom* original_ptr = veh->FindGeom( original_id );
+    if ( !original_ptr )
+    {
+        ErrorMgr.AddError( VSP_INVALID_PTR, "SetGeomCloneOriginal::Can't Find Geom " + original_id );
+        return;
+    }
+
+    if ( original_id == clone_id )
+    {
+        ErrorMgr.AddError( VSP_INVALID_ID, "SetGeomCloneOriginal::A Clone cannot be a Clone of itself" );
+        return;
+    }
+
+    if ( clone_ptr->IsCloneAncestor( original_id ) )
+    {
+        ErrorMgr.AddError( VSP_INVALID_ID, "SetGeomCloneOriginal::Geom " + original_id +
+                           " already copies Clone " + clone_id + ", so this would close a ring of Clones" );
+        return;
+    }
+
+    if ( clone_ptr->IsDescendant( original_id ) )
+    {
+        ErrorMgr.AddError( VSP_INVALID_ID, "SetGeomCloneOriginal::Geom " + original_id +
+                           " hangs off Clone " + clone_id + ", so it updates after it and would always be a pass behind" );
+        return;
+    }
+
+    if ( !clone_ptr->SetOriginalID( original_id ) )
+    {
+        ErrorMgr.AddError( VSP_INVALID_ID, "SetGeomCloneOriginal::Clone " + clone_id +
+                           " cannot copy Geom " + original_id );
+        return;
+    }
+
+    ErrorMgr.NoError();
+}
+
+std::string GetGeomCloneOriginal( const std::string & clone_id )
+{
+    Vehicle* veh = GetVehicle();
+    Geom* geom_ptr = veh->FindGeom( clone_id );
+    if ( !geom_ptr )
+    {
+        ErrorMgr.AddError( VSP_INVALID_PTR, "GetGeomCloneOriginal::Can't Find Geom " + clone_id );
+        return std::string();
+    }
+
+    CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( geom_ptr );
+    if ( !clone_ptr )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "GetGeomCloneOriginal::Geom " + clone_id + " is not a Clone" );
+        return std::string();
+    }
+
+    string origid = clone_ptr->GetOriginalID();
+    if ( origid == "NONE" )
+    {
+        origid = std::string();
+    }
+
+    ErrorMgr.NoError();
+    return origid;
+}
+
+void SetGeomCloneNameSuffix( const std::string & clone_id, const std::string & name_suffix )
+{
+    Vehicle* veh = GetVehicle();
+    Geom* geom_ptr = veh->FindGeom( clone_id );
+    if ( !geom_ptr )
+    {
+        ErrorMgr.AddError( VSP_INVALID_PTR, "SetGeomCloneNameSuffix::Can't Find Geom " + clone_id );
+        return;
+    }
+
+    CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( geom_ptr );
+    if ( !clone_ptr )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "SetGeomCloneNameSuffix::Geom " + clone_id + " is not a Clone" );
+        return;
+    }
+
+    clone_ptr->SetNameSuffix( name_suffix );
+    clone_ptr->Update();
+
+    ErrorMgr.NoError();
+}
+
+std::string GetGeomCloneNameSuffix( const std::string & clone_id )
+{
+    Vehicle* veh = GetVehicle();
+    Geom* geom_ptr = veh->FindGeom( clone_id );
+    if ( !geom_ptr )
+    {
+        ErrorMgr.AddError( VSP_INVALID_PTR, "GetGeomCloneNameSuffix::Can't Find Geom " + clone_id );
+        return std::string();
+    }
+
+    CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( geom_ptr );
+    if ( !clone_ptr )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "GetGeomCloneNameSuffix::Geom " + clone_id + " is not a Clone" );
+        return std::string();
+    }
+
+    ErrorMgr.NoError();
+    return clone_ptr->GetNameSuffix();
+}
+
+std::string ReplaceCloneGeom( const std::string & clone_id )
+{
+    Vehicle* veh = GetVehicle();
+    Geom* geom_ptr = veh->FindGeom( clone_id );
+    if ( !geom_ptr )
+    {
+        ErrorMgr.AddError( VSP_INVALID_PTR, "ReplaceCloneGeom::Can't Find Geom " + clone_id );
+        return std::string();
+    }
+
+    CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( geom_ptr );
+    if ( !clone_ptr )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "ReplaceCloneGeom::Geom " + clone_id + " is not a Clone" );
+        return std::string();
+    }
+
+    if ( !clone_ptr->GetOriginalGeom() )
+    {
+        ErrorMgr.AddError( VSP_INVALID_ID, "ReplaceCloneGeom::Clone " + clone_id + " has no original to copy" );
+        return std::string();
+    }
+
+    int n_errors_before = ErrorMgr.GetNumTotalErrors();
+
+    std::string new_id = veh->ReplaceCloneGeom( clone_id );
+    if ( new_id.empty() )
+    {
+        ErrorMgr.AddError( VSP_INVALID_ID, "ReplaceCloneGeom::Could not replace Clone " + clone_id );
+        return std::string();
+    }
+
+    // Leave the call flagged if anything was reported, e.g. a replacement that moved.
+    if ( ErrorMgr.GetNumTotalErrors() == n_errors_before )
+    {
+        ErrorMgr.NoError();
+    }
+    return new_id;
+}
+
+std::vector< std::string > CloneGeomVec( const std::vector< std::string > & geom_id_vec, const std::string & name_suffix )
+{
+    Vehicle* veh = GetVehicle();
+
+    for ( int i = 0 ; i < ( int )geom_id_vec.size() ; i++ )
+    {
+        if ( !veh->FindGeom( geom_id_vec[i] ) )
+        {
+            ErrorMgr.AddError( VSP_INVALID_PTR, "CloneGeomVec::Can't Find Geom " + geom_id_vec[i] );
+            return std::vector< std::string >();
+        }
+    }
+
+    // Vehicle::CloneGeomVec selects the new Clones; keep the script's selection.
+    std::vector< std::string > active_store = veh->GetActiveGeomVec();
+
+    std::vector< std::string > clone_vec = veh->CloneGeomVec( geom_id_vec, name_suffix );
+
+    veh->SetActiveGeomVec( active_store );
+
+    ErrorMgr.NoError();
+    return clone_vec;
 }
 
 // Get the VSP Surface type for the specified Geom (i.e DISK_SURF)
@@ -3611,6 +3938,17 @@ void DeleteSubSurf( const std::string & geom_id, const std::string & sub_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "DeleteSubSurf::Can't Find SubSurf " + sub_id );
         return;
     }
+
+    // A Clone rebuilds its copied subsurfaces on every update, so they cannot be deleted here.
+    CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( geom_ptr );
+    if ( clone_ptr && clone_ptr->IsCopiedSubSurf( sub_id ) )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "DeleteSubSurf::SubSurf " + sub_id +
+                           " is copied from Geom " + clone_ptr->GetOriginalID() +
+                           " -- delete it there, or turn the Clone's subsurface copying off" );
+        return;
+    }
+
     geom_ptr->DelSubSurf( index );
     ErrorMgr.NoError();
     return;
@@ -3637,6 +3975,17 @@ void DeleteSubSurf( const std::string & sub_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "DeleteSubSurf::Can't Find SubSurf " + sub_id );
         return;
     }
+
+    // A Clone rebuilds its copied subsurfaces on every update, so they cannot be deleted here.
+    CloneGeom* clone_ptr = dynamic_cast< CloneGeom* >( geom_ptr );
+    if ( clone_ptr && clone_ptr->IsCopiedSubSurf( sub_id ) )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "DeleteSubSurf::SubSurf " + sub_id +
+                           " is copied from Geom " + clone_ptr->GetOriginalID() +
+                           " -- delete it there, or turn the Clone's subsurface copying off" );
+        return;
+    }
+
     geom_ptr->DelSubSurf( index );
     ErrorMgr.NoError();
     return;
@@ -5385,6 +5734,10 @@ double GetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, int type 
         ret = feastruct->GetFeaGridDensityPtr()->GetRigorLimit();
     else if ( type == CFD_HALF_MESH_FLAG )
         ret = feastruct->GetStructSettingsPtr()->m_HalfMeshFlag();
+    else if ( type == CFD_SPLIT_JOIN_SURFS_FLAG )
+        ret = feastruct->GetStructSettingsPtr()->m_SplitJoinSurfsFlag();
+    else if ( type == CFD_PARALLEL_MESH_FLAG )
+        ret = feastruct->GetStructSettingsPtr()->m_ParallelMeshFlag();
     else
     {
         ErrorMgr.AddError( VSP_CANT_FIND_TYPE, "GetFeaMeshVal::Can't Find Type " + to_string( ( long long )type ) );
@@ -5445,6 +5798,10 @@ void SetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, int type, d
         feastruct->GetFeaGridDensityPtr()->SetRigorLimit( ToBool( val ) );
     else if ( type == CFD_HALF_MESH_FLAG )
         feastruct->GetStructSettingsPtr()->m_HalfMeshFlag = ToBool( val );
+    else if ( type == CFD_SPLIT_JOIN_SURFS_FLAG )
+        feastruct->GetStructSettingsPtr()->m_SplitJoinSurfsFlag = ToBool( val );
+    else if ( type == CFD_PARALLEL_MESH_FLAG )
+        feastruct->GetStructSettingsPtr()->m_ParallelMeshFlag = ToBool( val );
     else
     {
         ErrorMgr.AddError( VSP_CANT_FIND_TYPE, "SetFEAMeshVal::Can't Find Type " + to_string( (long long)type ) );
@@ -5516,6 +5873,7 @@ void ComputeFeaMesh( const std::string & geom_id, int fea_struct_ind, int file_t
     FeaMeshMgr.GenerateFeaMesh();
 
     FeaMeshMgr.ExportFeaMesh( feastruct->GetID() );
+    FeaMeshMgr.ExportCADFiles();
 
     ErrorMgr.NoError();
 }
@@ -5541,6 +5899,7 @@ void ComputeFeaMesh( const std::string & struct_id, int file_type )
     FeaMeshMgr.GenerateFeaMesh();
 
     FeaMeshMgr.ExportFeaMesh( struct_id );
+    FeaMeshMgr.ExportCADFiles();
 
     ErrorMgr.NoError();
 }
@@ -5597,6 +5956,19 @@ std::string GetXSecCurveAlias( const std::string & id )
     return xsc->GetGroupAlias();
 }
 
+// A Clone's cross sections belong to its original, so XSec edits on a Clone are refused.
+static bool RefuseOnClone( Geom* geom_ptr, const std::string &fname )
+{
+    if ( !dynamic_cast< CloneGeom* >( geom_ptr ) )
+    {
+        return false;
+    }
+
+    ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, fname + "::Geom " + geom_ptr->GetID() +
+                       " is a Clone -- change the Geom it copies" );
+    return true;
+}
+
 void CutXSec( const std::string & geom_id, int index )
 {
     Vehicle* veh = GetVehicle();
@@ -5604,6 +5976,11 @@ void CutXSec( const std::string & geom_id, int index )
     if ( !geom_ptr )
     {
         ErrorMgr.AddError( VSP_INVALID_PTR, "CutXSec::Can't Find Geom " + geom_id );
+        return;
+    }
+
+    if ( RefuseOnClone( geom_ptr, "CutXSec" ) )
+    {
         return;
     }
 
@@ -5637,6 +6014,11 @@ void PasteXSec( const std::string & geom_id, int index )
         return;
     }
 
+    if ( RefuseOnClone( geom_ptr, "PasteXSec" ) )
+    {
+        return;
+    }
+
     geom_ptr->PasteXSec( index );
     ErrorMgr.NoError();
 }
@@ -5648,6 +6030,11 @@ void InsertXSec( const std::string & geom_id, int index, int type )
     if ( !geom_ptr )
     {
         ErrorMgr.AddError( VSP_INVALID_PTR, "InsertXSec::Can't Find Geom " + geom_id );
+        return;
+    }
+
+    if ( RefuseOnClone( geom_ptr, "InsertXSec" ) )
+    {
         return;
     }
 
@@ -5693,10 +6080,11 @@ std::vector < int > GetDriverGroup( const std::string & geom_id, int section_ind
         return choices;
     }
 
-    if ( geom_ptr->GetType().m_Type == MS_WING_GEOM_TYPE )
+    // Read-only, so a Clone of a wing answers from its original.  SetDriverGroup does not.
+    if ( geom_ptr->GetBehaviorType() == MS_WING_GEOM_TYPE )
     {
-        WingGeom* wg = dynamic_cast<WingGeom*>( geom_ptr );
-        WingSect* ws = wg->GetWingSect( section_index );
+        WingGeom* behavior_wing = dynamic_cast<WingGeom*>( geom_ptr->GetBehaviorGeom() );
+        WingSect* ws = behavior_wing->GetWingSect( section_index );
         if ( !ws )
         {
             ErrorMgr.AddError( VSP_INVALID_PTR, "GetDriverGroup::Invalid Wing Section Index " + to_string( ( long long )section_index ) );
@@ -7700,7 +8088,8 @@ void WriteBezierAirfoil( const std::string & file_name, const std::string & geom
         return;
     }
 
-    geom_ptr->WriteBezierAirfoil( file_name, foilsurf_u );
+    // Airfoils carry no placement, so a Clone's are its original's.
+    geom_ptr->GetBehaviorGeom()->WriteBezierAirfoil( file_name, foilsurf_u );
     ErrorMgr.NoError();
 }
 
@@ -7720,7 +8109,8 @@ void WriteSeligAirfoil( const std::string & file_name, const std::string & geom_
         return;
     }
 
-    geom_ptr->WriteSeligAirfoil( file_name, foilsurf_u );
+    // Airfoils carry no placement, so a Clone's are its original's.
+    geom_ptr->GetBehaviorGeom()->WriteSeligAirfoil( file_name, foilsurf_u );
     ErrorMgr.NoError();
 }
 
@@ -7741,7 +8131,8 @@ std::vector < vec3d > GetAirfoilCoordinates( const std::string & geom_id, const 
         return ordered_vec;
     }
 
-    ordered_vec = geom_ptr->GetAirfoilCoordinates( foilsurf_u );
+    // Airfoils carry no placement, so a Clone's are its original's.
+    ordered_vec = geom_ptr->GetBehaviorGeom()->GetAirfoilCoordinates( foilsurf_u );
     ErrorMgr.NoError();
     return ordered_vec;
 }
@@ -7890,16 +8281,17 @@ int GetNumRoutingPts( const std::string &routing_id )
         return -1;
     }
 
-    RoutingGeom* routing_ptr = dynamic_cast< RoutingGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a route answers too.
+    RouteRole* route_ptr = Geom::CastTo< RouteRole > ( geom_ptr );
 
-    if ( !routing_ptr || geom_ptr->GetType().m_Type != ROUTING_GEOM_TYPE )
+    if ( !route_ptr )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetNumRoutingPts::Geom " + routing_id + " is not a RoutingGeom" );
         return -1;
     }
 
     ErrorMgr.NoError();
-    return routing_ptr->GetNumPt();
+    return route_ptr->GetNumRoutePts();
 }
 
 std::string AddRoutingPt( const std::string &routing_id, const std::string &geom_id, int surf_index )
@@ -8091,21 +8483,22 @@ std::string GetRoutingPtID( const std::string &routing_id, int index )
         return ret_id;
     }
 
-    RoutingGeom* routing_ptr = dynamic_cast< RoutingGeom* > ( rgeom_ptr );
+    // For a Clone these IDs belong to its original; writing through them changes the original.
+    RoutingGeom* behavior_route = dynamic_cast< RoutingGeom* > ( rgeom_ptr->GetBehaviorGeom() );
 
-    if ( !routing_ptr || rgeom_ptr->GetType().m_Type != ROUTING_GEOM_TYPE )
+    if ( !behavior_route || rgeom_ptr->GetBehaviorType() != ROUTING_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetRoutingPtID::Geom " + routing_id + " is not a RoutingGeom" );
         return ret_id;
     }
 
-    if ( index < 0 || index >= routing_ptr->GetNumPt() )
+    if ( index < 0 || index >= behavior_route->GetNumPt() )
     {
         ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, "GetRoutingPtID::index " + to_string( index ) + " is out of range" );
         return ret_id;
     }
 
-    ret_id = routing_ptr->GetPtID( index );
+    ret_id = behavior_route->GetPtID( index );
 
     ErrorMgr.NoError();
     return ret_id;
@@ -8123,15 +8516,16 @@ std::vector < std::string > GetAllRoutingPtIds( const std::string &routing_id )
         return ret_vec;
     }
 
-    RoutingGeom* routing_ptr = dynamic_cast< RoutingGeom* > ( rgeom_ptr );
+    // For a Clone these IDs belong to its original; writing through them changes the original.
+    RoutingGeom* behavior_route = dynamic_cast< RoutingGeom* > ( rgeom_ptr->GetBehaviorGeom() );
 
-    if ( !routing_ptr || rgeom_ptr->GetType().m_Type != ROUTING_GEOM_TYPE )
+    if ( !behavior_route || rgeom_ptr->GetBehaviorType() != ROUTING_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetAllRoutingPtIds::Geom " + routing_id + " is not a RoutingGeom" );
         return ret_vec;
     }
 
-    ret_vec = routing_ptr->GetAllPtIds();
+    ret_vec = behavior_route->GetAllPtIds();
 
     ErrorMgr.NoError();
     return ret_vec;
@@ -8204,27 +8598,28 @@ vec3d GetRoutingPtCoord( const std::string &routing_id, int index, int symm_inde
         return ret;
     }
 
-    RoutingGeom* routing_ptr = dynamic_cast< RoutingGeom* > ( rgeom_ptr );
+    // Placed coordinates, so asked of this Geom, not its original; a Clone holds its own.
+    RouteRole* route_ptr = Geom::CastTo< RouteRole > ( rgeom_ptr );
 
-    if ( !routing_ptr || rgeom_ptr->GetType().m_Type != ROUTING_GEOM_TYPE )
+    if ( !route_ptr )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetRoutingPtCoord::Geom " + routing_id + " is not a RoutingGeom" );
         return ret;
     }
 
-    if ( index < 0 || index >= routing_ptr->GetNumPt() )
+    if ( index < 0 || index >= route_ptr->GetNumRoutePts() )
     {
         ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, "GetRoutingPtCoord::index " + to_string( index ) + " is out of range" );
         return ret;
     }
 
-    if ( symm_index < 0 || symm_index >= routing_ptr->GetNumSymmCopies() )
+    if ( symm_index < 0 || symm_index >= rgeom_ptr->GetNumSymmCopies() )
     {
         ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, "GetRoutingPtCoord::symm_index " + to_string( symm_index ) + " is out of range" );
         return ret;
     }
 
-    ret = routing_ptr->GetPtCoord( index,symm_index );
+    ret = route_ptr->GetRoutePtCoord( index, symm_index );
 
     ErrorMgr.NoError();
     return ret;
@@ -8242,21 +8637,22 @@ std::vector < vec3d > GetAllRoutingPtCoords( const std::string &routing_id, int 
         return ret_vec;
     }
 
-    RoutingGeom* routing_ptr = dynamic_cast< RoutingGeom* > ( rgeom_ptr );
+    // Placed coordinates, so they come from the Geom that was asked -- see GetRoutingPtCoord.
+    RouteRole* route_ptr = Geom::CastTo< RouteRole > ( rgeom_ptr );
 
-    if ( !routing_ptr || rgeom_ptr->GetType().m_Type != ROUTING_GEOM_TYPE )
+    if ( !route_ptr )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetAllRoutingPtCoords::Geom " + routing_id + " is not a RoutingGeom" );
         return ret_vec;
     }
 
-    if ( symm_index < 0 || symm_index >= routing_ptr->GetNumSymmCopies() )
+    if ( symm_index < 0 || symm_index >= rgeom_ptr->GetNumSymmCopies() )
     {
         ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, "GetAllRoutingPtCoords::symm_index " + to_string( symm_index ) + " is out of range" );
         return ret_vec;
     }
 
-    ret_vec = routing_ptr->GetAllPtCoord( symm_index );
+    ret_vec = route_ptr->GetAllRoutePtCoord( symm_index );
 
     ErrorMgr.NoError();
     return ret_vec;
@@ -8274,21 +8670,22 @@ std::vector < vec3d > GetRoutingCurve( const std::string &routing_id, int symm_i
         return ret_vec;
     }
 
-    RoutingGeom* routing_ptr = dynamic_cast< RoutingGeom* > ( rgeom_ptr );
+    // The placed curve, so it comes from the Geom that was asked -- see GetRoutingPtCoord.
+    RouteRole* route_ptr = Geom::CastTo< RouteRole > ( rgeom_ptr );
 
-    if ( !routing_ptr || rgeom_ptr->GetType().m_Type != ROUTING_GEOM_TYPE )
+    if ( !route_ptr )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetRoutingCurve::Geom " + routing_id + " is not a RoutingGeom" );
         return ret_vec;
     }
 
-    if ( symm_index < 0 || symm_index >= routing_ptr->GetNumSymmCopies() )
+    if ( symm_index < 0 || symm_index >= rgeom_ptr->GetNumSymmCopies() )
     {
         ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, "GetRoutingCurve::symm_index " + to_string( symm_index ) + " is out of range" );
         return ret_vec;
     }
 
-    ret_vec = routing_ptr->GetCurve( symm_index );
+    ret_vec = route_ptr->GetRouteCurve( symm_index );
 
     ErrorMgr.NoError();
     return ret_vec;
@@ -8475,16 +8872,17 @@ int GetNumBogies( const std::string &gear_id )
         return -1;
     }
 
-    GearGeom* gear_ptr = dynamic_cast< GearGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a gear answers from its original.
+    GearGeom* behavior_gear = dynamic_cast< GearGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    if ( !gear_ptr || geom_ptr->GetType().m_Type != GEAR_GEOM_TYPE )
+    if ( !behavior_gear || geom_ptr->GetBehaviorType() != GEAR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetNumBogies::Geom " + gear_id + " is not a GearGeom" );
         return -1;
     }
 
     ErrorMgr.NoError();
-    return ( int )gear_ptr->GetBogieVec().size();
+    return ( int )behavior_gear->GetBogieVec().size();
 }
 
 std::vector < std::string > GetAllBogies( const std::string &gear_id )
@@ -8499,15 +8897,16 @@ std::vector < std::string > GetAllBogies( const std::string &gear_id )
         return ret_vec;
     }
 
-    GearGeom* gear_ptr = dynamic_cast< GearGeom* > ( geom_ptr );
+    // For a Clone these are its original's bogies; writing through them changes the original.
+    GearGeom* behavior_gear = dynamic_cast< GearGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    if ( !gear_ptr || geom_ptr->GetType().m_Type != GEAR_GEOM_TYPE )
+    if ( !behavior_gear || geom_ptr->GetBehaviorType() != GEAR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetAllBogies::Geom " + gear_id + " is not a GearGeom" );
         return ret_vec;
     }
 
-    ret_vec = gear_ptr->GetAllBogies();
+    ret_vec = behavior_gear->GetAllBogies();
 
     ErrorMgr.NoError();
     return ret_vec;
@@ -8602,16 +9001,17 @@ int GetBORXSecShape( const std::string & geom_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "GetBORXSecShape::Can't Find Geom " + geom_id );
         return XS_UNDEFINED;
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetBORXSecShape::Geom " + geom_id + " is not a body of revolution" );
         return XS_UNDEFINED;
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
     ErrorMgr.NoError();
-    return bor_ptr->GetXSecCurveType();
+    return behavior_bor->GetXSecCurveType();
 }
 
 //==== Read XSec From File ====//
@@ -8673,15 +9073,16 @@ std::vector< vec3d > GetBORXSecPnts( const std::string& bor_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "GetBORXSecPnts::Can't Find Geom " + bor_id );
         return pnt_vec;
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetBORXSecPnts::Geom " + bor_id + " is not a body of revolution" );
         return pnt_vec;
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    XSecCurve* xsc = bor_ptr->GetXSecCurve();
+    XSecCurve* xsc = behavior_bor->GetXSecCurve();
 
     if ( !xsc )
     {
@@ -8753,15 +9154,16 @@ vec3d ComputeBORXSecPnt( const std::string& bor_id, double fract )
         ErrorMgr.AddError( VSP_INVALID_PTR, "ComputeBORXSecPnt::Can't Find Geom " + bor_id );
         return vec3d();
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "ComputeBORXSecPnt::Geom " + bor_id + " is not a body of revolution" );
         return vec3d();
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    XSecCurve* xsc = bor_ptr->GetXSecCurve();
+    XSecCurve* xsc = behavior_bor->GetXSecCurve();
 
     if ( !xsc )
     {
@@ -8785,15 +9187,16 @@ vec3d ComputeBORXSecTan( const std::string& bor_id, double fract )
         ErrorMgr.AddError( VSP_INVALID_PTR, "ComputeBORXSecTan::Can't Find Geom " + bor_id );
         return vec3d();
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "ComputeBORXSecTan::Geom " + bor_id + " is not a body of revolution" );
         return vec3d();
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    XSecCurve* xsc = bor_ptr->GetXSecCurve();
+    XSecCurve* xsc = behavior_bor->GetXSecCurve();
 
     if ( !xsc )
     {
@@ -8973,15 +9376,16 @@ std::vector<vec3d> GetBORAirfoilUpperPnts( const std::string& bor_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "GetBORAirfoilUpperPnts::Can't Find Geom " + bor_id );
         return pnt_vec;
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetBORAirfoilUpperPnts::Geom " + bor_id + " is not a body of revolution" );
         return pnt_vec;
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    XSecCurve* xsc = bor_ptr->GetXSecCurve();
+    XSecCurve* xsc = behavior_bor->GetXSecCurve();
 
     if ( !xsc )
     {
@@ -9013,15 +9417,16 @@ std::vector<vec3d> GetBORAirfoilLowerPnts( const std::string& bor_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "GetBORAirfoilLowerPnts::Can't Find Geom " + bor_id );
         return pnt_vec;
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetBORAirfoilLowerPnts::Geom " + bor_id + " is not a body of revolution" );
         return pnt_vec;
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    XSecCurve* xsc = bor_ptr->GetXSecCurve();
+    XSecCurve* xsc = behavior_bor->GetXSecCurve();
 
     if ( !xsc )
     {
@@ -9053,15 +9458,16 @@ std::vector<double> GetBORUpperCSTCoefs( const std::string& bor_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "GetBORUpperCSTCoefs::Can't Find Geom " + bor_id );
         return ret_vec;
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetBORUpperCSTCoefs::Geom " + bor_id + " is not a body of revolution" );
         return ret_vec;
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    XSecCurve* xsc = bor_ptr->GetXSecCurve();
+    XSecCurve* xsc = behavior_bor->GetXSecCurve();
 
     if ( !xsc )
     {
@@ -9095,15 +9501,16 @@ std::vector<double> GetBORLowerCSTCoefs( const std::string& bor_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "GetBORLowerCSTCoefs::Can't Find Geom " + bor_id );
         return ret_vec;
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetBORLowerCSTCoefs::Geom " + bor_id + " is not a body of revolution" );
         return ret_vec;
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    XSecCurve* xsc = bor_ptr->GetXSecCurve();
+    XSecCurve* xsc = behavior_bor->GetXSecCurve();
 
     if ( !xsc )
     {
@@ -9136,15 +9543,16 @@ int GetBORUpperCSTDegree( const std::string& bor_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "GetBORUpperCSTDegree::Can't Find Geom " + bor_id );
         return deg;
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetBORUpperCSTDegree::Geom " + bor_id + " is not a body of revolution" );
         return deg;
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    XSecCurve* xsc = bor_ptr->GetXSecCurve();
+    XSecCurve* xsc = behavior_bor->GetXSecCurve();
 
     if ( !xsc )
     {
@@ -9177,15 +9585,16 @@ int GetBORLowerCSTDegree( const std::string& bor_id )
         ErrorMgr.AddError( VSP_INVALID_PTR, "GetBORLowerCSTDegree::Can't Find Geom " + bor_id );
         return deg;
     }
-    else if ( geom_ptr->GetType().m_Type != BOR_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != BOR_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_TYPE, "GetBORLowerCSTDegree::Geom " + bor_id + " is not a body of revolution" );
         return deg;
     }
 
-    BORGeom* bor_ptr = dynamic_cast< BORGeom* > ( geom_ptr );
+    // Read-only, so a Clone of a body of revolution answers from its original.
+    BORGeom* behavior_bor = dynamic_cast< BORGeom* > ( geom_ptr->GetBehaviorGeom() );
 
-    XSecCurve* xsc = bor_ptr->GetXSecCurve();
+    XSecCurve* xsc = behavior_bor->GetXSecCurve();
 
     if ( !xsc )
     {
@@ -10533,6 +10942,15 @@ void SetContainerName( const std::string & parm_container_id, const std::string 
     if ( !pc )
     {
         ErrorMgr.AddError( VSP_INVALID_PTR, "SetContainerName::Can't Find Parm Container " + parm_container_id );
+        return;
+    }
+
+    // A self-naming Geom refuses here too, as in SetGeomName.
+    Geom* geom_ptr = dynamic_cast< Geom* >( pc );
+    if ( geom_ptr && geom_ptr->NameIsAutomatic() )
+    {
+        ErrorMgr.AddError( VSP_INVALID_ID, "SetContainerName::Geom " + parm_container_id +
+                           " names itself and would write over this on its next update" );
         return;
     }
 
@@ -12243,18 +12661,19 @@ int PCurveGetType( const std::string & geom_id, const int & pcurveid )
         ErrorMgr.AddError( VSP_INVALID_PTR, "PCurveGetType::Can't Find Geom " + geom_id );
         return -1;
     }
-    else if ( geom_ptr->GetType().m_Type != PROP_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != PROP_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_PTR, "PCurveGetType::Geom doesn't support PCurves " + geom_id );
         return -1;
     }
 
-    PropGeom* prop_ptr = dynamic_cast < PropGeom* > (geom_ptr );
+    // Read-only, so a Clone of a propeller answers from its original.
+    PropGeom* behavior_prop = dynamic_cast < PropGeom* > ( geom_ptr->GetBehaviorGeom() );
     PCurve *pc = nullptr;
 
-    if ( prop_ptr )
+    if ( behavior_prop )
     {
-        pc = prop_ptr->GetPCurve( pcurveid );
+        pc = behavior_prop->GetPCurve( pcurveid );
     }
 
     if ( !pc )
@@ -12279,18 +12698,19 @@ std::vector < double > PCurveGetTVec( const std::string & geom_id, const int & p
         ErrorMgr.AddError( VSP_INVALID_PTR, "PCurveGetTVec::Can't Find Geom " + geom_id );
         return retvec;
     }
-    else if ( geom_ptr->GetType().m_Type != PROP_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != PROP_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_PTR, "PCurveGetTVec::Geom doesn't support PCurves " + geom_id );
         return retvec;
     }
 
-    PropGeom* prop_ptr = dynamic_cast < PropGeom* > (geom_ptr );
+    // Read-only, so a Clone of a propeller answers from its original.
+    PropGeom* behavior_prop = dynamic_cast < PropGeom* > ( geom_ptr->GetBehaviorGeom() );
     PCurve *pc = nullptr;
 
-    if ( prop_ptr )
+    if ( behavior_prop )
     {
-        pc = prop_ptr->GetPCurve( pcurveid );
+        pc = behavior_prop->GetPCurve( pcurveid );
     }
 
     if ( !pc )
@@ -12317,18 +12737,19 @@ std::vector < double > PCurveGetValVec( const std::string & geom_id, const int &
         ErrorMgr.AddError( VSP_INVALID_PTR, "PCurveGetValVec::Can't Find Geom " + geom_id );
         return retvec;
     }
-    else if ( geom_ptr->GetType().m_Type != PROP_GEOM_TYPE )
+    else if ( geom_ptr->GetBehaviorType() != PROP_GEOM_TYPE )
     {
         ErrorMgr.AddError( VSP_INVALID_PTR, "PCurveGetValVec::Geom doesn't support PCurves " + geom_id );
         return retvec;
     }
 
-    PropGeom* prop_ptr = dynamic_cast < PropGeom* > (geom_ptr );
+    // Read-only, so a Clone of a propeller answers from its original.
+    PropGeom* behavior_prop = dynamic_cast < PropGeom* > ( geom_ptr->GetBehaviorGeom() );
     PCurve *pc = nullptr;
 
-    if ( prop_ptr )
+    if ( behavior_prop )
     {
-        pc = prop_ptr->GetPCurve( pcurveid );
+        pc = behavior_prop->GetPCurve( pcurveid );
     }
 
     if ( !pc )
@@ -13257,18 +13678,16 @@ void ConvertUtoEta( const std::string &geom_id, const double &u, double &eta_out
         return;
     }
 
-    WingGeom *wg = dynamic_cast<WingGeom *>( geom );
+    // A Clone of a wing answers from its original.
+    WingGeom *behavior_wing = dynamic_cast<WingGeom *>( geom->GetBehaviorGeom() );
 
-    if ( geom->GetType().m_Type != MS_WING_GEOM_TYPE || !wg )
+    if ( geom->GetBehaviorType() != MS_WING_GEOM_TYPE || !behavior_wing )
     {
         ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "ConvertUtoEta::Geom is not a WingGeom" );
         return;
     }
 
-    if ( wg )
-    {
-        eta_out = wg->UtoEta( u );
-    }
+    eta_out = behavior_wing->UtoEta( u );
 
     ErrorMgr.NoError();
 
@@ -13288,18 +13707,16 @@ void ConvertEtatoU( const std::string &geom_id, const double &eta, double &u_out
         return;
     }
 
-    WingGeom *wg = dynamic_cast<WingGeom *>( geom );
+    // A Clone of a wing answers from its original.
+    WingGeom *behavior_wing = dynamic_cast<WingGeom *>( geom->GetBehaviorGeom() );
 
-    if ( geom->GetType().m_Type != MS_WING_GEOM_TYPE || !wg )
+    if ( geom->GetBehaviorType() != MS_WING_GEOM_TYPE || !behavior_wing )
     {
         ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "ConvertEtatoU::Geom is not a WingGeom" );
         return;
     }
 
-    if ( wg )
-    {
-        u_out = wg->EtatoU( eta );
-    }
+    u_out = behavior_wing->EtatoU( eta );
 
     ErrorMgr.NoError();
 
@@ -13994,6 +14411,49 @@ void DelRSTProbe( const std::string &id )
 void DeleteAllRSTProbes()
 {
     MeasureMgr.DelAllRSTProbes();
+}
+
+std::vector < vec3d > ControlSurfaceHingeLine( const std::string & id, int surf_indx )
+{
+    Vehicle* veh = GetVehicle();
+    vector < vec3d > pts;
+
+    SSControlSurf* cs = dynamic_cast< SSControlSurf* > ( SubSurfaceMgr.GetSubSurf( id ) );
+    Geom *h = veh->FindGeom( id );
+    if ( h && !Geom::CastTo< JointRole >( h ) )
+    {
+        h = nullptr;
+    }
+
+    if ( !h && !cs )
+    {
+        ErrorMgr.AddError( VSP_INVALID_GEOM_ID, "ControlSurfaceHingeLine::ID is not a control surface or hinge " + id );
+        return pts;
+    }
+
+    if ( cs ) // If control surface is a valid subsurface
+    {
+        string gid = cs->GetParentContainer();
+        Geom *geom_ptr = veh->FindGeom( gid );
+        if ( geom_ptr )
+        {
+            if ( surf_indx < 0 || surf_indx >= geom_ptr->GetNumTotalSurfs() ) // Then make sure surf_index is valid for geom_ptr
+            {
+                ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, "ControlSurfaceHingeLine::Invalid Surface Index " + to_string( surf_indx ) );
+                return pts;
+            }
+        }
+        else
+        {
+            ErrorMgr.AddError( VSP_INVALID_GEOM_ID, "ControlSurfaceHingeLine::Control surface parent geom ID invalid " + gid );
+            return pts;
+        }
+    }
+
+    pts = veh->ControlSurfaceHingeLine( id, surf_indx );
+
+    ErrorMgr.NoError();
+    return pts;
 }
 
 std::string AddRuler( const std::string & startgeomid, int startsurfindx, double startu, double startw,

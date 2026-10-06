@@ -23,6 +23,7 @@
 #include "BEMOptionsScreen.h"
 #include "CfdMeshScreen.h"
 #include "ClippingScreen.h"
+#include "CloneNameSuffixScreen.h"
 #include "CompGeomScreen.h"
 #include "CurveEditScreen.h"
 #include "DegenGeomScreen.h"
@@ -61,6 +62,7 @@
 #include "SetEditorScreen.h"
 #include "STEPOptionsScreen.h"
 #include "STEPStructureOptionsScreen.h"
+#include "SplitStitchOptionsScreen.h"
 #include "STLOptionsScreen.h"
 #include "StructScreen.h"
 #include "StructAssemblyScreen.h"
@@ -947,6 +949,7 @@ void ScreenMgr::Init()
     m_ScreenVec[vsp::VSP_BEM_OPTIONS_SCREEN] = new BEMOptionsScreen( this );
     m_ScreenVec[vsp::VSP_CFD_MESH_SCREEN] = new CfdMeshScreen( this );
     m_ScreenVec[vsp::VSP_CLIPPING_SCREEN] = new ClippingScreen( this );
+    m_ScreenVec[vsp::VSP_CLONE_NAME_SUFFIX_SCREEN] = new CloneNameSuffixScreen( this );
     m_ScreenVec[vsp::VSP_COMP_GEOM_SCREEN] = new CompGeomScreen( this );
     m_ScreenVec[vsp::VSP_COR_SCREEN] = new ManageCORScreen( this );
     m_ScreenVec[vsp::VSP_CURVE_EDIT_SCREEN] = new CurveEditScreen( this );
@@ -985,6 +988,7 @@ void ScreenMgr::Init()
     m_ScreenVec[vsp::VSP_SET_EDITOR_SCREEN] = new SetEditorScreen( this );
     m_ScreenVec[vsp::VSP_STEP_OPTIONS_SCREEN] = new STEPOptionsScreen( this );
     m_ScreenVec[vsp::VSP_STEP_STRUCTURE_OPTIONS_SCREEN] = new STEPStructureOptionsScreen( this );
+    m_ScreenVec[vsp::VSP_SPLIT_STITCH_OPTIONS_SCREEN] = new SplitStitchOptionsScreen( this );
     m_ScreenVec[vsp::VSP_STL_OPTIONS_SCREEN] = new STLOptionsScreen( this );
     m_ScreenVec[vsp::VSP_STRUCT_SCREEN] = new StructScreen( this );
     m_ScreenVec[vsp::VSP_STRUCT_ASSEMBLY_SCREEN] = new StructAssemblyScreen( this );
@@ -1002,6 +1006,29 @@ void ScreenMgr::Init()
 
     //==== Init Main Screen last as it checks for other screens' sizes to set its own size ====//
     m_ScreenVec[vsp::VSP_MAIN_SCREEN] = new MainVSPScreen( this  );
+
+    // Report any widget a window holds outside the group it is in, the Geom screens included
+    vector< VspScreen* > screens = m_ScreenVec;
+    ManageGeomScreen* geom_screen = dynamic_cast< ManageGeomScreen* >( m_ScreenVec[vsp::VSP_MANAGE_GEOM_SCREEN] );
+    if ( geom_screen )
+    {
+        vector< VspScreen* > geom_screens = geom_screen->GetGeomScreenVec();
+        screens.insert( screens.end(), geom_screens.begin(), geom_screens.end() );
+    }
+
+    for ( int i = 0; i < ( int )screens.size(); i++ )
+    {
+        if ( screens[i] )
+        {
+            string title = "Main";
+            BasicScreen* basic = dynamic_cast< BasicScreen* >( screens[i] );
+            if ( basic )
+            {
+                title = basic->GetTitle();
+            }
+            GroupLayout::CheckInsideGroups( screens[i]->GetFlWindow(), title );
+        }
+    }
 }
 
 void ScreenMgr::FirstShow()

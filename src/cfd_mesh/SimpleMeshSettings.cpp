@@ -24,20 +24,22 @@ SimpleMeshCommonSettings::SimpleMeshCommonSettings()
 
     m_DrawMeshFlag = false;
     m_ColorFacesFlag = false;
+    m_ParallelMeshFlag = true;
+    m_SplitJoinSurfsFlag = true;
     m_ColorTagReason = vsp::TAG;
 
     m_DrawSourceWakeFlag = false;
 
     m_DrawBorderFlag = false;
     m_DrawIsectFlag = false;
-    m_DrawRawFlag = false;
-    m_DrawBinAdaptFlag = false;
+    m_DrawJoinFlag = false;
+    // Set by Trimmed Surfaces; the meshers always draw their raw curves
+    m_DrawRawFlag = true;
+    m_DrawCubicFlag = false;
     m_DrawCurveFlag = false;
     m_DrawPntsFlag = false;
 
-    m_RelCurveTol = 1e-6;
-    m_ExportRawFlag = false;
-    m_ExportRelCurveTol = 1e-6;
+    m_RelCurveTol = 0.005;
 
     m_IntersectSubSurfs = true;
 
@@ -56,7 +58,6 @@ SimpleMeshCommonSettings::SimpleMeshCommonSettings()
     m_UseMode = false;
     m_ModeID = "";
 
-    m_XYZIntCurveFlag = false;
 
     m_STEPTol = 1e-6;
     m_STEPMergePoints = false;
@@ -81,20 +82,17 @@ void SimpleMeshCommonSettings::CopyFrom( MeshCommonSettings* settings )
 
     m_DrawMeshFlag = settings->m_DrawMeshFlag.Get();
     m_ColorFacesFlag = settings->m_ColorFacesFlag.Get();
+    m_ParallelMeshFlag = settings->m_ParallelMeshFlag.Get();
+    m_SplitJoinSurfsFlag = settings->m_SplitJoinSurfsFlag.Get();
     m_ColorTagReason = settings->m_ColorTagReason.Get();
 
     m_DrawSourceWakeFlag = settings->m_DrawSourceWakeFlag.Get();
 
     m_DrawBorderFlag = settings->m_DrawBorderFlag.Get();
     m_DrawIsectFlag = settings->m_DrawIsectFlag.Get();
-    m_DrawRawFlag = settings->m_DrawRawFlag.Get();
-    m_DrawBinAdaptFlag = settings->m_DrawBinAdaptFlag.Get();
+    m_DrawJoinFlag = settings->m_DrawJoinFlag.Get();
     m_DrawCurveFlag = settings->m_DrawCurveFlag.Get();
     m_DrawPntsFlag = settings->m_DrawPntsFlag.Get();
-
-    m_RelCurveTol = settings->m_RelCurveTol.Get();
-
-    m_ExportRawFlag = settings->m_ExportRawFlag.Get();
 
     m_IntersectSubSurfs = settings->m_IntersectSubSurfs.Get();
 
@@ -169,6 +167,9 @@ void SimpleIntersectSettings::CopyFrom( IntersectSettings* settings )
     m_CADLabelDelim = settings->m_CADLabelDelim.Get();
     m_CADLabelSplitNo = settings->m_CADLabelSplitNo.Get();
 
+    m_DrawRawFlag = settings->m_DrawRawFlag.Get();
+    m_DrawCubicFlag = settings->m_DrawCubicFlag.Get();
+
     SimpleMeshCommonSettings::CopyFrom( settings );
 }
 
@@ -178,6 +179,8 @@ void SimpleIntersectSettings::CopyFrom( IntersectSettings* settings )
 
 SimpleCfdMeshSettings::SimpleCfdMeshSettings()
 {
+    m_POGSNRef = 0;
+
     m_FarManLocFlag = false;
     m_FarAbsSizeFlag = false;
 
@@ -211,6 +214,9 @@ void SimpleCfdMeshSettings::CopyFrom( CfdMeshSettings* settings )
 {
     m_FarManLocFlag = settings->m_FarManLocFlag.Get();
     m_FarAbsSizeFlag = settings->m_FarAbsSizeFlag.Get();
+
+    m_POGSNRef = settings->m_POGSNRef.Get();
+    m_RelCurveTol = settings->m_RelCurveTol.Get();
 
     m_FarGeomID = settings->m_FarGeomID;
 
@@ -246,7 +252,6 @@ void SimpleCfdMeshSettings::CopyFrom( CfdMeshSettings* settings )
         m_ExportFileFlags[i] = settings->m_ExportFileFlags[i].Get();
     }
 
-    m_XYZIntCurveFlag = settings->m_XYZIntCurveFlag.Get();
 
     m_ExportFileNames = settings->GetExportFileNames();
 
@@ -263,7 +268,6 @@ SimpleFeaMeshSettings::SimpleFeaMeshSettings()
     m_DrawNodesFlag = false;
     m_DrawBCNodesFlag = false;
     m_DrawElementOrientVecFlag = false;
-    m_XYZIntCurveFlag = false;
 
     m_BeamPerElementNormal = true;
 
@@ -311,22 +315,16 @@ void SimpleFeaMeshSettings::CopyPostOpFrom( StructSettings* settings )
     m_BeamPerElementNormal = settings->m_BeamPerElementNormal.Get();
 
     // Allow CAD output settings to be included as Post-Op for Structures
-    m_XYZIntCurveFlag = settings->m_XYZIntCurveFlag.Get();
 
     m_STEPTol = settings->m_STEPTol.Get();
     m_STEPMergePoints = settings->m_STEPMergePoints.Get();
     m_STEPRepresentation = settings->m_STEPRepresentation.Get();
 
-    m_CADLenUnit = settings->m_CADLenUnit.Get();
     m_CADLabelID = settings->m_CADLabelID.Get();
     m_CADLabelName = settings->m_CADLabelName.Get();
     m_CADLabelSurfNo = settings->m_CADLabelSurfNo.Get();
     m_CADLabelDelim = settings->m_CADLabelDelim.Get();
     m_CADLabelSplitNo = settings->m_CADLabelSplitNo.Get();
-
-    // Copied in SimpleMeshCommonSettings, but needed here also.
-    m_ExportRawFlag = settings->m_ExportRawFlag.Get();
-    m_RelCurveTol = settings->m_RelCurveTol.Get();
 }
 
 
@@ -528,6 +526,8 @@ SimpleAssemblySettings::SimpleAssemblySettings()
 
     m_DrawMeshFlag = false;
     m_ColorFacesFlag = false;
+    m_ParallelMeshFlag = true;
+    m_SplitJoinSurfsFlag = true;
     m_ColorTagReason = vsp::TAG;
 
     m_DrawNodesFlag = false;

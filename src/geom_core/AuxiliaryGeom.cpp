@@ -226,7 +226,8 @@ void AuxiliaryGeom::UpdateSurf()
         return;
     }
 
-    m_ParentType = parent_geom->GetType().m_Type;
+    // Behavior type, so a parent that is a Clone of a gear or prop counts as one.
+    m_ParentType = parent_geom->GetBehaviorType();
 
 
     double refLen = 30.0;
@@ -252,7 +253,7 @@ void AuxiliaryGeom::UpdateSurf()
 
     if ( m_ParentType == PROP_GEOM_TYPE )
     {
-        PropGeom * parent_prop = dynamic_cast< PropGeom* > ( parent_geom );
+        RotorRole * parent_prop = Geom::CastTo< RotorRole >( parent_geom );
 
         if ( parent_prop )
         {
@@ -260,7 +261,7 @@ void AuxiliaryGeom::UpdateSurf()
             {
                 if ( m_AuxuliaryGeomMode() == AUX_GEOM_ROTOR_TIP_PATH )
                 {
-                    m_Diameter.Set( parent_prop->m_Diameter() );
+                    m_Diameter.Set( parent_prop->GetRotorDiameter() );
                 }
                 else // AUX_GEOM_ROTOR_BURST
                 {
@@ -336,7 +337,7 @@ void AuxiliaryGeom::UpdateSurf()
     }
     if ( m_ParentType == GEAR_GEOM_TYPE )
     {
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
             vector < Bogie* > bogie_vec = gear->GetBogieVec();
@@ -376,7 +377,7 @@ void AuxiliaryGeom::UpdateSurf()
 
         if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_GROUND )
         {
-            GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+            GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
             if ( gear )
             {
                 Matrix4d mat;
@@ -397,7 +398,7 @@ void AuxiliaryGeom::UpdateSurf()
         }
         else if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_TWO_PT_GROUND )
         {
-            GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+            GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
             if ( gear )
             {
                 Matrix4d basis;
@@ -449,7 +450,7 @@ void AuxiliaryGeom::UpdateSurf()
                 AppendContact2Surfs( gear, m_BogieTheta() );
 
                 // Return results in world coordinates
-                Matrix4d world = gear->getModelMatrix();
+                Matrix4d world = gear->GetRoleShapeMatrix();
                 world.xformvec( m_ContactPts );
 
                 // Visualize fwd/aft contact point and axis on rotated bogie.
@@ -464,7 +465,7 @@ void AuxiliaryGeom::UpdateSurf()
         }
         else if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_ONE_PT_GROUND )
         {
-            GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+            GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
             if ( gear )
             {
                 Matrix4d basis;
@@ -494,7 +495,7 @@ void AuxiliaryGeom::UpdateSurf()
         }
         else if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_CCE )
         {
-            GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+            GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
             if ( gear )
             {
                 Matrix4d mat;
@@ -508,7 +509,7 @@ void AuxiliaryGeom::UpdateSurf()
 
                 vector < VspCurve > crv_vec( 2, m_CCECurve );
 
-                double cce2model = ConvertLength( 1, m_CCEUnits(), gear->m_ModelLenUnits() );
+                double cce2model = ConvertLength( 1, m_CCEUnits(), gear->GetGearModelLenUnits() );
 
 
                 Matrix4d start;
@@ -536,7 +537,7 @@ void AuxiliaryGeom::UpdateSurf()
         }
         else if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_SINGLE_GEAR )
         {
-            GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+            GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
             if ( gear )
             {
                 m_MainSurfVec.clear();
@@ -546,7 +547,7 @@ void AuxiliaryGeom::UpdateSurf()
         }
         else if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_TIRE_SPRAY )
         {
-            GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+            GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
             if ( gear )
             {
                 m_MainSurfVec.clear();
@@ -707,7 +708,7 @@ void AuxiliaryGeom::UpdateSurf()
         {
             m_MainSurfVec.clear();
 
-            GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+            GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
             if ( gear )
             {
 
@@ -1159,18 +1160,18 @@ void AuxiliaryGeom::UpdateSurf()
 
             if ( m_ParentType == PROP_GEOM_TYPE )
             {
-                PropGeom * parent_prop = dynamic_cast< PropGeom* > ( parent_geom );
+                RotorRole * parent_prop = Geom::CastTo< RotorRole >( parent_geom );
 
                 if ( parent_prop )
                 {
-                    double r0 = parent_prop->GetR0();
-                    double r = 0.5 * parent_prop->m_Diameter();
+                    double r0 = parent_prop->GetRotorR0();
+                    double r = 0.5 * parent_prop->GetRotorDiameter();
 
                     double bladelen = r * ( 1.0 - r0 );
                     m_FragLength = 2.0 * std::max( 1.0 - m_ThrownBladeCGFrac(), m_ThrownBladeCGFrac() ) * bladelen;
                     m_CGRadius = r0 * r + m_ThrownBladeCGFrac() * bladelen;
 
-                    m_RotDir = !parent_prop->m_ReverseFlag();
+                    m_RotDir = !parent_prop->GetRotorReverseFlag();
                 }
             }
         }
@@ -1291,7 +1292,7 @@ void AuxiliaryGeom::UpdateMainTessVec()
         int itess = 1;
 
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
             if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_GROUND ||
@@ -1346,7 +1347,7 @@ void AuxiliaryGeom::UpdateMainDegenGeomPreview()
         int idegen = 1;
 
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
             if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_GROUND ||
@@ -1775,7 +1776,7 @@ void AuxiliaryGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
     // draw_obj_vec.push_back( &m_ContactDrawObj );
 }
 
-void AuxiliaryGeom::AppendContact1Surfs( GearGeom * gear, double bogietheta )
+void AuxiliaryGeom::AppendContact1Surfs( GearContactRole * gear, double bogietheta )
 {
     if ( gear )
     {
@@ -1819,7 +1820,7 @@ void AuxiliaryGeom::AppendContact1Surfs( GearGeom * gear, double bogietheta )
     }
 }
 
-void AuxiliaryGeom::AppendContact2Surfs( GearGeom * gear, double bogietheta )
+void AuxiliaryGeom::AppendContact2Surfs( GearContactRole * gear, double bogietheta )
 {
     if ( gear )
     {
@@ -1842,7 +1843,7 @@ void AuxiliaryGeom::AppendContact2Surfs( GearGeom * gear, double bogietheta )
     }
 }
 
-void AuxiliaryGeom::AppendContact3Surfs( GearGeom * gear, double bogietheta )
+void AuxiliaryGeom::AppendContact3Surfs( GearContactRole * gear, double bogietheta )
 {
     if ( gear )
     {
@@ -1865,7 +1866,7 @@ void AuxiliaryGeom::AppendContact3Surfs( GearGeom * gear, double bogietheta )
     }
 }
 
-int AuxiliaryGeom::TessContact1( GearGeom * gear, int itess, double bogietheta )
+int AuxiliaryGeom::TessContact1( GearContactRole * gear, int itess, double bogietheta )
 {
     if ( gear )
     {
@@ -1915,7 +1916,7 @@ int AuxiliaryGeom::TessContact1( GearGeom * gear, int itess, double bogietheta )
     return itess;
 }
 
-int AuxiliaryGeom::TessContact2( GearGeom * gear, int itess, double bogietheta )
+int AuxiliaryGeom::TessContact2( GearContactRole * gear, int itess, double bogietheta )
 {
     if ( gear )
     {
@@ -1944,7 +1945,7 @@ int AuxiliaryGeom::TessContact2( GearGeom * gear, int itess, double bogietheta )
     return itess;
 }
 
-int AuxiliaryGeom::TessContact3( GearGeom * gear, int itess, double bogietheta )
+int AuxiliaryGeom::TessContact3( GearContactRole * gear, int itess, double bogietheta )
 {
     if ( gear )
     {
@@ -1973,7 +1974,7 @@ int AuxiliaryGeom::TessContact3( GearGeom * gear, int itess, double bogietheta )
     return itess;
 }
 
-int AuxiliaryGeom::DegenContact1( GearGeom * gear, int idegen, double bogietheta )
+int AuxiliaryGeom::DegenContact1( GearContactRole * gear, int idegen, double bogietheta )
 {
     if ( gear )
     {
@@ -2022,7 +2023,7 @@ int AuxiliaryGeom::DegenContact1( GearGeom * gear, int idegen, double bogietheta
     return idegen;
 }
 
-int AuxiliaryGeom::DegenContact2( GearGeom * gear, int idegen, double bogietheta )
+int AuxiliaryGeom::DegenContact2( GearContactRole * gear, int idegen, double bogietheta )
 {
     if ( gear )
     {
@@ -2050,7 +2051,7 @@ int AuxiliaryGeom::DegenContact2( GearGeom * gear, int idegen, double bogietheta
     return idegen;
 }
 
-int AuxiliaryGeom::DegenContact3( GearGeom * gear, int idegen, double bogietheta )
+int AuxiliaryGeom::DegenContact3( GearContactRole * gear, int idegen, double bogietheta )
 {
     if ( gear )
     {
@@ -2078,13 +2079,12 @@ int AuxiliaryGeom::DegenContact3( GearGeom * gear, int idegen, double bogietheta
     return idegen;
 }
 
-void AuxiliaryGeom::UpdateBBox( )
+void AuxiliaryGeom::UpdateMainBBox( )
 {
-    // Fill m_BBox like normal
-    Geom::UpdateBBox();
+    Geom::UpdateMainBBox();
 
-    // Reset m_ScaleIndependentBBox to empty
-    m_ScaleIndependentBBox.Reset();
+    // Burst zones and clearance surfaces are all sized from the model box.
+    m_ScaleIndependentMainBBox.Reset();
 }
 
 xmlNodePtr AuxiliaryGeom::EncodeXml( xmlNodePtr & node )
@@ -2190,7 +2190,7 @@ void AuxiliaryGeom::SetContactPt3ID( const std::string& id )
     Update();
 }
 
-bool AuxiliaryGeom::GetCG( vec3d &cgnom, vector < vec3d > &cgbounds )
+bool AuxiliaryGeom::GetCGInGear( vec3d &cgnom, vector < vec3d > &cgbounds )
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_GROUND ||
          m_AuxuliaryGeomMode() == vsp::AUX_GEOM_TWO_PT_GROUND ||
@@ -2199,27 +2199,27 @@ bool AuxiliaryGeom::GetCG( vec3d &cgnom, vector < vec3d > &cgbounds )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
-            gear->GetCGInWorld( cgnom, cgbounds );
+            gear->GetCG( cgnom, cgbounds );
             return true;
         }
     }
     return false;
 }
 
-bool AuxiliaryGeom::GetPtNormal( vec3d &pt, vec3d &normal ) const
+bool AuxiliaryGeom::GetPtNormalInGear( vec3d &pt, vec3d &normal ) const
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_GROUND ||
          m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_CCE )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
-            gear->GetPtNormalInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
+            gear->GetPtNormal( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
                                       m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(), m_ContactPt2_TireMode(),
                                       m_ContactPt3_ID, m_ContactPt3_Isymm(), m_ContactPt3_SuspensionMode(), m_ContactPt3_TireMode(),
                                       pt, normal );
@@ -2229,16 +2229,16 @@ bool AuxiliaryGeom::GetPtNormal( vec3d &pt, vec3d &normal ) const
     return false;
 }
 
-bool AuxiliaryGeom::GetPtPivotAxis( vec3d &ptaxis, vec3d &axis )
+bool AuxiliaryGeom::GetPtPivotAxisInGear( vec3d &ptaxis, vec3d &axis )
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_TWO_PT_GROUND )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
-            gear->GetTwoPtPivotInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(),
+            gear->GetTwoPtPivot( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(),
                                         m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(),
                                         ptaxis, axis );
             return true;
@@ -2247,21 +2247,22 @@ bool AuxiliaryGeom::GetPtPivotAxis( vec3d &ptaxis, vec3d &axis )
     return false;
 }
 
-bool AuxiliaryGeom::GetPtNormalMeanContactPtPivotAxis( vec3d &pt, vec3d &normal, vec3d &ptaxis, vec3d &axis, bool &usepivot, double &mintheta, double &maxtheta )
+bool AuxiliaryGeom::GetPtNormalMeanContactPtPivotAxisInGear( vec3d &pt, vec3d &normal, vec3d &ptaxis, vec3d &axis, bool &usepivot, double &mintheta, double &maxtheta )
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_TWO_PT_GROUND )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
-            gear->GetTwoPtMeanContactPtNormalInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
+            vec3d scratch1, scratch2;
+            gear->GetTwoPtMeanContactPtNormal( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
                                                       m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(), m_ContactPt2_TireMode(),
-                                                      0, pt, normal, usepivot, mintheta, maxtheta );
+                                                      0, pt, normal, scratch1, scratch2, usepivot, mintheta, maxtheta );
 
 
-            gear->GetTwoPtPivotInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(),
+            gear->GetTwoPtPivot( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(),
                                         m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(),
                                         ptaxis, axis );
             return true;
@@ -2270,16 +2271,16 @@ bool AuxiliaryGeom::GetPtNormalMeanContactPtPivotAxis( vec3d &pt, vec3d &normal,
     return false;
 }
 
-bool AuxiliaryGeom::GetSideContactPtRollAxisNormal( vec3d &pt, vec3d &axis, vec3d &normal, int &ysign )
+bool AuxiliaryGeom::GetSideContactPtRollAxisNormalInGear( vec3d &pt, vec3d &axis, vec3d &normal, int &ysign )
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_ONE_PT_GROUND )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
-            gear->GetOnePtSideContactPtAxisNormalInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
+            gear->GetOnePtSideContactPtAxisNormal( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
                                                           m_BogieTheta() * M_PI / 180.0, m_WheelTheta() * M_PI / 180, 0, pt, axis, normal, ysign);
             return true;
         }
@@ -2287,21 +2288,22 @@ bool AuxiliaryGeom::GetSideContactPtRollAxisNormal( vec3d &pt, vec3d &axis, vec3
     return false;
 }
 
-bool AuxiliaryGeom::GetPtNormalAftAxleAxis( double thetabogie, vec3d &pt, vec3d &normal, vec3d &ptaxis, vec3d &axis )
+bool AuxiliaryGeom::GetPtNormalAftAxleAxisInGear( double thetabogie, vec3d &pt, vec3d &normal, vec3d &ptaxis, vec3d &axis )
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_TWO_PT_GROUND )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
-            gear->GetTwoPtAftContactPtNormalInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
+            vec3d scratch1, scratch2;
+            gear->GetTwoPtAftContactPtNormal( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
                                                      m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(), m_ContactPt2_TireMode(),
-                                                     thetabogie, 0, pt, normal );
+                                                     thetabogie, 0, pt, normal, scratch1, scratch2 );
 
 
-            gear->GetTwoPtAftAxleAxisInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(),
+            gear->GetTwoPtAftAxleAxis( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(),
                                               m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(),
                                               thetabogie, ptaxis, axis );
             return true;
@@ -2310,21 +2312,22 @@ bool AuxiliaryGeom::GetPtNormalAftAxleAxis( double thetabogie, vec3d &pt, vec3d 
     return false;
 }
 
-bool AuxiliaryGeom::GetPtNormalFwdAxleAxis( double thetabogie, vec3d &pt, vec3d &normal, vec3d &ptaxis, vec3d &axis )
+bool AuxiliaryGeom::GetPtNormalFwdAxleAxisInGear( double thetabogie, vec3d &pt, vec3d &normal, vec3d &ptaxis, vec3d &axis )
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_TWO_PT_GROUND )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
-            gear->GetTwoPtFwdContactPtNormalInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
+            vec3d scratch1, scratch2;
+            gear->GetTwoPtFwdContactPtNormal( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
                                                      m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(), m_ContactPt2_TireMode(),
-                                                     thetabogie, 0, pt, normal );
+                                                     thetabogie, 0, pt, normal, scratch1, scratch2 );
 
 
-            gear->GetTwoPtFwdAxleAxisInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(),
+            gear->GetTwoPtFwdAxleAxis( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(),
                                               m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(),
                                               thetabogie, ptaxis, axis );
             return true;
@@ -2333,16 +2336,16 @@ bool AuxiliaryGeom::GetPtNormalFwdAxleAxis( double thetabogie, vec3d &pt, vec3d 
     return false;
 }
 
-bool AuxiliaryGeom::GetTwoPtSideContactPtsNormal( vec3d &p1, vec3d &p2, vec3d &normal )
+bool AuxiliaryGeom::GetTwoPtSideContactPtsNormalInGear( vec3d &p1, vec3d &p2, vec3d &normal )
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_TWO_PT_GROUND )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
-            gear->GetTwoPtSideContactPtsNormalInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
+            gear->GetTwoPtSideContactPtsNormal( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
                                                      m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(), m_ContactPt2_TireMode(),
                                                      p1, p2, normal );
             return true;
@@ -2351,17 +2354,17 @@ bool AuxiliaryGeom::GetTwoPtSideContactPtsNormal( vec3d &p1, vec3d &p2, vec3d &n
     return false;
 }
 
-bool AuxiliaryGeom::GetContactPointVecNormal( vector < vec3d > &ptvec, vec3d &normal )
+bool AuxiliaryGeom::GetContactPointVecNormalInGear( vector < vec3d > &ptvec, vec3d &normal )
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_GROUND ||
          m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_CCE )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
-            gear->GetContactPointVecNormalInWorld( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
+            gear->GetContactPointVecNormal( m_ContactPt1_ID, m_ContactPt1_Isymm(), m_ContactPt1_SuspensionMode(), m_ContactPt1_TireMode(),
                                                    m_ContactPt2_ID, m_ContactPt2_Isymm(), m_ContactPt2_SuspensionMode(), m_ContactPt2_TireMode(),
                                                    m_ContactPt3_ID, m_ContactPt3_Isymm(), m_ContactPt3_SuspensionMode(), m_ContactPt3_TireMode(),
                                                    ptvec, normal );
@@ -2371,14 +2374,14 @@ bool AuxiliaryGeom::GetContactPointVecNormal( vector < vec3d > &ptvec, vec3d &no
     return false;
 }
 
-bool AuxiliaryGeom::CalculateTurn( vec3d &cor, vec3d &normal, vector<double> &rvec )
+bool AuxiliaryGeom::CalculateTurnInGear( vec3d &cor, vec3d &normal, vector<double> &rvec )
 {
     if ( m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_GROUND ||
          m_AuxuliaryGeomMode() == vsp::AUX_GEOM_THREE_PT_CCE )
     {
         Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
 
-        GearGeom * gear = dynamic_cast< GearGeom* > ( parent_geom );
+        GearContactRole * gear = Geom::CastTo< GearContactRole >( parent_geom );
         if ( gear )
         {
             vector < vec3d > ptvec;
@@ -2472,18 +2475,13 @@ bool AuxiliaryGeom::CalculateTurn( vec3d &cor, vec3d &normal, vector<double> &rv
                 rvec[i] = dist( ptvec[ i ], cor );
             }
 
-            // Return results in world coordinates
-            Matrix4d world = gear->getModelMatrix();
-            normal = world.xformnorm( normal );
-            cor = world.xform( cor );
-
             return true;
         }
     }
     return false;
 }
 
-bool AuxiliaryGeom::GetSpreadTri( vec3d &pt, vec3d &axis, vector < vec3d > &t, int &flip )
+bool AuxiliaryGeom::GetSpreadTriInSelf( vec3d &pt, vec3d &axis, vector < vec3d > &t, int &flip ) const
 {
     double refLen = 30.0;
 
@@ -2519,13 +2517,255 @@ bool AuxiliaryGeom::GetSpreadTri( vec3d &pt, vec3d &axis, vector < vec3d > &t, i
     pt = vec3d( 0, 0, 0 );
     axis = vec3d( -1.0, 0.0, 0.0 );
 
-    pt = m_ModelMatrix.xform( pt );
-    axis = m_ModelMatrix.xformnorm( axis );
+    return true;
+}
 
-    for ( int i = 0; i < t.size(); i++ )
+Matrix4d AuxiliaryGeom::GetFlipMat() const
+{
+    Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
+    if ( !parent_geom )
     {
-        t[i] = m_ModelMatrix.xform( t[i] );
+        return Matrix4d();
     }
 
-    return true;
+    return parent_geom->GetFlipMat();
+}
+
+int AuxiliaryGeom::GetFlipFlag() const
+{
+    Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
+    if ( !parent_geom )
+    {
+        return 0;
+    }
+
+    return parent_geom->GetFlipFlag();
+}
+
+bool AuxiliaryGeom::GetFlipReversesNormal() const
+{
+    Geom* parent_geom = m_Vehicle->FindGeom( m_ParentID );
+    if ( !parent_geom )
+    {
+        return false;
+    }
+
+    return parent_geom->GetFlipReversesNormal();
+}
+
+// The gear this auxiliary is measured against is the Geom it hangs off.
+GearContactRole* AuxiliaryGeom::GetContactGear() const
+{
+    return Geom::CastTo< GearContactRole >( m_Vehicle->FindGeom( m_ParentID ) );
+}
+
+Matrix4d AuxiliaryRole::GetContactGearMatrix() const
+{
+    GearContactRole* gear = GetContactGear();
+    if ( gear )
+    {
+        return gear->GetRoleShapeMatrix();
+    }
+
+    return Matrix4d();
+}
+
+bool AuxiliaryRole::GetCG( vec3d &cgnom, vector < vec3d > &cgbounds )
+{
+    bool ret = GetCGInGear( cgnom, cgbounds );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    cgnom = mat.xform( cgnom );
+    mat.xformvec( cgbounds );
+
+    return ret;
+}
+
+bool AuxiliaryRole::GetPtNormal( vec3d &pt, vec3d &normal ) const
+{
+    bool ret = GetPtNormalInGear( pt, normal );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    pt = mat.xform( pt );
+    normal = mat.xformnorm( normal );
+
+    return ret;
+}
+
+// Transform an axis a rotation is measured about.  A reflection also reverses the sense of
+// rotation, so the axis is flipped to keep angles about it those of the flipped shape.
+static vec3d XFormRotationAxis( const Matrix4d &mat, const vec3d &axis )
+{
+    vec3d ax = mat.xformnorm( axis );
+
+    vec3d xdir = mat.xformnorm( vec3d( 1.0, 0.0, 0.0 ) );
+    vec3d ydir = mat.xformnorm( vec3d( 0.0, 1.0, 0.0 ) );
+    vec3d zdir = mat.xformnorm( vec3d( 0.0, 0.0, 1.0 ) );
+    if ( dot( cross( xdir, ydir ), zdir ) < 0.0 )
+    {
+        ax = -1.0 * ax;
+    }
+
+    return ax;
+}
+
+bool AuxiliaryRole::GetPtPivotAxis( vec3d &ptaxis, vec3d &axis )
+{
+    bool ret = GetPtPivotAxisInGear( ptaxis, axis );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    ptaxis = mat.xform( ptaxis );
+    axis = XFormRotationAxis( mat, axis );
+
+    return ret;
+}
+
+bool AuxiliaryRole::GetPtNormalMeanContactPtPivotAxis( vec3d &pt, vec3d &normal, vec3d &ptaxis, vec3d &axis, bool &usepivot, double &mintheta, double &maxtheta )
+{
+    bool ret = GetPtNormalMeanContactPtPivotAxisInGear( pt, normal, ptaxis, axis, usepivot, mintheta, maxtheta );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    pt = mat.xform( pt );
+    normal = mat.xformnorm( normal );
+    ptaxis = mat.xform( ptaxis );
+    axis = XFormRotationAxis( mat, axis );
+
+    return ret;
+}
+
+bool AuxiliaryRole::GetSideContactPtRollAxisNormal( vec3d &pt, vec3d &axis, vec3d &normal, int &ysign )
+{
+    bool ret = GetSideContactPtRollAxisNormalInGear( pt, axis, normal, ysign );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    pt = mat.xform( pt );
+    axis = XFormRotationAxis( mat, axis );
+    normal = mat.xformnorm( normal );
+
+    // A flip that reverses the gear's y puts the contact on the other side; reverse the side and
+    // the axis together.
+    GearContactRole* gear = GetContactGear();
+    if ( gear && gear->GetRoleFlipMat().xformnorm( vec3d( 0.0, 1.0, 0.0 ) ).y() < 0.0 )
+    {
+        ysign = -ysign;
+        axis = -1.0 * axis;
+    }
+
+    return ret;
+}
+
+bool AuxiliaryRole::GetPtNormalAftAxleAxis( double thetabogie, vec3d &pt, vec3d &normal, vec3d &ptaxis, vec3d &axis )
+{
+    bool ret = GetPtNormalAftAxleAxisInGear( thetabogie, pt, normal, ptaxis, axis );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    pt = mat.xform( pt );
+    normal = mat.xformnorm( normal );
+    ptaxis = mat.xform( ptaxis );
+    axis = XFormRotationAxis( mat, axis );
+
+    return ret;
+}
+
+bool AuxiliaryRole::GetPtNormalFwdAxleAxis( double thetabogie, vec3d &pt, vec3d &normal, vec3d &ptaxis, vec3d &axis )
+{
+    bool ret = GetPtNormalFwdAxleAxisInGear( thetabogie, pt, normal, ptaxis, axis );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    pt = mat.xform( pt );
+    normal = mat.xformnorm( normal );
+    ptaxis = mat.xform( ptaxis );
+    axis = XFormRotationAxis( mat, axis );
+
+    return ret;
+}
+
+bool AuxiliaryRole::GetTwoPtSideContactPtsNormal( vec3d &p1, vec3d &p2, vec3d &normal )
+{
+    bool ret = GetTwoPtSideContactPtsNormalInGear( p1, p2, normal );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    p1 = mat.xform( p1 );
+    p2 = mat.xform( p2 );
+    normal = mat.xformnorm( normal );
+
+    return ret;
+}
+
+bool AuxiliaryRole::GetContactPointVecNormal( vector < vec3d > &ptvec, vec3d &normal )
+{
+    bool ret = GetContactPointVecNormalInGear( ptvec, normal );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    mat.xformvec( ptvec );
+    normal = mat.xformnorm( normal );
+
+    return ret;
+}
+
+bool AuxiliaryRole::CalculateTurn( vec3d &cor, vec3d &normal, vector<double> &rvec )
+{
+    bool ret = CalculateTurnInGear( cor, normal, rvec );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetContactGearMatrix();
+    cor = mat.xform( cor );
+    normal = mat.xformnorm( normal );
+
+    return ret;
+}
+
+bool AuxiliaryRole::GetSpreadTri( vec3d &pt, vec3d &axis, vector < vec3d > &t, int &flip ) const
+{
+    bool ret = GetSpreadTriInSelf( pt, axis, t, flip );
+    if ( !ret )
+    {
+        return false;
+    }
+
+    Matrix4d mat = GetRoleShapeMatrix();
+    pt = mat.xform( pt );
+    axis = mat.xformnorm( axis );
+    mat.xformvec( t );
+
+    return ret;
 }

@@ -424,8 +424,16 @@ void APITestSuiteCFDMesh::FEAMeshAnalysisTest()
     vsp::SetDoubleAnalysisInput( analysis_name, "NCircSeg", nCircSegNums, 0 );
     vector < double > growthRationNums{ 1.3 };
     vsp::SetDoubleAnalysisInput( analysis_name, "GrowthRatio", growthRationNums, 0 );
-    vector < double > relCurveTolNums{ 0.01 };
-    vsp::SetDoubleAnalysisInput( analysis_name, "RelCurveTol", relCurveTolNums, 0 );
+    // list inputs, type, and current values
+    vsp::PrintAnalysisInputs( analysis_name );
+
+    printf( "\tExecuting Analysis\n" );
+    string resid = vsp::ExecAnalysis( analysis_name );
+
+    // Meshing writes nothing; the files are written by the export analysis.
+    analysis_name = "FeaMeshExport";
+    vsp::SetAnalysisInputDefaults( analysis_name );
+
     vector < double > sTEPTolNums{ 1e-06 };
     vsp::SetDoubleAnalysisInput( analysis_name, "STEPTol", sTEPTolNums, 0 );
 
@@ -448,26 +456,16 @@ void APITestSuiteCFDMesh::FEAMeshAnalysisTest()
     vector < string > calculix_file_name{ "Example_Test_CALCULIX.dat" };
     vsp::SetStringAnalysisInput( analysis_name, "CALCULIXFileName", calculix_file_name );
 
-    vector < string > curve_file_name{ "Example_Test_CURVE.curv" };
-    vsp::SetStringAnalysisInput( analysis_name, "CURVFileName", curve_file_name );
-
-    vector < string > p3d_file_name{ "Example_Test_P3D.p3d" };
-    vsp::SetStringAnalysisInput( analysis_name, "P3DFileName", p3d_file_name );
-
-    vector < string > srf_file_name{ "Example_Test_SRF.srf" };
-    vsp::SetStringAnalysisInput( analysis_name, "SRFFileName", srf_file_name );
-
     vector < int > iges_file_flag{ 0 };
     vsp::SetIntAnalysisInput( analysis_name, "IGESFileFlag", iges_file_flag );
 
     vector < int > step_file_flag{ 0 };
     vsp::SetIntAnalysisInput( analysis_name, "STEPFileFlag", step_file_flag );
 
-    // list inputs, type, and current values
     vsp::PrintAnalysisInputs( analysis_name );
 
-    printf( "\tExecuting Analysis\n" );
-    string resid = vsp::ExecAnalysis( analysis_name );
+    printf( "\tExecuting Export\n" );
+    resid = vsp::ExecAnalysis( analysis_name );
 
     // Final check for errors
     TEST_ASSERT( !vsp::ErrorMgr.PopErrorAndPrint( stdout ) );    //PopErrorAndPrint returns TRUE if there is an error we want ASSERT to check that this is FALSE

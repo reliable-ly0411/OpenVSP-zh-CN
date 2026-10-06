@@ -7,8 +7,6 @@ on:
         description: Exact candidate commit to build without creating a release
         required: true
         type: string
-  pull_request:
-    branches: [main]
   push:
     tags:
       - "*.*.*-Codex-AI-zh-CN*"

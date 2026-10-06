@@ -270,10 +270,16 @@ void GeomEngine::Extend( VspSurf &surf, const double & u, bool extbefore )
     if ( m_RotExtensionFlag() )
     {
         Matrix4d model_matrix;
-        model_matrix = getModelMatrix();
+        model_matrix = GetShapeMatrix();
         model_matrix.affineInverse();
         vec3d ydir, zdir;
         model_matrix.getBasis( xdir, ydir, zdir );
+
+        // A flip that turns the shape round in x turns the face round with it.
+        if ( GetFlipMat().xformnorm( vec3d( 1.0, 0.0, 0.0 ) ).x() < 0.0 )
+        {
+            xdir = -1.0 * xdir;
+        }
     }
 
     if ( extbefore )
@@ -303,20 +309,12 @@ void GeomEngine::Extend( VspSurf &surf, const double & u, bool extbefore )
     surf = s;
 }
 
-void GeomEngine::UpdateBBox()
+void GeomEngine::UpdateMainBBox()
 {
-    // Fill m_BBox like normal
-    Geom::UpdateBBox();
+    Geom::UpdateMainBBox();
 
-    // Fill m_ScaleIndependentBBox with positioned copies of m_OrigMainBBox
-    vector < BndBox > mainBBvec;
-    mainBBvec.push_back( m_ScaleIndependentMainBBox );
-
-    vector < BndBox > bbvec;
-    ApplySymm( mainBBvec, bbvec );
-
-    m_ScaleIndependentBBox.Reset();
-    m_ScaleIndependentBBox.Update( bbvec );
+    // The extension is sized from the model box, so only the surface it was grown from counts.
+    m_ScaleIndependentMainBBox = m_UnextendedMainBBox;
 }
 
 void GeomEngine::UpdateXForm()
@@ -337,8 +335,8 @@ void GeomEngine::UpdateXForm()
 
 void GeomEngine::UpdateEngine()
 {
-    m_ScaleIndependentMainBBox.Reset();
-    m_MainSurfVec[0].GetBoundingBox( m_ScaleIndependentMainBBox );
+    m_UnextendedMainBBox.Reset();
+    m_MainSurfVec[0].GetBoundingBox( m_UnextendedMainBBox );
 
     if ( m_EngineGeomIOType() != ENGINE_GEOM_NONE )
     {
@@ -372,7 +370,7 @@ void GeomEngine::UpdateEngine()
         VspSurf surf3;
         bool usesurf3 = false;
 
-        vec3d ptoff( m_ScaleIndependentMainBBox.DiagDist() * 1.0e-4, 0, 0 );
+        vec3d ptoff( m_UnextendedMainBBox.DiagDist() * 1.0e-4, 0, 0 );
         vec3d zero( 0.0, 0.0, 0.0 );
 
         double umax = surf.GetUMax();
@@ -732,82 +730,62 @@ void GeomEngine::UpdateLCurve()
     }
 }
 
-void GeomEngine::UpdateHighlightDrawObj()
+// The inlet and outlet lip and face stations on the main surface, placed by placer.
+void GeomEngine::BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec )
 {
-    GeomXSec::UpdateHighlightDrawObj();
+    marker_vec.clear();
 
-    if ( m_EngineGeomIOType() == ENGINE_GEOM_NONE )
+    vector< Matrix4d > trans_vec = placer->GetTransMatVec();
+    if ( m_EngineGeomIOType() == ENGINE_GEOM_NONE || trans_vec.empty() )
     {
-        m_EngineDrawObj_vec.clear();
+        return;
     }
 
-    if ( m_EngineGeomIOType() != ENGINE_GEOM_NONE )
+    Matrix4d relTrans = trans_vec[ 0 ];
+
+    double tol = 1e-2;
+
+    double eng_loc[ vsp::ENGINE_LOC_NUM ] = { m_EngineInLipU(), m_EngineInFaceU(), m_EngineOutLipU(), m_EngineOutFaceU() };
+    int eng_color[ vsp::ENGINE_LOC_NUM ] = { DrawObj::CYAN, DrawObj::MAGENTA, DrawObj::YELLOW, DrawObj::LIME };
+
+    double umax = m_OrigSurf.GetUMax();
+
+    for ( int i = 0; i < vsp::ENGINE_LOC_NUM; i++ )
     {
-        Matrix4d relTrans;
-
-        relTrans = m_AttachMatrix;
-        relTrans.affineInverse();
-        relTrans.matMult( m_ModelMatrix.data() );
-        relTrans.postMult( m_AttachMatrix.data() );
-
-        double tol = 1e-2;
-
-        double eng_loc[ vsp::ENGINE_LOC_NUM ] = { m_EngineInLipU(), m_EngineInFaceU(), m_EngineOutLipU(), m_EngineOutFaceU() };
-        int eng_color[ vsp::ENGINE_LOC_NUM ] = { DrawObj::CYAN, DrawObj::MAGENTA, DrawObj::YELLOW, DrawObj::LIME };
-
-        double umax = m_OrigSurf.GetUMax();
-
-        // Resize only when the count changes; TessULine clears the point vector in place,
-        // so the existing allocations are reused.
-        if ( m_EngineDrawObj_vec.size() != vsp::ENGINE_LOC_NUM )
+        if ( m_engine_spec[i] )
         {
-            m_EngineDrawObj_vec.clear();
-            m_EngineDrawObj_vec.resize( vsp::ENGINE_LOC_NUM );
-        }
-        for ( int i = 0; i < vsp::ENGINE_LOC_NUM; i++ )
-        {
-            if ( !m_engine_spec[i] )
-            {
-                m_EngineDrawObj_vec[i].m_PntVec.clear();
-            }
-            else
-            {
-                char str[256];
-                snprintf( str, sizeof( str ), "_%d", i );
+            char str[256];
+            snprintf( str, sizeof( str ), "_%d", i );
 
-                m_OrigSurf.TessULine( eng_loc[i] * umax, m_EngineDrawObj_vec[i].m_PntVec, tol );
-                relTrans.xformvec( m_EngineDrawObj_vec[i].m_PntVec );
+            marker_vec.push_back( DrawObj() );
+            DrawObj &dobj = marker_vec.back();
 
-                m_EngineDrawObj_vec[i].m_LineWidth = 7;
-                m_EngineDrawObj_vec[i].m_LineColor = DrawObj::Color( eng_color[i] );
-                m_EngineDrawObj_vec[i].m_Type = DrawObj::VSP_LINE_STRIP;
-                m_EngineDrawObj_vec[i].m_GeomID = "ENG_" + m_ID + str;
-                m_EngineDrawObj_vec[i].m_Screen = DrawObj::VSP_MAIN_SCREEN;
-                m_EngineDrawObj_vec[i].m_GeomChanged = true;
+            m_OrigSurf.TessULine( eng_loc[i] * umax, dobj.m_PntVec, tol );
+            relTrans.xformvec( dobj.m_PntVec );
 
-                m_EngineDrawObj_vec[i].m_StippleFactor = 20;
-                m_EngineDrawObj_vec[i].m_StipplePattern = 0xAAAA;
-                m_EngineDrawObj_vec[i].m_StippleFlag = true;
-            }
+            dobj.m_LineWidth = 7;
+            dobj.m_LineColor = DrawObj::Color( eng_color[i] );
+            dobj.m_Type = DrawObj::VSP_LINE_STRIP;
+            dobj.m_GeomID = "ENG_" + placer->GetID() + str;
+            dobj.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+            dobj.m_GeomChanged = true;
+
+            dobj.m_StippleFactor = 20;
+            dobj.m_StipplePattern = 0xAAAA;
+            dobj.m_StippleFlag = true;
         }
     }
 }
 
-void GeomEngine::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
+void GeomEngine::SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec )
 {
-    GeomXSec::LoadDrawObjs( draw_obj_vec );
+    bool visible = placer->m_GuiDraw.GetDispFeatureFlag() &&
+                   m_EngineShowStationsFlag() &&
+                   placer->GetSetFlag( vsp::SET_SHOWN );
 
-    for ( int i = 0; i < m_EngineDrawObj_vec.size(); i++ )
+    for ( int i = 0; i < ( int )marker_vec.size(); i++ )
     {
-        if ( m_engine_spec[i] )
-        {
-            m_EngineDrawObj_vec[i].m_Visible =
-                ( m_EngineGeomIOType() != ENGINE_GEOM_NONE ) &&
-                  m_GuiDraw.GetDispFeatureFlag() &&
-                  m_EngineShowStationsFlag() &&
-                  GetSetFlag( vsp::SET_SHOWN );
-            draw_obj_vec.push_back( &m_EngineDrawObj_vec[i] );
-        }
+        marker_vec[i].m_Visible = visible;
     }
 }
 

@@ -335,7 +335,7 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
 
     m_MaterialEditSubGroup.AddYGap();
 
-    m_MaterialEditSubGroup.SetButtonWidth( -1 );
+    m_MaterialEditSubGroup.SetButtonWidth( 0 );
     m_MaterialEditSubGroup.AddInput( m_FeaMaterialDescriptionInput, "", 0, 2 );
     m_FeaMaterialDescriptionInput.SetType( FL_MULTILINE_INPUT_WRAP );
 
@@ -543,7 +543,7 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     m_OrthoSubGroup.SetButtonWidth( 0 );
     m_OrthoSubGroup.AddOutput( m_OrthoMatDensity_FEMOutput, "", "%5.3g" );
 
-    m_OrthoSubGroup.SetButtonWidth( choicew );
+    m_OrthoSubGroup.SetButtonWidth( 2 * little );
     m_OrthoSubGroup.AddButton( m_OrthoMatDensityUnit_FEM, "" );
     m_OrthoMatDensityUnit_FEM.GetFlButton()->box( FL_THIN_UP_BOX );
     m_OrthoMatDensityUnit_FEM.GetFlButton()->labelcolor( FL_BLACK );
@@ -852,7 +852,7 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
 
     m_LaminateEditGroup.AddYGap();
 
-    m_LaminateEditGroup.SetButtonWidth( -1 );
+    m_LaminateEditGroup.SetButtonWidth( 0 );
     m_LaminateEditGroup.AddInput( m_LaminateDescriptionInput, "", 0, 2 );
     m_LaminateDescriptionInput.SetType( FL_MULTILINE_INPUT_WRAP );
 
@@ -1766,12 +1766,29 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
 
     m_MeshTabLayout.AddButton( m_Rig3dGrowthLimit, "Rigorous 3D Growth Limiting" );
     m_MeshTabLayout.AddYGap();
-    m_MeshTabLayout.AddSlider( m_RelCurveTolSlider, "Curve Adaptation Tolerance", 0.01, "%7.5f" );
-    m_MeshTabLayout.AddYGap();
     m_MeshTabLayout.AddButton( m_HalfMeshButton, "Generate Half Mesh" );
     m_MeshTabLayout.AddYGap();
+    m_MeshTabLayout.AddButton( m_SplitJoinSurfs, "Split and Join Surfaces" );
+
+    m_MeshTabLayout.AddYGap();
+    m_MeshTabLayout.SetButtonWidth( m_MeshTabLayout.GetW() / 3 );
+    m_MeshTabLayout.SetSameLineFlag( true );
+    m_MeshTabLayout.SetFitWidthFlag( false );
+
     m_MeshTabLayout.AddButton( m_ToCubicToggle, "Demote Surfs to Cubic" );
-    m_MeshTabLayout.AddSlider( m_ToCubicTolSlider, "Cubic Tolerance", 10, "%5.4g", 0, true );
+    m_MeshTabLayout.SetFitWidthFlag( true );
+    m_MeshTabLayout.AddSlider( m_ToCubicTolSlider, "Tolerance", 10, "%5.4g", 0, true );
+
+    m_MeshTabLayout.ForceNewLine();
+
+    m_MeshTabLayout.SetSameLineFlag( false );
+    m_MeshTabLayout.SetFitWidthFlag( true );
+
+    m_MeshTabLayout.AddYGap();
+    m_MeshTabLayout.AddDividerBox( "Process Control" );
+    m_MeshTabLayout.AddYGap();
+
+    m_MeshTabLayout.AddButton( m_ParallelMesh, "Run Multi-threaded" );
 
     m_MeshTabLayout.AddYGap();
     m_MeshTabLayout.AddDividerBox( "Element Type" );
@@ -1862,9 +1879,9 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
 
     m_FemTabLayout.SetButtonWidth( m_FemTabLayout.GetW() / 6.0 );
 
-    m_FemTabLayout.AddButton( m_ColorElementsButton, "Color" );
-    m_FemTabLayout.AddButton( m_ColorByTag, "By Tag" );
-    m_FemTabLayout.AddButton( m_ColorByReason, "By Reason" );
+    m_FemTabLayout.AddButton( m_ColorElementsButton, "Color By:" );
+    m_FemTabLayout.AddButton( m_ColorByTag, "Tag" );
+    m_FemTabLayout.AddButton( m_ColorByReason, "Reason" );
     m_FemTabLayout.ForceNewLine();
 
     m_ColorByToggleGroup.Init( this );
@@ -1968,46 +1985,6 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     m_CadTabLayout.SetSameLineFlag( false );
     m_CadTabLayout.InitWidthHeightVals();
 
-    m_CadTabLayout.AddDividerBox("Surface and Curve Export");
-
-    m_CadTabLayout.AddButton( m_ExportRaw, "Export Raw Points" );
-
-    m_CadTabLayout.InitWidthHeightVals();
-    m_CadTabLayout.SetInputWidth( m_CadTabLayout.GetW() - 75 - 55 );
-    m_CadTabLayout.SetFitWidthFlag( false );
-    m_CadTabLayout.SetSameLineFlag( true );
-
-    m_CadTabLayout.SetButtonWidth( 75 );
-    m_CadTabLayout.AddButton(m_CurvFile, ".curv");
-    m_CadTabLayout.AddOutput(m_CurvOutput);
-    m_CadTabLayout.SetButtonWidth( m_CadTabLayout.GetRemainX() );
-    m_CadTabLayout.AddButton(m_SelectCurvFile, "...");
-    m_CadTabLayout.ForceNewLine();
-
-    m_CadTabLayout.SetButtonWidth( 75 );
-    m_CadTabLayout.AddButton(m_Plot3DFile, ".p3d");
-    m_CadTabLayout.AddOutput(m_Plot3DOutput);
-    m_CadTabLayout.SetButtonWidth( m_CadTabLayout.GetRemainX() );
-    m_CadTabLayout.AddButton(m_SelectPlot3DFile, "...");
-    m_CadTabLayout.ForceNewLine();
-
-    m_CadTabLayout.AddYGap();
-
-    m_CadTabLayout.SetButtonWidth( 75 );
-    m_CadTabLayout.AddButton( m_SrfFile, ".srf" );
-    m_CadTabLayout.AddOutput( m_SrfOutput );
-    m_CadTabLayout.SetButtonWidth( m_CadTabLayout.GetRemainX() );
-    m_CadTabLayout.AddButton( m_SelectSrfFile, "..." );
-    m_CadTabLayout.ForceNewLine();
-
-    m_CadTabLayout.SetSameLineFlag( false );
-    m_CadTabLayout.SetFitWidthFlag( true );
-    m_CadTabLayout.AddButton( m_XYZIntCurves, "Include X,Y,Z Intersection Curves" );
-
-    m_CadTabLayout.AddYGap();
-    m_CadTabLayout.SetFitWidthFlag( true );
-    m_CadTabLayout.SetSameLineFlag( false );
-
     m_CadTabLayout.AddDividerBox( "Trimmed CAD Export" );
 
     m_CadTabLayout.InitWidthHeightVals();
@@ -2031,13 +2008,6 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     m_LabelDelimChoice.AddItem( "None" );
     m_CadTabLayout.AddChoice( m_LabelDelimChoice, "Delimiter" );
 
-    m_LenUnitChoice.AddItem( "MM" );
-    m_LenUnitChoice.AddItem( "CM" );
-    m_LenUnitChoice.AddItem( "M" );
-    m_LenUnitChoice.AddItem( "IN" );
-    m_LenUnitChoice.AddItem( "FT" );
-    m_LenUnitChoice.AddItem( "YD" );
-    m_CadTabLayout.AddChoice( m_LenUnitChoice, "Length Unit" );
     m_CadTabLayout.ForceNewLine();
     m_CadTabLayout.AddYGap();
 
@@ -2068,7 +2038,7 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     //m_CadTabLayout.SetButtonWidth( m_OutputTabLayout.GetRemainX() / 3 );
     //m_CadTabLayout.AddButton( m_STEPMergePointsToggle, "Merge Points" );
     //m_CadTabLayout.SetFitWidthFlag( true );
-    m_CadTabLayout.AddSlider( m_STEPTolSlider, "STEP Tolerance", 10, "%5.4g", 0, true );
+    m_CadTabLayout.AddSlider( m_STEPTolSlider, "Tolerance", 10, "%5.4g", 0, true );
     //m_CadTabLayout.SetFitWidthFlag( false );
     //m_CadTabLayout.ForceNewLine();
 
@@ -2094,18 +2064,17 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     m_CadTabLayout.SetFitWidthFlag( false );
     m_CadTabLayout.SetSameLineFlag( true );
 
-    m_CadTabLayout.SetButtonWidth( m_CadTabLayout.GetW() / 2 );
+    m_CadTabLayout.SetButtonWidth( m_CadTabLayout.GetW() / 3 );
 
     m_CadTabLayout.AddButton( m_DrawIsect, "Show Intersection Curves");
     m_CadTabLayout.AddButton( m_DrawBorder, "Show Border Curves");
+    m_CadTabLayout.AddButton( m_DrawJoin, "Show Patch Join Curves");
     m_CadTabLayout.ForceNewLine();
+
+    m_CadTabLayout.SetButtonWidth( m_CadTabLayout.GetW() / 2 );
 
     m_CadTabLayout.AddButton( m_ShowCurve, "Show Curves");
     m_CadTabLayout.AddButton( m_ShowPts, "Show Points");
-    m_CadTabLayout.ForceNewLine();
-
-    m_CadTabLayout.AddButton( m_ShowRaw, "Show Raw Curve");
-    m_CadTabLayout.AddButton( m_ShowBinAdapt, "Show Binary Adapted");
     m_CadTabLayout.ForceNewLine();
 
     // Set initial values
@@ -2466,7 +2435,7 @@ void StructScreen::UpdateFeaPartChoice()
                     m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_XSEC_CURVE ), vsp::SS_XSEC_CURVE + m_FeaPartChoiceSubSurfOffset  );
                     m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_INTERSECT ), vsp::SS_INTERSECT + m_FeaPartChoiceSubSurfOffset  );
 
-                    if ( currgeom->GetType().m_Type == MS_WING_GEOM_TYPE )
+                    if ( currgeom->GetBehaviorType() == MS_WING_GEOM_TYPE )
                     {
                         m_FeaPartChoice.SetFlagByVal( vsp::FEA_RIB, 0 ); // FEA_RIB
                         m_FeaPartChoice.SetFlagByVal( vsp::FEA_SPAR, 0 ); // FEA_SPAR
@@ -2483,7 +2452,7 @@ void StructScreen::UpdateFeaPartChoice()
                         m_FeaPartChoice.SetFlagByVal( vsp::SS_CONTROL + m_FeaPartChoiceSubSurfOffset, FL_MENU_INACTIVE );
                     }
 
-                    if ( currgeom->GetType().m_Type == FUSELAGE_GEOM_TYPE || currgeom->GetType().m_Type == POD_GEOM_TYPE || currgeom->GetType().m_Type == STACK_GEOM_TYPE ) //TODO: Improve
+                    if ( currgeom->GetBehaviorType() == FUSELAGE_GEOM_TYPE || currgeom->GetBehaviorType() == POD_GEOM_TYPE || currgeom->GetBehaviorType() == STACK_GEOM_TYPE ) //TODO: Improve
                     {
                         m_FeaPartChoice.SetFlagByVal( vsp::FEA_DOME, 0 ); // FEA_DOME
                     }
@@ -2874,7 +2843,7 @@ void StructScreen::FeaStructDispGroup( GroupLayout* group )
 
             if ( currgeom )
             {
-                if ( currgeom->GetType().m_Type == MS_WING_GEOM_TYPE )
+                if ( currgeom->GetBehaviorType() == MS_WING_GEOM_TYPE )
                 {
                     m_StructWingGroup.Show();
                     m_StructGeneralGroup.Hide();
@@ -3625,13 +3594,13 @@ bool StructScreen::Update()
             m_GrowthRatio.Update( curr_struct->GetFeaGridDensityPtr()->m_GrowRatio.GetID() );
             m_Rig3dGrowthLimit.Update( curr_struct->GetFeaGridDensityPtr()->m_RigorLimit.GetID() );
 
-            m_RelCurveTolSlider.Update( curr_struct->GetStructSettingsPtr()->m_RelCurveTol.GetID() );
-
             //===== Geometry Control =====//
             m_HalfMeshButton.Update( curr_struct->GetStructSettingsPtr()->m_HalfMeshFlag.GetID() );
 
+            m_SplitJoinSurfs.Update( curr_struct->GetStructSettingsPtr()->m_SplitJoinSurfsFlag.GetID() );
             m_ToCubicToggle.Update( curr_struct->GetStructSettingsPtr()->m_DemoteSurfsCubicFlag.GetID() );
             m_ToCubicTolSlider.Update( curr_struct->GetStructSettingsPtr()->m_CubicSurfTolerance.GetID() );
+            m_ParallelMesh.Update( curr_struct->GetStructSettingsPtr()->m_ParallelMeshFlag.GetID() );
 
             if ( curr_struct->GetStructSettingsPtr()->m_DemoteSurfsCubicFlag.Get() )
             {
@@ -3671,9 +3640,7 @@ bool StructScreen::Update()
 
             m_DrawIsect.Update( curr_struct->GetStructSettingsPtr()->m_DrawIsectFlag.GetID() );
             m_DrawBorder.Update( curr_struct->GetStructSettingsPtr()->m_DrawBorderFlag.GetID() );
-
-            m_ShowRaw.Update( curr_struct->GetStructSettingsPtr()->m_DrawRawFlag.GetID() );
-            m_ShowBinAdapt.Update( curr_struct->GetStructSettingsPtr()->m_DrawBinAdaptFlag.GetID() );
+            m_DrawJoin.Update( curr_struct->GetStructSettingsPtr()->m_DrawJoinFlag.GetID() );
 
             m_ShowCurve.Update( curr_struct->GetStructSettingsPtr()->m_DrawCurveFlag.GetID() );
             m_ShowPts.Update( curr_struct->GetStructSettingsPtr()->m_DrawPntsFlag.GetID() );
@@ -3716,23 +3683,6 @@ bool StructScreen::Update()
                 m_SelectNkeyFile.Activate();
             }
 
-            string srfname = curr_struct->GetStructSettingsPtr()->GetExportFileName( vsp::FEA_SRF_FILE_NAME );
-            m_SrfOutput.Update( StringUtil::truncateFileName( srfname, 40 ).c_str() );
-
-            m_SrfFile.Update( curr_struct->GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_SRF_FILE_NAME )->GetID() );
-            m_XYZIntCurves.Update( curr_struct->GetStructSettingsPtr()->m_XYZIntCurveFlag.GetID() );
-
-            string curvname = curr_struct->GetStructSettingsPtr()->GetExportFileName( vsp::FEA_CURV_FILE_NAME );
-            m_CurvOutput.Update( StringUtil::truncateFileName( curvname, 40 ).c_str() );
-            string plot3dname = curr_struct->GetStructSettingsPtr()->GetExportFileName( vsp::FEA_PLOT3D_FILE_NAME );
-            m_Plot3DOutput.Update( StringUtil::truncateFileName( plot3dname, 40 ).c_str() );
-
-            //==== Update File Output Flags ====//
-            m_CurvFile.Update( curr_struct->GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_CURV_FILE_NAME )->GetID() );
-            m_Plot3DFile.Update( curr_struct->GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_PLOT3D_FILE_NAME )->GetID() );
-
-            m_ExportRaw.Update( curr_struct->GetStructSettingsPtr()->m_ExportRawFlag.GetID() );
-
             string igsname = curr_struct->GetStructSettingsPtr()->GetExportFileName( vsp::FEA_IGES_FILE_NAME );
             m_IGESOutput.Update( StringUtil::truncateFileName( igsname, 40 ).c_str() );
             m_IGESFile.Update( curr_struct->GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_IGES_FILE_NAME )->GetID() );
@@ -3744,7 +3694,6 @@ bool StructScreen::Update()
             //m_STEPMergePointsToggle.Update( curr_struct->GetStructSettingsPtr()->m_STEPMergePoints.GetID() );
             m_STEPTolSlider.Update( curr_struct->GetStructSettingsPtr()->m_STEPTol.GetID() );
             m_STEPRepGroup.Update( curr_struct->GetStructSettingsPtr()->m_STEPRepresentation.GetID() );
-            m_LenUnitChoice.Update( curr_struct->GetStructSettingsPtr()->m_CADLenUnit.GetID() );
             m_LabelIDToggle.Update( curr_struct->GetStructSettingsPtr()->m_CADLabelID.GetID() );
             m_LabelNameToggle.Update( curr_struct->GetStructSettingsPtr()->m_CADLabelName.GetID() );
             m_LabelSurfNoToggle.Update( curr_struct->GetStructSettingsPtr()->m_CADLabelSurfNo.GetID() );
@@ -3758,32 +3707,30 @@ bool StructScreen::Update()
             if ( !curr_struct->GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_STEP_FILE_NAME )->Get() )
             {
                 //m_STEPMergePointsToggle.Deactivate();
-                m_STEPTolSlider.Deactivate();
                 m_STEPRepGroup.Deactivate();
             }
             else
             {
                 //m_STEPMergePointsToggle.Activate();
-                m_STEPTolSlider.Activate();
                 m_STEPRepGroup.Activate();
             }
 
             if ( !curr_struct->GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_STEP_FILE_NAME )->Get() &&
                  !curr_struct->GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_IGES_FILE_NAME )->Get() )
             {
+                m_STEPTolSlider.Deactivate();
                 m_LabelIDToggle.Deactivate();
                 m_LabelNameToggle.Deactivate();
                 m_LabelSurfNoToggle.Deactivate();
-                m_LenUnitChoice.Deactivate();
                 m_LabelSplitNoToggle.Deactivate();
                 m_LabelDelimChoice.Deactivate();
             }
             else
             {
+                m_STEPTolSlider.Activate();
                 m_LabelIDToggle.Activate();
                 m_LabelNameToggle.Activate();
                 m_LabelSurfNoToggle.Activate();
-                m_LenUnitChoice.Activate();
                 m_LabelSplitNoToggle.Activate();
                 m_LabelDelimChoice.Activate();
             }
@@ -5043,45 +4990,6 @@ void StructScreen::GuiDeviceCallBack( GuiDevice* device )
             }
         }
     }
-    else if ( device == &m_SelectSrfFile )
-    {
-        if ( StructureMgr.ValidTotalFeaStructInd( StructureMgr.m_CurrStructIndex() ) )
-        {
-            vector < FeaStructure* > structvec = StructureMgr.GetAllFeaStructs();
-
-            string newfile = m_ScreenMgr->FileChooser( "Select .srf file.", "*.srf", vsp::SAVE );
-            if ( newfile.compare( "" ) != 0 )
-            {
-                structvec[StructureMgr.m_CurrStructIndex()]->GetStructSettingsPtr()->SetExportFileName( newfile, vsp::FEA_SRF_FILE_NAME );
-            }
-        }
-    }
-    else if ( device == &m_SelectCurvFile )
-    {
-        if ( StructureMgr.ValidTotalFeaStructInd( StructureMgr.m_CurrStructIndex() ) )
-        {
-            vector < FeaStructure* > structvec = StructureMgr.GetAllFeaStructs();
-
-            string newfile = m_ScreenMgr->FileChooser( "Select GridTool .curv file.", "*.curv", vsp::SAVE );
-            if ( newfile.compare( "" ) != 0 )
-            {
-                structvec[StructureMgr.m_CurrStructIndex()]->GetStructSettingsPtr()->SetExportFileName( newfile, vsp::FEA_CURV_FILE_NAME );
-            }
-        }
-    }
-    else if ( device == &m_SelectPlot3DFile )
-    {
-        if ( StructureMgr.ValidTotalFeaStructInd( StructureMgr.m_CurrStructIndex() ) )
-        {
-            vector < FeaStructure* > structvec = StructureMgr.GetAllFeaStructs();
-
-            string newfile = m_ScreenMgr->FileChooser( "Select Plot3D .p3d file.", "*.p3d", vsp::SAVE );
-            if ( newfile.compare( "" ) != 0 )
-            {
-                structvec[StructureMgr.m_CurrStructIndex()]->GetStructSettingsPtr()->SetExportFileName( newfile, vsp::FEA_PLOT3D_FILE_NAME );
-            }
-        }
-    }
     else if ( device == &m_SelectIGESFile )
     {
         if ( StructureMgr.ValidTotalFeaStructInd( StructureMgr.m_CurrStructIndex() ) )
@@ -5317,7 +5225,7 @@ void StructScreen::OrientWing()
             return;
         }
 
-        if ( current_wing->GetType().m_Type == MS_WING_GEOM_TYPE )
+        if ( current_wing->GetBehaviorType() == MS_WING_GEOM_TYPE )
         {
             BndBox wing_bbox = current_wing->GetBndBox();
 

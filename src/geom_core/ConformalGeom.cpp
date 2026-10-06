@@ -8,6 +8,7 @@
 #include "APIDefines.h"
 #include "VspUtil.h"
 #include "ConformalGeom.h"
+#include "CloneGeom.h"
 #include "Vehicle.h"
 #include "VSP_Geom_API.h"
 #include "WingGeom.h"
@@ -238,6 +239,17 @@ void ConformalGeom::UpdateSurf()
         return;
     }
 
+    // A Clone has no cross sections, so offset those of the Geom it shows; placement stays the Clone's.
+    CloneGeom* clone_parent = dynamic_cast< CloneGeom* >( parent_geom );
+    if ( clone_parent )
+    {
+        Geom* behavior_geom = clone_parent->GetBehaviorGeom();
+        if ( behavior_geom && behavior_geom != parent_geom )
+        {
+            parent_geom = behavior_geom;
+        }
+    }
+
     // A Conformal of a Conformal does not work and never has: the offset is built by moving
     // the parent's skinning ribs, and a Conformal keeps none of its own to move.  It came out
     // collapsed on the origin.  Say so and stop, rather than produce that quietly.
@@ -375,7 +387,7 @@ void ConformalGeom::UpdateCopyXFormParms()
         return;
     }
 
-    HingeGeom* hingeparent = dynamic_cast < HingeGeom* > ( m_Vehicle->FindGeom( GetParentID() ) );
+    JointRole* hingeparent = Geom::CastTo< JointRole >( m_Vehicle->FindGeom( GetParentID() ) );
 
     m_HingeConformalPositionFlag.Deactivate();
 
@@ -418,7 +430,7 @@ void ConformalGeom::UpdateCopyXFormParms()
                 // Deactivate relative position parms
                 ActiveRel = false;
 
-                Matrix4d hingeMat = hingeparent->getModelMatrix();
+                Matrix4d hingeMat = hingeparent->GetRoleModelMatrix();
                 Matrix4d parentMat = parent_geom->getModelMatrix();
 
                 hingeMat.affineInverse();
@@ -1002,16 +1014,26 @@ double ConformalGeom::FindEndUOffsetCurve( VspSurf & surf, double offset, bool s
     double u = 0.0;
     VspCurve vsp_crv;
 
+    // A wing's end rib is a whole section, moved along the span by the offset.  The walls
+    // beside it are already the offset away, since every section is offset, so measuring
+    // clearance there measures the section's thickness -- which a tapered wing never gains
+    // going inward, and the end would be walked most of the way to the middle.
     if ( start_flag )
     {
         u = cs.FindUGivenDist( offset );
-        u = AdjustForSurfaceDist( surf, cs, u, offset, false );
+        if ( !m_WingParentFlag )
+        {
+            u = AdjustForSurfaceDist( surf, cs, u, offset, false );
+        }
     }
     else
     {
         double max_d = cs.GetMaxDist();
         u = cs.FindUGivenDist( max_d - offset );
-        u = AdjustForSurfaceDist( surf, cs, u, offset, true );
+        if ( !m_WingParentFlag )
+        {
+            u = AdjustForSurfaceDist( surf, cs, u, offset, true );
+        }
     }
 
     surf.GetUConstCurve( vsp_crv, u );
@@ -1133,6 +1155,39 @@ void ConformalGeom::SetWingTrimParms(  VspSurf & surf )
 
 }
 
+Matrix4d ConformalGeom::GetFlipMat() const
+{
+    Geom* parent_geom = m_Vehicle->FindGeom( GetConformalParent() );
+    if ( !parent_geom )
+    {
+        return Matrix4d();
+    }
+
+    return parent_geom->GetFlipMat();
+}
+
+int ConformalGeom::GetFlipFlag() const
+{
+    Geom* parent_geom = m_Vehicle->FindGeom( GetConformalParent() );
+    if ( !parent_geom )
+    {
+        return 0;
+    }
+
+    return parent_geom->GetFlipFlag();
+}
+
+bool ConformalGeom::GetFlipReversesNormal() const
+{
+    Geom* parent_geom = m_Vehicle->FindGeom( GetConformalParent() );
+    if ( !parent_geom )
+    {
+        return false;
+    }
+
+    return parent_geom->GetFlipReversesNormal();
+}
+
 void ConformalGeom::UpdateParms( VspSurf & surf )
 {
     Geom* parent_geom = m_Vehicle->FindGeom( GetConformalParent() );
@@ -1141,7 +1196,8 @@ void ConformalGeom::UpdateParms( VspSurf & surf )
         return;
     }
 
-    WingGeom* wing_geom = dynamic_cast < WingGeom* > ( parent_geom );
+    // Only EtatoU and UtoEta are used; they depend on shape alone, so a Clone of a wing works too.
+    WingGeom* behavior_wing = dynamic_cast < WingGeom* > ( parent_geom->GetBehaviorGeom() );
 
     double lmax = surf.GetLMax();
 
@@ -1152,10 +1208,10 @@ void ConformalGeom::UpdateParms( VspSurf & surf )
         m_LTrimMin.Set( l );
         m_L0LenTrimMin.Set( m_LTrimMin() * lmax );
 
-        if ( wing_geom )
+        if ( behavior_wing )
         {
-            double umax = wing_geom->NumXSec() - 1;
-            m_EtaTrimMin = wing_geom->UtoEta( m_UTrimMin() * umax, true );
+            double umax = behavior_wing->NumXSec() - 1;
+            m_EtaTrimMin = behavior_wing->UtoEta( m_UTrimMin() * umax, true );
         }
     }
     else if ( m_UMinTrimTypeFlag() == vsp::L_TRIM ) // Trim based on L.
@@ -1175,18 +1231,18 @@ void ConformalGeom::UpdateParms( VspSurf & surf )
         surf.ConvertLMNtoRST( m_LTrimMin(), 0.5, 0.5, r, s, t );
         m_UTrimMin.Set( r );
 
-        if ( wing_geom )
+        if ( behavior_wing )
         {
-            double umax = wing_geom->NumXSec() - 1;
-            m_EtaTrimMin = wing_geom->UtoEta( m_UTrimMin() * umax, true );
+            double umax = behavior_wing->NumXSec() - 1;
+            m_EtaTrimMin = behavior_wing->UtoEta( m_UTrimMin() * umax, true );
         }
     }
     else // Trim based on eta
     {
-        if ( wing_geom )
+        if ( behavior_wing )
         {
-            double umax = wing_geom->NumXSec() - 1;
-            m_UTrimMin = wing_geom->EtatoU( m_EtaTrimMin(), true ) / umax;
+            double umax = behavior_wing->NumXSec() - 1;
+            m_UTrimMin = behavior_wing->EtatoU( m_EtaTrimMin(), true ) / umax;
 
             double l, m, n;
             surf.ConvertRSTtoLMN( m_UTrimMin(), 0.5, 0.5, l, m, n );
@@ -1202,10 +1258,10 @@ void ConformalGeom::UpdateParms( VspSurf & surf )
         m_LTrimMax.Set( l );
         m_L0LenTrimMax.Set( m_LTrimMax() * lmax );
 
-        if ( wing_geom )
+        if ( behavior_wing )
         {
-            double umax = wing_geom->NumXSec() - 1;
-            m_EtaTrimMax = wing_geom->UtoEta( m_UTrimMax() * umax, true );
+            double umax = behavior_wing->NumXSec() - 1;
+            m_EtaTrimMax = behavior_wing->UtoEta( m_UTrimMax() * umax, true );
         }
     }
     else if ( m_UMaxTrimTypeFlag() == L_TRIM ) // Trim based on L.
@@ -1225,18 +1281,18 @@ void ConformalGeom::UpdateParms( VspSurf & surf )
         surf.ConvertLMNtoRST( m_LTrimMax(), 0.5, 0.5, r, s, t );
         m_UTrimMax.Set( r );
 
-        if ( wing_geom )
+        if ( behavior_wing )
         {
-            double umax = wing_geom->NumXSec() - 1;
-            m_EtaTrimMax = wing_geom->UtoEta( m_UTrimMax() * umax, true );
+            double umax = behavior_wing->NumXSec() - 1;
+            m_EtaTrimMax = behavior_wing->UtoEta( m_UTrimMax() * umax, true );
         }
     }
     else // Trim based on eta
     {
-        if ( wing_geom )
+        if ( behavior_wing )
         {
-            double umax = wing_geom->NumXSec() - 1;
-            m_UTrimMax = wing_geom->EtatoU( m_EtaTrimMax(), true ) / umax;
+            double umax = behavior_wing->NumXSec() - 1;
+            m_UTrimMax = behavior_wing->EtatoU( m_EtaTrimMax(), true ) / umax;
 
             double l, m, n;
             surf.ConvertRSTtoLMN( m_UTrimMax(), 0.5, 0.5, l, m, n );

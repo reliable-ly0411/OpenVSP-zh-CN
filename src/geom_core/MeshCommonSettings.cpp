@@ -28,19 +28,22 @@ void MeshCommonSettings::InitCommonParms( bool curveFlagDefault )
 {
     m_DrawMeshFlag.Init( "DrawMeshFlag", "DrawMesh", this, true, 0, 1 );
     m_ColorFacesFlag.Init( "ColorTagsFlag", "DrawMesh", this, true, 0, 1 );
-    m_ColorTagReason.Init( "ColorReasonFlag", "DrawMesh", this, false, 0, 1 );
+    // The saved name is left alone so old files still find it.
+    m_ColorTagReason.Init( "ColorReasonFlag", "DrawMesh", this, vsp::TAG, vsp::TAG, vsp::QUALITY_LENGTH );
+
+    m_ParallelMeshFlag.Init( "ParallelMeshFlag", "Global", this, true, 0, 1 );
+    m_ParallelMeshFlag.SetDescript( "Mesh the surfaces on several threads" );
+
+    m_SplitJoinSurfsFlag.Init( "SplitJoinSurfsFlag", "Global", this, false, 0, 1 );
+    m_SplitJoinSurfsFlag.SetDescript( "Cut wings and bodies into patches chosen for the feature they carry" );
 
     m_DrawBorderFlag.Init( "DrawBorderFlag", "DrawMesh", this, curveFlagDefault, 0, 1 );
     m_DrawIsectFlag.Init( "DrawIsectFlag", "DrawMesh", this, curveFlagDefault, 0, 1 );
-    m_DrawRawFlag.Init( "DrawRawFlag", "DrawMesh", this, false, 0, 1 );
-    m_DrawBinAdaptFlag.Init( "DrawBinAdaptFlag", "DrawMesh", this, true, 0, 1 );
+    m_DrawJoinFlag.Init( "DrawJoinFlag", "DrawMesh", this, curveFlagDefault, 0, 1 );
+    m_DrawJoinFlag.SetDescript( "Draw the creases left inside a patch where split and join put pieces together" );
 
     m_DrawCurveFlag.Init( "DrawCurveFlag", "DrawMesh", this, true, 0, 1 );
     m_DrawPntsFlag.Init( "DrawPntsFlag", "DrawMesh", this, true, 0, 1 );
-
-    m_RelCurveTol.Init( "RelCurveTol", "Global", this, 0.005, 1e-5, 1.0 );
-    m_RelCurveTol.SetDescript( "Binary Adaptive Tolerance for Trimmed CAD Intersection Curves "
-                               "and Realtime Intersection Curve Display" );
 
     m_IntersectSubSurfs.Init( "IntersectSubSurfs", "Global", this, true, 0, 1 );
     m_IntersectSubSurfs.SetDescript( "Flag to intersect subsurfaces" );
@@ -74,8 +77,6 @@ IntersectSettings::IntersectSettings() : MeshCommonSettings()
 
     m_DrawSourceWakeFlag.Init( "DrawSourceWake", "DrawMesh", this, true, 0, 1 );
 
-    m_ExportRawFlag.Init( "ExportRawFlag", "ExportIntersect", this, false, 0, 1 );
-
     m_SelectedSetIndex.Init( "Set", "Global", this, DEFAULT_SET, vsp::SET_NONE, vsp::MAX_NUM_SETS );
     m_SelectedSetIndex.SetDescript( "Selected set for operation" );
 
@@ -85,10 +86,9 @@ IntersectSettings::IntersectSettings() : MeshCommonSettings()
     m_UseMode.Init( "UseMode", "Global", this, false, false, true );
     m_UseMode.SetDescript( "Flag to control whether modes are used instead of sets." );
 
-    m_XYZIntCurveFlag.Init( "SRF_XYZIntCurve", "ExportIntersect", this, false, 0, 1 );
-
     m_CADLenUnit.Init( "CADLenUnit", "ExportIntersect", this, vsp::LEN_FT, vsp::LEN_MM, vsp::LEN_YD );
     m_STEPTol.Init( "STEPTol", "ExportIntersect", this, 1e-6, 1e-12, 1e12 );
+    m_STEPTol.SetDescript( "Tolerance written to STEP files, and the tolerance trimmed CAD curves are built to" );
     m_STEPMergePoints.Init( "STEPMergePoints", "ExportIntersect", this, false, 0, 1 );
     m_STEPRepresentation.Init( "STEPRepresentation", "ExportIntersect", this, vsp::STEP_BREP, vsp::STEP_SHELL, vsp::STEP_BREP );
 
@@ -99,13 +99,14 @@ IntersectSettings::IntersectSettings() : MeshCommonSettings()
     m_CADLabelSplitNo.Init( "CADLabelSplitNo", "ExportIntersect", this, true, 0, 1 );
 
     m_ExportFileFlags.resize( vsp::INTERSECT_NUM_FILE_NAMES );
-    m_ExportFileFlags[ vsp::INTERSECT_SRF_FILE_NAME ].Init( "SRF_Export", "ExportIntersect", this, true, 0, 1 );
-    m_ExportFileFlags[ vsp::INTERSECT_CURV_FILE_NAME ].Init( "CURV_Export", "ExportIntersect", this, true, 0, 1 );
-    m_ExportFileFlags[ vsp::INTERSECT_PLOT3D_FILE_NAME ].Init( "PLOT3D_Export", "ExportIntersect", this, true, 0, 1 );
     m_ExportFileFlags[vsp::INTERSECT_IGES_FILE_NAME].Init( "IGES_Export", "ExportIntersect", this, true, 0, 1 );
     m_ExportFileFlags[vsp::INTERSECT_STEP_FILE_NAME].Init( "STEP_Export", "ExportIntersect", this, true, 0, 1 );
 
     m_ExportFileNames.resize( vsp::INTERSECT_NUM_FILE_NAMES );
+
+    m_DrawRawFlag.Init( "DrawRawFlag", "DrawMesh", this, false, 0, 1 );
+    m_DrawCubicFlag.Init( "DrawCubicFlag", "DrawMesh", this, true, 0, 1 );
+    m_DrawCubicFlag.SetDescript( "Draw intersection curves as the cubics written to trimmed CAD files" );
 
     InitCommonParms( true );
 
@@ -176,7 +177,7 @@ void IntersectSettings::ResetExportFileNames( const string& basename )
         base.erase( pos, base.length() - 1 );
     }
 
-    const char *suffix[] = {".srf", ".curv", ".p3d", ".igs", ".stp" };
+    const char *suffix[] = { ".igs", ".stp" };
 
     for ( int i = 0 ; i < vsp::INTERSECT_NUM_FILE_NAMES; i++ )
     {
@@ -255,6 +256,13 @@ CfdMeshSettings::CfdMeshSettings() : MeshCommonSettings()
     m_FarZLocation.Init( "FarZLocation", "FarField", this, 0.0, -1.0e12, 1.0e12 );
     m_FarZLocation.SetDescript( "Far field Z location" );
 
+    m_POGSNRef.Init( "POGSNRef", "Global", this, 0, 0, 6 );
+    m_POGSNRef.SetDescript( "Number of tessellation refinements for POGS surface output" );
+
+    m_RelCurveTol.Init( "RelCurveTol", "Global", this, 0.005, 1e-5, 1.0 );
+    m_RelCurveTol.SetDescript( "Relative tolerance on the intersection curves of POGS files, as a "
+                               "fraction of a segment's length" );
+
     m_SelectedSetIndex.Init( "Set", "Global", this, DEFAULT_SET, vsp::SET_NONE, vsp::MAX_NUM_SETS );
     m_SelectedSetIndex.SetDescript( "Selected set for operation" );
 
@@ -274,10 +282,7 @@ CfdMeshSettings::CfdMeshSettings() : MeshCommonSettings()
     m_ExportFileFlags[ vsp::CFD_TKEY_FILE_NAME ].Init( "TKEY_Export", "ExportCFD", this, true, 0, 1 );
     m_ExportFileFlags[ vsp::CFD_FACET_FILE_NAME ].Init( "FACET_Export", "ExportCFD", this, true, 0, 1 );
     m_ExportFileFlags[ vsp::CFD_VSPGEOM_FILE_NAME ].Init( "VSPGEOM_Export", "ExportCFD", this, true, 0, 1 );
-
-    m_XYZIntCurveFlag.Init( "SRF_XYZIntCurve", "ExportCFD", this, false, 0, 1 );
-
-    m_ExportRawFlag.Init( "ExportRawFlag", "ExportCFD", this, false, 0, 1 );
+    m_ExportFileFlags[ vsp::CFD_POGS_FILE_NAME ].Init( "POGS_Export", "ExportCFD", this, false, 0, 1 );
 
     InitCommonParms( false );
 
@@ -384,7 +389,7 @@ void CfdMeshSettings::ResetExportFileNames( const string& basename )
         base.erase( pos, base.length() - 1 );
     }
 
-    const char *suffix[] = {".stl", ".poly", ".tri", ".obj", "_NASCART.dat", "_NASCART.key", ".msh", ".tkey", ".facet", ".vspgeom" };
+    const char *suffix[] = {".stl", ".poly", ".tri", ".obj", "_NASCART.dat", "_NASCART.key", ".msh", ".tkey", ".facet", ".vspgeom", ".i.tri" };
 
     for ( int i = 0 ; i < vsp::CFD_NUM_FILE_NAMES ; i++ )
     {
@@ -440,18 +445,11 @@ StructSettings::StructSettings() : MeshCommonSettings()
     m_ExportFileFlags[ vsp::FEA_CALCULIX_FILE_NAME ].Init( "CALCULIX_Export", "ExportFEA", this, true, 0, 1 );
     m_ExportFileFlags[ vsp::FEA_STL_FILE_NAME ].Init( "STL_Export", "ExportFEA", this, true, 0, 1 );
     m_ExportFileFlags[ vsp::FEA_GMSH_FILE_NAME].Init( "GMSH_Export", "ExportFEA", this, true, 0, 1 );
-    m_ExportFileFlags[ vsp::FEA_SRF_FILE_NAME ].Init( "SRF_Export", "ExportFEA", this, true, 0, 1 );
-    m_ExportFileFlags[ vsp::FEA_CURV_FILE_NAME ].Init( "CURV_Export", "ExportFEA", this, true, 0, 1 );
-    m_ExportFileFlags[ vsp::FEA_PLOT3D_FILE_NAME ].Init( "PLOT3D_Export", "ExportFEA", this, true, 0, 1 );
     m_ExportFileFlags[vsp::FEA_IGES_FILE_NAME].Init( "IGES_Export", "ExportFEA", this, true, 0, 1 );
     m_ExportFileFlags[vsp::FEA_STEP_FILE_NAME].Init( "STEP_Export", "ExportFEA", this, true, 0, 1 );
 
-    m_XYZIntCurveFlag.Init( "SRF_XYZIntCurve", "ExportFEA", this, false, 0, 1 );
-
-    m_ExportRawFlag.Init( "ExportRawFlag", "ExportFEA", this, false, 0, 1 );
-
-    m_CADLenUnit.Init( "CADLenUnit", "ExportFEA", this, vsp::LEN_FT, vsp::LEN_MM, vsp::LEN_YD );
     m_STEPTol.Init( "STEPTol", "ExportFEA", this, 1e-6, 1e-12, 1e12 );
+    m_STEPTol.SetDescript( "Tolerance written to STEP files, and the tolerance trimmed CAD curves are built to" );
     m_STEPMergePoints.Init( "STEP", "ExportFEA", this, false, 0, 1 );
     m_STEPRepresentation.Init( "STEPRepresentation", "ExportFEA", this, vsp::STEP_BREP, vsp::STEP_SHELL, vsp::STEP_BREP );
 
@@ -554,7 +552,7 @@ void StructSettings::ResetExportFileNames( const string& structname )
     }
     base.append( "_" + structname );
 
-    const char *suffix[] = {"_mass.txt", "_NASTRAN.dat", "_NASTRAN.nkey", "_calculix.inp", ".stl", ".msh", ".srf", ".curv", ".p3d", ".igs", ".stp" };
+    const char *suffix[] = {"_mass.txt", "_NASTRAN.dat", "_NASTRAN.nkey", "_calculix.inp", ".stl", ".msh", ".igs", ".stp" };
 
     for ( int i = 0 ; i < vsp::FEA_NUM_FILE_NAMES; i++ )
     {
@@ -605,9 +603,6 @@ AssemblySettings::AssemblySettings() : ParmContainer()
     m_ExportFileFlags[ vsp::FEA_CALCULIX_FILE_NAME ].Init( "CALCULIX_Export", "ExportFEA", this, true, 0, 1 );
     m_ExportFileFlags[ vsp::FEA_STL_FILE_NAME ].Init( "STL_Export", "ExportFEA", this, true, 0, 1 );
     m_ExportFileFlags[ vsp::FEA_GMSH_FILE_NAME].Init( "GMSH_Export", "ExportFEA", this, true, 0, 1 );
-    m_ExportFileFlags[ vsp::FEA_SRF_FILE_NAME ].Init( "SRF_Export", "ExportFEA", this, true, 0, 1 );
-    m_ExportFileFlags[ vsp::FEA_CURV_FILE_NAME ].Init( "CURV_Export", "ExportFEA", this, true, 0, 1 );
-    m_ExportFileFlags[ vsp::FEA_PLOT3D_FILE_NAME ].Init( "PLOT3D_Export", "ExportFEA", this, true, 0, 1 );
     m_ExportFileFlags[vsp::FEA_IGES_FILE_NAME].Init( "IGES_Export", "ExportFEA", this, true, 0, 1 );
     m_ExportFileFlags[vsp::FEA_STEP_FILE_NAME].Init( "STEP_Export", "ExportFEA", this, true, 0, 1 );
 
@@ -684,7 +679,7 @@ void AssemblySettings::ResetExportFileNames( const string& structname )
     }
     base.append( "_" + structname );
 
-    const char *suffix[] = {"_mass.txt", "_NASTRAN.dat", "_NASTRAN.nkey", "_calculix.inp", ".stl", ".msh", ".srf", ".curv", ".p3d", ".igs", ".stp" };
+    const char *suffix[] = {"_mass.txt", "_NASTRAN.dat", "_NASTRAN.nkey", "_calculix.inp", ".stl", ".msh", ".igs", ".stp" };
 
     for ( int i = 0 ; i < vsp::FEA_NUM_FILE_NAMES; i++ )
     {

@@ -28,6 +28,43 @@ using namespace std;
 
 class ICurve;
 
+//==== Parameter line of a surface a curve runs along ====//
+// A patch border, or the seam where split and join put two pieces of a surface back together,
+// is a line of constant u or w.  It is recorded where the curve is made.
+class ParmLine
+{
+public:
+    enum { NONE, U_CONST, W_CONST };
+
+    ParmLine()
+    {
+        m_Kind = NONE;
+        m_Val = 0.0;
+    }
+    ParmLine( int kind, double val )
+    {
+        m_Kind = kind;
+        m_Val = val;
+    }
+
+    // A line of the patch between ( ua, wa ) and ( ub, wb ), or NONE where neither is held
+    static ParmLine Between( double ua, double wa, double ub, double wb );
+
+    bool IsLine() const
+    {
+        return m_Kind != NONE;
+    }
+
+    // uw with its constant parameter set to the line's
+    vec3d OnLine( const vec3d &uw ) const;
+
+    // The parameter that runs along the line
+    double Along( const vec3d &uw ) const;
+
+    int m_Kind;
+    double m_Val;
+};
+
 //////////////////////////////////////////////////////////////////////
 class SCurve
 {
@@ -46,12 +83,15 @@ public:
         return m_Surf;
     }
 
-    double GetTargetLen( SimpleGridDensity *grid_den, SCurve *BCurve, const vec3d &p, const vec3d &uw, double u, int &reason );
+    double GetTargetLen( SimpleGridDensity *grid_den, SCurve *BCurve, const vec3d &p, const vec3d &uw, const vec3d &uwB, int &reason );
 
     void BorderTesselate( );
+    void BorderTesselate( int npt );
     void CheapTesselate( );
     void ProjectTessToSurf( SCurve* sca );
     void InterpDistTable( double idouble, double &t, double &u, double &s, double &dsdi, int &reason );
+    void BuildDistTableGeom();
+    void BuildDistTableGeomB( SCurve* BCurve );
     void BuildDistTable( SimpleGridDensity* grid_den, SCurve* BCurve, list< MapSource* > & splitSources );
     void CleanupDistTable();
     void LimitTarget( SimpleGridDensity* grid_den );
@@ -65,8 +105,10 @@ public:
     void DoubleTess();
     void UWTess();
     void SpreadDensity( SCurve* BCurve );
+    void SpreadDensityA();
+    void SpreadDensityB( SCurve* BCurve );
     void CalcDensity( SimpleGridDensity* grid_den, SCurve* BCurve, list< MapSource* > & splitSources );
-    void ApplyESSurface( double u, double t, int reason );
+    void ApplyESAtUW( const vec3d &uw, const vec3d &p, double t, int reason );
     void Tesselate();
 
     void InterpolateLinear( const vector<vec3d> &pnts_to_interpolate );
@@ -104,9 +146,19 @@ public:
     void SetUWCrv( const Bezier_curve &crv )
     {
         m_UWCrv = crv;
+        CleanupDistTable();
     }
 
     void FlipDir();
+
+    void SetParmLine( const ParmLine &line )
+    {
+        m_ParmLine = line;
+    }
+    const ParmLine & GetParmLine() const
+    {
+        return m_ParmLine;
+    }
 
     // void Draw();
 
@@ -122,6 +174,9 @@ protected:
 
     Bezier_curve m_UWCrv;       // UW Curve
 
+    // The parameter line of m_Surf the curve lies on, where it is one
+    ParmLine m_ParmLine;
+
     vector< double > m_UTess;   // Tess Curve Pnts in U Space
     vector< vec3d > m_UWTess;   // Tess Curve Pnts in UW Space
     vector< double > m_STess;    // Tess Curve Pnts in arc-length
@@ -131,6 +186,19 @@ protected:
     vector< double > dist_vec;
     vector< double > target_vec;
     vector< double > reason_vec;
+
+    // Where each entry of the table sits, in the surface's parameters and in space.  The
+    // curve does not move while density is spread along it, so these are worked out once and
+    // the passes after the first recompute only the targets.  CleanupDistTable drops them.
+    vector< vec3d > m_TableUW;
+    vector< vec3d > m_TablePnt;
+
+    // The same for the curve on the other side of the intersection, which the spreading
+    // walks in step with this one.  Held here because it is this curve's table, and rebuilt
+    // if a different partner is ever handed in.
+    SCurve* m_TableBCurve = nullptr;
+    vector< vec3d > m_TableUWB;
+    vector< vec3d > m_TablePntB;
 };
 
 
