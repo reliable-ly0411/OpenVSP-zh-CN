@@ -3832,11 +3832,14 @@ bool GeomPicker::ValidGeom( const string &gid )
     Geom* g = m_Vehicle->FindGeom( gid );
     if ( g )
     {
+        // Filter on behavior, so a Clone of a wing is accepted wherever a wing is.
+        int gtype = g->GetBehaviorType();
+
         bool excludematch = false;
 
         for ( int j = 0; j < m_ExcludeTypes.size(); j++ )
         {
-            if ( g->GetType().m_Type == m_ExcludeTypes[j] )
+            if ( gtype == m_ExcludeTypes[j] )
             {
                 excludematch = true;
                 break;
@@ -3851,7 +3854,7 @@ bool GeomPicker::ValidGeom( const string &gid )
             {
                 for ( int j = 0; j < m_IncludeTypes.size(); j++ )
                 {
-                    if ( g->GetType().m_Type == m_IncludeTypes[j] )
+                    if ( gtype == m_IncludeTypes[j] )
                     {
                         includematch = true;
                         break;

@@ -7,8 +7,8 @@
 
 - 官方只读上游：`https://github.com/OpenVSP/OpenVSP.git`。
 - 汉化仓库：`https://github.com/reliable-ly0411/OpenVSP-zh-CN`。
-- 当前官方基线：OpenVSP 3.53.0，提交
-  `fbf9afc31d3bf337a75253e403423cb8c8dd86dc`；同步元数据见 `.github/upstream.json`。
+- 当前官方基线：OpenVSP 3.54.0，提交
+  `db6c6fe8f4eca27d7517f4ae0b2078abdd3fd927`；同步元数据见 `.github/upstream.json`。
 - 相对官方 OpenVSP 只保留汉化、目标平台兼容、案例打包和本仓库维护所需的最小差异。
 - OpenVSP 原软件、算法及英文源码的版权和作者归属不变，并遵循 NOSA 1.3；Codex
   是本地化和代码修改工具，不是 OpenVSP 原作者。
@@ -42,8 +42,13 @@
 
 ## 上游同步与发布规则
 
-- `Watch OpenVSP Upstream` 只创建更新计划 Issue；不得直接覆盖 `main`。
-- `Prepare OpenVSP Upstream Update` 将汉化差异移植到新上游并生成双父审查提交；冲突时停止。
+- `Sync and Build OpenVSP Upstream` 每周自动同步官方 `main`，也支持手动触发。
+- `Prepare OpenVSP Upstream Update` 作为可复用准备流程生成双父候选提交；只保留本仓库
+  的工作流文件，真实代码冲突时停止，不自动选择一方。
+- 候选提交通过 Linux/Windows 构建、本地化守卫、翻译回归和打包检查后，才以普通 push
+  快进 `main`。构建失败或主分支并发前进时保留候选分支，不强制覆盖。
+- 自动同步更新当前版本元数据及“未发布”说明；构建包保留在 Actions Artifacts 14 天。
+  自动构建不代表新增界面已全部补译或 GUI 已人工验收。
 - 审查、补译和 Linux/Windows 验收完成后，才可创建
   `<版本>-Codex-AI-zh-CN` 标签；同版本修复使用递增的不可变 `-rN` 标签。
 - 每次代码、构建或发布相关修改都必须更新 `README_zh-CN.md` 的版本变化；发布前把

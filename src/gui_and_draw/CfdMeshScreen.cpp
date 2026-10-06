@@ -22,7 +22,7 @@
 
 #define CFD_CONSOLE_HEIGHT 200
 
-CfdMeshScreen::CfdMeshScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 472 + CFD_CONSOLE_HEIGHT, "CFD Mesh", "", CFD_CONSOLE_HEIGHT )
+CfdMeshScreen::CfdMeshScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 572 + CFD_CONSOLE_HEIGHT, "CFD Mesh", "", CFD_CONSOLE_HEIGHT )
 {
     m_Vehicle = m_ScreenMgr->GetVehiclePtr();
 
@@ -148,8 +148,6 @@ void CfdMeshScreen::CreateGlobalTab()
     m_GlobalTabLayout.AddYGap();
     m_GlobalTabLayout.AddButton(m_Rig3dGrowthLimit, "Rigorous 3D Growth Limiting");
     m_GlobalTabLayout.AddYGap();
-    m_GlobalTabLayout.AddSlider( m_RelCurveTolSlider, "Curve Adaptation Tolerance", 0.01, "%7.5f" );
-    m_GlobalTabLayout.AddYGap();
     m_GlobalTabLayout.AddDividerBox("Global Source Control");
     m_GlobalTabLayout.AddYGap();
 
@@ -212,11 +210,27 @@ void CfdMeshScreen::CreateGlobalTab()
     m_GlobalTabLayout.AddYGap();
     m_GlobalTabLayout.SetButtonWidth( 175.0 );
 
+    m_GlobalTabLayout.SetButtonWidth( m_GlobalTabLayout.GetW() / 3 );
+    m_GlobalTabLayout.SetSameLineFlag( true );
+    m_GlobalTabLayout.SetFitWidthFlag( false );
     m_GlobalTabLayout.AddButton( m_ToCubicToggle, "Demote Surfs to Cubic" );
-    m_GlobalTabLayout.AddSlider( m_ToCubicTolSlider, "Cubic Tolerance", 10, "%5.4g", 0, true );
+    m_GlobalTabLayout.SetFitWidthFlag( true );
+    m_GlobalTabLayout.AddSlider( m_ToCubicTolSlider, "Tolerance", 10, "%5.4g", 0, true );
+    m_GlobalTabLayout.ForceNewLine();
+
+    m_GlobalTabLayout.SetSameLineFlag( false );
+    m_GlobalTabLayout.SetFitWidthFlag( true );
+
+    m_GlobalTabLayout.AddYGap();
+    m_GlobalTabLayout.AddButton( m_SplitJoinSurfs, "Split and Join Surfaces" );
 
     m_GlobalTabLayout.AddYGap();
     m_GlobalTabLayout.AddButton( m_ConvertToQuadsToggle, "Convert to Quads" );
+
+    m_GlobalTabLayout.AddYGap();
+    m_GlobalTabLayout.AddDividerBox("Process Control");
+    m_GlobalTabLayout.AddYGap();
+    m_GlobalTabLayout.AddButton( m_ParallelMesh, "Run Multi-threaded" );
 
     globalTab->show();
 }
@@ -238,14 +252,21 @@ void CfdMeshScreen::CreateDisplayTab()
     m_DisplayTabLayout.SetFitWidthFlag( false );
     m_DisplayTabLayout.SetSameLineFlag( true );
 
-    m_DisplayTabLayout.AddButton( m_ColorFaces, "Color Mesh");
-    m_DisplayTabLayout.AddButton( m_ColorByTag, "By Tag" );
-    m_DisplayTabLayout.AddButton( m_ColorByReason, "By Reason" );
+    m_DisplayTabLayout.SetButtonWidth( m_DisplayTabLayout.GetW() / 5.0 );
+    m_DisplayTabLayout.AddButton( m_ColorFaces, "Color By:");
+    m_DisplayTabLayout.AddButton( m_ColorByTag, "Tag" );
+    m_DisplayTabLayout.AddButton( m_ColorByReason, "Reason" );
+    m_DisplayTabLayout.AddButton( m_ColorByQualityAngle, "Angle" );
+    m_DisplayTabLayout.AddButton( m_ColorByQualityLength, "Length" );
     m_DisplayTabLayout.ForceNewLine();
 
+    // The order the buttons are added is the value each one sets, so it has to match
+    // vsp::CFD_VIS_TYPE.
     m_ColorByToggleGroup.Init( this );
     m_ColorByToggleGroup.AddButton( m_ColorByTag.GetFlButton() );
     m_ColorByToggleGroup.AddButton( m_ColorByReason.GetFlButton() );
+    m_ColorByToggleGroup.AddButton( m_ColorByQualityAngle.GetFlButton() );
+    m_ColorByToggleGroup.AddButton( m_ColorByQualityLength.GetFlButton() );
 
     m_DisplayTabLayout.SetFitWidthFlag( true );
     m_DisplayTabLayout.SetSameLineFlag( false );
@@ -279,14 +300,15 @@ void CfdMeshScreen::CreateDisplayTab()
     m_DisplayTabLayout.SetFitWidthFlag( false );
     m_DisplayTabLayout.SetSameLineFlag( true );
 
+    m_DisplayTabLayout.SetButtonWidth( m_DisplayTabLayout.GetW() / 3.0 );
     m_DisplayTabLayout.AddButton( m_DrawIsect, "Show Intersection Curves");
     m_DisplayTabLayout.AddButton( m_DrawBorder, "Show Border Curves");
+    m_DisplayTabLayout.AddButton( m_DrawJoin, "Show Patch Join Curves");
     m_DisplayTabLayout.ForceNewLine();
+
+    m_DisplayTabLayout.SetButtonWidth( m_DisplayTabLayout.GetW() / 2.0 );
     m_DisplayTabLayout.AddButton( m_ShowCurve, "Show Curves");
     m_DisplayTabLayout.AddButton( m_ShowPts, "Show Points");
-    m_DisplayTabLayout.ForceNewLine();
-    m_DisplayTabLayout.AddButton( m_ShowRaw, "Show Raw Curve");
-    m_DisplayTabLayout.AddButton( m_ShowBinAdapt, "Show Binary Adapted");
     m_DisplayTabLayout.ForceNewLine();
 
     m_DisplayTabLayout.SetFitWidthFlag( true );
@@ -367,6 +389,7 @@ void CfdMeshScreen::CreateOutputTab()
     m_OutputTabLayout.SetSameLineFlag( true );
 
 
+    int sm_but_w = 40;
     int typebuttonw = 80;
     m_OutputTabLayout.SetButtonWidth(typebuttonw);
     m_OutputTabLayout.SetInputWidth( m_OutputTabLayout.GetW() - typebuttonw - 30 );
@@ -419,8 +442,30 @@ void CfdMeshScreen::CreateOutputTab()
     m_OutputTabLayout.SetButtonWidth( m_OutputTabLayout.GetRemainX() );
     m_OutputTabLayout.AddButton(m_SelectVspgeomFile, "...");
     m_OutputTabLayout.ForceNewLine();
-    m_OutputTabLayout.AddYGap();
+    m_OutputTabLayout.SetButtonWidth( typebuttonw );
+    m_OutputTabLayout.AddButton(m_PogsFile, "POGS");
 
+    m_OutputTabLayout.SetSliderWidth( 50 );
+    m_OutputTabLayout.AddCounter( m_PogsNRefCounter, "Num Ref." );
+
+    m_OutputTabLayout.SetInputWidth( m_OutputTabLayout.GetW() - 2 * typebuttonw - 30 - 50 );
+    m_OutputTabLayout.AddOutput(m_PogsOutput);
+    m_OutputTabLayout.SetButtonWidth( m_OutputTabLayout.GetRemainX() );
+    m_OutputTabLayout.AddButton(m_SelectPogsFile, "...");
+    m_OutputTabLayout.ForceNewLine();
+
+    // Only the POGS curves are adapted
+    m_OutputTabLayout.SetFitWidthFlag( true );
+    m_OutputTabLayout.SetSameLineFlag( false );
+    m_OutputTabLayout.SetButtonWidth( 2 * typebuttonw );
+    m_OutputTabLayout.AddSlider( m_RelCurveTolSlider, "Curve Relative Tol.", 0.01, "%7.5f" );
+    m_OutputTabLayout.SetFitWidthFlag( false );
+    m_OutputTabLayout.SetSameLineFlag( true );
+
+
+    m_OutputTabLayout.SetInputWidth( m_OutputTabLayout.GetW() - typebuttonw - 30 );
+
+    m_OutputTabLayout.AddYGap();
     m_OutputTabLayout.SetFitWidthFlag( true );
     m_OutputTabLayout.AddDividerBox("NASCART");
     m_OutputTabLayout.ForceNewLine();
@@ -932,6 +977,9 @@ bool CfdMeshScreen::Update()
 
 void CfdMeshScreen::UpdateGlobalTab()
 {
+    m_ParallelMesh.Update( m_Vehicle->GetCfdSettingsPtr()->m_ParallelMeshFlag.GetID() );
+    m_SplitJoinSurfs.Update( m_Vehicle->GetCfdSettingsPtr()->m_SplitJoinSurfsFlag.GetID() );
+
     //===== Global Mesh Control =====//
     m_MaxEdgeLenToggleGroup.Update( m_Vehicle->GetCfdGridDensityPtr()->m_BaseAbsRel.GetID() );
     if ( m_Vehicle->GetCfdGridDensityPtr()->m_BaseAbsRel() == vsp::ABS )
@@ -966,8 +1014,6 @@ void CfdMeshScreen::UpdateGlobalTab()
     m_NumCircleSegments.Update( m_Vehicle->GetCfdGridDensityPtr()->m_NCircSeg.GetID() );
     m_GrowthRatio.Update( m_Vehicle->GetCfdGridDensityPtr()->m_GrowRatio.GetID() );
     m_Rig3dGrowthLimit.Update( m_Vehicle->GetCfdGridDensityPtr()->m_RigorLimit.GetID() );
-
-    m_RelCurveTolSlider.Update( m_Vehicle->GetCfdSettingsPtr()->m_RelCurveTol.GetID() );
 
     //===== Geometry Control =====//
     m_IntersectSubsurfaces.Update( m_Vehicle->GetCfdSettingsPtr()->m_IntersectSubSurfs.GetID() );
@@ -1008,9 +1054,7 @@ void CfdMeshScreen::UpdateDisplayTab()
 
     m_DrawIsect.Update( m_Vehicle->GetCfdSettingsPtr()->m_DrawIsectFlag.GetID() );
     m_DrawBorder.Update( m_Vehicle->GetCfdSettingsPtr()->m_DrawBorderFlag.GetID() );
-
-    m_ShowRaw.Update( m_Vehicle->GetCfdSettingsPtr()->m_DrawRawFlag.GetID() );
-    m_ShowBinAdapt.Update( m_Vehicle->GetCfdSettingsPtr()->m_DrawBinAdaptFlag.GetID() );
+    m_DrawJoin.Update( m_Vehicle->GetCfdSettingsPtr()->m_DrawJoinFlag.GetID() );
 
     m_ShowCurve.Update( m_Vehicle->GetCfdSettingsPtr()->m_DrawCurveFlag.GetID() );
     m_ShowPts.Update( m_Vehicle->GetCfdSettingsPtr()->m_DrawPntsFlag.GetID() );
@@ -1044,6 +1088,8 @@ void CfdMeshScreen::UpdateOutputTab()
     m_TkeyOutput.Update( StringUtil::truncateFileName( tkeyname, 40).c_str() );
     string vspgeomname = m_Vehicle->GetCfdSettingsPtr()->GetExportFileName( vsp::CFD_VSPGEOM_FILE_NAME );
     m_VspgeomOutput.Update( StringUtil::truncateFileName( vspgeomname, 40 ).c_str() );
+    string pogsname = m_Vehicle->GetCfdSettingsPtr()->GetExportFileName( vsp::CFD_POGS_FILE_NAME );
+    m_PogsOutput.Update( StringUtil::truncateFileName( pogsname, 40 ).c_str() );
 
     //==== Update File Output Flags ====//
     m_StlFile.Update( m_Vehicle->GetCfdSettingsPtr()->GetExportFileFlag( vsp::CFD_STL_FILE_NAME )->GetID() );
@@ -1057,6 +1103,20 @@ void CfdMeshScreen::UpdateOutputTab()
     m_KeyFile.Update( m_Vehicle->GetCfdSettingsPtr()->GetExportFileFlag( vsp::CFD_KEY_FILE_NAME )->GetID() );
     m_TkeyFile.Update( m_Vehicle->GetCfdSettingsPtr()->GetExportFileFlag( vsp::CFD_TKEY_FILE_NAME)->GetID() );
     m_VspgeomFile.Update( m_Vehicle->GetCfdSettingsPtr()->GetExportFileFlag( vsp::CFD_VSPGEOM_FILE_NAME )->GetID() );
+    m_PogsFile.Update( m_Vehicle->GetCfdSettingsPtr()->GetExportFileFlag( vsp::CFD_POGS_FILE_NAME )->GetID() );
+    m_PogsNRefCounter.Update( m_Vehicle->GetCfdSettingsPtr()->m_POGSNRef.GetID() );
+    m_RelCurveTolSlider.Update( m_Vehicle->GetCfdSettingsPtr()->m_RelCurveTol.GetID() );
+
+    if ( m_Vehicle->GetCfdSettingsPtr()->GetExportFileFlag( vsp::CFD_POGS_FILE_NAME )->Get() )
+    {
+        m_PogsNRefCounter.Activate();
+        m_RelCurveTolSlider.Activate();
+    }
+    else
+    {
+        m_PogsNRefCounter.Deactivate();
+        m_RelCurveTolSlider.Deactivate();
+    }
 
 }
 
@@ -1532,6 +1592,14 @@ void CfdMeshScreen::GuiDeviceOutputTabCallback( GuiDevice* device )
         if ( newfile.compare( "" ) != 0 )
         {
             m_Vehicle->GetCfdSettingsPtr()->SetExportFileName( newfile, vsp::CFD_VSPGEOM_FILE_NAME );
+        }
+    }
+    else if ( device == &m_SelectPogsFile )
+    {
+        string newfile = m_ScreenMgr->FileChooser( "Select POGS .i.tri file.", "*.i.tri", vsp::SAVE );
+        if ( newfile.compare( "" ) != 0 )
+        {
+            m_Vehicle->GetCfdSettingsPtr()->SetExportFileName( newfile, vsp::CFD_POGS_FILE_NAME );
         }
     }
 }

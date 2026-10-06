@@ -9,27 +9,104 @@
 #define VSPHINGEGEOM__INCLUDED_
 
 #include "Geom.h"
+#include "GeomInterface.h"
 
+
+//==== A Geom that articulates its children ====//
+// Implemented by HingeGeom and by a Clone standing in for one.  Children ride the joint.
+class JointRole : virtual public GeomInterface
+{
+public:
+    // The behavior type this role belongs to; checked by Geom::CastTo.
+    static int BehaviorType()   { return HINGE_GEOM_TYPE; }
+
+    // Which axis of the Geom's own frame the joint moves along and turns about.
+    virtual int GetJointPrimaryDir() const = 0;
+
+    // The deflection this Geom is posed at.  Each Clone of a joint has its own.
+    virtual double GetJointTranslate() const = 0;
+    virtual double GetJointRotate() const = 0;
+
+    // Pose the joint.  A Clone writes its own deflection; a hinge writes its own Parms.
+    virtual void SetJointTranslate( double val ) = 0;
+    virtual void SetJointRotate( double val ) = 0;
+
+    // The allowed motion: returns whether it is enabled, with a flag for each limit that is set.
+    virtual bool GetJointTransMotion( bool &min_set, double &min_val, bool &max_set, double &max_val ) const = 0;
+    virtual bool GetJointRotMotion( bool &min_set, double &min_val, bool &max_set, double &max_val ) const = 0;
+
+    // Apply this joint's motion flags and limits to another Geom's Parms.
+    virtual void SetJointParmLimits( Parm &translate, Parm &rotate ) = 0;
+
+    // The joint motion for a given deflection.
+    virtual Matrix4d BuildJointMatrix( double translate, double rotate, const Matrix4d &model_matrix ) const = 0;
+
+    // The same motion seen through a flip; the frame stays unreflected.
+    Matrix4d BuildFlippedJointMatrix( double translate, double rotate, const Matrix4d &model_matrix, const Matrix4d &flip_mat ) const;
+
+    // Where the joint has carried its children, from this Geom's own deflection and placement.
+    virtual Matrix4d GetJointMatrix() const;
+
+    // The line the joint moves along, in world coordinates.  See the definition.
+    vec3d GetJointAxis() const;
+
+    // The axis the joint turns about, positive by the right-hand rule, in world coordinates.
+    vec3d GetJointRotationAxis() const;
+};
 
 //==== Hinge Geom ====//
-class HingeGeom : public Geom
+class HingeGeom : public Geom, public JointRole
 {
 public:
     HingeGeom( Vehicle* vehicle_ptr );
     virtual ~HingeGeom();
 
-    virtual void ApplyScale( double currentScale );
+    virtual void ApplyScale( double currentScale ) override;
 
-    virtual void UpdateXForm();
+    virtual void UpdateXForm() override;
 
 
     virtual void UpdateMotionFlagsLimits();
 
-    virtual void UpdateDrawObj();
-    virtual void LoadMainDrawObjs(vector< DrawObj* > & draw_obj_vec);
-    virtual void LoadDrawObjs(vector< DrawObj* > & draw_obj_vec);
+    virtual void UpdateDrawObj() override;
+    virtual void BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec ) override;
+    virtual void SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec ) override;
+    virtual void LoadMainDrawObjs(vector< DrawObj* > & draw_obj_vec) override;
 
-    virtual Matrix4d GetJointMatrix();
+    // The frame the joint turns about is what there is of a Hinge to pick.
+    virtual bool LoadsMarkersAsMain() override
+    {
+        return true;
+    }
+    virtual void LoadDrawObjs(vector< DrawObj* > & draw_obj_vec) override;
+
+    virtual int GetJointPrimaryDir() const override
+    {
+        return m_PrimaryDir();
+    }
+
+    // Built once in UpdateXForm.
+    virtual Matrix4d GetJointMatrix() const override;
+    virtual double GetJointTranslate() const override
+    {
+        return m_JointTranslate();
+    }
+    virtual void SetJointTranslate( double val ) override
+    {
+        m_JointTranslate.Set( val );
+    }
+    virtual double GetJointRotate() const override
+    {
+        return m_JointRotate();
+    }
+    virtual void SetJointRotate( double val ) override
+    {
+        m_JointRotate.Set( val );
+    }
+    virtual Matrix4d BuildJointMatrix( double translate, double rotate, const Matrix4d &model_matrix ) const override;
+    virtual void SetJointParmLimits( Parm &translate, Parm &rotate ) override;
+    virtual bool GetJointTransMotion( bool &min_set, double &min_val, bool &max_set, double &max_val ) const override;
+    virtual bool GetJointRotMotion( bool &min_set, double &min_val, bool &max_set, double &max_val ) const override;
 
     Parm m_JointTranslate;
     BoolParm m_JointTranslateFlag;
@@ -83,12 +160,10 @@ public:
 
 
 protected:
-    virtual void UpdateSurf();
+    virtual void UpdateSurf() override;
 
-    DrawObj m_MotionLinesDO;
-    DrawObj m_MotionArrowsDO;
-
-    DrawObj m_PrimaryLineDO;
+    // The markers: the two frames' axes, then the motion and the primary direction.
+    enum { HINGE_MARKER_MOTION_ARROWS = 6, HINGE_MARKER_MOTION_LINES, HINGE_MARKER_PRIMARY_LINE, NUM_HINGE_MARKERS };
 
     Matrix4d m_JointMatrix;
 

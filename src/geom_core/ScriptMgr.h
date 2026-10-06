@@ -244,7 +244,9 @@ private:
     CScriptArray* GetEditXSecFixedUVec( const string& xsec_id );
     void SetEditXSecFixedUVec( const string & xsec_id, CScriptArray* fixed_u_vec );
 
-    void DeleteGeomVec( CScriptArray* del_arr );
+    void DeleteGeomVec( CScriptArray* del_arr, int clone_delete );
+    CScriptArray* CloneGeomVec( CScriptArray* geom_arr, const string & name_suffix );
+    CScriptArray* FindGeomClones( CScriptArray* geom_arr );
 
     void SetXSecPnts( const string& xsec_id, CScriptArray* pnt_arr );
     void SetAirfoilUpperPnts( const string& xsec_id, CScriptArray* up_pnt_arr );
@@ -358,6 +360,7 @@ private:
     void ProjVecPnt01(const string &geom_id, const int &surf_indx, CScriptArray* pts, CScriptArray* us, CScriptArray* ws, CScriptArray* ds );
     void ProjVecPnt01Guess(const string &geom_id, const int &surf_indx, CScriptArray* pts, CScriptArray* u0s, CScriptArray* w0s, CScriptArray* us, CScriptArray* ws, CScriptArray* ds );
     void GetUWTess01(const string &geom_id, const int &surf_indx, CScriptArray* us, CScriptArray* ws );
+    CScriptArray* ControlSurfaceHingeLine( const std::string & id, const int & surf_indx );
     void AxisProjVecPnt01(const string &geom_id, const int &surf_indx, const int &iaxis, CScriptArray* pts, CScriptArray* us, CScriptArray* ws, CScriptArray* ds );
     void AxisProjVecPnt01Guess(const string &geom_id, const int &surf_indx, const int &iaxis, CScriptArray* pts, CScriptArray* u0s, CScriptArray* w0s, CScriptArray* us, CScriptArray* ws, CScriptArray* ds );
     CScriptArray* VecInsideSurf( const string &geom_id, const int &surf_indx, CScriptArray* pts );

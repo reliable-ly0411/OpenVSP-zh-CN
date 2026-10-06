@@ -47,6 +47,13 @@ using std::vector;
 void SplitSurfsU( vector< piecewise_surface_type > &surfvec, const vector < double > &USplit );
 void SplitSurfsW( vector< piecewise_surface_type > &surfvec, const vector < double > &WSplit );
 
+// As above, but carrying each surface's record of where it came from and cutting that to
+// match.  regionvec runs parallel to surfvec throughout.
+void SplitSurfsU( vector< piecewise_surface_type > &surfvec, const vector < double > &USplit,
+                  vector< vector< UWRegion > > &regionvec );
+void SplitSurfsW( vector< piecewise_surface_type > &surfvec, const vector < double > &WSplit,
+                  vector< vector< UWRegion > > &regionvec );
+
 class VspSurf
 {
 public:
@@ -257,7 +264,7 @@ public:
     bool CapUMax(int capType, double len, double str, double offset, const vec3d &ptoff, bool swflag);
     bool CapUHandler(int whichCap, int CapType, double len, double str, double offset, const vec3d &pt, bool swflag);
 
-    void FetchXFerSurf( const std::string &geom_id, const std::string &name, int surf_ind, int comp_ind, int copyindex, int part_surf_num, vector< XferSurf > &xfersurfs, const vector < double > &usuppress = std::vector< double >(), const vector < double > &wsuppress = std::vector< double >() ) const;
+    void FetchXFerSurf( const std::string &geom_id, const std::string &name, int surf_ind, int comp_ind, int copyindex, int part_surf_num, vector< XferSurf > &xfersurfs, const vector < double > &usuppress = std::vector< double >(), const vector < double > &wsuppress = std::vector< double >(), const vector < double > &utess = std::vector< double >(), const vector < double > &wtess = std::vector< double >(), bool capumin = false, bool capumax = false, bool splitjoin = true ) const;
 
     void ResetUSkip() const;
     void FlagDuplicate( const VspSurf &othersurf ) const;
@@ -289,6 +296,7 @@ public:
     // void TessAdaptLine( double umin, double umax, double wmin, double wmax, const vec3d & pmin, const vec3d & pmax, std::vector< vec3d > & pts, double tol, int Nlimit, int Nadapt = 0 ) const;
 
     void SplitSurfs( vector< piecewise_surface_type > &surfvec, const vector < double > &usuppress, const vector < double > &wsuppress ) const;
+    void SplitSurfs( vector< piecewise_surface_type > &surfvec, const vector < double > &usuppress, const vector < double > &wsuppress, vector< vector< UWRegion > > &regionvec ) const;
     void SplitSurfs( vector< piecewise_surface_type > &surfvec ) const;
 
     void TrimU( double u, bool before );

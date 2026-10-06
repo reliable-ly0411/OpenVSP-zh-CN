@@ -102,7 +102,8 @@ void RoutingPoint::Update()
             double tempMat[16];
             parentMat.getMat( tempMat );
 
-            WingGeom* wing_parent = dynamic_cast < WingGeom * > ( g );
+            // Eta from the wing shown; the surface from the Geom the point is on.
+            WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( g->GetBehaviorGeom() );
 
             // Parent CompXXXCoordSys methods query the positioned m_SurfVec[0] surface,
             // not m_MainSurfVec[0].  Consequently, m_ModelMatrix is already implied in
@@ -128,10 +129,10 @@ void RoutingPoint::Update()
                     {
                         double l = m_Eta();
 
-                        if (wing_parent)
+                        if (behavior_wing)
                         {
                             double umax = g->GetMainUMapMax( m_SurfIndx() );
-                            double u = wing_parent->EtatoU( m_Eta()) / umax;
+                            double u = behavior_wing->EtatoU( m_Eta()) / umax;
 
                             double r = u;
                             g->ConvertRtoL( m_SurfIndx(), r, l );
@@ -244,17 +245,13 @@ void RoutingPoint::UpdateParms()
 
     if ( parent )
     {
-        if ( parent->GetType().m_Type == MESH_GEOM_TYPE ||
-             parent->GetType().m_Type == WIRE_FRAME_GEOM_TYPE ||
-             parent->GetType().m_Type == BLANK_GEOM_TYPE ||
-             parent->GetType().m_Type == HINGE_GEOM_TYPE ||
-             parent->GetType().m_Type == HUMAN_GEOM_TYPE ||
-             parent->GetType().m_Type == PT_CLOUD_GEOM_TYPE )
+        if ( parent->isNonSurfaceType() )
         {
             return;
         }
 
-        WingGeom* wing_parent = dynamic_cast < WingGeom * > ( parent );
+        // Eta stations come from the wing shown, whether the parent is the wing or a Clone of it.
+        WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent->GetBehaviorGeom() );
 
         const VspSurf * surf = parent->GetMainSurfPtr( parent->GetMainSurfID( m_SurfIndx() ) );
 
@@ -300,11 +297,11 @@ void RoutingPoint::UpdateParms()
                 m_L.Set( val / lmax );
             }
 
-            if ( wing_parent )
+            if ( behavior_wing )
             {
                 if ( m_CoordType() == vsp::ROUTE_PT_EtaMN ) // Eta is active.
                 {
-                    double u = wing_parent->EtatoU( m_Eta() ) / umax;
+                    double u = behavior_wing->EtatoU( m_Eta() ) / umax;
 
                     double r;
                     r = u;
@@ -339,13 +336,13 @@ void RoutingPoint::UpdateParms()
                 }
                 else if ( m_CoordType() == vsp::ROUTE_PT_UV ) // UV is active
                 {
-                    m_Eta = wing_parent->UtoEta( m_U() * umax );
+                    m_Eta = behavior_wing->UtoEta( m_U() * umax );
                 }
                 else if ( m_CoordType() == vsp::ROUTE_PT_RST ) // RST is active
                 {
                     double r = m_R();
                     double u = r;
-                    m_Eta = wing_parent->UtoEta( u * umax );
+                    m_Eta = behavior_wing->UtoEta( u * umax );
                 }
                 else if ( m_CoordType() == vsp::ROUTE_PT_LMN ) // LMN is active
                 {
@@ -353,11 +350,11 @@ void RoutingPoint::UpdateParms()
                     double r;
                     parent->ConvertLtoR( m_SurfIndx(), l, r );
                     double u = r;
-                    m_Eta = wing_parent->UtoEta( u * umax );
+                    m_Eta = behavior_wing->UtoEta( u * umax );
                 }
                 else // Nothing is active, use U value anyway.
                 {
-                    m_Eta = wing_parent->UtoEta( m_U() * umax );
+                    m_Eta = behavior_wing->UtoEta( m_U() * umax );
                 }
             }
 
@@ -586,10 +583,6 @@ RoutingGeom::RoutingGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
     m_Picking = false;
     m_ActivePointIndex = -1;
 
-    m_RouteLineDO.m_Type = DrawObj::VSP_LINES;
-    m_RouteLineDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_RouteLineDO.m_LineWidth = 2.0;
-
     m_DynamicRouteDO.m_Type = DrawObj::VSP_ROUTING;
     m_DynamicRouteDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
 
@@ -751,15 +744,22 @@ void RoutingGeom::OffsetXSecs( double off )
 {
 }
 
-vector < TetraMassProp* > RoutingGeom::ComputeMassProp()
+vector < TetraMassProp* > RouteRole::ComputeMassProp() const
 {
-    double ld = m_LinearDensity();
+    // The mass is reported as belonging to the Geom asked.
+    const Geom* geom_ptr = dynamic_cast < const Geom* > ( this );
+    if ( !geom_ptr )
+    {
+        return vector < TetraMassProp* > ();
+    }
+
+    double ld = GetRouteLinearDensity();
     vector < TetraMassProp* > mpv;
     for ( int i = 0; i < m_RouteTessCurveVec.size(); i++ )
     {
         if ( !m_RouteTessCurveVec[ i ].m_ptline.empty() )
         {
-            vector < vec3d > &pts = m_RouteTessCurveVec[ i ].m_ptline[0];
+            const vector < vec3d > &pts = m_RouteTessCurveVec[ i ].m_ptline[0];
 
             vec3d cg;
             double mass = 0;
@@ -800,8 +800,8 @@ vector < TetraMassProp* > RoutingGeom::ComputeMassProp()
 
             TetraMassProp* mp = new TetraMassProp();
 
-            mp->m_CompId = GetID();
-            mp->m_Name = GetName() + "_rg";
+            mp->m_CompId = geom_ptr->GetID();
+            mp->m_Name = geom_ptr->GetName() + "_rg";
 
             mp->m_Density = 0.0;
             mp->m_Vol  = 0.0;
@@ -891,7 +891,7 @@ RoutingPoint * RoutingGeom::GetPt( int index )
     return nullptr;
 }
 
-vec3d RoutingGeom::GetPtCoord( int index, int symm_index )
+vec3d RouteRole::GetRoutePtCoord( int index, int symm_index ) const
 {
     if ( symm_index >= 0 && symm_index < m_RouteTessVec.size() )
     {
@@ -906,7 +906,7 @@ vec3d RoutingGeom::GetPtCoord( int index, int symm_index )
     return vec3d();
 }
 
-vector < vec3d > RoutingGeom::GetAllPtCoord( int symm_index )
+vector < vec3d > RouteRole::GetAllRoutePtCoord( int symm_index ) const
 {
     if ( symm_index >= 0 && symm_index < m_RouteTessVec.size() )
     {
@@ -918,7 +918,7 @@ vector < vec3d > RoutingGeom::GetAllPtCoord( int symm_index )
     return vector < vec3d >();
 }
 
-vector < vec3d > RoutingGeom::GetCurve( int symm_index )
+vector < vec3d > RouteRole::GetRouteCurve( int symm_index ) const
 {
     if ( symm_index >= 0 && symm_index < m_RouteTessCurveVec.size() )
     {
@@ -1142,21 +1142,48 @@ void RoutingGeom::UpdateSymmAttach()
     Geom::UpdateSymmAttach( 1 );                 // Currently hard-coded to 1.
 }
 
-void RoutingGeom::UpdateBBox()
+void RouteRole::BuildRouteBndBox( BndBox &bbox ) const
 {
-    //==== Load Bounding Box ====//
-    BndBox new_box;
-
     for ( int i = 0 ; i < m_RouteTessVec.size() ; i++ )
     {
         for( int j = 0; j < m_RouteTessVec[i].m_ptline.size(); j++ )
         {
             for ( int k = 0; k < m_RouteTessVec[i].m_ptline[j].size(); k++ )
             {
-                new_box.Update( m_RouteTessVec[i].m_ptline[j][k] );
+                bbox.Update( m_RouteTessVec[i].m_ptline[j][k] );
             }
         }
     }
+}
+
+void RouteRole::BuildRouteLineDrawObj( DrawObj &dobj ) const
+{
+    dobj.m_Type = DrawObj::VSP_LINES;
+    dobj.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    dobj.m_LineWidth = 2.0;
+
+    dobj.m_PntVec.clear();
+    dobj.m_GeomChanged = true;
+
+    for ( int i = 0 ; i < m_RouteTessCurveVec.size() ; i++ )
+    {
+        for( int j = 0; j < m_RouteTessCurveVec[i].m_ptline.size(); j++ )
+        {
+            for ( int k = 0; k < (int) m_RouteTessCurveVec[i].m_ptline[j].size() - 1; k++ )
+            {
+                dobj.m_PntVec.push_back( m_RouteTessCurveVec[i].m_ptline[j][ k ] );
+                dobj.m_PntVec.push_back( m_RouteTessCurveVec[i].m_ptline[j][ k + 1 ] );
+            }
+        }
+    }
+}
+
+void RoutingGeom::UpdateBBox()
+{
+    //==== Load Bounding Box ====//
+    BndBox new_box;
+
+    BuildRouteBndBox( new_box );
 
     if ( new_box != m_BBox )
     {
@@ -1198,26 +1225,12 @@ void RoutingGeom::UpdateDrawObj()
 {
     Geom::UpdateDrawObj();
 
-    m_RouteLineDO.m_PntVec.clear();
-    m_DynamicRouteDO.m_PntVec.clear();
-
-    m_RouteLineDO.m_GeomChanged = true;
-    m_DynamicRouteDO.m_GeomChanged = true;
-
+    BuildRouteLineDrawObj( m_RouteLineDO );
     m_RouteLineDO.m_GeomID = "Rte_" + m_ID;
-    m_DynamicRouteDO.m_GeomID = "DyRte_" + m_ID;
 
-    for ( int i = 0 ; i < m_RouteTessCurveVec.size() ; i++ )
-    {
-        for( int j = 0; j < m_RouteTessCurveVec[i].m_ptline.size(); j++ )
-        {
-            for ( int k = 0; k < (int) m_RouteTessCurveVec[i].m_ptline[j].size() - 1; k++ )
-            {
-                m_RouteLineDO.m_PntVec.push_back( m_RouteTessCurveVec[i].m_ptline[j][ k ] );
-                m_RouteLineDO.m_PntVec.push_back( m_RouteTessCurveVec[i].m_ptline[j][ k + 1 ] );
-            }
-        }
-    }
+    m_DynamicRouteDO.m_PntVec.clear();
+    m_DynamicRouteDO.m_GeomChanged = true;
+    m_DynamicRouteDO.m_GeomID = "DyRte_" + m_ID;
 
 
     // Dynamic points need to include points currently being placed.

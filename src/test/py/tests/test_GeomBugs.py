@@ -282,6 +282,61 @@ def testATexturesPlacementSurvivesAFile():
     assert_no_errors()
 
 
+def testAMeshSourceNeedsASurfaceToSitOn():
+    """A source on a Geom with no surface crashed the mesher.
+
+    AddCFDSource took any surface index, including one on a Blank, which has no surfaces at
+    all.  Geom::UpdateSources then looked up the symmetric copies of a surface that was not
+    there and read through an empty list -- a segfault on every mesh of the model, which is
+    what adding a source to every Geom of sbw or x57 did.  The API now refuses the index, and
+    a source that names a surface the Geom does not have, however it got there, is left out.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+
+    blank = vsp.AddGeom( "BLANK" )
+    pod = vsp.AddGeom( "POD" )
+    vsp.Update()
+
+    mgr = vsp.ErrorMgrSingleton.getInstance()
+    for src in ( vsp.ULINE_SOURCE, vsp.WLINE_SOURCE, vsp.POINT_SOURCE ):
+        before = mgr.GetNumTotalErrors()
+        vsp.AddCFDSource( src, blank, 0, 0.1, 0.2, 0.5, 0.5 )
+        assert mgr.GetNumTotalErrors() == before + 1
+        assert mgr.PopLastError().GetErrorCode() == vsp.VSP_INDEX_OUT_RANGE
+
+    before = mgr.GetNumTotalErrors()
+    vsp.AddCFDSource( vsp.ULINE_SOURCE, pod, 1, 0.1, 0.2, 0.5, 0.0 )
+    assert mgr.GetNumTotalErrors() == before + 1
+    assert mgr.PopLastError().GetErrorCode() == vsp.VSP_INDEX_OUT_RANGE
+
+    vsp.AddCFDSource( vsp.ULINE_SOURCE, pod, 0, 0.1, 0.2, 0.5, 0.0 )
+    vsp.AddCFDSource( vsp.WLINE_SOURCE, pod, 0, 0.1, 0.2, 0.0, 0.5 )
+    assert_no_errors()
+
+    out = tempfile.mkdtemp()
+    vsp.SetVSP3FileName( os.path.join( out, "source.vsp3" ) )
+    vsp.SetCFDMeshVal( vsp.CFD_MAX_EDGE_LEN, 0.5 )
+    vsp.SetCFDMeshVal( vsp.CFD_MIN_EDGE_LEN, 0.1 )
+    vsp.ComputeCFDMesh( vsp.SET_ALL, vsp.SET_NONE, vsp.CFD_TRI_TYPE )
+    assert os.path.getsize( os.path.join( out, "source.tri" ) ) > 0
+
+    # A source whose surface index is out of range by the time it is meshed -- here, edited in
+    # the file -- is left out rather than read through.
+    path = os.path.join( out, "bad.vsp3" )
+    vsp.WriteVSPFile( path )
+    text = open( path ).read()
+    assert text.count( '<MainSurfIndx Value="0' ) >= 2
+    open( path, "w" ).write( text.replace( '<MainSurfIndx Value="0', '<MainSurfIndx Value="7' ) )
+    vsp.VSPRenew()
+    vsp.ReadVSPFile( path )
+    vsp.Update()
+    drop_errors()
+    vsp.SetVSP3FileName( os.path.join( out, "bad.vsp3" ) )
+    vsp.ComputeCFDMesh( vsp.SET_ALL, vsp.SET_NONE, vsp.CFD_TRI_TYPE )
+    assert os.path.getsize( os.path.join( out, "bad.tri" ) ) > 0
+
+
 def a_texture_file():
     """An image from the repo, by a path that does not depend on the working directory."""
     here = os.path.dirname( os.path.abspath( __file__ ) )
@@ -487,3 +542,66 @@ def testAFileSectionRefusesPointsItCannotShape( points ):
     vsp.Update()
     assert em.GetNumTotalErrors() == 0
     assert vsp.GetParmVal( vsp.GetXSecParm( xs, "Width" ) ) == pytest.approx( 1.0 )
+
+
+def testAHumanWithAxialSymmetryOnAReflectedCopyIsNotInsideOut():
+    """Axial copies of a reflected Human keep the reflection's winding, so planar plus axial
+    symmetry gives twice the volume of axial alone."""
+    vsp.VSPRenew()
+    drop_errors()
+    scratch = tempfile.mkdtemp()
+    vsp.SetComputationFileName( vsp.COMP_GEOM_TXT_TYPE, os.path.join( scratch, "cg.txt" ) )
+    vsp.SetComputationFileName( vsp.COMP_GEOM_CSV_TYPE, os.path.join( scratch, "cg.csv" ) )
+
+    def volume( planar ):
+        vsp.VSPRenew()
+        human = vsp.AddGeom( "HUMAN" )
+        for parm, val in ( ( "Y_Rel_Location", 5.0 ), ( "Z_Rel_Location", 5.0 ) ):
+            vsp.SetParmVal( vsp.FindParm( human, parm, "XForm" ), val )
+        vsp.SetParmVal( vsp.FindParm( human, "Sym_Planar_Flag", "Sym" ), planar )
+        vsp.SetParmVal( vsp.FindParm( human, "Sym_Axial_Flag", "Sym" ), vsp.SYM_ROT_X )
+        vsp.SetParmVal( vsp.FindParm( human, "Sym_Rot_N", "Sym" ), 2 )
+        vsp.Update()
+        vsp.ComputeCompGeom( vsp.SET_ALL, False, 0 )
+        res = vsp.FindLatestResultsID( "Comp_Geom" )
+        return sum( vsp.GetDoubleResults( res, "Theo_Vol" ) )
+
+    axial = volume( 0 )
+    assert axial > 0.0
+    assert volume( vsp.SYM_XZ ) == pytest.approx( 2.0 * axial )
+    drop_errors()
+
+
+def _pov_signed_volume( path ):
+    """Signed volume of the triangles in a POV-Ray include file."""
+    import re
+    total = 0.0
+    for block in re.findall( r'smooth_triangle \{(.*?)\}', open( path ).read(), re.S ):
+        vecs = re.findall( r'<([^>]*)>', block )
+        a, b, c = ( tuple( float( t ) for t in vecs[i].split( ',' ) ) for i in ( 0, 2, 4 ) )
+        total += ( a[0] * ( b[1] * c[2] - b[2] * c[1] )
+                 - a[1] * ( b[0] * c[2] - b[2] * c[0] )
+                 + a[2] * ( b[0] * c[1] - b[1] * c[0] ) ) / 6.0
+    return total
+
+
+def testAPovRayFileWindsAReflectedCopyTheWayItsNormalsPoint():
+    """A POV-Ray export winds a symmetric copy outward, so it adds to the volume."""
+    vsp.VSPRenew()
+    drop_errors()
+    scratch = tempfile.mkdtemp()
+
+    def written( planar ):
+        vsp.VSPRenew()
+        pod = vsp.AddGeom( "POD" )
+        vsp.SetParmVal( vsp.FindParm( pod, "Sym_Planar_Flag", "Sym" ), planar )
+        vsp.SetParmVal( vsp.FindParm( pod, "Y_Rel_Location", "XForm" ), 3.0 )
+        vsp.Update()
+        path = os.path.join( scratch, "pod_%d.pov" % planar )
+        vsp.ExportFile( path, vsp.SET_ALL, vsp.EXPORT_POVRAY )
+        return _pov_signed_volume( path.replace( ".pov", ".inc" ) )
+
+    one = written( 0 )
+    assert one > 0.0
+    assert written( vsp.SYM_XZ ) == pytest.approx( 2.0 * one, rel = 1e-9 )
+    drop_errors()

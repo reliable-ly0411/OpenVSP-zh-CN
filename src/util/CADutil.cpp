@@ -10,8 +10,10 @@
 #include "CADutil.h"
 #include "VspSurf.h"
 #include "PntNodeMerge.h"
+#include "FileUtil.h"
 #include "main.h"
 #include <float.h>
+#include <ctime>
 
 //===================================================================//
 //=================        STEP Functions         ===================//
@@ -20,8 +22,11 @@
 STEPutil::STEPutil( const int & len, const double & tol )
 {
     context = nullptr;
+    param_context = nullptr;
     shape_rep = nullptr;
     pshape = nullptr;
+    file_name = nullptr;
+    product = nullptr;
 
     // The registry contains information about types present in the current schema; SchemaInit is a function in the schema-specific SDAI library
     registry = new Registry( SchemaInit );
@@ -35,9 +40,11 @@ STEPutil::STEPutil( const int & len, const double & tol )
     // Build file header
     header_instances = sfile->HeaderInstances();
 
-    string tolstr = std::to_string( tol );
+    // A STEP real, which needs its decimal point
+    char tolstr[64];
+    snprintf( tolstr, sizeof( tolstr ), "%.17E", tol );
 
-    STEPBoilerplate( (vsp::LEN_UNITS) len, tolstr.c_str() );
+    STEPBoilerplate( (vsp::LEN_UNITS) len, tolstr );
 }
 
 STEPutil::~STEPutil()
@@ -425,6 +432,75 @@ STEPcomplex * STEPutil::Geometric_Context( const vsp::LEN_UNITS & len, const vsp
     return complex_entity;
 }
 
+SdaiCartesian_point * STEPutil::MakePoint2D( const double & u, const double & v )
+{
+    SdaiCartesian_point * pnt = ( SdaiCartesian_point * ) registry->ObjCreate( "CARTESIAN_POINT" );
+    pnt->name_( "''" );
+
+    RealAggregate * coords = pnt->coordinates_();
+
+    RealNode * unode = new RealNode();
+    unode->value = u;
+    coords->AddNode( unode );
+
+    RealNode * vnode = new RealNode();
+    vnode->value = v;
+    coords->AddNode( vnode );
+
+    instance_list->Append( ( SDAI_Application_instance * ) pnt, completeSE );
+
+    return pnt;
+}
+
+STEPcomplex * STEPutil::Parametric_Context()
+{
+    if ( param_context )
+    {
+        return param_context;
+    }
+
+    const char * entNmArr[4] = { "geometric_representation_context", "parametric_representation_context", "representation_context", "*" };
+    param_context = new STEPcomplex( registry, ( const char ** ) entNmArr, 0 );
+
+    STEPattribute * attr;
+    STEPcomplex * stepcomplex = param_context->head;
+
+    while( stepcomplex )
+    {
+        if( !strcmp( stepcomplex->EntityName(), "Geometric_Representation_Context" ) )
+        {
+            stepcomplex->ResetAttributes();
+            while( ( attr = stepcomplex->NextAttribute() ) != nullptr )
+            {
+                if( !strcmp( attr->Name(), "coordinate_space_dimension" ) )
+                {
+                    attr->StrToVal( "2" );
+                }
+            }
+        }
+
+        if( !strcmp( stepcomplex->EntityName(), "Representation_Context" ) )
+        {
+            stepcomplex->ResetAttributes();
+            while( ( attr = stepcomplex->NextAttribute() ) != nullptr )
+            {
+                if( !strcmp( attr->Name(), "context_identifier" ) )
+                {
+                    attr->StrToVal( "'2D SPACE'" );
+                }
+                if( !strcmp( attr->Name(), "context_type" ) )
+                {
+                    attr->StrToVal( "''" );
+                }
+            }
+        }
+        stepcomplex = stepcomplex->sc;
+    }
+    instance_list->Append( ( SDAI_Application_instance * ) param_context, completeSE );
+
+    return param_context;
+}
+
 SdaiCartesian_point * STEPutil::MakePoint( const double & x, const double & y, const double & z )
 {
     SdaiCartesian_point * pnt = ( SdaiCartesian_point * ) registry->ObjCreate( "CARTESIAN_POINT" );
@@ -492,23 +568,47 @@ SdaiAxis2_placement_3d * STEPutil::DefaultAxis( )
 
 SdaiDate_and_time * STEPutil::DateTime( )
 {
+    // The local time, and its offset from UTC
+    std::time_t now = std::time( nullptr );
+    std::tm loc = std::tm();
+    std::tm utc = std::tm();
+#ifdef _WIN32
+    localtime_s( &loc, &now );
+    gmtime_s( &utc, &now );
+#else
+    localtime_r( &now, &loc );
+    gmtime_r( &now, &utc );
+#endif
+
+    // mktime reads the UTC time as local, so it trails now by the offset
+    utc.tm_isdst = loc.tm_isdst;
+    int offset = ( int ) std::difftime( now, std::mktime( &utc ) );
+
     SdaiCalendar_date * caldate = ( SdaiCalendar_date * ) registry->ObjCreate( "CALENDAR_DATE" );
     instance_list->Append( ( SDAI_Application_instance * ) caldate, completeSE );
-    caldate->year_component_( 2000 );
-    caldate->month_component_( 1 );
-    caldate->day_component_( 1 );
+    caldate->year_component_( loc.tm_year + 1900 );
+    caldate->month_component_( loc.tm_mon + 1 );
+    caldate->day_component_( loc.tm_mday );
 
     SdaiCoordinated_universal_time_offset * tzone = ( SdaiCoordinated_universal_time_offset * ) registry->ObjCreate( "COORDINATED_UNIVERSAL_TIME_OFFSET" );
     instance_list->Append( ( SDAI_Application_instance * ) tzone, completeSE );
-    tzone->hour_offset_( 0 );
-    tzone->minute_offset_( 0 );
-    tzone->sense_( Ahead_or_behind__behind );
+    if ( offset < 0 )
+    {
+        tzone->sense_( Ahead_or_behind__behind );
+        offset = -offset;
+    }
+    else
+    {
+        tzone->sense_( Ahead_or_behind__ahead );
+    }
+    tzone->hour_offset_( offset / 3600 );
+    tzone->minute_offset_( ( offset % 3600 ) / 60 );
 
     SdaiLocal_time * loctime = ( SdaiLocal_time * ) registry->ObjCreate( "LOCAL_TIME" );
     instance_list->Append( ( SDAI_Application_instance * ) loctime, completeSE );
-    loctime->hour_component_( 12 );
-    loctime->minute_component_( 0 );
-    loctime->second_component_( 0 );
+    loctime->hour_component_( loc.tm_hour );
+    loctime->minute_component_( loc.tm_min );
+    loctime->second_component_( loc.tm_sec );
     loctime->zone_( tzone );
 
     SdaiDate_and_time * date_time = ( SdaiDate_and_time * ) registry->ObjCreate( "DATE_AND_TIME" );
@@ -569,20 +669,22 @@ void  STEPutil::STEPBoilerplate( const vsp::LEN_UNITS & len, const char * tolstr
     registry->ResetSchemas();
     registry->ResetEntities();
 
+    // STEPfile stamps the time as it writes
     SdaiFile_name * fn = ( SdaiFile_name * ) sfile->HeaderDefaultFileName();
     header_instances->Append( ( SDAI_Application_instance * ) fn, completeSE );
-    fn->name_( "'outfile.stp'" );
+    fn->name_( "''" );
     fn->time_stamp_( "''" );
     fn->author_()->AddNode( new StringNode( "''" ) );
     fn->organization_()->AddNode( new StringNode( "''" ) );
     fn->preprocessor_version_( "''" );
-    fn->originating_system_( "''" );
+    fn->originating_system_( "'" + string( VSPVERSION4 ) + "'" );
     fn->authorization_( "''" );
+    file_name = fn;
 
     SdaiFile_description * fd = ( SdaiFile_description * ) sfile->HeaderDefaultFileDescription();
     header_instances->Append( ( SDAI_Application_instance * ) fd, completeSE );
     fd->description_()->AddNode( new StringNode( "''" ) );
-    fd->implementation_level_( "'1'" );
+    fd->implementation_level_( "'2;1'" );
 
     SdaiFile_schema * fs = ( SdaiFile_schema * ) sfile->HeaderDefaultFileSchema();
     header_instances->Append( ( SDAI_Application_instance * ) fs, completeSE );
@@ -593,7 +695,7 @@ void  STEPutil::STEPBoilerplate( const vsp::LEN_UNITS & len, const char * tolstr
     // references a later entity.  This is not required, but has been done to give a logical
     // flow to the source and the resulting STEP file.
 
-    // Stand-in date and time.
+    // Date and time of writing.
     SdaiDate_and_time * date_time = DateTime( );
 
     // Global units and tolerance.
@@ -629,8 +731,9 @@ void  STEPutil::STEPBoilerplate( const vsp::LEN_UNITS & len, const char * tolstr
     SdaiProduct * prod = ( SdaiProduct * ) registry->ObjCreate( "PRODUCT" );
     instance_list->Append( ( SDAI_Application_instance * ) prod, completeSE );
     prod->id_( "''" );
-    prod->name_( "'prodname'" );
+    prod->name_( "''" );
     prod->description_( "''" );
+    product = prod;
     prod->frame_of_reference_()->AddNode( new EntityNode( ( SDAI_Application_instance * ) mech_context ) );
 
     SdaiProduct_related_product_category * prodcat = ( SdaiProduct_related_product_category * ) registry->ObjCreate( "PRODUCT_RELATED_PRODUCT_CATEGORY" );
@@ -772,43 +875,98 @@ void  STEPutil::STEPBoilerplate( const vsp::LEN_UNITS & len, const char * tolstr
     ownerpersonorg->role_( owner_role );
 }
 
+// Text as a STEP string, quotes included: a quote or backslash doubled, a control character
+// written as its code in a \X\ escape, and anything past ASCII as its Unicode code point in a
+// \X2\ or \X4\ escape
+string STEPString( const string &text )
+{
+    string out = "'";
+
+    size_t i = 0;
+    while ( i < text.size() )
+    {
+        unsigned char c = ( unsigned char ) text[i];
+
+        if ( c < 0x20 || c == 0x7F )
+        {
+            char esc[8];
+            snprintf( esc, sizeof( esc ), "\\X\\%02X", ( unsigned int ) c );
+            out += esc;
+            i++;
+            continue;
+        }
+
+        if ( c < 0x80 )
+        {
+            out.push_back( ( char ) c );
+            if ( c == '\'' || c == '\\' )
+            {
+                out.push_back( ( char ) c );
+            }
+            i++;
+            continue;
+        }
+
+        // UTF-8: the lead byte gives the length
+        int nextra = 0;
+        unsigned int code = 0;
+        if ( ( c & 0xE0 ) == 0xC0 )
+        {
+            nextra = 1;
+            code = c & 0x1F;
+        }
+        else if ( ( c & 0xF0 ) == 0xE0 )
+        {
+            nextra = 2;
+            code = c & 0x0F;
+        }
+        else if ( ( c & 0xF8 ) == 0xF0 )
+        {
+            nextra = 3;
+            code = c & 0x07;
+        }
+        else
+        {
+            code = c;
+        }
+
+        i++;
+        for ( int k = 0; k < nextra && i < text.size(); k++ )
+        {
+            code = ( code << 6 ) | ( ( unsigned char ) text[i] & 0x3F );
+            i++;
+        }
+
+        char buf[32];
+        if ( code <= 0xFFFF )
+        {
+            snprintf( buf, sizeof( buf ), "\\X2\\%04X\\X0\\", code );
+        }
+        else
+        {
+            snprintf( buf, sizeof( buf ), "\\X4\\%08X\\X0\\", code );
+        }
+        out.append( buf );
+    }
+
+    out.push_back( '\'' );
+    return out;
+}
+
 void STEPutil::WriteFile( const string &fname )
 {
+    string path, file;
+    GetPathFile( fname, path, file );
+
+    file_name->name_( STEPString( file ) );
+    product->id_( STEPString( GetBasename( file ) ) );
+    product->name_( STEPString( GetBasename( file ) ) );
+
     sfile->WriteExchangeFile( fname.c_str() );
     if( sfile->Error().severity() < SEVERITY_USERMSG )
     {
         sfile->Error().PrintContents( cout );
     }
-}
-
-SdaiSurface* STEPutil::MakePlane( const vec3d &center, const vec3d &norm, const vec3d &tangent, const string& label )
-{
-    SdaiPlane* plane = (SdaiPlane*)registry->ObjCreate( "PLANE" );
-    instance_list->Append( (SDAI_Application_instance*)plane, completeSE );
-
-    SdaiCartesian_point* origin2 = MakePoint( center.x(), center.y(), center.z() );
-    SdaiDirection* axis2 = MakeDirection( norm.x(), norm.y(), norm.z() );
-    SdaiDirection* refd2 = MakeDirection( tangent.x(), tangent.y(), tangent.z() );
-
-    SdaiAxis2_placement_3d* placement2 = (SdaiAxis2_placement_3d*)registry->ObjCreate( "AXIS2_PLACEMENT_3D" );
-    placement2->name_( "''" );
-    placement2->location_( origin2 );
-    placement2->axis_( axis2 );
-    placement2->ref_direction_( refd2 );
-    instance_list->Append( (SDAI_Application_instance*)placement2, completeSE );
-
-    plane->position_( placement2 );
-
-    if ( label.size() > 0 )
-    {
-        plane->name_( "'" + ( "Plane_" + label ) + "'" );
-    }
-    else
-    {
-        plane->name_( "''" );
-    }
-
-    return (SdaiSurface*)plane;
 }
 
 SdaiSurface* STEPutil::MakeSurf( piecewise_surface_type& s, const string& label, bool mergepts, double merge_tol )
@@ -830,7 +988,7 @@ SdaiSurface* STEPutil::MakeSurf( piecewise_surface_type& s, const string& label,
 
     if ( label.size() > 0 )
     {
-        surf->name_( "'" + ( "Surf_" + label ) + "'" );
+        surf->name_( STEPString( "Surf_" + label ) );
     }
     else
     {
@@ -922,25 +1080,29 @@ SdaiSurface* STEPutil::MakeSurf( piecewise_surface_type& s, const string& label,
 
     piecewise_surface_type::index_type ip, jp;
 
+    // The knots are the surface's own parameters, so a point has the same (u, v) in the file
+    vector < double > upmap, vpmap;
+    s.get_pmap_uv( upmap, vpmap );
+
     surf->u_multiplicities_()->AddNode( new IntNode( maxu + 1 ) );
-    surf->u_knots_()->AddNode( new RealNode( 0.0 ) );
+    surf->u_knots_()->AddNode( new RealNode( upmap[0] ) );
     for ( ip = 1; ip < nupatch; ++ip )
     {
         surf->u_multiplicities_()->AddNode( new IntNode( maxu ) );
-        surf->u_knots_()->AddNode( new RealNode( ip ) );
+        surf->u_knots_()->AddNode( new RealNode( upmap[ip] ) );
     }
     surf->u_multiplicities_()->AddNode( new IntNode( maxu + 1 ) );
-    surf->u_knots_()->AddNode( new RealNode( nupatch ) );
+    surf->u_knots_()->AddNode( new RealNode( upmap[nupatch] ) );
 
     surf->v_multiplicities_()->AddNode( new IntNode( maxv + 1 ) );
-    surf->v_knots_()->AddNode( new RealNode( 0.0 ) );
+    surf->v_knots_()->AddNode( new RealNode( vpmap[0] ) );
     for ( jp = 1; jp < nvpatch; ++jp )
     {
         surf->v_multiplicities_()->AddNode( new IntNode( maxv ) );
-        surf->v_knots_()->AddNode( new RealNode( jp ) );
+        surf->v_knots_()->AddNode( new RealNode( vpmap[jp] ) );
     }
     surf->v_multiplicities_()->AddNode( new IntNode( maxv + 1 ) );
-    surf->v_knots_()->AddNode( new RealNode( nvpatch ) );
+    surf->v_knots_()->AddNode( new RealNode( vpmap[nvpatch] ) );
 
     surf->knot_spec_( Knot_type__piecewise_bezier_knots );
 
@@ -957,9 +1119,9 @@ SdaiVertex_point* STEPutil::MakeVertex( const vec3d &vertex )
     return vert_pnt;
 }
 
-SdaiB_spline_curve_with_knots* STEPutil::MakeCurve( const vector < vec3d > &cp_vec, const int& deg, const string& label, bool closed_curve, bool mergepnts, double merge_tol )
+SdaiB_spline_curve_with_knots* STEPutil::MakeCurve( const vector < vec3d > &cp_vec, int deg, const vector < double > &break_vec, const string& label,
+                                                    bool closed_curve, bool mergepnts, double merge_tol )
 {
-    // Identify the edge
     int npts = (int)cp_vec.size();
 
     SdaiB_spline_curve_with_knots* curve = (SdaiB_spline_curve_with_knots*)registry->ObjCreate( "B_SPLINE_CURVE_WITH_KNOTS" );
@@ -969,68 +1131,120 @@ SdaiB_spline_curve_with_knots* STEPutil::MakeCurve( const vector < vec3d > &cp_v
 
     if ( label.size() > 0 )
     {
-        curve->name_( "'" + ( "Curve_" + label ) + "'" );
+        curve->name_( STEPString( "Curve_" + label ) );
     }
     else
     {
         curve->name_( "''" );
     }
 
-    piecewise_surface_type::index_type ip;
-
     curve->self_intersect_( SDAI_LOGICAL( LFalse ) );
-    curve->curve_form_( B_spline_curve_form__polyline_form );
 
-    PntNodeCloud pnCloud;
-    vector < SdaiCartesian_point* > usedPts;
+    if ( deg == 1 )
+    {
+        curve->curve_form_( B_spline_curve_form__polyline_form );
+    }
+    else
+    {
+        curve->curve_form_( B_spline_curve_form__unspecified );
+    }
+
+    // Coincident control points share one CARTESIAN_POINT when merging
+    vector < SdaiCartesian_point* > pt_vec( npts );
 
     if ( mergepnts )
     {
-        //==== Build Map ====//
+        PntNodeCloud pnCloud;
         pnCloud.AddPntNodes( cp_vec );
-
-        //==== Use NanoFlann to Find Close Points and Group ====//
         IndexPntNodes( pnCloud, merge_tol );
 
-        //==== Load Used Points ====//
-        for ( size_t j = 0; j < cp_vec.size(); j++ )
+        vector < SdaiCartesian_point* > usedPts;
+        for ( int j = 0; j < npts; j++ )
         {
-            if ( pnCloud.UsedNode( j ) || j == cp_vec.size() - 1 )
+            if ( pnCloud.UsedNode( j ) )
             {
                 const vec3d& p = cp_vec[j];
-                SdaiCartesian_point* pt = MakePoint( p.x(), p.y(), p.z() );
-                usedPts.push_back( pt );
+                usedPts.push_back( MakePoint( p.x(), p.y(), p.z() ) );
             }
+        }
+
+        for ( int j = 0; j < npts; j++ )
+        {
+            pt_vec[j] = usedPts[ pnCloud.GetNodeUsedIndex( j ) ];
         }
     }
     else
     {
-        for ( int j = 0; j < (int)cp_vec.size(); j++ )
+        for ( int j = 0; j < npts; j++ )
         {
             const vec3d& p = cp_vec[j];
-            SdaiCartesian_point* pt = MakePoint( p.x(), p.y(), p.z() );
-            usedPts.push_back( pt );
+            pt_vec[j] = MakePoint( p.x(), p.y(), p.z() );
         }
     }
-
-    npts = (int)usedPts.size();
 
     std::ostringstream point_ss;
 
     for ( int j = 0; j < npts; ++j )
     {
-        int pindx = j;
+        point_ss << "#" << pt_vec[j]->GetFileId();
 
-        SdaiCartesian_point* pt;
+        if ( j < npts - 1 )
+        {
+            point_ss << ", ";
+        }
+    }
 
-        if ( mergepnts )
+    curve->control_points_list_()->AddNode( new GenericAggrNode( point_ss.str().c_str() ) );
+
+    SetKnots( curve, deg, break_vec );
+
+    return curve;
+}
+
+void STEPutil::SetKnots( SdaiB_spline_curve_with_knots* curve, int deg, const vector < double > &break_vec )
+{
+    // Clamped at the ends, and a knot of multiplicity deg where segments meet
+    int nbreak = (int)break_vec.size();
+
+    for ( int i = 0; i < nbreak; i++ )
+    {
+        int mult = deg;
+        if ( i == 0 || i == nbreak - 1 )
         {
-            pt = usedPts[pnCloud.GetNodeUsedIndex( pindx )];
+            mult = deg + 1;
         }
-        else
-        {
-            pt = usedPts[pindx];
-        }
+
+        curve->knot_multiplicities_()->AddNode( new IntNode( mult ) );
+        curve->knots_()->AddNode( new RealNode( break_vec[i] ) );
+    }
+
+    curve->knot_spec_( Knot_type__piecewise_bezier_knots );
+}
+
+SdaiPcurve* STEPutil::MakePCurve( SdaiSurface* surf, const vector < vec3d > &uv_vec, int deg, const vector < double > &break_vec )
+{
+    int npts = (int)uv_vec.size();
+
+    SdaiB_spline_curve_with_knots* curve = (SdaiB_spline_curve_with_knots*)registry->ObjCreate( "B_SPLINE_CURVE_WITH_KNOTS" );
+    instance_list->Append( (SDAI_Application_instance*)curve, completeSE );
+    curve->name_( "''" );
+    curve->degree_( deg );
+    if ( deg == 1 )
+    {
+        curve->curve_form_( B_spline_curve_form__polyline_form );
+    }
+    else
+    {
+        curve->curve_form_( B_spline_curve_form__unspecified );
+    }
+    curve->closed_curve_( SDAI_LOGICAL( LFalse ) );
+    curve->self_intersect_( SDAI_LOGICAL( LFalse ) );
+
+    std::ostringstream point_ss;
+
+    for ( int j = 0; j < npts; ++j )
+    {
+        SdaiCartesian_point* pt = MakePoint2D( uv_vec[j].x(), uv_vec[j].y() );
         point_ss << "#" << pt->GetFileId();
 
         if ( j < npts - 1 )
@@ -1041,24 +1255,66 @@ SdaiB_spline_curve_with_knots* STEPutil::MakeCurve( const vector < vec3d > &cp_v
 
     curve->control_points_list_()->AddNode( new GenericAggrNode( point_ss.str().c_str() ) );
 
-    int num_intermediate_knot = npts - ( deg + 1 );
+    SetKnots( curve, deg, break_vec );
 
-    curve->knot_multiplicities_()->AddNode( new IntNode( deg + 1 ) );
-    curve->knots_()->AddNode( new RealNode( 0.0 ) );
-    for ( ip = 1; ip <= num_intermediate_knot; ++ip )
-    {
-        curve->knot_multiplicities_()->AddNode( new IntNode( 1 ) );
-        curve->knots_()->AddNode( new RealNode( ip ) );
-    }
-    curve->knot_multiplicities_()->AddNode( new IntNode( deg + 1 ) );
-    curve->knots_()->AddNode( new RealNode( num_intermediate_knot + 1 ) );
+    SdaiDefinitional_representation* rep = (SdaiDefinitional_representation*)registry->ObjCreate( "DEFINITIONAL_REPRESENTATION" );
+    instance_list->Append( (SDAI_Application_instance*)rep, completeSE );
+    rep->name_( "''" );
+    rep->items_()->AddNode( new EntityNode( (SDAI_Application_instance*)curve ) );
+    rep->context_of_items_( (SdaiRepresentation_context*)Parametric_Context() );
 
-    curve->knot_spec_( Knot_type__uniform_knots );
+    SdaiPcurve* pcurve = (SdaiPcurve*)registry->ObjCreate( "PCURVE" );
+    instance_list->Append( (SDAI_Application_instance*)pcurve, completeSE );
+    pcurve->name_( "''" );
+    pcurve->basis_surface_( surf );
+    pcurve->reference_to_curve_( rep );
 
-    return curve;
+    return pcurve;
 }
 
-void STEPutil::MakeSurfaceCurve( vector < vec3d > cp_vec, const int& deg, const string& label, bool mergepnts, double merge_tol )
+SdaiSurface_curve* STEPutil::MakeCurveOnSurfaces( SdaiCurve* curve, const vector < SdaiPcurve* > &pcurve_vec, const string& label )
+{
+    SdaiSurface_curve* scurve = (SdaiSurface_curve*)registry->ObjCreate( "SURFACE_CURVE" );
+    instance_list->Append( (SDAI_Application_instance*)scurve, completeSE );
+
+    if ( label.size() > 0 )
+    {
+        scurve->name_( STEPString( "SurfCurve_" + label ) );
+    }
+    else
+    {
+        scurve->name_( "''" );
+    }
+
+    scurve->curve_3d_( curve );
+
+    std::ostringstream pc_ss;
+    for ( size_t i = 0; i < pcurve_vec.size(); i++ )
+    {
+        pc_ss << "#" << pcurve_vec[i]->GetFileId();
+
+        if ( i < pcurve_vec.size() - 1 )
+        {
+            pc_ss << ", ";
+        }
+    }
+    scurve->associated_geometry_()->AddNode( new GenericAggrNode( pc_ss.str().c_str() ) );
+
+    scurve->master_representation_( Preferred_surface_curve_representation__curve_3d );
+
+    return scurve;
+}
+
+// A number as a STEP real, all its digits and its decimal point
+static string STEPReal( double val )
+{
+    char str[64];
+    snprintf( str, sizeof( str ), "%.17E", val );
+    return string( str );
+}
+
+void STEPutil::MakeSurfaceCurve( const vector < vec3d > &cp_vec, int deg, const vector < double > &break_vec, const string& label,
+                                 bool mergepnts, double merge_tol )
 {
     // Check for closure (i.e. ellipse sub-surface)
     bool closed_curve = false;
@@ -1067,7 +1323,7 @@ void STEPutil::MakeSurfaceCurve( vector < vec3d > cp_vec, const int& deg, const 
         closed_curve = true;
     }
 
-    SdaiB_spline_curve_with_knots* curve = MakeCurve( cp_vec, deg, label, closed_curve, mergepnts, merge_tol );
+    SdaiB_spline_curve_with_knots* curve = MakeCurve( cp_vec, deg, break_vec, label, closed_curve, mergepnts, merge_tol );
 
     // Identify the start and end control point node numbers
     string cp_vec_str;
@@ -1088,7 +1344,7 @@ void STEPutil::MakeSurfaceCurve( vector < vec3d > cp_vec, const int& deg, const 
 
     if ( label.size() > 0 )
     {
-        trimmed_curve->name_( "'" + ( "TrimSurf_" + label ) + "'" );
+        trimmed_curve->name_( STEPString( "TrimSurf_" + label ) );
     }
     else
     {
@@ -1097,13 +1353,11 @@ void STEPutil::MakeSurfaceCurve( vector < vec3d > cp_vec, const int& deg, const 
 
     // Identify the start and end control points along with the parameterization (complete knot vector)
     std::ostringstream trim_1;
-    trim_1 << cp_vec_str_vec.front() << "PARAMETER_VALUE(0.E+000)"; // Note, comma included in all elements of cp_vec_str_vec except the last
+    trim_1 << cp_vec_str_vec.front() << "PARAMETER_VALUE(" << STEPReal( break_vec.front() ) << ")"; // Note, comma included in all elements of cp_vec_str_vec except the last
     trimmed_curve->trim_1_()->AddNode( new GenericAggrNode( trim_1.str().c_str() ) );
     std::ostringstream trim_2;
 
-    int num_knot = cp_vec.size() - ( deg + 1 );
-
-    trim_2 << cp_vec_str_vec.back() << ",PARAMETER_VALUE(" << to_string( num_knot + 1 ) << ".)";
+    trim_2 << cp_vec_str_vec.back() << ",PARAMETER_VALUE(" << STEPReal( break_vec.back() ) << ")";
     trimmed_curve->trim_2_()->AddNode( new GenericAggrNode( trim_2.str().c_str() ) );
     trimmed_curve->master_representation_( Trimming_preference::Trimming_preference__parameter );
 
@@ -1133,45 +1387,63 @@ void STEPutil::MakeSurfaceCurve( vector < vec3d > cp_vec, const int& deg, const 
     sdr->used_representation_( shape_rep );
 }
 
-void STEPutil::RepresentBREPSolid( vector < vector < SdaiAdvanced_face* > > adv_vec, const string& label )
+// The faces of a shell as a STEP list
+static string FaceList( const vector < SdaiAdvanced_face* > &face_vec )
+{
+    std::ostringstream ss;
+
+    for ( size_t i = 0; i < face_vec.size(); i++ )
+    {
+        ss << "#" << face_vec[i]->GetFileId();
+
+        if ( i < face_vec.size() - 1 )
+        {
+            ss << ", ";
+        }
+    }
+    return ss.str();
+}
+
+void STEPutil::RepresentBREPSolid( const vector < vector < SdaiAdvanced_face* > > &adv_vec, const vector < bool > &closed_vec,
+                                   const string& label )
 {
     vector < SdaiManifold_solid_brep* > brep_vec;
+    vector < vector < SdaiAdvanced_face* > > open_vec;
 
     for ( size_t j = 0; j < adv_vec.size(); j++ )
     {
-        std::ostringstream adv_ss;
-
-        for ( size_t i = 0; i < adv_vec[j].size(); i++ )
+        if ( adv_vec[j].empty() )
         {
-            adv_ss << "#" << adv_vec[j][i]->GetFileId();
+            continue;
+        }
 
-            if ( i < adv_vec[j].size() - 1 )
-            {
-                adv_ss << ", ";
-            }
+        if ( !closed_vec[j] )
+        {
+            open_vec.push_back( adv_vec[j] );
+            continue;
         }
 
         SdaiClosed_shell* shell = (SdaiClosed_shell*)registry->ObjCreate( "CLOSED_SHELL" );
         instance_list->Append( (SDAI_Application_instance*)shell, completeSE );
         shell->name_( "''" );
-        shell->cfs_faces_()->AddNode( new GenericAggrNode( adv_ss.str().c_str() ) );
-
-        SdaiCartesian_point* origin2 = MakePoint( 0.0, 0.0, 0.0 );
-        SdaiDirection* axis2 = MakeDirection( 0.0, 0.0, 1.0 );
-        SdaiDirection* refd2 = MakeDirection( 1.0, 0.0, 0.0 );
-
-        SdaiAxis2_placement_3d* placement2 = (SdaiAxis2_placement_3d*)registry->ObjCreate( "AXIS2_PLACEMENT_3D" );
-        placement2->name_( "''" );
-        placement2->location_( origin2 );
-        placement2->axis_( axis2 );
-        placement2->ref_direction_( refd2 );
-        instance_list->Append( (SDAI_Application_instance*)placement2, completeSE );
+        shell->cfs_faces_()->AddNode( new GenericAggrNode( FaceList( adv_vec[j] ).c_str() ) );
 
         SdaiManifold_solid_brep* brep = (SdaiManifold_solid_brep*)registry->ObjCreate( "MANIFOLD_SOLID_BREP" );
         instance_list->Append( (SDAI_Application_instance*)brep, completeSE );
         brep->name_( "''" );
         brep->outer_( shell );
         brep_vec.push_back( brep );
+    }
+
+    // What bounds no solid is written as a surface model beside the solids
+    if ( !open_vec.empty() )
+    {
+        RepresentManifoldShell( open_vec, vector < bool > ( open_vec.size(), false ), label );
+    }
+
+    if ( brep_vec.empty() )
+    {
+        return;
     }
 
     std::ostringstream brep_ss;
@@ -1192,7 +1464,7 @@ void STEPutil::RepresentBREPSolid( vector < vector < SdaiAdvanced_face* > > adv_
 
     if ( label.size() > 0 )
     {
-        adv_brep->name_( "'" + ( "BREP_" + label ) + "'" );
+        adv_brep->name_( STEPString( "BREP_" + label ) );
     }
     else
     {
@@ -1205,30 +1477,37 @@ void STEPutil::RepresentBREPSolid( vector < vector < SdaiAdvanced_face* > > adv_
     shape_def_rep->used_representation_( adv_brep );
 }
 
-void STEPutil::RepresentManifoldShell( vector < vector < SdaiAdvanced_face* > > adv_vec, const string& label )
+void STEPutil::RepresentManifoldShell( const vector < vector < SdaiAdvanced_face* > > &adv_vec, const vector < bool > &closed_vec,
+                                       const string& label )
 {
-    vector < SdaiOpen_shell* > shell_vec;
+    vector < SdaiConnected_face_set* > shell_vec;
 
     for ( size_t j = 0; j < adv_vec.size(); j++ )
     {
-        std::ostringstream adv_ss;
-
-        for ( size_t i = 0; i < adv_vec[j].size(); i++ )
+        if ( adv_vec[j].empty() )
         {
-            adv_ss << "#" << adv_vec[j][i]->GetFileId();
-
-            if ( i < adv_vec[j].size() - 1 )
-            {
-                adv_ss << ", ";
-            }
+            continue;
         }
 
-        SdaiOpen_shell* shell = (SdaiOpen_shell*)registry->ObjCreate( "OPEN_SHELL" );
+        SdaiConnected_face_set* shell = nullptr;
+        if ( closed_vec[j] )
+        {
+            shell = (SdaiConnected_face_set*)registry->ObjCreate( "CLOSED_SHELL" );
+        }
+        else
+        {
+            shell = (SdaiConnected_face_set*)registry->ObjCreate( "OPEN_SHELL" );
+        }
         instance_list->Append( (SDAI_Application_instance*)shell, completeSE );
         shell->name_( "''" );
-        shell->cfs_faces_()->AddNode( new GenericAggrNode( adv_ss.str().c_str() ) );
+        shell->cfs_faces_()->AddNode( new GenericAggrNode( FaceList( adv_vec[j] ).c_str() ) );
 
         shell_vec.push_back( shell );
+    }
+
+    if ( shell_vec.empty() )
+    {
+        return;
     }
 
     SdaiShell_based_surface_model* shell_surf = (SdaiShell_based_surface_model*)registry->ObjCreate( "SHELL_BASED_SURFACE_MODEL" );
@@ -1257,7 +1536,7 @@ void STEPutil::RepresentManifoldShell( vector < vector < SdaiAdvanced_face* > > 
 
     if ( label.size() > 0 )
     {
-        man_surf->name_( "'" + ( "ManShell_" + label ) + "'" );
+        man_surf->name_( STEPString( "ManShell_" + label ) );
     }
     else
     {
@@ -1289,7 +1568,7 @@ void STEPutil::RepresentUntrimmedSurfs( const vector < SdaiB_spline_surface_with
 {
     SdaiGeometric_set* gset = (SdaiGeometric_set*)registry->ObjCreate( "GEOMETRIC_SET" );
     instance_list->Append( (SDAI_Application_instance*)gset, completeSE );
-    gset->name_( "'" + label + "'" );
+    gset->name_( STEPString( label ) );
 
     for ( int i = 0; i < surf_vec.size(); ++i )
     {
@@ -1344,6 +1623,14 @@ IGESutil::~IGESutil()
 
 void IGESutil::WriteFile( const string &fname, const bool overwrite )
 {
+    string path, file;
+    GetPathFile( fname, path, file );
+
+    // The product is the file written, without its extension
+    string product = GetBasename( file );
+    model.SetProductID_SendingSystem( product.c_str() );
+    model.SetProductID_ReceivingSystem( product.c_str() );
+
     model.Write( fname.c_str(), overwrite );
 }
 
@@ -1384,10 +1671,14 @@ DLL_IGES_ENTITY_128 IGESutil::MakeSurf( piecewise_surface_type& s, const string&
         }
     }
 
+    // The knots are the surface's own parameters, so a point has the same (u, v) in the file
+    vector < double > upmap, vpmap;
+    s.get_pmap_uv( upmap, vpmap );
+
     vector< double > knotu, knotv;
 
-    IGESKnots( maxu, nupatch, knotu );
-    IGESKnots( maxv, nvpatch, knotv );
+    IGESKnots( maxu, upmap, knotu );
+    IGESKnots( maxv, vpmap, knotv );
 
     if ( !isurf.SetNURBSData( nupts, nvpts, maxu + 1, maxv + 1,
                               knotu.data(), knotv.data(), coeff.data(),
@@ -1400,17 +1691,20 @@ DLL_IGES_ENTITY_128 IGESutil::MakeSurf( piecewise_surface_type& s, const string&
     return isurf;
 }
 
-DLL_IGES_ENTITY_144 IGESutil::MakeLoop( DLL_IGES_ENTITY_128& parent_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec, const string& label )
+DLL_IGES_ENTITY_144 IGESutil::MakeLoop( DLL_IGES_ENTITY_128& parent_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec,
+                                        const vector < DLL_IGES_ENTITY_126* > &uv_vec, CURVE_CREATION creation, const string& label )
 {
     // Create the Trimmed Parametric Surface (TPS)
     DLL_IGES_ENTITY_144 trim_surf( model, true );
 
-    // Define the 1st surface boundary in model space
-    DLL_IGES_ENTITY_142 bound = MakeBound( parent_surf, nurbs_vec, label );
+    // Define the 1st surface boundary
+    DLL_IGES_ENTITY_142 bound = MakeBound( parent_surf, nurbs_vec, uv_vec, creation, label );
 
     if ( !trim_surf.SetBoundCurve( bound ) )
     {
+        printf( "Error: IGES boundary %s could not bound its surface, which is left out\n", label.c_str() );
         model.DelEntity( &trim_surf );
+        return DLL_IGES_ENTITY_144( model, false );
     }
 
     trim_surf.SetSurface( parent_surf );
@@ -1420,19 +1714,20 @@ DLL_IGES_ENTITY_144 IGESutil::MakeLoop( DLL_IGES_ENTITY_128& parent_surf, const 
     return trim_surf;
 }
 
-void IGESutil::MakeCutout( DLL_IGES_ENTITY_128& parent_surf, DLL_IGES_ENTITY_144& trimmed_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec, const string& label )
+void IGESutil::MakeCutout( DLL_IGES_ENTITY_128& parent_surf, DLL_IGES_ENTITY_144& trimmed_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec,
+                           const vector < DLL_IGES_ENTITY_126* > &uv_vec, CURVE_CREATION creation, const string& label )
 {
-    // Define the 1st surface boundary in model space
-    DLL_IGES_ENTITY_142 bound = MakeBound( parent_surf, nurbs_vec, label );
+    // Define the hole's boundary
+    DLL_IGES_ENTITY_142 bound = MakeBound( parent_surf, nurbs_vec, uv_vec, creation, label );
 
+    // The surface stands without the hole rather than not at all
     if ( !trimmed_surf.AddCutout( bound ) )
     {
-        model.DelEntity( &trimmed_surf );
-        return;
+        printf( "Error: IGES hole %s could not be cut from its surface\n", label.c_str() );
     }
 }
 
-DLL_IGES_ENTITY_126 IGESutil::MakeCurve( const vector < vec3d > &cp_vec, int deg, const string& label )
+DLL_IGES_ENTITY_126 IGESutil::MakeCurve( const vector < vec3d > &cp_vec, int deg, const vector < double > &break_vec, const string& label )
 {
     int npts = (int)cp_vec.size();
 
@@ -1453,24 +1748,26 @@ DLL_IGES_ENTITY_126 IGESutil::MakeCurve( const vector < vec3d > &cp_vec, int deg
     // Get knot vector
     vector< double > knot;
     int order = deg + 1;
-    int nseg = npts - 2;
 
-    IGESKnots( deg, nseg, knot );
+    IGESKnots( deg, break_vec, knot );
 
     // Create a NURBS curve to add to the
     DLL_IGES_ENTITY_126 nc( model, true );
     if ( !nc.SetNURBSData( npts, order, knot.data(),
                            coeff.data(), false, knot[0], knot.back() ) )
     {
+        printf( "Error: IGES curve %s could not be written\n", label.c_str() );
         model.DelEntity( &nc );
+        return nc;
     }
 
-    // Create a custom color (magenta)
-    // TODO: Cycle through various colors
-    DLL_IGES_ENTITY_314 color( model, true );
-    color.SetColor( 100.0, 0.0, 100.0 );
-    // Attach the color to the NURBS curve
-    nc.SetColor( color );
+    // Every curve is drawn in one custom color (magenta)
+    if ( !curve_color )
+    {
+        curve_color.reset( new DLL_IGES_ENTITY_314( model, true ) );
+        curve_color->SetColor( 100.0, 0.0, 100.0 );
+    }
+    nc.SetColor( *curve_color );
 
     if ( label.size() > 0 )
     {
@@ -1480,26 +1777,75 @@ DLL_IGES_ENTITY_126 IGESutil::MakeCurve( const vector < vec3d > &cp_vec, int deg
     return nc;
 }
 
-DLL_IGES_ENTITY_142 IGESutil::MakeBound( DLL_IGES_ENTITY_128& parent_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec, const string& label )
+DLL_IGES_ENTITY_126 IGESutil::MakeCurve2D( const vector < vec3d > &uv_vec, int deg, const vector < double > &break_vec )
 {
-    // Create a compound curve
+    int npts = (int)uv_vec.size();
+
+    vector< double > coeff( npts * 3 );
+
+    for ( int n = 0; n < npts; ++n )
+    {
+        coeff[3 * n] = uv_vec[n].x();
+        coeff[3 * n + 1] = uv_vec[n].y();
+        coeff[3 * n + 2] = 0.0;
+    }
+
+    vector< double > knot;
+    IGESKnots( deg, break_vec, knot );
+
+    DLL_IGES_ENTITY_126 nc( model, true );
+    if ( !nc.SetNURBSData( npts, deg + 1, knot.data(), coeff.data(), false, knot[0], knot.back() ) )
+    {
+        printf( "Error: IGES parameter space curve could not be written\n" );
+        model.DelEntity( &nc );
+        return nc;
+    }
+
+    nc.SetEntityUse( STAT_USE_2D_PARAMETRIC );
+
+    return nc;
+}
+
+DLL_IGES_ENTITY_142 IGESutil::MakeBound( DLL_IGES_ENTITY_128& parent_surf, const vector < DLL_IGES_ENTITY_126* > &nurbs_vec,
+                                         const vector < DLL_IGES_ENTITY_126* > &uv_vec, CURVE_CREATION creation, const string& label )
+{
+    // Create a compound curve.  A curve it will not take is left out of the boundary, and
+    // reported, but stays in the file.
     DLL_IGES_ENTITY_102 compound( model, true );
 
     for ( size_t i = 0; i < nurbs_vec.size(); i++ )
     {
         if ( !compound.AddSegment( *nurbs_vec[i] ) )
         {
-            model.DelEntity( nurbs_vec[i] );
+            printf( "Error: IGES boundary %s is missing a curve\n", label.c_str() );
         }
     }
 
-    // Define the 1st surface boundary in model space
+    // The boundary in model space
     DLL_IGES_ENTITY_142 bound( model, true );
     bound.SetModelSpaceBound( compound );
-    // Note, the curve creation and preference flag do not seem to have an effect on the import
-    bound.SetCurveCreationFlag( CURVE_CREATE_PROJECTION );
+    bound.SetCurveCreationFlag( creation );
     bound.SetCurvePreference( BOUND_PREF_MODELSPACE );
     bound.SetSurface( parent_surf );
+
+    // The same boundary in the surface's parameters, held to the same tolerance, so neither is
+    // preferred
+    if ( !uv_vec.empty() )
+    {
+        DLL_IGES_ENTITY_102 uv_compound( model, true );
+        uv_compound.SetEntityUse( STAT_USE_2D_PARAMETRIC );
+
+        for ( size_t i = 0; i < uv_vec.size(); i++ )
+        {
+            if ( !uv_compound.AddSegment( *uv_vec[i] ) )
+            {
+                printf( "Error: IGES boundary %s is missing a parameter space curve\n", label.c_str() );
+            }
+        }
+
+        bound.SetParameterSpaceBound( uv_compound );
+        bound.SetCurvePreference( BOUND_PREF_ANY );
+    }
 
     if ( label.size() > 0 )
     {
@@ -1521,26 +1867,24 @@ void IGESutil::AddLabel( DLL_IGES_ENTITY& entity, const string& label )
     e406.Detach();
 }
 
-void IGESutil::IGESKnots( int deg, int npatch, vector< double >& knot )
+void IGESutil::IGESKnots( int deg, const vector < double > &break_vec, vector< double >& knot )
 {
-    int i, j;
-
     knot.clear();
 
-    for ( i = 0; i <= deg; i++ )
+    int nbreak = (int)break_vec.size();
+
+    for ( int i = 0; i < nbreak; i++ )
     {
-        knot.push_back( 0.0 );
-    }
-    for ( i = 1; i <= npatch; ++i )
-    {
-        for ( j = 0; j < deg; j++ )
+        int mult = deg;
+        if ( i == 0 || i == nbreak - 1 )
         {
-            knot.push_back( 1.0 * i );
+            mult = deg + 1;
         }
-    }
-    for ( i = 0; i <= deg; i++ )
-    {
-        knot.push_back( 1.0 * npatch );
+
+        for ( int j = 0; j < mult; j++ )
+        {
+            knot.push_back( break_vec[i] );
+        }
     }
 }
 

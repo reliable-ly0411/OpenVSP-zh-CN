@@ -16,6 +16,9 @@
 #include "StlHelper.h"
 #include "MessageMgr.h"
 #include "VspUtil.h"
+#include "ResultsMgr.h"
+
+#include <map>
 
 //=============================================================//
 //=============================================================//
@@ -71,6 +74,12 @@ void FeaMeshMgrSingleton::CleanUp()
     m_SimpleMaterialVec.clear();
 
     m_IntersectComplete = false;
+}
+
+void FeaMeshMgrSingleton::RenewMesh()
+{
+    CleanUp();
+    CleanMeshMap();
 }
 
 // Cleanup done on file-load.
@@ -171,7 +180,8 @@ void FeaMeshMgrSingleton::LoadSkins()
 
             int skin_index = fea_struct->GetFeaPartIndex( prt );
 
-            skin->FetchFeaXFerSurf( skinxfersurfs, 0, fea_struct->GetUSuppress(), fea_struct->GetWSuppress() );
+            skin->FetchFeaXFerSurf( skinxfersurfs, 0, fea_struct->GetUSuppress(), fea_struct->GetWSuppress(),
+                                    GetSettingsPtr()->m_SplitJoinSurfsFlag );
 
             // Load Skin XFerSurf to m_SurfVec
             LoadSurfs( skinxfersurfs, GetMeshPtr()->m_LenScale );
@@ -500,6 +510,7 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
     if ( m_SurfVec.size() == 0 )
     {
         addOutputText( "No Surfaces.  Done.\n" );
+        RecordResults();
         m_FeaMeshInProgress = false;
         MessageMgr::getInstance().Send( "ScreenMgr", "UpdateAllScreens" );
         return;
@@ -528,6 +539,7 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
     if ( !CheckPropMat() )
     {
         addOutputText( "Material or property not identified.\n" );
+        RecordResults();
         m_FeaMeshInProgress = false;
         MessageMgr::getInstance().Send( "ScreenMgr", "UpdateAllScreens" );
         return;
@@ -577,8 +589,7 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
     AddDegenCornerChains();
     }
 
-    addOutputText( "Binary Adaptation Curve Approximation\n" );
-    BinaryAdaptIntCurves();
+    RecordIntCurves();
 
     m_IntersectComplete = true;
 
@@ -642,12 +653,102 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
 
     GetMeshPtr()->m_MeshReady = true;
 
+    RecordResults();
+
     UpdateDrawObjs();
 
     addOutputText( "Finished\n" );
 
     m_FeaMeshInProgress = false;
     MessageMgr::getInstance().Send( "ScreenMgr", "UpdateAllScreens" );
+}
+
+// A structure's mesh is open by design -- a part's edge stops where the part does, and a half
+// mesh stops at the symmetry plane -- and every joint between parts puts more than two elements
+// on one edge, so the CFD mesher's watertight verdict means nothing here.  What is reported in
+// its place is the free edges, those of one shell element alone, which is how a structure's
+// connections are checked: a part that should meet another and does not shows up there.
+void FeaMeshMgrSingleton::RecordResults()
+{
+    m_LastResultID = string();
+
+    Results* res = ResultsMgr.CreateResults( "FEAMesh", "FEA mesh generation results." );
+
+    if ( !res )
+    {
+        return;
+    }
+
+    m_LastResultID = res->GetID();
+
+    FeaMesh* mesh = GetMeshPtr();
+
+    int num_nodes = 0;
+    int num_els = 0;
+    int num_tris = 0;
+    int num_quads = 0;
+    int num_beams = 0;
+    int num_free_edges = 0;
+
+    if ( mesh && mesh->m_MeshReady )
+    {
+        num_nodes = ( int )mesh->m_NumNodes;
+        num_els = ( int )mesh->m_NumEls;
+        num_tris = ( int )mesh->m_NumTris;
+        num_quads = ( int )mesh->m_NumQuads;
+        num_beams = ( int )mesh->m_NumBeams;
+
+        // Each shell element's edges, between corners, by the numbers the nodes are written with.
+        map< pair< long long int, long long int >, int > edge_count;
+
+        for ( int i = 0; i < ( int )mesh->m_FeaElementVec.size(); i++ )
+        {
+            FeaElement* el = mesh->m_FeaElementVec[i];
+            int type = el->GetElementType();
+
+            if ( type != FeaElement::FEA_TRI_3 && type != FeaElement::FEA_TRI_6 &&
+                 type != FeaElement::FEA_QUAD_4 && type != FeaElement::FEA_QUAD_8 )
+            {
+                continue;
+            }
+
+            int ncorner = ( int )el->m_Corners.size();
+
+            for ( int j = 0; j < ncorner; j++ )
+            {
+                long long int a = el->m_Corners[j]->m_Index;
+                long long int b = el->m_Corners[( j + 1 ) % ncorner]->m_Index;
+
+                if ( a == b )
+                {
+                    continue;
+                }
+
+                if ( a > b )
+                {
+                    std::swap( a, b );
+                }
+
+                edge_count[ make_pair( a, b ) ]++;
+            }
+        }
+
+        map< pair< long long int, long long int >, int >::const_iterator e;
+        for ( e = edge_count.begin(); e != edge_count.end(); ++e )
+        {
+            if ( e->second == 1 )
+            {
+                num_free_edges++;
+            }
+        }
+    }
+
+    res->Add( new NameValData( "Num_Nodes", num_nodes, "Number of nodes in the mesh." ) );
+    res->Add( new NameValData( "Num_Els", num_els, "Number of elements in the mesh." ) );
+    res->Add( new NameValData( "Num_Tris", num_tris, "Number of triangular shell elements." ) );
+    res->Add( new NameValData( "Num_Quads", num_quads, "Number of quadrilateral shell elements." ) );
+    res->Add( new NameValData( "Num_Beams", num_beams, "Number of beam elements." ) );
+    res->Add( new NameValData( "Num_Free_Edges", num_free_edges, "Number of shell element edges with no other shell element on them." ) );
 }
 
 void FeaMeshMgrSingleton::ExportFeaMesh( const string &structID )
@@ -679,23 +780,6 @@ void FeaMeshMgrSingleton::ExportCADFiles()
         GetMeshPtr()->m_StructSettings.CopyPostOpFrom( fea_struct->GetStructSettingsPtr());
     }
 
-    if ( GetSettingsPtr()->GetExportFileFlag( vsp::FEA_SRF_FILE_NAME ) )
-    {
-        WriteSurfsIntCurves( GetSettingsPtr()->GetExportFileName( vsp::FEA_SRF_FILE_NAME ) );
-    }
-
-    if ( GetSettingsPtr()->GetExportFileFlag( vsp::FEA_CURV_FILE_NAME ) )
-    {
-        WriteGridToolCurvFile( GetSettingsPtr()->GetExportFileName( vsp::FEA_CURV_FILE_NAME ),
-                               GetSettingsPtr()->m_ExportRawFlag );
-    }
-
-    if ( GetSettingsPtr()->GetExportFileFlag( vsp::FEA_PLOT3D_FILE_NAME ) )
-    {
-        WritePlot3DFile( GetSettingsPtr()->GetExportFileName( vsp::FEA_PLOT3D_FILE_NAME ),
-                         GetSettingsPtr()->m_ExportRawFlag );
-    }
-
     if ( GetSettingsPtr()->GetExportFileFlag( vsp::FEA_IGES_FILE_NAME ) || GetSettingsPtr()->GetExportFileFlag( vsp::FEA_STEP_FILE_NAME ) )
     {
         BuildNURBSCurvesVec(); // Note: Must be called before BuildNURBSSurfMap
@@ -707,7 +791,8 @@ void FeaMeshMgrSingleton::ExportCADFiles()
     {
         string delim = StringUtil::get_delim( GetSettingsPtr()->m_CADLabelDelim );
 
-        WriteIGESFile( GetSettingsPtr()->GetExportFileName( vsp::FEA_IGES_FILE_NAME ), GetSettingsPtr()->m_CADLenUnit,
+        // The surfaces were scaled into the structures' analysis unit for meshing.
+        WriteIGESFile( GetSettingsPtr()->GetExportFileName( vsp::FEA_IGES_FILE_NAME ), m_Vehicle->GetStructLenUnit(),
                        GetSettingsPtr()->m_CADLabelID, GetSettingsPtr()->m_CADLabelSurfNo, GetSettingsPtr()->m_CADLabelSplitNo,
                        GetSettingsPtr()->m_CADLabelName, delim );
     }
@@ -716,7 +801,8 @@ void FeaMeshMgrSingleton::ExportCADFiles()
     {
         string delim = StringUtil::get_delim( GetSettingsPtr()->m_CADLabelDelim );
 
-        WriteSTEPFile( GetSettingsPtr()->GetExportFileName( vsp::FEA_STEP_FILE_NAME ), GetSettingsPtr()->m_CADLenUnit,
+        // The surfaces were scaled into the structures' analysis unit for meshing.
+        WriteSTEPFile( GetSettingsPtr()->GetExportFileName( vsp::FEA_STEP_FILE_NAME ), m_Vehicle->GetStructLenUnit(),
                        GetSettingsPtr()->m_STEPTol, GetSettingsPtr()->m_STEPMergePoints,
                        GetSettingsPtr()->m_CADLabelID, GetSettingsPtr()->m_CADLabelSurfNo, GetSettingsPtr()->m_CADLabelSplitNo,
                        GetSettingsPtr()->m_CADLabelName, delim, GetSettingsPtr()->m_STEPRepresentation );
@@ -911,7 +997,8 @@ void FeaMeshMgrSingleton::AddStructureSurfParts()
             {
                 vector< XferSurf > partxfersurfs;
 
-                fea_part_vec[i]->FetchFeaXFerSurf( partxfersurfs, -9999 + ( i - 1 ) );
+                fea_part_vec[i]->FetchFeaXFerSurf( partxfersurfs, -9999 + ( i - 1 ), std::vector< double >(),
+                                                   std::vector< double >(), GetSettingsPtr()->m_SplitJoinSurfsFlag );
 
                 // Load FeaPart XFerSurf to m_SurfVec
                 LoadSurfs( partxfersurfs, GetMeshPtr()->m_LenScale, start_surf_id );
@@ -928,6 +1015,23 @@ void FeaMeshMgrSingleton::AddStructureSurfParts()
             }
         }
     }
+}
+
+// A fix point is given in the parent surface's parameters.  A patch cut from that surface is
+// not always a plain piece of it -- a wing's trailing edge patch is the strip at one end of w
+// joined to the strip at the other -- so the patch has to be asked where the point falls in
+// its own terms.  A point the patch does not cover is handed back unchanged; it was never
+// going to be used, and an invented number would be worse than the original.
+static vec2d FixPointPatchUW( const Surf *srf, const vec2d &uw )
+{
+    double u, w;
+
+    if ( srf->ToPatchUW( uw.x(), uw.y(), u, w ) )
+    {
+        return vec2d( u, w );
+    }
+
+    return uw;
 }
 
 void FeaMeshMgrSingleton::AddStructureFixPoints()
@@ -992,11 +1096,13 @@ void FeaMeshMgrSingleton::AddStructureFixPoints()
                                 // values of the parameter are valid on both patches.  This is not true when you reach the max/min
                                 // limit of a patch.  I.e. W=0.0 and W=1.0 are the same point, but both do not get added by this
                                 // logic.
-                                if ( m_SurfVec[k]->ValidUW( fxpt.m_UW, 0.0 ) )
+                                vec2d puw = FixPointPatchUW( m_SurfVec[k], fxpt.m_UW );
+
+                                if ( m_SurfVec[k]->ValidUW( puw, 0.0 ) )
                                 {
                                     surf_index.push_back( k );
 
-                                    int border = m_SurfVec[k]->UWPointOnBorder( fxpt.m_UW.x(), fxpt.m_UW.y(), 1e-6 );
+                                    int border = m_SurfVec[k]->UWPointOnBorder( puw.x(), puw.y(), 1e-6 );
                                     if ( border != SurfCore::NOBNDY )
                                     {
                                         onborder = true;
@@ -1077,7 +1183,7 @@ void FeaMeshMgrSingleton::ForceSurfaceFixPoints( int surf_indx, vector < vec2d >
                     {
                         if ( fxpt.m_BorderFlag[ j ] == SURFACE_FIX_POINT )  // Should be redundant by now, but to be safe.
                         {
-                            adduw.push_back( fxpt.m_UW );
+                            adduw.push_back( FixPointPatchUW( m_SurfVec[ surf_indx ], fxpt.m_UW ) );
                         }
                     }
                 }
@@ -1182,8 +1288,8 @@ void FeaMeshMgrSingleton::RemoveTrimTris()
         {
             bool delSomeTris = false;
 
-            list < Face * > faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
-            for ( list < Face * >::iterator t = faceList.begin(); t != faceList.end(); ++t ) // every triangle
+            const list < Face * > &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
+            for ( list < Face * >::const_iterator t = faceList.begin(); t != faceList.end(); ++t ) // every triangle
             {
                 vec3d cp = ( *t )->ComputeCenterPnt( m_SurfVec[ s ] );
 
@@ -1745,7 +1851,8 @@ void FeaMeshMgrSingleton::SetFixPointSurfaceNodes()
                     {
                         string fix_point_name = GetMeshPtr()->m_FeaPartNameVec[ fxpt.m_FeaPartIndex ];
 
-                        if ( m_SurfVec[ fxpt.m_SurfInd[j][0] ]->GetMesh()->SetFixPoint( fxpt.m_Pnt[j], fxpt.m_UW ) )
+                        if ( m_SurfVec[ fxpt.m_SurfInd[j][0] ]->GetMesh()->SetFixPoint( fxpt.m_Pnt[j],
+                                 FixPointPatchUW( m_SurfVec[ fxpt.m_SurfInd[j][0] ], fxpt.m_UW ) ) )
                         {
                             // No message on success.
                         }
@@ -1792,18 +1899,21 @@ void FeaMeshMgrSingleton::SetFixPointBorderNodes()
                         {
                             vec2d closest_uwA, closest_uwB;
 
-                            if ( ( *c )->m_SurfA->ValidUW( fxpt.m_UW ) )
+                            vec2d puwA = FixPointPatchUW( ( *c )->m_SurfA, fxpt.m_UW );
+                            vec2d puwB = FixPointPatchUW( ( *c )->m_SurfB, fxpt.m_UW );
+
+                            if ( ( *c )->m_SurfA->ValidUW( puwA ) )
                             {
-                                closest_uwA = ( *c )->m_SurfA->ClosestUW( fxpt.m_Pnt[j], fxpt.m_UW[0], fxpt.m_UW[1] );
+                                closest_uwA = ( *c )->m_SurfA->ClosestUW( fxpt.m_Pnt[j], puwA[0], puwA[1] );
                             }
                             else
                             {
                                 closest_uwA = ( *c )->m_SurfA->ClosestUW( fxpt.m_Pnt[j] );
                             }
 
-                            if ( ( *c )->m_SurfB->ValidUW( fxpt.m_UW ) )
+                            if ( ( *c )->m_SurfB->ValidUW( puwB ) )
                             {
-                                closest_uwB = ( *c )->m_SurfB->ClosestUW( fxpt.m_Pnt[j], fxpt.m_UW[0], fxpt.m_UW[1] );
+                                closest_uwB = ( *c )->m_SurfB->ClosestUW( fxpt.m_Pnt[j], puwB[0], puwB[1] );
                             }
                             else
                             {
@@ -1911,7 +2021,8 @@ void FeaMeshMgrSingleton::CheckFixPointIntersects()
                                     // Compare FeaFixPoint to closest point on other surface
                                     if ( dist( closest_pnt, fxpt.m_Pnt[j] ) <= tol )
                                     {
-                                        vec2d closest_uwA = ( *c )->m_SurfA->ClosestUW( fxpt.m_Pnt[j], fxpt.m_UW[0], fxpt.m_UW[1] );
+                                        vec2d puwA = FixPointPatchUW( ( *c )->m_SurfA, fxpt.m_UW );
+                                        vec2d closest_uwA = ( *c )->m_SurfA->ClosestUW( fxpt.m_Pnt[j], puwA[0], puwA[1] );
                                         vec2d closest_uwB = closest_uw;
 
                                         if ( ( *c )->m_SurfA->ValidUW( closest_uwA ) )
@@ -1947,7 +2058,8 @@ void FeaMeshMgrSingleton::CheckFixPointIntersects()
                                     if ( dist( closest_pnt, fxpt.m_Pnt[j] ) <= tol )
                                     {
                                         vec2d closest_uwA = closest_uw;
-                                        vec2d closest_uwB = ( *c )->m_SurfB->ClosestUW( fxpt.m_Pnt[j], fxpt.m_UW[0], fxpt.m_UW[1] );
+                                        vec2d puwB = FixPointPatchUW( ( *c )->m_SurfB, fxpt.m_UW );
+                                        vec2d closest_uwB = ( *c )->m_SurfB->ClosestUW( fxpt.m_Pnt[j], puwB[0], puwB[1] );
 
                                         if ( ( *c )->m_SurfA->ValidUW( closest_uwA ) )
                                         {
@@ -1997,8 +2109,10 @@ void FeaMeshMgrSingleton::CheckFixPointIntersects()
 
                                 if ( closest_dist < ss_tol )
                                 {
-                                    vec2d closest_uwA = ( *c )->m_SurfA->ClosestUW( fxpt.m_Pnt[j], fxpt.m_UW[0], fxpt.m_UW[1] );
-                                    vec2d closest_uwB = ( *c )->m_SurfB->ClosestUW( fxpt.m_Pnt[j], fxpt.m_UW[0], fxpt.m_UW[1] );
+                                    vec2d puwA = FixPointPatchUW( ( *c )->m_SurfA, fxpt.m_UW );
+                                    vec2d puwB = FixPointPatchUW( ( *c )->m_SurfB, fxpt.m_UW );
+                                    vec2d closest_uwA = ( *c )->m_SurfA->ClosestUW( fxpt.m_Pnt[j], puwA[0], puwA[1] );
+                                    vec2d closest_uwB = ( *c )->m_SurfB->ClosestUW( fxpt.m_Pnt[j], puwB[0], puwB[1] );
 
                                     if ( ( *c )->m_SurfA->ValidUW( closest_uwA ) )
                                     {
@@ -2138,19 +2252,32 @@ void FeaMeshMgrSingleton::CheckSubSurfBorderIntersect()
                 // Get all SubSurfaces for the specified geom
                 vector < SimpleSubSurface > ss_vec = GetSimpSubSurfs( surf_vec[i]->GetGeomID(), surf_vec[i]->GetMainSurfID(), surf_vec[i]->GetCompID() );
 
+                // Everything below this point -- the chain's split points, the surface
+                // limits, the clamping -- is in the patch's parameters.  The subsurface is
+                // in the Geom's, so it is clipped and converted per region up front and the
+                // rest of the comparison is left to work in one space.
+                vector < UWRegion > regvec = surf_vec[i]->GetUWRegionsOrWhole();
+
                 int ss = 0;
 
                 while ( ss < (int)ss_vec.size() && ( *c )->m_BorderFlag && ( *c )->m_SSIntersectIndex < 0 )
                 {
                     if ( ss_vec[ss].m_CreateBeamElements ) // Only consider SubSurface if cap intersections is flagged
                     {
-                        // Split SubSurfs
-                        ss_vec[ss].SplitSegsU( surf_vec[i]->GetSurfCore()->GetMinU() );
-                        ss_vec[ss].SplitSegsU( surf_vec[i]->GetSurfCore()->GetMaxU() );
-                        ss_vec[ss].SplitSegsW( surf_vec[i]->GetSurfCore()->GetMinW() );
-                        ss_vec[ss].SplitSegsW( surf_vec[i]->GetSurfCore()->GetMaxW() );
+                      for ( int ir = 0; ir < (int)regvec.size() && ( *c )->m_BorderFlag && ( *c )->m_SSIntersectIndex < 0; ir++ )
+                      {
+                        const UWRegion &reg = regvec[ir];
 
-                        vector < vector< SSLineSeg > >& segsvec = ss_vec[ss].GetSplitSegs();
+                        // Splitting modifies the subsurface, so each region starts from a copy.
+                        SimpleSubSurface ssurf = ss_vec[ss];
+
+                        // Split SubSurfs
+                        ssurf.SplitSegsU( reg.m_UMin );
+                        ssurf.SplitSegsU( reg.m_UMax );
+                        ssurf.SplitSegsW( reg.m_WMin );
+                        ssurf.SplitSegsW( reg.m_WMax );
+
+                        vector < vector< SSLineSeg > >& segsvec = ssurf.GetSplitSegs();
 
                         // Build Intersection Chains
                         int j = 0;
@@ -2164,6 +2291,11 @@ void FeaMeshMgrSingleton::CheckSubSurfBorderIntersect()
                             {
                                 vec3d lp0 = segs[ls].GetP0();
                                 vec3d lp1 = segs[ls].GetP1();
+
+                                // Into the patch's parameters before anything is compared.
+                                lp0 = vec3d( reg.ToPatchU( lp0.x() ), reg.ToPatchW( lp0.y() ), 0.0 );
+                                lp1 = vec3d( reg.ToPatchU( lp1.x() ), reg.ToPatchW( lp1.y() ), 0.0 );
+
                                 vec2d uw_pnt0 = vec2d( lp0.x(), lp0.y() );
                                 vec2d uw_pnt1 = vec2d( lp1.x(), lp1.y() );
 
@@ -2238,7 +2370,7 @@ void FeaMeshMgrSingleton::CheckSubSurfBorderIntersect()
                                     ( std::abs( uw_pnt0[1] - max_w ) < tol && std::abs( uw_pnt1[1] - max_w ) < tol ) ||
                                      ( std::abs( uw_pnt0[0] - min_u ) < tol && std::abs( uw_pnt1[0] - min_u ) < tol ) ||
                                      ( std::abs( uw_pnt0[1] - min_w ) < tol && std::abs( uw_pnt1[1] - min_w ) < tol ) )
-                                        && ss_vec[ss].GetPolyFlag() )
+                                        && ssurf.GetPolyFlag() )
                                 {
                                     if ( ( dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Puws[0]->m_UW, uw_pnt0 ) <= FLT_EPSILON
                                          && dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Puws.back()->m_UW, uw_pnt1 ) <= FLT_EPSILON )
@@ -2420,6 +2552,7 @@ void FeaMeshMgrSingleton::CheckSubSurfBorderIntersect()
                             }
                             j++; // increase segvec index
                         }
+                      }
                     }
                     ss++; // increase subsurface index
                 }
@@ -2453,20 +2586,32 @@ void FeaMeshMgrSingleton::MergeFeaPartSSEdgeOverlap()
             {
                 vector < SimpleSubSurface > ss_vec = GetSimpSubSurfs( surfB->GetGeomID(), surfB->GetMainSurfID(), surfB->GetCompID() );
 
+                // The skin patch may be built from more than one piece of the Geom's
+                // surface, and the subsurface is drawn in the Geom's parameters, so each
+                // piece is clipped and converted on its own.
+                vector < UWRegion > regvec = surfB->GetUWRegionsOrWhole();
+
                 // Split SubSurfs
                 for ( int ss = 0; ss < (int)ss_vec.size(); ss++ )
                 {
-                    ss_vec[ss].SplitSegsU( surfB->GetSurfCore()->GetMinU() );
-                    ss_vec[ss].SplitSegsU( surfB->GetSurfCore()->GetMaxU() );
-                    ss_vec[ss].SplitSegsW( surfB->GetSurfCore()->GetMinW() );
-                    ss_vec[ss].SplitSegsW( surfB->GetSurfCore()->GetMaxW() );
+                  for ( int ir = 0; ir < (int)regvec.size(); ir++ )
+                  {
+                    const UWRegion &reg = regvec[ir];
 
-                    vector < vector< SSLineSeg > >& segsvec = ss_vec[ss].GetSplitSegs();
+                    // Splitting modifies the subsurface, so each region starts from a copy.
+                    SimpleSubSurface ssurf = ss_vec[ss];
+
+                    ssurf.SplitSegsU( reg.m_UMin );
+                    ssurf.SplitSegsU( reg.m_UMax );
+                    ssurf.SplitSegsW( reg.m_WMin );
+                    ssurf.SplitSegsW( reg.m_WMax );
+
+                    vector < vector< SSLineSeg > >& segsvec = ssurf.GetSplitSegs();
 
                     for ( int k = 0; k < segsvec.size(); k++ )
                     {
                         vector< SSLineSeg >& segs = segsvec[k];
-                        bool is_poly = ss_vec[ss].GetPolyFlag();
+                        bool is_poly = ssurf.GetPolyFlag();
 
                         // Build Intersection Chains
                         for ( int ls = 0; ls < (int)segs.size(); ls++ )
@@ -2481,10 +2626,10 @@ void FeaMeshMgrSingleton::MergeFeaPartSSEdgeOverlap()
                             double max_u, max_w, tol;
                             double min_u, min_w;
                             tol = 1e-6;
-                            min_u = surfB->GetSurfCore()->GetMinU();
-                            min_w = surfB->GetSurfCore()->GetMinW();
-                            max_u = surfB->GetSurfCore()->GetMaxU();
-                            max_w = surfB->GetSurfCore()->GetMaxW();
+                            min_u = reg.m_UMin;
+                            min_w = reg.m_WMin;
+                            max_u = reg.m_UMax;
+                            max_w = reg.m_WMax;
 
                             if ( uw_pnt0[0] < min_u - FLT_EPSILON || uw_pnt0[1] < min_w - FLT_EPSILON || uw_pnt1[0] < min_u - FLT_EPSILON || uw_pnt1[1] < min_w - FLT_EPSILON )
                             {
@@ -2502,6 +2647,11 @@ void FeaMeshMgrSingleton::MergeFeaPartSSEdgeOverlap()
                             {
                                 continue; // Skip if both end points are on the same edge of the surface
                             }
+
+                            // Everything above was in the Geom's parameters.  From here on
+                            // the skin patch is asked about its own.
+                            uw_pnt0 = vec2d( reg.ToPatchU( uw_pnt0[0] ), reg.ToPatchW( uw_pnt0[1] ) );
+                            uw_pnt1 = vec2d( reg.ToPatchU( uw_pnt1[0] ), reg.ToPatchW( uw_pnt1[1] ) );
 
                             // Project SubSurface edge point on FeaPart surface
                             vec3d skin_pnt0 = surfB->CompPnt( uw_pnt0[0], uw_pnt0[1] );
@@ -2528,7 +2678,7 @@ void FeaMeshMgrSingleton::MergeFeaPartSSEdgeOverlap()
                                             if ( std::find( remove_chain_list.begin(), remove_chain_list.end(), ( *c1 ) ) == remove_chain_list.end() )
                                             {
                                                 string part = GetMeshPtr()->m_FeaPartNameVec[surfA->GetFeaPartIndex()];
-                                                string message = "Merged Intersection Curve: " + part + " and " + ss_vec[ss].GetName() + "\n";
+                                                string message = "Merged Intersection Curve: " + part + " and " + ssurf.GetName() + "\n";
                                                 addOutputText( message );
 
                                                 remove_chain_list.push_back( *c1 );
@@ -2600,6 +2750,7 @@ void FeaMeshMgrSingleton::MergeFeaPartSSEdgeOverlap()
                             }
                         }
                     }
+                  }
                 }
             }
         }
@@ -3032,6 +3183,13 @@ void FeaMeshMgrSingleton::UpdateAssemblyDisplaySettings( const string &assembly_
     }
 }
 
+static void RegisterFeaMeshAnalysis()
+{
+    FeaMeshMgr.RegisterAnalysis();
+}
+
+static AnalysisRegistrar g_FeaMeshRegistrar( RegisterFeaMeshAnalysis );
+
 void FeaMeshMgrSingleton::RegisterAnalysis()
 {
     if (!AnalysisMgr.FindAnalysis( "FeaMeshAnalysis" ))
@@ -3041,6 +3199,16 @@ void FeaMeshMgrSingleton::RegisterAnalysis()
         if ( sia && !AnalysisMgr.RegisterAnalysis( sia ) )
         {
             delete sia;
+        }
+    }
+
+    if ( !AnalysisMgr.FindAnalysis( "FeaMeshExport" ) )
+    {
+        FeaMeshExportAnalysis* fea_export = new FeaMeshExportAnalysis();
+
+        if ( fea_export && !AnalysisMgr.RegisterAnalysis( fea_export ) )
+        {
+            delete fea_export;
         }
     }
 }

@@ -330,7 +330,7 @@ void NerfManageGeomScreen::LoadBrowser()
                 }
 
                 // Is this geom a HINGE? Change its child lines to double style
-                HingeGeom* hPtr = dynamic_cast < HingeGeom* > ( gPtr );
+                JointRole* hPtr = Geom::CastTo < JointRole > ( gPtr );
                 if ( hPtr )
                 {
                     geom_tree_item->SetChildVConnLine( TREE_LINE_CONN::STYLE_DOUBLE );
@@ -339,7 +339,7 @@ void NerfManageGeomScreen::LoadBrowser()
                 if ( parent_ptr )
                 {
                     // Is this geom ATTACHED to a hinge? Change its attachment lines to double style
-                    HingeGeom* parent_hPtr = dynamic_cast < HingeGeom* > ( parent_ptr );
+                    JointRole* parent_hPtr = Geom::CastTo < JointRole > ( parent_ptr );
                     if ( parent_hPtr )
                     {
                         geom_tree_item->SetHConnLine( TREE_LINE_CONN::STYLE_DOUBLE );
@@ -389,6 +389,16 @@ void NerfManageGeomScreen::LoadBrowser()
                     label_color = fl_lighter( label_color );
                 }
                 geom_tree_item->labelcolor( label_color );
+
+                // Italics mark an automatic name, as in the Geom Browser.
+                if ( gPtr->NameIsAutomatic() )
+                {
+                    geom_tree_item->labelfont( FL_HELVETICA_ITALIC );
+                }
+                else
+                {
+                    geom_tree_item->labelfont( FL_HELVETICA );
+                }
 
                 // Close item if display children flag false
                 if ( !gPtr->m_GuiDraw.GetDisplayChildrenFlag() )

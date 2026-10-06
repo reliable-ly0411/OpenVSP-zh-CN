@@ -24,6 +24,7 @@
 #include "Background3DMgr.h"
 #include "BlankGeom.h"
 #include "BORGeom.h"
+#include "CloneGeom.h"
 #include "ConformalGeom.h"
 #include "CustomGeom.h"
 #include "DesignVarMgr.h"
@@ -188,6 +189,9 @@ Vehicle::Vehicle()
     m_SVGView4_rot.Init( "BottomRightRotation", "SVGSettings", this, vsp::ROT_0, vsp::ROT_0, vsp::ROT_270 );
 
     m_WorkingXDDMType.Init( "Working_XDDM_Type", "Design", this, vsp::XDDM_VAR, vsp::XDDM_VAR, vsp::XDDM_CONST );
+    // 1e12 is the largest observed Parm lower/upper limit in OpenVSP.  This needs to meet or exceed that limit.
+    m_WorkingDVMin.Init( "WorkingDVMin", "Design", this, 0, -1e12, 1e12 );
+    m_WorkingDVMax.Init( "WorkingDVMax", "Design", this, 0, -1e12, 1e12 );
 
     m_SurfIndx.Init( "SurfIndx", "FitModel", this, 0, 0, 1e6 );
     m_SurfIndx.SetDescript( "Surface index a target point is matched to" );
@@ -447,6 +451,7 @@ void Vehicle::Init()
     m_GeomTypeVec.push_back( GeomType( ROUTING_GEOM_TYPE, "ROUTING", true ) );
     m_GeomTypeVec.push_back( GeomType( AUXILIARY_GEOM_TYPE, "AUXILIARY", true ) );
     m_GeomTypeVec.push_back( GeomType( COBRA_GEOM_TYPE, "COBRA", true ) );
+    m_GeomTypeVec.push_back( GeomType( CLONE_GEOM_TYPE, "CLONE", true ) );
 
     //==== Get Custom Geom Types =====//
     vector< GeomType > custom_types = CustomGeomMgr.GetCustomTypes();
@@ -716,7 +721,12 @@ void Vehicle::Wype()
 
     ResultsMgr.DeleteAllResults();
 
-    // Need to renew FeaMeshMgr to  FeaMeshMgr.CleanMeshMap() however, it is invisible from here.
+    // The meshers keep their results and everything drawn from them, and they outlive any one
+    // model, so a mesh left behind here would survive into a model it has nothing to do with.
+    // They cannot be called directly -- the geometry core does not depend on the meshing
+    // library, and must not -- so they are told, which is what MessageMgr is for.  Any that
+    // was never used has never registered, and has nothing to throw away in any case.
+    MessageMgr::getInstance().Send( "MeshRenew", "Renew" );
 
     LightMgr.Wype();
 }
@@ -1130,6 +1140,10 @@ string Vehicle::CreateGeom( const GeomType & type )
     {
         new_geom = new CobraGeom( this );
     }
+    else if ( type.m_Name == "Clone" || type.m_Name == "CLONE" )
+    {
+        new_geom = new CloneGeom( this );
+    }
 
     if ( !new_geom )
     {
@@ -1277,7 +1291,7 @@ string Vehicle::AddMeshGeom( BndBox & bbox, int normal_set, int degen_set, bool 
 
             if ( g_ptr->GetSetFlag( degen_set ) )
             {
-                if( g_ptr->GetType().m_Type != BLANK_GEOM_TYPE )
+                if( g_ptr->GetBehaviorType() != BLANK_GEOM_TYPE )
                 {
                     vector< DegenGeom > DegenGeomVec; // Vector of geom in degenerate representation
 
@@ -1327,7 +1341,7 @@ string Vehicle::AddMeshGeom( BndBox & bbox, int normal_set, int degen_set, bool 
         Geom* g_ptr = FindGeom( singleGeomID );
         if ( g_ptr )
         {
-            if( g_ptr->GetType().m_Type != BLANK_GEOM_TYPE )
+            if( g_ptr->GetBehaviorType() != BLANK_GEOM_TYPE )
             {
                 vector< DegenGeom > DegenGeomVec; // Vector of geom in degenerate representation
 
@@ -1568,10 +1582,11 @@ vector< TetraMassProp* > Vehicle::CreateTetraMassPropVec( const string &geomid )
 
         }
 
-        RoutingGeom *rg = dynamic_cast< RoutingGeom* >( geom_ptr );
+        // By role, so a Clone of a route is weighed too.
+        RouteRole *rg = Geom::CastTo< RouteRole >( geom_ptr );
         if ( rg )
         {
-            if ( rg->m_LinearDensity() != 0.0 )
+            if ( rg->GetRouteLinearDensity() != 0.0 )
             {
                 vector < TetraMassProp* > rgm = rg->ComputeMassProp(); // Deleted by mesh_ptr
 
@@ -1680,6 +1695,89 @@ void Vehicle::DeleteGeomVec( const vector< string > & del_vec )
         const string& id = del_vec[c];
         DeleteGeom( id );
     }
+}
+
+void Vehicle::DeleteGeomVec( const vector< string > & del_vec, int clone_delete )
+{
+    DeleteGeomVec( SettleClonesOf( del_vec, clone_delete ) );
+}
+
+void Vehicle::CutGeomVec( const vector< string > & cut_vec, int clone_delete )
+{
+    CutGeomVec( SettleClonesOf( cut_vec, clone_delete ) );
+}
+
+vector< string > Vehicle::FindClonesOf( const vector< string > & geom_id_vec )
+{
+    vector< string > clone_vec;
+
+    vector< string > all_vec = GetGeomVec();
+    for ( int i = 0; i < ( int )all_vec.size(); i++ )
+    {
+        CloneGeom* clone = dynamic_cast < CloneGeom* > ( FindGeom( all_vec[i] ) );
+        if ( clone && !vector_contains_val( geom_id_vec, clone->GetID() ) &&
+             vector_contains_val( geom_id_vec, clone->GetOriginalID() ) )
+        {
+            clone_vec.push_back( clone->GetID() );
+        }
+    }
+
+    return clone_vec;
+}
+
+vector< string > Vehicle::FindAllClonesOf( const vector< string > & geom_id_vec )
+{
+    vector< string > all_vec;
+    vector< string > going_vec = geom_id_vec;
+
+    // Follow Clones of Clones.
+    vector< string > clone_vec = FindClonesOf( going_vec );
+    while ( !clone_vec.empty() )
+    {
+        all_vec.insert( all_vec.end(), clone_vec.begin(), clone_vec.end() );
+        going_vec.insert( going_vec.end(), clone_vec.begin(), clone_vec.end() );
+        clone_vec = FindClonesOf( going_vec );
+    }
+
+    return all_vec;
+}
+
+vector< string > Vehicle::SettleClonesOf( const vector< string > & geom_id_vec, int clone_delete )
+{
+    vector< string > gone_vec = geom_id_vec;
+
+    if ( clone_delete == vsp::CLONE_DELETE_WITH_ORIGINAL )
+    {
+        vector< string > clone_vec = FindAllClonesOf( gone_vec );
+        gone_vec.insert( gone_vec.end(), clone_vec.begin(), clone_vec.end() );
+        return gone_vec;
+    }
+
+    // ReplaceCloneGeom changes the selection; restore it afterwards.
+    vector< string > active_store = GetActiveGeomVec();
+
+    vector< string > clone_vec = FindClonesOf( geom_id_vec );
+    for ( int i = 0; i < ( int )clone_vec.size(); i++ )
+    {
+        // A replacement that cannot be made leaves the Clone to be emptied.
+        if ( clone_delete == vsp::CLONE_DELETE_REPLACE && !ReplaceCloneGeom( clone_vec[i] ).empty() )
+        {
+            UpdateGeom( clone_vec[i] );
+            continue;
+        }
+
+        CloneGeom* clone = dynamic_cast < CloneGeom* > ( FindGeom( clone_vec[i] ) );
+        if ( clone )
+        {
+            clone->ReleaseOriginal();
+
+            clone->Update();
+        }
+    }
+
+    SetActiveGeomVec( active_store );
+
+    return gone_vec;
 }
 
 void Vehicle::CutGeomVec( const vector< string > & cut_vec )
@@ -1937,7 +2035,287 @@ void Vehicle::ReparentActiveGeom( int action )
     }
 }
 
-//==== \Delete Active Geom ====//
+//==== Clone Geoms ====//
+// One Clone per Geom, keeping the hierarchy among them.  Each top Clone is a sibling of its
+// original and places itself; the Clones below it copy their relative placement.
+vector< string > Vehicle::CloneGeomVec( const vector<string> & geom_id_vec, const string & name_suffix )
+{
+    vector< string > clone_vec;
+
+    map < string, string > clone_of_id;
+
+    vector< string > active_store = GetActiveGeomVec();
+
+    // Hierarchy order, so a parent's Clone is made before its children's.
+    vector< string > ordered_vec = GetGeomVec();
+
+    for ( int i = 0 ; i < ( int )ordered_vec.size() ; i++ )
+    {
+        if ( !vector_contains_val( geom_id_vec, ordered_vec[i] ) )
+        {
+            continue;
+        }
+
+        Geom* orig_geom = FindGeom( ordered_vec[i] );
+        if ( !orig_geom )
+        {
+            continue;
+        }
+
+        // The nearest ancestor that is also being cloned, if any.
+        string clone_parent_id = "NONE";
+        string walk_id = orig_geom->GetParentID();
+        while ( walk_id != "NONE" && !walk_id.empty() )
+        {
+            map < string, string >::iterator iclone = clone_of_id.find( walk_id );
+            if ( iclone != clone_of_id.end() )
+            {
+                clone_parent_id = iclone->second;
+                break;
+            }
+
+            Geom* walk_geom = FindGeom( walk_id );
+            if ( !walk_geom )
+            {
+                break;
+            }
+            walk_id = walk_geom->GetParentID();
+        }
+
+        // None, so it goes beside the original.
+        bool top_flag = false;
+        if ( clone_parent_id == "NONE" )
+        {
+            clone_parent_id = orig_geom->GetParentID();
+            top_flag = true;
+        }
+
+        // AddGeom parents to the active Geom.
+        vector< string > parent_vec;
+        if ( clone_parent_id != "NONE" && !clone_parent_id.empty() )
+        {
+            parent_vec.push_back( clone_parent_id );
+        }
+        SetActiveGeomVec( parent_vec );
+
+        GeomType clone_type( CLONE_GEOM_TYPE, "CLONE", true );
+        string clone_id = AddGeom( clone_type );
+
+        CloneGeom* clone_geom = dynamic_cast < CloneGeom* > ( FindGeom( clone_id ) );
+        if ( !clone_geom )
+        {
+            continue;
+        }
+
+        clone_geom->SetNameSuffix( name_suffix );
+
+        clone_geom->SetOriginalID( orig_geom->GetID() );
+
+        // The top starts at the original's placement and is free to move; the rest copy theirs.
+        clone_geom->m_CloneXForm.Set( !top_flag );
+        if ( top_flag )
+        {
+            CloneGeom::CopyXFormParms( orig_geom, clone_geom );
+        }
+
+        // Display settings are not Parms, so copy them here.  A Clone added from the Add menu
+        // keeps the defaults.
+        clone_geom->m_GuiDraw.CopyDisplaySettings( orig_geom->m_GuiDraw );
+
+        clone_of_id[ orig_geom->GetID() ] = clone_id;
+        clone_vec.push_back( clone_id );
+    }
+
+    if ( clone_vec.empty() )
+    {
+        SetActiveGeomVec( active_store );
+    }
+    else
+    {
+        SetActiveGeomVec( clone_vec );
+    }
+
+    Update();
+
+    return clone_vec;
+}
+
+// Replaces a Clone with a full copy of the Geom it shows, with the Clone's own Parm values
+// written onto the copy.  The copy takes the Clone's Geom ID, Parm IDs and subsurface IDs, so
+// attached Geoms, design variables, links and control surface groups keep working.
+string Vehicle::ReplaceCloneGeom( const string & clone_id )
+{
+    CloneGeom* clone = dynamic_cast< CloneGeom* >( FindGeom( clone_id ) );
+    if ( !clone )
+    {
+        return string();
+    }
+
+    // The end of the Clone chain, so a Clone of a Clone is not replaced by another Clone.
+    Geom* original = clone->GetBehaviorGeom();
+    if ( !original || original == clone )
+    {
+        return string();
+    }
+
+    // A polygon mesh cannot be copied.
+    if ( original->GetType().m_Type == NGON_GEOM_TYPE )
+    {
+        MessageData errMsgData;
+        errMsgData.m_String = "Error";
+        errMsgData.m_IntVec.push_back( vsp::VSP_WRONG_GEOM_TYPE );
+        errMsgData.m_StringVec.push_back( string( "ReplaceCloneGeom::" ) + clone->GetName() +
+                                          " is a Clone of a polygon mesh, which cannot be copied." );
+        MessageMgr::getInstance().SendAll( errMsgData );
+        return string();
+    }
+
+    string clone_name = clone->GetName();
+    string parent_id = clone->GetParentID();
+    vector< string > children = clone->GetChildIDVec();
+    // Every plane the Clone shows its shape reflected about.  None where the flip does not
+    // apply (e.g. a Blank), whatever its Parm holds.
+    int flip_flag = 0;
+    if ( clone->GetNumFlipPlanes() != 0 )
+    {
+        flip_flag = clone->GetFlipFlag();
+    }
+
+    BndBox clone_box = clone->GetBndBox();
+
+    //==== Full copy of the original ====//
+    vector< string > made = CopyGeomVec( vector< string >( 1, original->GetID() ) );
+    if ( made.size() != 1 )
+    {
+        return string();
+    }
+
+    Geom* replacement = FindGeom( made[0] );
+    if ( !replacement )
+    {
+        return string();
+    }
+
+    //==== Values the Clone shows, taken from the Clone ====//
+    // Not gated on the switches: the Clone holds every value either way, and in a chain of Clones
+    // the copy (from the end of the chain) may differ from what the Clone shows.
+    CloneGeom::CopyXFormParms( clone, replacement );
+    CloneGeom::CopyAttachParms( clone, replacement );
+    CloneGeom::CopySymParms( clone, replacement );
+    if ( replacement->FlipApplies() )
+    {
+        replacement->m_FlipFlag.Set( flip_flag );
+    }
+    CloneGeom::CopySetFlags( clone, replacement );
+    CloneGeom::CopyMassPropParms( clone, replacement );
+    CloneGeom::CopyNegativeVolumeParm( clone, replacement );
+    CloneGeom::CopyAppearance( clone, replacement );
+
+    // Display settings are not Parms, so copy them explicitly.
+    replacement->m_GuiDraw.CopyDisplaySettings( clone->m_GuiDraw );
+
+    // CopySetFlags skips the show flags; the replacement takes the Clone's.
+    replacement->SetSetFlag( vsp::SET_SHOWN, clone->GetSetFlag( vsp::SET_SHOWN ) );
+    replacement->SetSetFlag( vsp::SET_NOT_SHOWN, clone->GetSetFlag( vsp::SET_NOT_SHOWN ) );
+
+    // Joint pose, if the replacement is a joint.
+    JointRole* joint = Geom::CastTo< JointRole >( replacement );
+    if ( joint )
+    {
+        joint->SetJointTranslate( clone->GetJointTranslate() );
+        joint->SetJointRotate( clone->GetJointRotate() );
+    }
+
+    // Drop the Clone's step-child entry on its original before the ID swap; the replacement
+    // takes the ID, so the stale entry would never be pruned.
+    Geom* registered_on = clone->GetOriginalGeom();
+    if ( registered_on )
+    {
+        registered_on->RemoveStepChildID( clone_id );
+    }
+
+    // Step children of the Clone (routes, gear) do not re-register themselves.
+    vector< string > step_children = clone->GetStepChildIDVec();
+    for ( int i = 0; i < ( int )step_children.size(); i++ )
+    {
+        replacement->AddStepChildID( step_children[i] );
+    }
+
+    //==== Subsurfaces, keeping their IDs ====//
+    clone->HandSubSurfsTo( replacement );
+
+    // Structures built on the Clone are the user's own; keep them alongside any the copy brought.
+    clone->HandFeaStructsTo( replacement );
+
+    // CFD sources are the Clone's own; they replace the copy's.
+    clone->HandCfdSourcesTo( replacement );
+
+    // Textures: with CloneAppearance off the Clone's list (even empty) replaces the copy's;
+    // with it on the Clone's own are appended.  Handed over to keep their IDs and Parms.
+    if ( !clone->m_CloneAppearance() )
+    {
+        clone->m_GuiDraw.getTextureMgr()->HandTexturesTo( replacement->m_GuiDraw.getTextureMgr() );
+    }
+    else
+    {
+        clone->m_GuiDraw.getTextureMgr()->AppendTexturesTo( replacement->m_GuiDraw.getTextureMgr() );
+    }
+
+    // The replacement takes the Clone's attributes, not the copy's.
+    replacement->GetAttrCollection()->DelAllAttrs();
+
+    //==== Swap the Geom ID and the IDs of Parms in common (by group and name) ====//
+    // Only base Geom Parms match; Clone-only Parms are in groups no other Geom has.  Everything
+    // that named the Clone now names the replacement, including its slot in the tree.
+    replacement->SwapIdentity( clone );
+
+    // Attributes follow the IDs; those on Clone-only Parms are kept on the replacement.
+    clone->HandAttributesTo( replacement );
+    clone->HandUnpairedAttributesTo( replacement );
+
+    replacement->SetName( clone_name );
+
+    //==== Parent and children are not covered by the swap ====//
+    replacement->SetParentID( parent_id );
+    for ( int i = 0; i < ( int )children.size(); i++ )
+    {
+        replacement->AddChildID( children[i] );
+    }
+
+    //==== Detach the Clone so deleting it disturbs nothing ====//
+    clone->SetParentID( "NONE" );
+    for ( int i = 0; i < ( int )children.size(); i++ )
+    {
+        clone->RemoveChildID( children[i] );
+    }
+
+    DeleteGeomVec( vector< string >( 1, clone->GetID() ) );
+
+    SetGeomMapDirtyFlag( true );
+
+    Update();
+
+    // Some Geoms place their own shape (e.g. a route or a conformal), so the copy may not land
+    // where the Clone stood.  Keep it, but report it.
+    BndBox replaced_box = replacement->GetBndBox();
+    double tol = 1.0e-9 * std::max( 1.0, clone_box.DiagDist() );
+    if ( dist( clone_box.GetMin(), replaced_box.GetMin() ) > tol ||
+         dist( clone_box.GetMax(), replaced_box.GetMax() ) > tol )
+    {
+        MessageData errMsgData;
+        errMsgData.m_String = "Error";
+        errMsgData.m_IntVec.push_back( vsp::VSP_WRONG_GEOM_TYPE );
+        errMsgData.m_StringVec.push_back( string( "ReplaceCloneGeom::" ) + clone_name +
+                                          " is a Clone of a Geom that places its own shape, so the"
+                                          " replacement does not stand where the Clone did." );
+        MessageMgr::getInstance().SendAll( errMsgData );
+    }
+
+    SetActiveGeomVec( vector< string >( 1, clone_id ) );
+
+    return clone_id;
+}
+
 void Vehicle::DeleteActiveGeomVec()
 {
     vector< string > sel_vec = GetActiveGeomVec();
@@ -1947,6 +2325,19 @@ void Vehicle::DeleteActiveGeomVec()
     }
 
     DeleteGeomVec( sel_vec );
+
+    ClearActiveGeom();
+}
+
+void Vehicle::DeleteActiveGeomVec( int clone_delete )
+{
+    vector< string > sel_vec = GetActiveGeomVec();
+    if ( sel_vec.size() == 0 )
+    {
+        return;
+    }
+
+    DeleteGeomVec( sel_vec, clone_delete );
 
     ClearActiveGeom();
 }
@@ -1962,6 +2353,20 @@ void Vehicle::CutActiveGeomVec()
 
     DeleteClipBoard();
     CutGeomVec( sel_vec );
+
+    ClearActiveGeom();
+}
+
+void Vehicle::CutActiveGeomVec( int clone_delete )
+{
+    vector< string > sel_vec = GetActiveGeomVec();
+    if ( sel_vec.size() == 0 )
+    {
+        return;
+    }
+
+    DeleteClipBoard();
+    CutGeomVec( sel_vec, clone_delete );
 
     ClearActiveGeom();
 }
@@ -2174,7 +2579,7 @@ string Vehicle::ConvertFuselageToStack( const string & fuse_id )
 
     vec3d color = fuse->GetColor();
     stack->SetColor( color.x(), color.y(), color.z() );
-    stack->GetMaterial()->SetMaterial( fuse->GetMaterial() );
+    stack->SetMaterial( *fuse->GetMaterial() );
 
     stack->m_GuiDraw.SetDisplayType( fuse->m_GuiDraw.GetDisplayType() );
     stack->m_GuiDraw.SetDrawType( fuse->m_GuiDraw.GetDrawType() );
@@ -2344,7 +2749,7 @@ vector< string > Vehicle::PasteClipboard()
                 parentGeom->AddChildID( gPtr->GetID() );
 
                 //==== Update gPtr and all children  ====//
-                if ( parentGeom->GetType().m_Type != HINGE_GEOM_TYPE )
+                if ( !Geom::CastTo< JointRole >( parentGeom ) )
                 {
                     gPtr->SetIgnoreAbsFlag( true );
                 }
@@ -2354,7 +2759,7 @@ vector< string > Vehicle::PasteClipboard()
 
             if ( parentGeom )
             {
-                if ( parentGeom->GetType().m_Type != HINGE_GEOM_TYPE )
+                if ( !Geom::CastTo< JointRole >( parentGeom ) )
                 {
                     gPtr->SetIgnoreAbsFlag( false );
                 }
@@ -3279,6 +3684,22 @@ bool Vehicle::ExistMesh( int set )
     return ExistType( set, MESH_GEOM_TYPE );
 }
 
+// Strictly the type; a Clone of that type does not count.  ExistType checks the behaviour.
+bool Vehicle::ExistGeomType( int set, int geomtype )
+{
+    vector< Geom* > geom_vec = FindGeomVec( GetGeomVec() );
+
+    for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
+    {
+        if ( geom_vec[i] && geom_vec[i]->GetSetFlag( set ) && geom_vec[i]->GetType().m_Type == geomtype )
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool Vehicle::ExistType( int set, int geomtype )
 {
     vector< Geom* > geom_vec = FindGeomVec( GetGeomVec() );
@@ -3291,7 +3712,7 @@ bool Vehicle::ExistType( int set, int geomtype )
     bool exist = false;
     for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
-        if ( geom_vec[i]->GetSetFlag( set ) && geom_vec[i]->GetType().m_Type == geomtype )
+        if ( geom_vec[i]->GetSetFlag( set ) && geom_vec[i]->GetBehaviorType() == geomtype )
         {
             exist = true;
         }
@@ -3363,7 +3784,7 @@ string Vehicle::WriteSTLFile( const string & file_name, int write_set, bool useM
     fprintf( fid, "solid\n" );
     for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
-        if ( geom_vec[i]->GetSetFlag( write_set ) && geom_vec[i]->GetType().m_Type == MESH_GEOM_TYPE )
+        if ( geom_vec[i]->GetSetFlag( write_set ) && Geom::CastTo< TMeshRole >( geom_vec[i] ) )
         {
             mesh_id = geom_vec[i]->GetID(); // Set ID in case mesh already existed
 
@@ -3417,18 +3838,20 @@ string Vehicle::WriteTaggedMSSTLFile( const string & file_name, int write_set, i
     }
 
     // Pre-build indexed meshes
-    vector< MeshGeom* > mg_vec;
+    vector< TMeshRole* > mg_vec;
+    vector< Geom* > mg_geom_vec;
     vector< vector< TTri* > > trivec_vec;
     vector< vector< TNode* > > nodvec_vec;
     for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
-        if ( geom_vec[i]->GetSetFlag( write_set ) && geom_vec[i]->GetType().m_Type == MESH_GEOM_TYPE )
+        TMeshRole* mg = Geom::CastTo< TMeshRole >( geom_vec[i] );
+        if ( geom_vec[i]->GetSetFlag( write_set ) && mg )
         {
-            MeshGeom* mg = ( MeshGeom* )geom_vec[i];
             mg_vec.push_back( mg );
+            mg_geom_vec.push_back( geom_vec[i] );
             trivec_vec.emplace_back();
             nodvec_vec.emplace_back();
-            BuildIndexedMesh( mg->m_TMeshVec, mg->m_SliceVec, mg->m_ViewMeshFlag(), mg->m_ViewSliceFlag(),
+            BuildIndexedMesh( mg->GetTMeshVecInSelf(), mg->GetTMeshSliceVec(), mg->GetTMeshViewMeshFlag(), mg->GetTMeshViewSliceFlag(),
                               trivec_vec.back(), nodvec_vec.back() );
         }
     }
@@ -3444,8 +3867,8 @@ string Vehicle::WriteTaggedMSSTLFile( const string & file_name, int write_set, i
 
             for ( int j = 0 ; j < ( int )mg_vec.size() ; j++ )
             {
-                mesh_id = mg_vec[j]->GetID(); // Set ID in case mesh already existed
-                WriteStlByTag( file_id, tags[i], trivec_vec[j] );
+                mesh_id = mg_geom_vec[j]->GetID(); // Set ID in case mesh already existed
+                WriteStlByTag( file_id, tags[i], trivec_vec[j], mg_vec[j]->GetTMeshTransMat(), mg_vec[j]->GetRoleShapeFlipNormal() );
             }
             fprintf( file_id, "endsolid %d_%s\n", tags[i], tagname.c_str() );
         }
@@ -3516,20 +3939,22 @@ string Vehicle::WriteFacetFile( const string & file_name, int write_set, int sub
         int num_parts = 0;
 
         // Pre-build indexed meshes
-        vector< MeshGeom* > mg_vec;
+        vector< TMeshRole* > mg_vec;
+        vector< Geom* > mg_geom_vec;
         vector< vector< TTri* > > trivec_vec;
         vector< vector< TNode* > > nodvec_vec;
         for ( int i = 0; i < (int)geom_vec.size(); i++ )
         {
-            if ( geom_vec[i]->GetSetFlag( write_set ) && geom_vec[i]->GetType().m_Type == MESH_GEOM_TYPE )
+            TMeshRole* mg = Geom::CastTo< TMeshRole >( geom_vec[i] );
+            if ( geom_vec[i]->GetSetFlag( write_set ) && mg )
             {
-                MeshGeom* mg = (MeshGeom*)geom_vec[i];
                 mg_vec.push_back( mg );
+                mg_geom_vec.push_back( geom_vec[i] );
                 trivec_vec.emplace_back();
                 nodvec_vec.emplace_back();
-                BuildIndexedMesh( mg->m_TMeshVec, mg->m_SliceVec, mg->m_ViewMeshFlag(), mg->m_ViewSliceFlag(),
+                BuildIndexedMesh( mg->GetTMeshVecInSelf(), mg->GetTMeshSliceVec(), mg->GetTMeshViewMeshFlag(), mg->GetTMeshViewSliceFlag(),
                                   trivec_vec.back(), nodvec_vec.back() );
-                num_parts += (int)mg->m_TMeshVec.size();
+                num_parts += (int)mg->GetTMeshVecInSelf().size();
                 num_pnts += (int)nodvec_vec.back().size();
             }
         }
@@ -3539,8 +3964,8 @@ string Vehicle::WriteFacetFile( const string & file_name, int write_set, int sub
         // List all points (nodes) in "Big" part
         for ( int i = 0; i < (int)mg_vec.size(); i++ )
         {
-            mesh_id = mg_vec[i]->GetID(); // Set ID in case mesh already existed
-            WriteFacetNodes( fid, nodvec_vec[i], mg_vec[i]->GetTotalTransMat() );
+            mesh_id = mg_geom_vec[i]->GetID(); // Set ID in case mesh already existed
+            WriteFacetNodes( fid, nodvec_vec[i], mg_vec[i]->GetTMeshTransMat() );
         }
 
         // Define each "Small" part by corresponding nodes for each facet
@@ -3554,7 +3979,8 @@ string Vehicle::WriteFacetFile( const string & file_name, int write_set, int sub
 
         for ( int i = 0; i < (int)mg_vec.size(); i++ )
         {
-            WriteFacetTriParts( fid, offset, tri_count, part_count, mg_vec[i]->m_TMeshVec, trivec_vec[i], nodvec_vec[i] );
+            WriteFacetTriParts( fid, offset, tri_count, part_count, mg_vec[i]->GetTMeshVecInSelf(), trivec_vec[i], nodvec_vec[i],
+                                mg_vec[i]->GetRoleShapeFlipNormal() );
         }
 
         // Note: The mesh geom created during the export is not deleted.
@@ -3624,20 +4050,22 @@ string Vehicle::WriteTRIFile( const string & file_name, int write_set, int subsF
     int i;
 
     // Pre-build indexed meshes
-    vector< MeshGeom* > mg_vec;
+    vector< TMeshRole* > mg_vec;
+    vector< Geom* > mg_geom_vec;
     vector< vector< TTri* > > trivec_vec;
     vector< vector< TNode* > > nodvec_vec;
     for ( i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
-        if ( geom_vec[i]->GetSetFlag( write_set ) && geom_vec[i]->GetType().m_Type == MESH_GEOM_TYPE )
+        TMeshRole* mg = Geom::CastTo< TMeshRole >( geom_vec[i] );
+        if ( geom_vec[i]->GetSetFlag( write_set ) && mg )
         {
-            MeshGeom* mg = ( MeshGeom* )geom_vec[i];
             mg_vec.push_back( mg );
+            mg_geom_vec.push_back( geom_vec[i] );
             trivec_vec.emplace_back();
             nodvec_vec.emplace_back();
-            BuildIndexedMesh( mg->m_TMeshVec, mg->m_SliceVec, mg->m_ViewMeshFlag(), mg->m_ViewSliceFlag(),
+            BuildIndexedMesh( mg->GetTMeshVecInSelf(), mg->GetTMeshSliceVec(), mg->GetTMeshViewMeshFlag(), mg->GetTMeshViewSliceFlag(),
                               trivec_vec.back(), nodvec_vec.back() );
-            num_parts += (int)mg->m_TMeshVec.size();
+            num_parts += (int)mg->GetTMeshVecInSelf().size();
             num_pnts += (int)nodvec_vec.back().size();
             num_tris += (int)trivec_vec.back().size();
         }
@@ -3648,15 +4076,15 @@ string Vehicle::WriteTRIFile( const string & file_name, int write_set, int subsF
     //==== Dump Points ====//
     for ( i = 0 ; i < ( int )mg_vec.size() ; i++ )
     {
-        mesh_id = mg_vec[i]->GetID(); // Set ID in case mesh already existed
-        WriteCart3DPnts( file_id, nodvec_vec[i], mg_vec[i]->GetTotalTransMat() );
+        mesh_id = mg_geom_vec[i]->GetID(); // Set ID in case mesh already existed
+        WriteCart3DPnts( file_id, nodvec_vec[i], mg_vec[i]->GetTMeshTransMat() );
     }
 
     int offset = 0;
     //==== Dump Tris ====//
     for ( i = 0 ; i < ( int )mg_vec.size() ; i++ )
     {
-        offset = WriteCart3DTris( file_id, offset, trivec_vec[i], nodvec_vec[i] );
+        offset = WriteCart3DTris( file_id, offset, trivec_vec[i], nodvec_vec[i], mg_vec[i]->GetRoleShapeFlipNormal() );
     }
 
     for ( i = 0 ; i < ( int )mg_vec.size() ; i++ )
@@ -3728,20 +4156,22 @@ string Vehicle::WriteOBJFile( const string & file_name, int write_set, int subsF
     int num_parts = 0;
     int i;
 
-    vector< MeshGeom* > mg_vec;
+    vector< TMeshRole* > mg_vec;
+    vector< Geom* > mg_geom_vec;
     vector< vector< TTri* > > trivec_vec;
     vector< vector< TNode* > > nodvec_vec;
     for ( i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
-        if ( geom_vec[i]->GetSetFlag( write_set ) && geom_vec[i]->GetType().m_Type == MESH_GEOM_TYPE )
+        TMeshRole* mg = Geom::CastTo< TMeshRole >( geom_vec[i] );
+        if ( geom_vec[i]->GetSetFlag( write_set ) && mg )
         {
-            MeshGeom* mg = ( MeshGeom* )geom_vec[i];
             mg_vec.push_back( mg );
+            mg_geom_vec.push_back( geom_vec[i] );
             trivec_vec.emplace_back();
             nodvec_vec.emplace_back();
-            BuildIndexedMesh( mg->m_TMeshVec, mg->m_SliceVec, mg->m_ViewMeshFlag(), mg->m_ViewSliceFlag(),
+            BuildIndexedMesh( mg->GetTMeshVecInSelf(), mg->GetTMeshSliceVec(), mg->GetTMeshViewMeshFlag(), mg->GetTMeshViewSliceFlag(),
                               trivec_vec.back(), nodvec_vec.back() );
-            num_parts += (int)mg->m_TMeshVec.size();
+            num_parts += (int)mg->GetTMeshVecInSelf().size();
             num_pnts += (int)nodvec_vec.back().size();
             num_tris += (int)trivec_vec.back().size();
         }
@@ -3750,16 +4180,16 @@ string Vehicle::WriteOBJFile( const string & file_name, int write_set, int subsF
     //==== Dump Points ====//
     for ( i = 0 ; i < ( int )mg_vec.size() ; i++ )
     {
-        mesh_id = mg_vec[i]->GetID(); // Set ID in case mesh already existed
-        WriteOBJPnts( file_id, nodvec_vec[i], mg_vec[i]->GetTotalTransMat() );
+        mesh_id = mg_geom_vec[i]->GetID(); // Set ID in case mesh already existed
+        WriteOBJPnts( file_id, nodvec_vec[i], mg_vec[i]->GetTMeshTransMat() );
     }
 
     int offset = 0;
     //==== Dump Tris ====//
     for ( i = 0 ; i < ( int )mg_vec.size() ; i++ )
     {
-        fprintf( file_id, "g %s\n", mg_vec[i]->GetName().c_str() );
-        offset = WriteOBJTris( file_id, offset, trivec_vec[i], nodvec_vec[i] );
+        fprintf( file_id, "g %s\n", mg_geom_vec[i]->GetName().c_str() );
+        offset = WriteOBJTris( file_id, offset, trivec_vec[i], nodvec_vec[i], mg_vec[i]->GetRoleShapeFlipNormal() );
     }
 
     fclose( file_id );
@@ -3827,9 +4257,10 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         return mesh_id;
     }
 
-    // Add a new mesh if one does not exist in either set
-    if ( ( write_set >= 0 && !ExistMesh( write_set ) && !ExistType( write_set, NGON_GEOM_TYPE ) ) ||
-         ( degen_set >= 0 && !ExistMesh( degen_set ) && !ExistType( degen_set, NGON_GEOM_TYPE ) ) )
+    // Add a new mesh if one does not exist in either set.  Strictly the type for the polygon
+    // mesh, so a Clone of one still gets a mesh built.
+    if ( ( write_set >= 0 && !ExistMesh( write_set ) && !ExistGeomType( write_set, NGON_GEOM_TYPE ) ) ||
+         ( degen_set >= 0 && !ExistMesh( degen_set ) && !ExistGeomType( degen_set, NGON_GEOM_TYPE ) ) )
     {
         mesh_id = AddMeshGeom( write_set, degen_set, suppressdisks );
         if ( mesh_id.compare( "NONE" ) != 0 )
@@ -3872,8 +4303,10 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         }
     }
 
-    if ( ExistType( write_set, NGON_GEOM_TYPE ) ||
-         ExistType( degen_set, NGON_GEOM_TYPE ) )
+    // Strictly the type: only a real polygon mesh has a PGMulti.  A Clone of one falls through
+    // to the triangle branch below.
+    if ( ExistGeomType( write_set, NGON_GEOM_TYPE ) ||
+         ExistGeomType( degen_set, NGON_GEOM_TYPE ) )
     {
         for ( int i = 0; i < ( int ) geom_vec.size(); i++ )
         {
@@ -3913,25 +4346,31 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         int i;
 
         // Pre-build indexed meshes
-        vector< MeshGeom* > mg_vec;
+        vector< TMeshRole* > mg_vec;
+        vector< Geom* > mg_geom_vec;
         vector< vector< TTri* > > trivec_vec;
         vector< vector< TNode* > > nodvec_vec;
         for ( i = 0; i < ( int ) geom_vec.size(); i++ )
         {
+            TMeshRole *mg = Geom::CastTo< TMeshRole >( geom_vec[i] );
             if ( ( geom_vec[i]->GetSetFlag( write_set ) || geom_vec[i]->GetSetFlag( degen_set ) )
-                && geom_vec[i]->GetType().m_Type == MESH_GEOM_TYPE )
+                && mg )
             {
-                MeshGeom *mg = ( MeshGeom * ) geom_vec[i];
                 mg_vec.push_back( mg );
+                mg_geom_vec.push_back( geom_vec[i] );
                 trivec_vec.emplace_back();
                 nodvec_vec.emplace_back();
-                BuildIndexedMesh( mg->m_TMeshVec, mg->m_SliceVec, mg->m_ViewMeshFlag(), mg->m_ViewSliceFlag(),
+                BuildIndexedMesh( mg->GetTMeshVecInSelf(), mg->GetTMeshSliceVec(), mg->GetTMeshViewMeshFlag(), mg->GetTMeshViewSliceFlag(),
                                   trivec_vec.back(), nodvec_vec.back() );
-                IdentifyWakes( trivec_vec.back(), mg->m_Wakes, mg->m_PolyVec );
-                num_parts += (int)mg->m_TMeshVec.size();
+                MeshGeom* wake_mesh = dynamic_cast< MeshGeom* >( geom_vec[i] );
+                if ( wake_mesh )
+                {
+                    IdentifyWakes( trivec_vec.back(), wake_mesh->m_Wakes, wake_mesh->m_PolyVec );
+                    num_wakes += wake_mesh->GetNumWakes();
+                }
+                num_parts += (int)mg->GetTMeshVecInSelf().size();
                 num_pnts += (int)nodvec_vec.back().size();
                 num_tris += (int)trivec_vec.back().size();
-                num_wakes += mg->GetNumWakes();
             }
         }
 
@@ -3942,8 +4381,8 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         //==== Dump Points ====//
         for ( i = 0; i < ( int ) mg_vec.size(); i++ )
         {
-            mesh_id = mg_vec[i]->GetID(); // Set ID in case mesh already existed
-            WriteVSPGeomPnts( file_id, nodvec_vec[i], mg_vec[i]->GetTotalTransMat() );
+            mesh_id = mg_geom_vec[i]->GetID(); // Set ID in case mesh already existed
+            WriteVSPGeomPnts( file_id, nodvec_vec[i], mg_vec[i]->GetTMeshTransMat() );
         }
 
         fprintf( file_id, "%d\n", num_tris );
@@ -3952,12 +4391,12 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         //==== Dump Tris ====//
         for ( i = 0; i < ( int ) mg_vec.size(); i++ )
         {
-            offset = WriteVSPGeomTris( file_id, offset, trivec_vec[i], nodvec_vec[i] );
+            offset = WriteVSPGeomTris( file_id, offset, trivec_vec[i], nodvec_vec[i], mg_vec[i]->GetRoleShapeFlipNormal() );
         }
 
         for ( i = 0; i < ( int ) mg_vec.size(); i++ )
         {
-            WriteVSPGeomParts( file_id, trivec_vec[i] );
+            WriteVSPGeomParts( file_id, trivec_vec[i], mg_vec[i]->GetRoleShapeFlipNormal() );
         }
 
         //==== Write parents ====//
@@ -3973,10 +4412,21 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         // Wake line data.
         for ( i = 0; i < ( int ) mg_vec.size(); i++ )
         {
-            offset = WriteVSPGeomWakes( file_id, offset, mg_vec[i]->m_Wakes, nodvec_vec[i] );
+            // A Clone of a mesh has no wakes, but the offset must still step over its nodes.
+            MeshGeom* wake_mesh = dynamic_cast< MeshGeom* >( mg_geom_vec[i] );
+            vector < deque < TEdge > > no_wakes;
 
-            mg_vec[i]->m_SurfDirty = true;
-            mg_vec[i]->Update();
+            if ( wake_mesh )
+            {
+                offset = WriteVSPGeomWakes( file_id, offset, wake_mesh->m_Wakes, nodvec_vec[i] );
+            }
+            else
+            {
+                offset = WriteVSPGeomWakes( file_id, offset, no_wakes, nodvec_vec[i] );
+            }
+
+            mg_geom_vec[i]->SetDirtyFlag( GeomBase::SURF );
+            mg_geom_vec[i]->Update();
         }
 
         offset = 0;
@@ -3984,13 +4434,13 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         //==== Dump alternate Tris ====//
         for ( i = 0; i < ( int ) mg_vec.size(); i++ )
         {
-            offset = WriteVSPGeomAlternateTris( file_id, offset, tcount, trivec_vec[i], nodvec_vec[i] );
+            offset = WriteVSPGeomAlternateTris( file_id, offset, tcount, trivec_vec[i], nodvec_vec[i], mg_vec[i]->GetRoleShapeFlipNormal() );
         }
 
         tcount = 1;
         for ( i = 0; i < ( int ) mg_vec.size(); i++ )
         {
-            WriteVSPGeomAlternateParts( file_id, tcount, trivec_vec[i] );
+            WriteVSPGeomAlternateParts( file_id, tcount, trivec_vec[i], mg_vec[i]->GetRoleShapeFlipNormal() );
         }
         fclose( file_id );
 
@@ -4023,6 +4473,56 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
             }
         }
 
+
+
+        vector < string > gidvec;
+        vector < int > partvec2;
+        vector < int > surfvec;
+        SubSurfaceMgr.GetPartData( gidvec, partvec2, surfvec );
+
+        int nhingefile = 0;
+        vector < string > hinges;
+        vector < vector < int > > hingedescendantparts;
+        Vehicle *veh = VehicleMgr.GetVehicle();
+        if ( veh )
+        {
+            // Check all geoms, whether they are in mesh or not.
+            std::vector< std::string > comps = veh->GetGeomVec();
+            for ( int icomp = 0; icomp < comps.size(); icomp++ )
+            {
+                Geom * g = veh->FindGeom( comps[icomp] );
+                if ( g )
+                {
+                    // A Clone of a hinge articulates its children the same way, so it is a
+                    // control surface too.
+                    if ( Geom::CastTo< JointRole >( g ) )
+                    {
+                        ntagfile++;
+                        nhingefile++;
+
+                        hinges.push_back( comps[icomp] );
+
+                        vector < string > descendants;
+                        g->BuildRigidAttachedDescendantList( descendants );
+
+                        vector < int > descpart;
+                        for ( int ides = 0; ides < descendants.size(); ides++ )
+                        {
+                            vector < int > indvec;
+                            vector_find_val_multiple( gidvec, descendants[ ides ], indvec );
+
+                            for ( int iind = 0; iind < indvec.size(); iind++ )
+                            {
+                                descpart.push_back( partvec2[ indvec[ iind ] ] );
+                            }
+                        }
+
+                        hingedescendantparts.push_back( descpart );
+                    }
+                }
+            }
+        }
+
         if ( ntagfile > 0 )
         {
             string base_name = GetBasename( file_name );
@@ -4035,12 +4535,19 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
 
             string taglist_name = base_name + ".ALL.taglist";
             string csf_taglist_name = base_name + ".ControlSurfaces.taglist";
+            string hinge_taglist_name = base_name + ".Hinges.taglist";
 
             FILE* taglist_fid = fopen( taglist_name.c_str(), "w" );
             FILE* csf_taglist_fid = NULL;
             if ( ncsffile > 0 )
             {
                 csf_taglist_fid = fopen( csf_taglist_name.c_str(), "w" );
+            }
+
+            FILE* hinge_taglist_fid = nullptr;
+            if ( nhingefile > 0 )
+            {
+                hinge_taglist_fid = fopen( hinge_taglist_name.c_str(), "w" );
             }
 
             if ( taglist_fid )
@@ -4115,12 +4622,77 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
                         }
                     }
                 }
-
-                fclose( taglist_fid );
-
                 if ( csf_taglist_fid )
                 {
                     fclose( csf_taglist_fid );
+                }
+
+                if ( hinge_taglist_fid )
+                {
+                    fprintf( hinge_taglist_fid, "%d\n", nhingefile );
+                }
+
+                for ( int ihinge = 0; ihinge < nhingefile; ihinge++ )
+                {
+                    Geom * g = veh->FindGeom( hinges[ ihinge ] );
+                    if ( g )
+                    {
+                        string hingename = g->GetName() + "_Hinge";
+                        // The taglist records the space-substituted name, so the file has to be
+                        // written under that same name -- and under the space-substituted path --
+                        // or the reader cannot find it.  This is what the part tags above do.
+                        StringUtil::change_space_to_underscore( hingename );
+
+                        string tagfile_name = base_path_nospace + "." + hingename + ".tag";
+                        string tagfile_localname = base_fname + "." + hingename;
+
+                        fprintf( taglist_fid, "%s\n", tagfile_localname.c_str() );
+
+                        if ( hinge_taglist_fid )
+                        {
+                            fprintf( hinge_taglist_fid, "%s\n", tagfile_localname.c_str() );
+                        }
+
+                        FILE* fid = fopen( tagfile_name.c_str(), "w" );
+                        if ( fid )
+                        {
+                            // trivec_vec holds one entry per mesh, not one per Geom, so
+                            // this is counted over the meshes, as every other loop here does.
+                            int tagcount = 0;
+                            for ( i = 0; i < ( int ) mg_vec.size(); i++ )
+                            {
+                                tagcount += CountVSPGeomParts( hingedescendantparts[ ihinge ], trivec_vec[i] );
+                            }
+                            fprintf( fid, "%d\n\n", tagcount );
+
+                            int tri_offset = 0;
+                            for ( i = 0; i < ( int ) mg_vec.size(); i++ )
+                            {
+                                tri_offset = WriteVSPGeomParts( fid, tri_offset, hingedescendantparts[ ihinge ], trivec_vec[i] );
+                            }
+
+                            fclose( fid );
+                        }
+                    }
+                }
+                if ( hinge_taglist_fid )
+                {
+                    fclose( hinge_taglist_fid );
+                }
+
+                fclose( taglist_fid );
+            }
+            else
+            {
+                // These two were opened before the block above, so they have to be closed
+                // even when the main list could not be opened and that block never ran.
+                if ( csf_taglist_fid )
+                {
+                    fclose( csf_taglist_fid );
+                }
+                if ( hinge_taglist_fid )
+                {
+                    fclose( hinge_taglist_fid );
                 }
             }
         }
@@ -4130,11 +4702,6 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         //==== Write Out tag key file ====//
 
         SubSurfaceMgr.WriteVSPGEOMKeyFile( file_name );
-
-        vector < string > gidvec;
-        vector < int > partvec2;
-        vector < int > surfvec;
-        SubSurfaceMgr.GetPartData( gidvec, partvec2, surfvec );
 
 
         vector < string > all_files;
@@ -4199,20 +4766,22 @@ string Vehicle::WriteNascartFiles( const string & file_name, int write_set, int 
     int num_tris = 0;
     int num_parts = 0;
     // Pre-build indexed meshes
-    vector< MeshGeom* > mg_vec;
+    vector< TMeshRole* > mg_vec;
+    vector< Geom* > mg_geom_vec;
     vector< vector< TTri* > > trivec_vec;
     vector< vector< TNode* > > nodvec_vec;
     for ( i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
-        if ( geom_vec[i]->GetSetFlag( write_set ) && geom_vec[i]->GetType().m_Type == MESH_GEOM_TYPE )
+        TMeshRole* mg = Geom::CastTo< TMeshRole >( geom_vec[i] );
+        if ( geom_vec[i]->GetSetFlag( write_set ) && mg )
         {
-            MeshGeom* mg = ( MeshGeom* )geom_vec[i];
             mg_vec.push_back( mg );
+            mg_geom_vec.push_back( geom_vec[i] );
             trivec_vec.emplace_back();
             nodvec_vec.emplace_back();
-            BuildIndexedMesh( mg->m_TMeshVec, mg->m_SliceVec, mg->m_ViewMeshFlag(), mg->m_ViewSliceFlag(),
+            BuildIndexedMesh( mg->GetTMeshVecInSelf(), mg->GetTMeshSliceVec(), mg->GetTMeshViewMeshFlag(), mg->GetTMeshViewSliceFlag(),
                               trivec_vec.back(), nodvec_vec.back() );
-            num_parts += (int)mg->m_TMeshVec.size();
+            num_parts += (int)mg->GetTMeshVecInSelf().size();
             num_pnts += (int)nodvec_vec.back().size();
             num_tris += (int)trivec_vec.back().size();
         }
@@ -4222,15 +4791,15 @@ string Vehicle::WriteNascartFiles( const string & file_name, int write_set, int 
     //==== Dump Points ====//
     for ( i = 0 ; i < ( int )mg_vec.size() ; i++ )
     {
-        mesh_id = mg_vec[i]->GetID(); // Set ID in case mesh already existed
-        WriteNascartPnts( file_id, nodvec_vec[i], mg_vec[i]->GetTotalTransMat() );
+        mesh_id = mg_geom_vec[i]->GetID(); // Set ID in case mesh already existed
+        WriteNascartPnts( file_id, nodvec_vec[i], mg_vec[i]->GetTMeshTransMat() );
     }
 
     int offset = 0;
     //==== Dump Tris ====//
     for ( i = 0 ; i < ( int )mg_vec.size() ; i++ )
     {
-        offset = WriteNascartTris( file_id, offset, trivec_vec[i], nodvec_vec[i] );
+        offset = WriteNascartTris( file_id, offset, trivec_vec[i], nodvec_vec[i], mg_vec[i]->GetRoleShapeFlipNormal() );
     }
 
     fclose( file_id );
@@ -4306,22 +4875,24 @@ string Vehicle::WriteGmshFile( const string & file_name, int write_set, int subs
     int num_parts = 0;
     int i;
 
-    vector< MeshGeom* > mg_vec;
+    vector< TMeshRole* > mg_vec;
+    vector< Geom* > mg_geom_vec;
     vector< vector< TTri* > > trivec_vec;
     vector< vector< TNode* > > nodvec_vec;
     vector< int > node_offset_vec;
     for ( i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
-        if ( geom_vec[i]->GetSetFlag( write_set ) && geom_vec[i]->GetType().m_Type == MESH_GEOM_TYPE )
+        TMeshRole* mg = Geom::CastTo< TMeshRole >( geom_vec[i] );
+        if ( geom_vec[i]->GetSetFlag( write_set ) && mg )
         {
-            MeshGeom* mg = ( MeshGeom* )geom_vec[i];
             node_offset_vec.push_back( num_pnts );
             mg_vec.push_back( mg );
+            mg_geom_vec.push_back( geom_vec[i] );
             trivec_vec.emplace_back();
             nodvec_vec.emplace_back();
-            BuildIndexedMesh( mg->m_TMeshVec, mg->m_SliceVec, mg->m_ViewMeshFlag(), mg->m_ViewSliceFlag(),
+            BuildIndexedMesh( mg->GetTMeshVecInSelf(), mg->GetTMeshSliceVec(), mg->GetTMeshViewMeshFlag(), mg->GetTMeshViewSliceFlag(),
                               trivec_vec.back(), nodvec_vec.back() );
-            num_parts += (int)mg->m_TMeshVec.size();
+            num_parts += (int)mg->GetTMeshVecInSelf().size();
             num_pnts += (int)nodvec_vec.back().size();
             num_tris += (int)trivec_vec.back().size();
         }
@@ -4337,8 +4908,8 @@ string Vehicle::WriteGmshFile( const string & file_name, int write_set, int subs
     int node_offset = 0;
     for ( i = 0 ; i < ( int )mg_vec.size() ; i++ )
     {
-        mesh_id = mg_vec[i]->GetID(); // Set ID in case mesh already existed
-        node_offset = WriteGMshNodes( file_id, node_offset, nodvec_vec[i], mg_vec[i]->GetTotalTransMat() );
+        mesh_id = mg_geom_vec[i]->GetID(); // Set ID in case mesh already existed
+        node_offset = WriteGMshNodes( file_id, node_offset, nodvec_vec[i], mg_vec[i]->GetTMeshTransMat() );
     }
     fprintf( file_id, "$EndNodes\n" );
 
@@ -4348,7 +4919,7 @@ string Vehicle::WriteGmshFile( const string & file_name, int write_set, int subs
     int tri_offset = 0;
     for ( i = 0 ; i < ( int )mg_vec.size() ; i++ )
     {
-        tri_offset = WriteGMshTris( file_id, node_offset_vec[i], tri_offset, trivec_vec[i] );
+        tri_offset = WriteGMshTris( file_id, node_offset_vec[i], tri_offset, trivec_vec[i], mg_vec[i]->GetRoleShapeFlipNormal() );
     }
     fprintf( file_id, "$EndElements\n" );
 
@@ -4388,7 +4959,7 @@ void Vehicle::WriteX3DFile( const string & file_name, int write_set, bool useMod
     //==== All Geometry ====//
     for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
-        if ( geom_vec[i]->GetSetFlag( write_set ) && geom_vec[i]->GetType().m_Type != BLANK_GEOM_TYPE && geom_vec[i]->GetType().m_Type != HINGE_GEOM_TYPE )
+        if ( geom_vec[i]->GetSetFlag( write_set ) && geom_vec[i]->GetBehaviorType() != BLANK_GEOM_TYPE && geom_vec[i]->GetBehaviorType() != HINGE_GEOM_TYPE )
         {
             xmlNodePtr shape_node = xmlNewChild( scene_node, nullptr, BAD_CAST "Shape", nullptr );
 
@@ -4483,7 +5054,7 @@ void Vehicle::WriteX3DViewpointProps( xmlNodePtr node, const string &orients, co
     xmlSetProp( node, BAD_CAST "fieldOfView", BAD_CAST sfov.c_str() );
 }
 
-void Vehicle::WriteX3DMaterial( xmlNodePtr node, Material * material )
+void Vehicle::WriteX3DMaterial( xmlNodePtr node, const Material * material )
 {
     if ( !material ) return;
 
@@ -4630,7 +5201,7 @@ void Vehicle::WritePovRayFile( const string & file_name, int write_set, bool use
     fclose( pov_file );
 }
 
-void Vehicle::FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs )
+void Vehicle::FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs, int n_ref, bool splitjoin )
 {
     vector< Geom* > geom_vec = FindGeomVec( geomvec );
 
@@ -4643,13 +5214,18 @@ void Vehicle::FetchXFerSurfs( const vector < string > & geomvec, vector< XferSur
 
         for ( int j = 0; j < num_surf; j++ )
         {
-            (*surf_vec_ptr)[j].FetchXFerSurf( geom_vec[i]->GetID(), geom_vec[i]->GetName(), geom_vec[i]->GetMainSurfID( j ), icomp, geom_vec[i]->GetSurfCopyIndx( j ), j, xfersurfs);
+            vector < double > utess, wtess;
+            geom_vec[i]->GetUWTessSurf( j, utess, wtess, n_ref );
+
+            (*surf_vec_ptr)[j].FetchXFerSurf( geom_vec[i]->GetID(), geom_vec[i]->GetName(), geom_vec[i]->GetMainSurfID( j ), icomp, geom_vec[i]->GetSurfCopyIndx( j ), j, xfersurfs, std::vector< double >(), std::vector< double >(), utess, wtess,
+                                                 geom_vec[i]->GetCapUMinSuccess( geom_vec[i]->GetMainSurfID( j ) ),
+                                                 geom_vec[i]->GetCapUMaxSuccess( geom_vec[i]->GetMainSurfID( j ) ), splitjoin );
             icomp++;
         }
     }
 }
 
-void Vehicle::FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &xfersurfs )
+void Vehicle::FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &xfersurfs, int n_ref, bool splitjoin )
 {
     vector< Geom* > geom_vec = FindGeomVec( GetGeomVec() );
 
@@ -4677,7 +5253,12 @@ void Vehicle::FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &
 
             for ( int j = 0; j < num_surf; j++ )
             {
-                (*surf_vec_ptr)[j].FetchXFerSurf( geom_vec[i]->GetID(), geom_vec[i]->GetName(), geom_vec[i]->GetMainSurfID( j ), icomp, geom_vec[i]->GetSurfCopyIndx( j ), j, xfersurfs);
+                vector < double > utess, wtess;
+                geom_vec[i]->GetUWTessSurf( j, utess, wtess, n_ref );
+
+                (*surf_vec_ptr)[j].FetchXFerSurf( geom_vec[i]->GetID(), geom_vec[i]->GetName(), geom_vec[i]->GetMainSurfID( j ), icomp, geom_vec[i]->GetSurfCopyIndx( j ), j, xfersurfs, std::vector< double >(), std::vector< double >(), utess, wtess,
+                                                 geom_vec[i]->GetCapUMinSuccess( geom_vec[i]->GetMainSurfID( j ) ),
+                                                 geom_vec[i]->GetCapUMaxSuccess( geom_vec[i]->GetMainSurfID( j ) ), splitjoin );
                 icomp++;
             }
         }
@@ -4800,31 +5381,8 @@ void Vehicle::WriteStructureSTEPFile( const string & file_name )
 
     fea_struct->Update();
 
-    int len = UNIT_FOOT;
-    switch ( m_StructUnit() )
-    {
-        case vsp::SI_UNIT:
-            len = UNIT_METER;
-            break;
-
-        case vsp::CGS_UNIT:
-            len =  UNIT_CENTIMETER;
-            break;
-
-        case vsp::MPA_UNIT:
-            len =  UNIT_MM;
-            break;
-
-        case vsp::BFT_UNIT:
-            len = UNIT_FOOT;
-            break;
-
-        case vsp::BIN_UNIT:
-            len =  UNIT_IN;
-            break;
-    }
-
-    STEPutil step( len, m_STEPStructureTol() );
+    // The parts' surfaces are written as they are, unscaled.
+    STEPutil step( GetStructGeomLenUnit(), m_STEPStructureTol() );
 
     string delim = StringUtil::get_delim( m_STEPStructureLabelDelim() );
 
@@ -5006,7 +5564,8 @@ void Vehicle::WriteStructureIGESFile( const string & file_name, int feaMeshStruc
 
     string delim = StringUtil::get_delim( delimType );
 
-    IGESutil iges( m_StructUnit() );
+    // The parts' surfaces are written as they are, unscaled.
+    IGESutil iges( GetStructGeomLenUnit() );
 
     vector < double > usplit;
     vector < double > wsplit;
@@ -5069,10 +5628,17 @@ void Vehicle::WriteBEMFile( const string &file_name, int write_set, bool useMode
 
     Geom* geom = FindGeom( m_BEMPropID );
 
-    PropGeom* pgeom = dynamic_cast < PropGeom* > ( geom );
-    if ( pgeom )
+    // A Clone shows the blade unchanged, so the BEM file comes from the Geom it copies.
+    Geom* behavior_geom = nullptr;
+    if ( geom )
     {
-        string rid = pgeom->BuildBEMResults();
+        behavior_geom = geom->GetBehaviorGeom();
+    }
+
+    PropGeom* behavior_prop = dynamic_cast < PropGeom* > ( behavior_geom );
+    if ( behavior_prop )
+    {
+        string rid = behavior_prop->BuildBEMResults();
 
         Results* resptr = ResultsMgr.FindResultsPtr( rid );
         if( resptr )
@@ -5119,9 +5685,15 @@ void Vehicle::WriteAirfoilFile( const string &file_name, int write_set, bool use
 
     for ( int i = 0; i < (int)geom_vec.size(); i++ )
     {
-        if ( geom_vec[i]->GetSetFlag( write_set ) && ( geom_vec[i]->GetType().m_Type == MS_WING_GEOM_TYPE || geom_vec[i]->GetType().m_Type == PROP_GEOM_TYPE ) )
+        // Airfoils carry no placement, so a Clone's are its original's.  Written from the
+        // original under the Clone's name and ID.
+        if ( geom_vec[i]->GetSetFlag( write_set ) && ( geom_vec[i]->GetBehaviorType() == MS_WING_GEOM_TYPE || geom_vec[i]->GetBehaviorType() == PROP_GEOM_TYPE ) )
         {
-            geom_vec[i]->WriteAirfoilFiles( meta_fid );
+            Geom* behavior_geom = geom_vec[i]->GetBehaviorGeom();
+            if ( behavior_geom )
+            {
+                behavior_geom->WriteAirfoilFiles( meta_fid, geom_vec[i]->GetName(), geom_vec[i]->GetID() );
+            }
         }
     }
 
@@ -5897,6 +6469,51 @@ void Vehicle::WriteVehProjectionLinesSVG( xmlNodePtr root, const BndBox &svgbox 
     }
 }
 
+vector < vec3d > Vehicle::ControlSurfaceHingeLine( const string & id, int isurf )
+{
+    vector < vec3d > retvec;
+
+    SSControlSurf* cs = dynamic_cast< SSControlSurf* > ( SubSurfaceMgr.GetSubSurf( id ) );
+
+    Geom *h = FindGeom( id );
+    if ( h && !Geom::CastTo< JointRole >( h ) )
+    {
+        h = nullptr;
+    }
+
+    if ( cs )
+    {
+        string gid = cs->GetParentContainer();
+        Geom *g = FindGeom( gid );
+        if ( g )
+        {
+            double uscale = g->GetUMax( isurf );
+            double wscale = g->GetWMax( isurf );
+
+            int nhinge = cs->m_UWStart.size();
+
+            for ( int ihinge = 0; ihinge < nhinge; ihinge++ )
+            {
+                vec3d xStart = g->CompPnt01( isurf, clamp( cs->m_UWStart[ihinge].x(), 0.0, uscale ) / uscale, clamp( cs->m_UWStart[ihinge].y(), 0.0, wscale ) / wscale );
+                vec3d xEnd = g->CompPnt01( isurf, clamp( cs->m_UWEnd[ihinge].x(), 0.0, uscale ) / uscale, clamp( cs->m_UWEnd[ihinge].y(), 0.0, wscale ) / wscale );
+
+                retvec.push_back( xStart );
+                retvec.push_back( xEnd );
+            }
+        }
+    }
+    else if ( h )
+    {
+        JointRole* joint = Geom::CastTo< JointRole >( h );
+        vec3d xStart = joint->GetRoleModelMatrix().xform( vec3d( 0.0, 0.0, 0.0 ) );
+        vec3d xEnd = xStart + joint->GetJointRotationAxis();
+
+        retvec.push_back( xStart );
+        retvec.push_back( xEnd );
+    }
+    return retvec;
+}
+
 void Vehicle::WriteControlSurfaceFile( const string & file_name, const vector < string > &gidvec, const vector < int > &partvec, const vector < int > &surfvec, vector < string > &all_fnames )
 {
     string base_name = GetBasename( file_name );
@@ -5932,7 +6549,40 @@ void Vehicle::WriteControlSurfaceFile( const string & file_name, const vector < 
                 }
             }
         }
-        fprintf( csf_file, "%d Control Surfaces\n", ncsurf );
+
+
+        int nhinge = 0;
+        vector < string > hinges;
+        // vector < vector < int > > hingedescendantparts;
+
+        // Check all geoms, whether they are in mesh or not.
+        std::vector< std::string > comps = GetGeomVec();
+        for ( int icomp = 0; icomp < comps.size(); icomp++ )
+        {
+            Geom *h = FindGeom( comps[icomp] );
+            if ( Geom::CastTo< JointRole >( h ) )
+            {
+                nhinge++;
+
+                hinges.push_back( comps[icomp] );
+
+                // vector < string > descendants;
+                // h->BuildRigidAttachedDescendantList( descendants );
+                //
+                // vector < int > descpart;
+                // for ( int ides = 0; ides < descendants.size(); ides++ )
+                // {
+                //     vector < int > indvec;
+                //     vector_find_val_multiple( gidvec, descendants[ ides ], indvec );
+                //
+                //     descpart.insert( descpart.end(), indvec.begin(), indvec.end() );
+                // }
+                //
+                // hingedescendantparts.push_back( descpart );
+            }
+        }
+
+        fprintf( csf_file, "%d Control Surfaces\n", ncsurf + nhinge );
 
         for ( int ipart = 0; ipart < ( int )gidvec.size(); ipart++ ) // Loop over all geoms.
         {
@@ -5994,15 +6644,18 @@ void Vehicle::WriteControlSurfaceFile( const string & file_name, const vector < 
                         cs->UpdatePolygonPnts();
                         std::vector< std::vector< vec2d > > ppvec = cs->GetPolyPntsVec();
 
-                        int nhinge = cs->m_UWStart.size();
+                        // Hinge LINES on this one control surface -- not the count of
+                        // HingeGeoms in the model, which the enclosing function also calls
+                        // nhinge.  The two are unrelated.
+                        int nhingeline = cs->m_UWStart.size();
                         int nbound = ppvec.size();
 
-                        if ( nhinge != nbound )
+                        if ( nhingeline != nbound )
                         {
                             printf( "Mismatch number of control surfaces\n" );
                         }
 
-                        for ( int ihinge = 0; ihinge < nhinge; ihinge++ )
+                        for ( int ihinge = 0; ihinge < nhingeline; ihinge++ )
                         {
                             fprintf( csf_file, "2 Hinge UV\n" );
                             fprintf( csf_file, "%16.10g %16.10g\n", clamp( cs->m_UWStart[ihinge].x(), 0.0, uscale ) / uscale, clamp( cs->m_UWStart[ihinge].y(), 0.0, wscale ) / wscale );
@@ -6017,7 +6670,7 @@ void Vehicle::WriteControlSurfaceFile( const string & file_name, const vector < 
                             }
                         }
 
-                        for ( int ihinge = 0; ihinge < nhinge; ihinge++ )
+                        for ( int ihinge = 0; ihinge < nhingeline; ihinge++ )
                         {
                             vec3d xStart = g->CompPnt01( isurf, clamp( cs->m_UWStart[ihinge].x(), 0.0, uscale ) / uscale, clamp( cs->m_UWStart[ihinge].y(), 0.0, wscale ) / wscale );
                             vec3d xEnd = g->CompPnt01( isurf, clamp( cs->m_UWEnd[ihinge].x(), 0.0, uscale ) / uscale, clamp( cs->m_UWEnd[ihinge].y(), 0.0, wscale ) / wscale );
@@ -6042,9 +6695,54 @@ void Vehicle::WriteControlSurfaceFile( const string & file_name, const vector < 
 
             }
         }
+
+        if ( nhinge > 0 )
+        {
+            for ( int ihinge = 0; ihinge < nhinge; ihinge++ )
+            {
+                Geom *g = FindGeom( hinges[ ihinge ] );
+
+                if ( g )
+                {
+                    string tagfile_localname = base_fname + "." + g->GetName() + "_Hinge";
+
+                    char str[256];
+                    snprintf( str, sizeof( str ),  "%s_Hinge", g->GetName().c_str() );
+
+                    fprintf( csf_file, "CSurf ID:     NONE\n" );
+                    fprintf( csf_file, "CSurf Name:   NA\n" );
+                    fprintf( csf_file, "Geom ID:      %s\n", g->GetID().c_str() );
+                    fprintf( csf_file, "Geom Name:    %s\n", g->GetName().c_str() );
+                    fprintf( csf_file, "VSPAERO Name: %s\n", str );
+
+                    fprintf( csf_file, "Tagfile Name: %s\n", tagfile_localname.c_str() );
+                    fprintf( csf_file, "Surface #:    0\n" ); // indexes from 0
+                    fprintf( csf_file, "Part #:       0\n" ); // indexes from 1
+
+                    fprintf( csf_file, "1 Hinge\n" );
+
+                    fprintf( csf_file, "0 Hinge UV\n" );
+                    fprintf( csf_file, "0 Boundary UV\n" );
+
+                    JointRole* joint = Geom::CastTo< JointRole >( g );
+                    vec3d xStart = joint->GetRoleModelMatrix().xform( vec3d( 0.0, 0.0, 0.0 ) );
+                    vec3d xEnd = xStart + joint->GetJointRotationAxis();
+
+                    fprintf( csf_file, "2 Hinge XYZ\n" );
+                    fprintf( csf_file, "%16.10g %16.10g %16.10g\n", xStart.x(), xStart.y(), xStart.z() );
+                    fprintf( csf_file, "%16.10g %16.10g %16.10g\n", xEnd.x(), xEnd.y(), xEnd.z() );
+
+                    fprintf( csf_file, "0 Boundary XYZ\n" );
+                }
+            }
+        }
     }
 
-    fclose( csf_file );
+    // The open is guarded above, so the close has to be too -- fclose( NULL ) is undefined.
+    if ( csf_file )
+    {
+        fclose( csf_file );
+    }
 }
 
 vector< vector < vec3d > > Vehicle::GetVehProjectionLines( int view, const vec3d &offset )
@@ -7409,9 +8107,10 @@ void Vehicle::CreateDegenGeom( int set, bool useMode, const string &modeID )
     {
         if ( geom_vec[i]->GetSetFlag( set ) )
         {
-            if( geom_vec[i]->GetType().m_Type == BLANK_GEOM_TYPE )
+            if( geom_vec[i]->GetBehaviorType() == BLANK_GEOM_TYPE )
             {
-                BlankGeom *g = (BlankGeom*) geom_vec[i];
+                // Geom members only, so a Clone of a blank uses its own mass and position.
+                Geom *g = geom_vec[i];
                 if( g->m_PointMass() != 0.0 )
                 {
                     DegenPtMass pm;
@@ -7673,35 +8372,46 @@ double Vehicle::ComputeStructuresScaleFactor()
         return 1.0;
     }
 
-    int to_unit = -1;
-    switch ( m_StructUnit() )
+    int to_unit = GetStructLenUnit();
+    if ( to_unit < 0 )
     {
-        case vsp::SI_UNIT:
-            to_unit = vsp::LEN_M;
-            break;
-
-        case vsp::CGS_UNIT:
-            to_unit = vsp::LEN_CM;
-            break;
-
-        case vsp::MPA_UNIT:
-            to_unit = vsp::LEN_MM;
-            break;
-
-        case vsp::BFT_UNIT:
-            to_unit = vsp::LEN_FT;
-            break;
-
-        case vsp::BIN_UNIT:
-            to_unit = vsp::LEN_IN;
-            break;
-
-        default:
-            return 1.0;
-            break;
+        return 1.0;
     }
 
     return ConvertLength( 1.0, m_StructModelUnit(), to_unit );
+}
+
+int Vehicle::GetStructLenUnit()
+{
+    switch ( m_StructUnit() )
+    {
+        case vsp::SI_UNIT:
+            return vsp::LEN_M;
+
+        case vsp::CGS_UNIT:
+            return vsp::LEN_CM;
+
+        case vsp::MPA_UNIT:
+            return vsp::LEN_MM;
+
+        case vsp::BFT_UNIT:
+            return vsp::LEN_FT;
+
+        case vsp::BIN_UNIT:
+            return vsp::LEN_IN;
+    }
+
+    return -1;
+}
+
+int Vehicle::GetStructGeomLenUnit()
+{
+    if ( m_StructModelUnit() != vsp::LEN_UNITLESS )
+    {
+        return m_StructModelUnit();
+    }
+
+    return GetStructLenUnit();
 }
 
 void Vehicle::SetExportPropMainSurf( bool b )
@@ -7709,10 +8419,10 @@ void Vehicle::SetExportPropMainSurf( bool b )
     vector< Geom* > geom_vec = FindGeomVec( GetGeomVec() );
     for ( int i = 0; i < (int) geom_vec.size(); i++ )
     {
-        PropGeom *pg = dynamic_cast< PropGeom * > ( geom_vec[i] );
-        if ( pg )
+        // By behaviour, so a Clone of a propeller is included; it holds its own flag.
+        if ( geom_vec[i]->GetBehaviorType() == PROP_GEOM_TYPE )
         {
-            pg->SetExportMainSurf( b );
+            geom_vec[i]->SetExportMainSurf( b );
         }
     }
 }

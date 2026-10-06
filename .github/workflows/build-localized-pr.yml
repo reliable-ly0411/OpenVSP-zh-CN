@@ -1,0 +1,17 @@
+name: Build Localized Pull Request
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # PR 与定时同步调用同一构建入口，验证精确提交且不会发布 Release。
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-localized.yml
+    with:
+      source_ref: ${{ github.sha }}

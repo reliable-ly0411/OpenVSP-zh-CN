@@ -8,13 +8,22 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "CfdMeshMgr.h"
+#include "UnformattedFile.h"
+#include "ResultsMgr.h"
 #include "SubSurfaceMgr.h"
 #include "main.h"
 #include "MeshAnalysis.h"
 #include "ModeMgr.h"
 #include "FileUtil.h"
+#include "HingeGeom.h"
+#include "StlHelper.h"
 
 #include <algorithm>
+#include <functional>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
 
 #include "StringUtil.h"
 
@@ -35,13 +44,7 @@ CfdMeshMgrSingleton::~CfdMeshMgrSingleton()
 {
     CleanUp();
 
-#ifdef DEBUG_CFD_MESH
-    if ( m_DebugFile )
-    {
-        fclose( m_DebugFile );
-    }
-#endif
-
+    // The debug log belongs to the base class, which closes it.
 }
 
 void CfdMeshMgrSingleton::GenerateMesh()
@@ -54,13 +57,24 @@ void CfdMeshMgrSingleton::GenerateMesh()
     addOutputText( "Init Timer\n" );
 #endif
 
+    // What this run produced, reported at the end.  Cleared here so a run that stops early
+    // cannot be read as the one before it.
+    m_NumMeshTris = 0;
+    m_NumBorderEdges = 0;
+    m_NumOverConnEdges = 0;
+
     addOutputText( "Transfer Mesh Settings\n" );
     TransferMeshSettings();
 
     addOutputText( "Fetching Bezier Surfaces\n" );
 
     vector< XferSurf > xfersurfs;
-    FetchSurfs( xfersurfs );
+
+    // The POGS surface files sample along each Geom's own tessellation lines, refined by
+    // however much the user asked for.  Read the copy TransferMeshSettings just took, not
+    // the Vehicle's live Parms, so a setting changed while the mesher runs cannot land
+    // halfway through.
+    FetchSurfs( xfersurfs, GetCfdSettingsPtr()->m_POGSNRef );
 
     // UpdateSourcesAndWakes must be before m_Vehicle->HideAll() to prevent components 
     // being being added to or removed from the CFD Mesh set
@@ -88,7 +102,13 @@ void CfdMeshMgrSingleton::GenerateMesh()
 
     if ( m_SurfVec.size() == 0 )
     {
+        // Nothing was selected.  Worth saying out loud: the meshing set defaults to the
+        // shown set and a run hides every Geom when it has taken their surfaces, so a
+        // second run in a row finds nothing and would otherwise write empty files and
+        // report success.  addOutputText reaches the screen only.
         addOutputText( "No Surfaces To Mesh\n" );
+        printf( "No Surfaces To Mesh\n" );
+        RecordResults();
         m_MeshInProgress = false;
         MessageMgr::getInstance().Send( "ScreenMgr", "UpdateAllScreens" );
         return;
@@ -115,8 +135,7 @@ void CfdMeshMgrSingleton::GenerateMesh()
     AddDegenCornerChains();
     }
 
-    addOutputText( "Binary Adaptation Curve Approximation\n" );
-    BinaryAdaptIntCurves();
+    RecordIntCurves();
 
     addOutputText( "Build Target Map\n" );
     BuildTargetMap( CfdMeshMgrSingleton::VOCAL_OUTPUT );
@@ -150,12 +169,16 @@ void CfdMeshMgrSingleton::GenerateMesh()
     addOutputText( "Build Single Tag Map\n" );
     SubSurfaceMgr.BuildSingleTagMap();
 
-    addOutputText( "Exporting Files\n" );
     ExportFiles();
 
     addOutputText( "Check Water Tight\n" );
     string resultTxt = CheckWaterTight();
     addOutputText( resultTxt );
+
+    RecordResults();
+
+    // string lenTxt = TargetLengthReport();
+    // addOutputText( lenTxt );
 
     UpdateDrawObjs();
 
@@ -224,6 +247,7 @@ void CfdMeshMgrSingleton::CleanUp()
 
     m_TagDO.clear();
     m_ReasonDO.clear();
+    m_QualityDO.clear();
 }
 
 void CfdMeshMgrSingleton::AdjustAllSourceLen( double mult )
@@ -485,14 +509,55 @@ void CfdMeshMgrSingleton::DeleteAllSources()
 
 void CfdMeshMgrSingleton::Update()
 {
+    // The screen updates on every change anywhere, a rotation of the view among them, and the
+    // sources and wakes only need building again when what they are built from has changed
     if ( !GetMeshInProgress() )
     {
-        UpdateSourcesAndWakes();
+        string state = SourcesAndWakesState();
+        if ( state != m_SourcesAndWakesState )
+        {
+            m_SourcesAndWakesState = state;
+            UpdateSourcesAndWakes();
+        }
     }
 
     UpdateDomain();
 
     m_Vehicle->GetCfdGridDensityPtr()->Update( 1.0 );
+}
+
+string CfdMeshMgrSingleton::SourcesAndWakesState()
+{
+    string state = to_string( GetCfdSettingsPtr()->m_SelectedSetIndex ) + " " +
+                   to_string( GetCfdSettingsPtr()->m_SelectedDegenSetIndex ) + " " +
+                   to_string( ( int )GetCfdSettingsPtr()->m_UseMode ) + " " +
+                   GetCfdSettingsPtr()->m_ModeID;
+
+    if ( GetCfdSettingsPtr()->m_UseMode )
+    {
+        Mode *m = ModeMgr.GetMode( GetCfdSettingsPtr()->m_ModeID );
+        if ( m )
+        {
+            state += " " + to_string( m->m_NormalSet() ) + " " + to_string( m->m_DegenSet() );
+        }
+    }
+
+    vector<string> geomVec = m_Vehicle->GetGeomVec();
+    for ( int g = 0 ; g < ( int )geomVec.size() ; g++ )
+    {
+        Geom* geom = m_Vehicle->FindGeom( geomVec[g] );
+        if ( geom )
+        {
+            state += " " + geomVec[g] + " " + to_string( geom->GetUpdateStamp() );
+
+            vector< BaseSource* > sVec = geom->GetCfdMeshMainSourceVec();
+            for ( int s = 0 ; s < ( int )sVec.size() ; s++ )
+            {
+                state += " " + sVec[s]->GetID() + " " + to_string( sVec[s]->GetLatestChangeCnt() );
+            }
+        }
+    }
+    return state;
 }
 
 void CfdMeshMgrSingleton::UpdateSourcesAndWakes()
@@ -695,10 +760,56 @@ void CfdMeshMgrSingleton::BuildTargetMap( int output_type )
     vector< MapSource* > allsources;
 
     int i;
-    for ( i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+
+    // Each surface's map is built and limited from that surface alone, so surfaces run side by
+    // side.  The one shared thing evaluated is a constant U or W line source's Geom surface, and
+    // that source locks around it.
+    int nsurf = ( int )m_SurfVec.size();
+
+    vector < vector < MapSource* > > surfsources( nsurf );
+
+    // Biggest maps first, so the run does not end on one large surface with every other thread
+    // idle.  Surfaces are independent, so the order they are taken in changes none of them.
+    vector < pair < int, int > > order( nsurf );
+
+    for ( i = 0 ; i < nsurf ; i++ )
     {
-        m_SurfVec[i]->BuildTargetMap( allsources, i );
-        m_SurfVec[i]->LimitTargetMap();
+        order[i] = pair< int, int >( m_SurfVec[i]->GetTargetMapSize(), i );
+    }
+
+    sort( order.begin(), order.end(), std::greater< pair < int, int > >() );
+
+    BeginProgress( "Surface Maps", nsurf, output_type );
+
+    RunIndexed( nsurf, StageThreadCount( nsurf ), [&]( int k )
+    {
+        int isurf = order[k].second;
+
+        m_SurfVec[isurf]->BuildTargetMap( surfsources[isurf], isurf );
+        m_SurfVec[isurf]->LimitTargetMap();
+
+        m_ProgressDone++;
+        StepProgress( output_type );
+    } );
+
+    EndProgress( output_type );
+
+    // Only rigorous limiting looks at every surface's map points together.  Each surface's list is
+    // let go once copied, so the two are not both held in full.
+    if ( GetGridDensityPtr()->m_RigorLimit )
+    {
+        size_t ntotal = 0;
+        for ( i = 0 ; i < nsurf ; i++ )
+        {
+            ntotal += surfsources[i].size();
+        }
+        allsources.reserve( ntotal );
+
+        for ( i = 0 ; i < nsurf ; i++ )
+        {
+            allsources.insert( allsources.end(), surfsources[i].begin(), surfsources[i].end() );
+            vector< MapSource* >().swap( surfsources[i] );
+        }
     }
 
     // Set up split sources to provide a source at the endpoint of curves where
@@ -728,17 +839,38 @@ void CfdMeshMgrSingleton::BuildTargetMap( int output_type )
         }
     }
 
+    BuildChainDistTables();
+
     // Number of times to propagate intersection edges through surfaces
     int nedgeprop = 4;
 
-    for ( i = 0; i < nedgeprop; i ++ )
+    int nthread = StageThreadCount( nsurf );
+
+    // A chain is counted as it is taken up, and the bar redrawn some two hundred times in all.
+    int nspread = nedgeprop * ( int )m_ISegChainList.size();
+    int stride = std::max( 1, nspread / 200 );
+
+    BeginProgress( "Chain Density", nspread, output_type );
+
+    if ( nthread > 1 )
     {
-        for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
+        SpreadChainDensity( nedgeprop, nthread, splitSources, stride, output_type );
+    }
+    else
+    {
+        for ( i = 0; i < nedgeprop; i ++ )
         {
-            ( *c )->CalcDensity( GetGridDensityPtr(), splitSources );
-            ( *c )->SpreadDensity();
+            for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
+            {
+                ( *c )->CalcDensity( GetGridDensityPtr(), splitSources );
+                ( *c )->SpreadDensity();
+
+                StepProgressEvery( stride, output_type );
+            }
         }
     }
+
+    EndProgress( output_type );
 
     if( GetGridDensityPtr()->m_RigorLimit )
     {
@@ -746,6 +878,8 @@ void CfdMeshMgrSingleton::BuildTargetMap( int output_type )
         {
             addOutputText( " Rigorous 3D Limiting\n", output_type );
         }
+
+        BeginProgress( "Rigorous Limit", ( int )m_SurfVec.size(), output_type );
 
         for ( i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
         {
@@ -770,7 +904,12 @@ void CfdMeshMgrSingleton::BuildTargetMap( int output_type )
             ms_tree.buildIndex();
 
             m_SurfVec[i]->LimitTargetMap( ms_cloud, ms_tree, minmap );
+
+            m_ProgressDone++;
+            StepProgress( output_type );
         }
+
+        EndProgress( output_type );
 
         for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
         {
@@ -788,54 +927,337 @@ void CfdMeshMgrSingleton::BuildTargetMap( int output_type )
     splitSources.clear();
 }
 
+// Runs work on worker threads, one queue per surface.  A surface's work is done in the order it
+// was added, one piece at a time; work on different surfaces runs side by side.
+class SurfWorkQueue
+{
+public:
+
+    SurfWorkQueue( int nsurf, int nworker ) : m_Queue( nsurf ), m_Busy( nsurf, false ), m_Stop( false )
+    {
+        for ( int t = 0 ; t < nworker ; t++ )
+        {
+            m_Pool.push_back( std::thread( [this]() { Work(); } ) );
+        }
+    }
+
+    ~SurfWorkQueue()
+    {
+        {
+            std::lock_guard< std::mutex > lock( m_Mutex );
+            m_Stop = true;
+        }
+        m_WorkCV.notify_all();
+
+        for ( int t = 0 ; t < ( int )m_Pool.size() ; t++ )
+        {
+            m_Pool[t].join();
+        }
+    }
+
+    void Add( int isurf, const std::function< void() > &f )
+    {
+        std::lock_guard< std::mutex > lock( m_Mutex );
+
+        m_Queue[ isurf ].push_back( f );
+
+        // A surface already waiting or being worked on is picked up again when its work is done.
+        if ( !m_Busy[ isurf ] && m_Queue[ isurf ].size() == 1 )
+        {
+            m_Ready.push_back( isurf );
+            m_WorkCV.notify_one();
+        }
+    }
+
+    // Wait until nothing is queued or running on surface isurf.
+    void WaitSurf( int isurf )
+    {
+        std::unique_lock< std::mutex > lock( m_Mutex );
+        m_DoneCV.wait( lock, [&]() { return m_Queue[ isurf ].empty() && !m_Busy[ isurf ]; } );
+    }
+
+    // Wait until every surface is idle, then hand on the first exception any work threw.
+    void WaitAll()
+    {
+        std::unique_lock< std::mutex > lock( m_Mutex );
+        m_DoneCV.wait( lock, [&]() { return m_Ready.empty() && m_NumBusy == 0; } );
+
+        if ( m_Err )
+        {
+            std::exception_ptr err = m_Err;
+            m_Err = nullptr;
+            std::rethrow_exception( err );
+        }
+    }
+
+protected:
+
+    void Work()
+    {
+        std::unique_lock< std::mutex > lock( m_Mutex );
+
+        while ( true )
+        {
+            m_WorkCV.wait( lock, [&]() { return m_Stop || !m_Ready.empty(); } );
+
+            if ( m_Ready.empty() )
+            {
+                return;
+            }
+
+            int isurf = m_Ready.front();
+            m_Ready.pop_front();
+
+            std::function< void() > f = m_Queue[ isurf ].front();
+            m_Queue[ isurf ].pop_front();
+            m_Busy[ isurf ] = true;
+            m_NumBusy++;
+
+            lock.unlock();
+
+            try
+            {
+                f();
+            }
+            catch ( ... )
+            {
+                std::lock_guard< std::mutex > errlock( m_ErrMutex );
+                if ( !m_Err )
+                {
+                    m_Err = std::current_exception();
+                }
+            }
+
+            lock.lock();
+
+            m_Busy[ isurf ] = false;
+            m_NumBusy--;
+
+            if ( !m_Queue[ isurf ].empty() )
+            {
+                m_Ready.push_back( isurf );
+                m_WorkCV.notify_one();
+            }
+
+            m_DoneCV.notify_all();
+        }
+    }
+
+    vector < std::deque < std::function< void() > > > m_Queue;
+    vector < bool > m_Busy;
+    std::deque < int > m_Ready;
+    int m_NumBusy = 0;
+    bool m_Stop;
+
+    std::mutex m_Mutex;
+    std::condition_variable m_WorkCV;
+    std::condition_variable m_DoneCV;
+
+    std::mutex m_ErrMutex;
+    std::exception_ptr m_Err;
+
+    vector < std::thread > m_Pool;
+};
+
+// Density is worked out along each chain from the maps of the two surfaces it lies on, and then
+// spread back onto those maps, chain after chain.  Working a chain out reads its two maps and the
+// split sources, and spreading writes only its two maps, so a chain's spreading can run while
+// later chains on other surfaces are worked out.  Chains are worked out here in order, each once
+// its surfaces are idle, and spreading is queued on each surface in that same order, so every
+// map is read and written in the order the serial loop would.  The two sides of a chain are
+// separate maps unless the chain lies on one surface, and are spread separately.
+void CfdMeshMgrSingleton::SpreadChainDensity( int nedgeprop, int nthread, list< MapSource* > &splitSources, int stride, int output_type )
+{
+    int nsurf = ( int )m_SurfVec.size();
+
+    std::map< Surf*, int > surfindex;
+    for ( int i = 0 ; i < nsurf ; i++ )
+    {
+        surfindex[ m_SurfVec[i] ] = i;
+    }
+
+    int nchain = ( int )m_ISegChainList.size();
+    vector < ISegChain* > chains( nchain );
+    vector < int > surfa( nchain, -1 );
+    vector < int > surfb( nchain, -1 );
+
+    int k = 0;
+    list< ISegChain* >::iterator c;
+    for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
+    {
+        chains[k] = *c;
+
+        std::map< Surf*, int >::iterator it = surfindex.find( ( *c )->m_ACurve.GetSurf() );
+        if ( it != surfindex.end() )
+        {
+            surfa[k] = it->second;
+        }
+
+        it = surfindex.find( ( *c )->m_BCurve.GetSurf() );
+        if ( it != surfindex.end() )
+        {
+            surfb[k] = it->second;
+        }
+
+        k++;
+    }
+
+    SurfWorkQueue queue( nsurf, nthread - 1 );
+
+    for ( int ipass = 0; ipass < nedgeprop; ipass++ )
+    {
+        for ( k = 0 ; k < nchain ; k++ )
+        {
+            ISegChain* chain = chains[k];
+            int ia = surfa[k];
+            int ib = surfb[k];
+
+            // A chain on a surface the mesher does not hold is done here, once everything is idle.
+            if ( ia < 0 || ib < 0 )
+            {
+                queue.WaitAll();
+                chain->CalcDensity( GetGridDensityPtr(), splitSources );
+                chain->SpreadDensity();
+                StepProgressEvery( stride, output_type );
+                continue;
+            }
+
+            queue.WaitSurf( ia );
+            queue.WaitSurf( ib );
+
+            chain->CalcDensity( GetGridDensityPtr(), splitSources );
+
+            if ( ia == ib )
+            {
+                queue.Add( ia, [chain]() { chain->SpreadDensity(); } );
+            }
+            else
+            {
+                queue.Add( ia, [chain]() { chain->SpreadDensityA(); } );
+                queue.Add( ib, [chain]() { chain->SpreadDensityB(); } );
+            }
+
+            StepProgressEvery( stride, output_type );
+        }
+    }
+
+    queue.WaitAll();
+}
+
+// Lay out every chain's distance table before density is spread along the chains.  The table is
+// fixed by the curves alone, so this changes nothing but when it is done.  The A side evaluates
+// surface A and the B side surface B, so each side is grouped by its surface and the groups run
+// side by side, one surface to a thread.
+void CfdMeshMgrSingleton::BuildChainDistTables()
+{
+    int nsurf = ( int )m_SurfVec.size();
+
+    std::map< Surf*, int > surfindex;
+    for ( int i = 0 ; i < nsurf ; i++ )
+    {
+        surfindex[ m_SurfVec[i] ] = i;
+    }
+
+    vector < vector < ISegChain* > > bysurfa( nsurf );
+    vector < vector < ISegChain* > > bysurfb( nsurf );
+
+    list< ISegChain* >::iterator c;
+    for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
+    {
+        std::map< Surf*, int >::iterator ita = surfindex.find( ( *c )->m_ACurve.GetSurf() );
+        std::map< Surf*, int >::iterator itb = surfindex.find( ( *c )->m_BCurve.GetSurf() );
+
+        // A chain on a surface the mesher does not hold is left to build its table when first used.
+        if ( ita != surfindex.end() && itb != surfindex.end() )
+        {
+            bysurfa[ ita->second ].push_back( *c );
+            bysurfb[ itb->second ].push_back( *c );
+        }
+    }
+
+    int nthread = StageThreadCount( nsurf );
+
+    RunIndexed( nsurf, nthread, [&]( int i )
+    {
+        for ( int k = 0 ; k < ( int )bysurfa[i].size() ; k++ )
+        {
+            bysurfa[i][k]->BuildDistTableGeom();
+        }
+    } );
+
+    RunIndexed( nsurf, nthread, [&]( int i )
+    {
+        for ( int k = 0 ; k < ( int )bysurfb[i].size() ; k++ )
+        {
+            bysurfb[i][k]->BuildDistTableGeomB();
+        }
+    } );
+}
+
+// Remesh one surface.  Everything here reaches the model only through that surface's own
+// Mesh, which is what lets surfaces be run side by side.  The two shared things it touches
+// are the grid density, which is only read, and the progress text, which is locked.
+void CfdMeshMgrSingleton::RemeshOneSurf( int isurf, int nsurf, int output_type, int &num_tris )
+{
+    num_tris = 0;
+
+    for ( int iter = 0 ; iter < 10 ; ++iter )
+    {
+        num_tris = 0;
+        m_SurfVec[isurf]->GetMesh()->Remesh();
+
+        m_SurfVec[isurf]->GetMesh()->RemoveIllFormedFaces();
+
+        num_tris += m_SurfVec[isurf]->GetMesh()->GetNumFaces();
+    }
+
+    m_SurfVec[isurf]->GetMesh()->DumpGarbage();
+
+    m_ProgressDone++;
+    StepProgress( output_type );
+}
+
 void CfdMeshMgrSingleton::Remesh( int output_type )
 {
     char str[256];
-    int total_num_tris = 0;
     int nsurf = ( int )m_SurfVec.size();
-    for ( int i = 0 ; i < nsurf ; ++i )
+    vector < int > surftris( nsurf, 0 );
+
+    int nthread = StageThreadCount( nsurf );
+
+    BeginProgress( "Remesh", nsurf, output_type );
+
+    // Biggest surfaces first, so the long surfaces start while there is still small work to fill
+    // in behind them and the run does not end on one large surface with every other thread idle.
+    // The surfaces are independent, so the order they are taken in does not change any of them.
+    vector < pair < int, int > > order( nsurf );
+
+    for ( int i = 0 ; i < nsurf ; i++ )
     {
-        int num_tris = 0;
+        order[i] = pair< int, int >( m_SurfVec[i]->GetMesh()->GetNumFaces(), i );
+    }
 
-        int num_rev_removed = 0;
+    sort( order.begin(), order.end(), std::greater< pair < int, int > >() );
 
-        for ( int iter = 0 ; iter < 10 ; ++iter )
-        {
-            num_tris = 0;
-            m_SurfVec[i]->GetMesh()->Remesh();
+    RunIndexed( nsurf, nthread, [&]( int k )
+    {
+        int i = order[k].second;
 
-            num_rev_removed = m_SurfVec[ i ]->GetMesh()->RemoveRevFaces();
+        RemeshOneSurf( i, nsurf, output_type, surftris[i] );
+    } );
 
+    EndProgress( output_type );
 
-            num_tris += m_SurfVec[ i ]->GetMesh()->GetNumFaces();
+    int total_num_tris = 0;
 
-            snprintf( str, sizeof( str ), "Surf %3d/%3d Iter %2d/10 Num Tris = %8d %s                                       \r", i + 1, nsurf, iter + 1, num_tris, m_SurfVec[i]->GetDisplayName().c_str() );
-
-            if ( output_type != CfdMeshMgrSingleton::QUIET_OUTPUT )
-            {
-                addOutputText( str, output_type );
-            }
-        }
-        total_num_tris += num_tris;
-
-        if ( output_type != CfdMeshMgrSingleton::QUIET_OUTPUT )
-        {
-            snprintf( str, sizeof( str ), "Surf %3d/%3d Num Tris = %8d %s                                       \n", i + 1, nsurf, num_tris, m_SurfVec[i]->GetDisplayName().c_str() );
-            addOutputText( str, output_type );
-        }
-
-        if ( num_rev_removed > 0 )
-        {
-            snprintf( str, sizeof( str ), "%d Reversed tris collapsed in final iteration.\n", num_rev_removed );
-            if ( output_type != CfdMeshMgrSingleton::QUIET_OUTPUT )
-            {
-                addOutputText( str, output_type );
-            }
-        }
-        m_SurfVec[i]->GetMesh()->DumpGarbage();
+    for ( int i = 0 ; i < nsurf ; i++ )
+    {
+        total_num_tris += surftris[i];
     }
 
     WakeMgr.StretchWakes();
+
+    m_NumMeshTris = total_num_tris;
 
     snprintf( str, sizeof( str ), "Total Num Tris = %d\n", total_num_tris );
     addOutputText( str, output_type );
@@ -844,12 +1266,58 @@ void CfdMeshMgrSingleton::Remesh( int output_type )
 void CfdMeshMgrSingleton::PostMesh()
 {
     int nsurf = ( int )m_SurfVec.size();
-    for ( int i = 0 ; i < nsurf ; ++i )
+
+    // Gathered here because Clear() below is the end of the edges, and the target length an
+    // edge was working to lives on the edge.
+    m_LengthRatios.clear();
+    m_FaceLengthRatios.clear();
+    m_BorderFaceLengthRatios.clear();
+
+    // Each surface's share of what this stage collects, kept apart and joined in surface
+    // order afterwards, so the answer does not depend on which thread finished first.
+    vector < vector < double > > lenratio( nsurf );
+    vector < vector < double > > faceratio( nsurf );
+    vector < vector < double > > borderratio( nsurf );
+    vector < std::set< std::vector< int > > > tagcombo( nsurf );
+
+    int nthread = StageThreadCount( nsurf );
+
+    // Each surface reduces its own mesh to simple faces, tags them and condenses them.  None
+    // of that reaches another surface: the target map, the subsurfaces and the tag numbering
+    // are all read, and everything written belongs to the surface or to the vectors above.
+    RunIndexed( nsurf, nthread, [&]( int i )
     {
         m_SurfVec[ i ]->GetMesh()->LoadSimpFaces();
+        m_SurfVec[ i ]->GetMesh()->AccumLengthRatios( lenratio[i] );
+
+        // The same misses counted per face instead of per edge, which is what the coloured
+        // picture shows: a face is as bad as its worst edge, so the share of bad faces is
+        // always larger than the share of bad edges and the two must not be confused.
+        const vector< SimpFace > &sfv = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+
+        for ( int f = 0 ; f < ( int )sfv.size() ; f++ )
+        {
+            if ( sfv[f].m_WorstLenRatio > 0.0 )
+            {
+                faceratio[i].push_back( sfv[f].m_WorstLenRatio );
+
+                if ( sfv[f].m_OffBorder )
+                {
+                    borderratio[i].push_back( sfv[f].m_WorstLenRatio );
+                }
+            }
+        }
         m_SurfVec[i]->GetMesh()->Clear();
-        Subtag( m_SurfVec[i] );
+        Subtag( m_SurfVec[i], tagcombo[i] );
         m_SurfVec[ i ]->GetMesh()->CondenseSimpFaces();
+    } );
+
+    for ( int i = 0 ; i < nsurf ; ++i )
+    {
+        m_LengthRatios.insert( m_LengthRatios.end(), lenratio[i].begin(), lenratio[i].end() );
+        m_FaceLengthRatios.insert( m_FaceLengthRatios.end(), faceratio[i].begin(), faceratio[i].end() );
+        m_BorderFaceLengthRatios.insert( m_BorderFaceLengthRatios.end(), borderratio[i].begin(), borderratio[i].end() );
+        SubSurfaceMgr.m_TagCombos.insert( tagcombo[i].begin(), tagcombo[i].end() );
     }
 }
 
@@ -901,8 +1369,13 @@ string CfdMeshMgrSingleton::GetQualString()
     return "";
 }
 
+// Each message goes out ahead of the work it names, so whatever is on screen is what is running.
+// The POGS files are the slow ones and are optional, so they speak for themselves below rather
+// than being covered by one label for the whole stage.
 void CfdMeshMgrSingleton::ExportFiles()
 {
+    addOutputText( "Exporting Files\n" );
+
     if ( GetSettingsPtr()->GetExportFileFlag( vsp::CFD_STL_FILE_NAME ) )
     {
         if ( !m_Vehicle->m_STLMultiSolid() )
@@ -961,6 +1434,21 @@ void CfdMeshMgrSingleton::ExportFiles()
     {
         SubSurfaceMgr.WriteTKeyFile(GetSettingsPtr()->GetExportFileName(vsp::CFD_TKEY_FILE_NAME));
     }
+
+    string pogs_fn;
+    if (  GetSettingsPtr()->GetExportFileFlag( vsp::CFD_POGS_FILE_NAME ) )
+    {
+        addOutputText( "Building POGS Surfaces\n" );
+
+        // The POGS files are polylines, so the curves are only adapted that far
+        BuildNURBSCurvesVec( true, false ); // Note: Must be called before BuildNURBSSurfMap
+
+        BuildNURBSSurfMap();
+
+        pogs_fn = GetSettingsPtr()->GetExportFileName( vsp::CFD_POGS_FILE_NAME );
+        WritePOGS( pogs_fn );
+    }
+
 }
 
 void CfdMeshMgrSingleton::WriteTaggedSTL( const string &filename )
@@ -1031,18 +1519,42 @@ void CfdMeshMgrSingleton::WriteTaggedSTL( const string &filename )
     if ( file_id )
     {
         std::vector< int > tags = SubSurfaceMgr.GetAllTags();
+
+        // Which faces belong to each tag, gathered in one pass.  Asking every face about
+        // every tag in turn is a walk of the whole mesh per tag, and a model can carry
+        // dozens of tags.
+        std::map< int, int > tagpos;
+        for ( int itag = 0; itag < ( int ) tags.size(); itag++ )
+        {
+            tagpos[ tags[itag] ] = itag;
+        }
+
+        vector < vector < int > > tagface( tags.size() );
+        for ( int f = 0; f < ( int ) allFaceVec.size(); f++ )
+        {
+            std::map< int, int >::const_iterator it = tagpos.find( SubSurfaceMgr.GetTag( allFaceVec[f].m_Tags ) );
+
+            if ( it != tagpos.end() )
+            {
+                tagface[ it->second ].push_back( f );
+            }
+        }
+
         for ( int itag = 0; itag < ( int ) tags.size(); itag++ )
         {
             std::string tagname = SubSurfaceMgr.GetTagNames( itag );
             fprintf( file_id, "solid %s\n", tagname.c_str() );
 
-            for ( int f = 0; f < ( int ) allFaceVec.size(); f++ )
-            {
-                SimpFace* sface = &allFaceVec[f];
-                int t = SubSurfaceMgr.GetTag( sface->m_Tags );
+            const vector < int > &face = tagface[itag];
 
-                if ( t == tags[itag] )
+            WriteChunked( file_id, ( int )face.size(), [&]( int ibeg, int iend, string &out )
+            {
+                char buf[256];
+
+                for ( int k = ibeg; k < iend; k++ )
                 {
+                    const SimpFace* sface = &allFaceVec[ face[k] ];
+
                     const vec3d& p0 = allUsedPntVec[sface->ind0];
                     const vec3d& p1 = allUsedPntVec[sface->ind1];
                     const vec3d& p2 = allUsedPntVec[sface->ind2];
@@ -1051,15 +1563,7 @@ void CfdMeshMgrSingleton::WriteTaggedSTL( const string &filename )
                     vec3d norm = cross( v01, v12 );
                     norm.normalize();
 
-                    fprintf( file_id, " facet normal  %2.10le %2.10le %2.10le\n",  norm.x(), norm.y(), norm.z() );
-                    fprintf( file_id, "   outer loop\n" );
-
-                    fprintf( file_id, "     vertex %2.10le %2.10le %2.10le\n", p0.x(), p0.y(), p0.z() );
-                    fprintf( file_id, "     vertex %2.10le %2.10le %2.10le\n", p1.x(), p1.y(), p1.z() );
-                    fprintf( file_id, "     vertex %2.10le %2.10le %2.10le\n", p2.x(), p2.y(), p2.z() );
-
-                    fprintf( file_id, "   endloop\n" );
-                    fprintf( file_id, " endfacet\n" );
+                    AppendSTLFacet( out, buf, sizeof( buf ), norm, p0, p1, p2 );
 
                     if ( sface->m_isQuad ) // Split quad and write additional tri.
                     {
@@ -1069,18 +1573,11 @@ void CfdMeshMgrSingleton::WriteTaggedSTL( const string &filename )
                         norm = cross( v23, v30 );
                         norm.normalize();
 
-                        fprintf( file_id, " facet normal  %2.10le %2.10le %2.10le\n",  norm.x(), norm.y(), norm.z() );
-                        fprintf( file_id, "   outer loop\n" );
-
-                        fprintf( file_id, "     vertex %2.10le %2.10le %2.10le\n", p0.x(), p0.y(), p0.z() );
-                        fprintf( file_id, "     vertex %2.10le %2.10le %2.10le\n", p2.x(), p2.y(), p2.z() );
-                        fprintf( file_id, "     vertex %2.10le %2.10le %2.10le\n", p3.x(), p3.y(), p3.z() );
-
-                        fprintf( file_id, "   endloop\n" );
-                        fprintf( file_id, " endfacet\n" );
+                        AppendSTLFacet( out, buf, sizeof( buf ), norm, p0, p2, p3 );
                     }
                 }
-            }
+            } );
+
             fprintf( file_id, "endsolid %s\n", tagname.c_str() );
         }
 
@@ -1099,7 +1596,11 @@ void CfdMeshMgrSingleton::WriteSTL( const string &filename )
         {
             if ( !m_SurfVec[i]->GetWakeFlag() )
             {
-                m_SurfVec[ i ]->GetMesh()->WriteSimpleSTL( file_id );
+                Mesh* msh = m_SurfVec[ i ]->GetMesh();
+                WriteChunked( file_id, msh->GetNumSimpFaces(), [&]( int ibeg, int iend, string &out )
+                {
+                    msh->AppendSimpleSTL( ibeg, iend, out );
+                } );
             }
             else
             {
@@ -1115,7 +1616,11 @@ void CfdMeshMgrSingleton::WriteSTL( const string &filename )
             {
                 if ( m_SurfVec[i]->GetWakeFlag() )
                 {
-                    m_SurfVec[ i ]->GetMesh()->WriteSimpleSTL( file_id );
+                    Mesh* msh = m_SurfVec[ i ]->GetMesh();
+                    WriteChunked( file_id, msh->GetNumSimpFaces(), [&]( int ibeg, int iend, string &out )
+                    {
+                        msh->AppendSimpleSTL( ibeg, iend, out );
+                    } );
                 }
             }
             fprintf( file_id, "endsolid wake\n" );
@@ -1311,9 +1816,12 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
     fprintf( m_DebugFile, "CfdMeshMgr::WriteNASCART Small Edge Length = %f \n", sqrt( small_edge ) );
 #endif
 
-//  //==== Any Files To Write? ====//
-//  if ( !dat_fn && !key_fn && !obj_fn && !tri_fn )
-//      return;
+    //==== Any Files To Write? ====//
+    if ( dat_fn.empty() && key_fn.empty() && obj_fn.empty() && tri_fn.empty() &&
+         gmsh_fn.empty() && vspgeom_fn.empty() )
+    {
+        return;
+    }
 
     // Used when comparing W parameter to TMAGIC
     double tol = 1e-12;
@@ -1369,7 +1877,9 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
     vector< SimpFace > allFaceVec;
     int ntristrict = 0;
     vector< int > allSurfIDVec;
-    vector< vector< vec2d > > allUWVec;
+    // Four parameter pairs per face, laid end to end.  A vector per face is an allocation
+    // per face, and a mesh has a million of them.
+    vector< vec2d > allUWVec;
     vector < pair < int, int > > wedges;
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
@@ -1397,7 +1907,7 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 allFaceVec.push_back( sface );
                 allSurfIDVec.push_back( m_SurfVec[i]->GetSurfID() );
 
-                vector< vec2d > uwFace( 4 );
+                vec2d uwFace[4];
                 uwFace[0] = sUWVec[ sFaceVec[t].ind0 ];
                 uwFace[1] = sUWVec[ sFaceVec[t].ind1 ];
                 uwFace[2] = sUWVec[ sFaceVec[t].ind2 ];
@@ -1405,7 +1915,7 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 {
                     uwFace[3] = sUWVec[ sFaceVec[t].ind3 ];
                 }
-                allUWVec.push_back( uwFace );
+                allUWVec.insert( allUWVec.end(), uwFace, uwFace + 4 );
 
                 if ( m_SurfVec[i]->GetSurfaceVSPType() == vsp::WING_SURF )
                 {
@@ -1578,7 +2088,7 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 allFaceVec.push_back( sface );
                 allSurfIDVec.push_back( m_SurfVec[i]->GetSurfID() );
 
-                vector< vec2d > uwFace( 4 );
+                vec2d uwFace[4];
                 uwFace[0] = sUWVec[ sFaceVec[f].ind0 ];
                 uwFace[1] = sUWVec[ sFaceVec[f].ind1 ];
                 uwFace[2] = sUWVec[ sFaceVec[f].ind2 ];
@@ -1586,7 +2096,7 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 {
                     uwFace[3] = sUWVec[ sFaceVec[f].ind3 ];
                 }
-                allUWVec.push_back( uwFace );
+                allUWVec.insert( allUWVec.end(), uwFace, uwFace + 4 );
 
             }
         }
@@ -1652,24 +2162,36 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
         if ( fp )
         {
             //==== Write Pnts ====//
-            for ( int i = 0 ; i < ( int )allUsedPntVec.size() ; i++ )
+            WriteChunked( fp, ( int )allUsedPntVec.size(), [&]( int ibeg, int iend, string &out )
             {
-                fprintf( fp, "v %16.10f %16.10f %16.10f\n", allUsedPntVec[i].x(), allUsedPntVec[i].z(), -allUsedPntVec[i].y() );
-            }
+                char buf[256];
+
+                for ( int i = ibeg ; i < iend ; i++ )
+                {
+                    snprintf( buf, sizeof( buf ), "v %16.10f %16.10f %16.10f\n", allUsedPntVec[i].x(), allUsedPntVec[i].z(), -allUsedPntVec[i].y() );
+                    out += buf;
+                }
+            } );
             fprintf( fp, "\n" );
 
             //==== Write Tris ====//
-            for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+            WriteChunked( fp, ( int )allFaceVec.size(), [&]( int ibeg, int iend, string &out )
             {
-                if( allFaceVec[i].m_isQuad )
+                char buf[256];
+
+                for ( int i = ibeg ; i < iend ; i++ )
                 {
-                    fprintf( fp, "f %d %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                    if( allFaceVec[i].m_isQuad )
+                    {
+                        snprintf( buf, sizeof( buf ), "f %d %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                    }
+                    else
+                    {
+                        snprintf( buf, sizeof( buf ), "f %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
+                    }
+                    out += buf;
                 }
-                else
-                {
-                    fprintf( fp, "f %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
-                }
-            }
+            } );
             fclose( fp );
         }
     }
@@ -1688,30 +2210,51 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
             fprintf( fp, "%d %d\n", ( int )allUsedPntVec.size(), ntristrict );
 
             //==== Write Pnts ====//
-            for ( int i = 0 ; i < ( int )allUsedPntVec.size() ; i++ )
+            WriteChunked( fp, ( int )allUsedPntVec.size(), [&]( int ibeg, int iend, string &out )
             {
-                fprintf( fp, "%16.10g %16.10g %16.10g\n", allUsedPntVec[i].x(), allUsedPntVec[i].y(), allUsedPntVec[i].z() );
-            }
+                char buf[256];
+
+                for ( int i = ibeg ; i < iend ; i++ )
+                {
+                    snprintf( buf, sizeof( buf ), "%16.10g %16.10g %16.10g\n", allUsedPntVec[i].x(), allUsedPntVec[i].y(), allUsedPntVec[i].z() );
+                    out += buf;
+                }
+            } );
 
             //==== Write Tris ====//
-            for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+            WriteChunked( fp, ( int )allFaceVec.size(), [&]( int ibeg, int iend, string &out )
             {
-                fprintf( fp, "%d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
-                if( allFaceVec[i].m_isQuad )
+                char buf[256];
+
+                for ( int i = ibeg ; i < iend ; i++ )
                 {
-                    fprintf( fp, "%d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                    snprintf( buf, sizeof( buf ), "%d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
+                    out += buf;
+
+                    if( allFaceVec[i].m_isQuad )
+                    {
+                        snprintf( buf, sizeof( buf ), "%d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                        out += buf;
+                    }
                 }
-            }
+            } );
 
             //==== Write Component ID ====//
-            for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+            WriteChunked( fp, ( int )allFaceVec.size(), [&]( int ibeg, int iend, string &out )
             {
-                fprintf( fp, "%d \n", SubSurfaceMgr.GetTag( allFaceVec[i].m_Tags ) );
-                if( allFaceVec[i].m_isQuad )
+                char buf[256];
+
+                for ( int i = ibeg ; i < iend ; i++ )
                 {
-                    fprintf( fp, "%d \n", SubSurfaceMgr.GetTag( allFaceVec[i].m_Tags ) );
+                    snprintf( buf, sizeof( buf ), "%d \n", SubSurfaceMgr.GetTag( allFaceVec[i].m_Tags ) );
+                    out += buf;
+
+                    if( allFaceVec[i].m_isQuad )
+                    {
+                        out += buf;
+                    }
                 }
-            }
+            } );
 
             fclose( fp );
         }
@@ -1732,30 +2275,42 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
             //==== Write Nodes ====//
             fprintf( fp, "$Nodes\n" );
             fprintf( fp, "%d\n", ( int )allUsedPntVec.size() );
-            for ( int i = 0 ; i < ( int )allUsedPntVec.size() ; i++ )
+            WriteChunked( fp, ( int )allUsedPntVec.size(), [&]( int ibeg, int iend, string &out )
             {
-                fprintf( fp, "%d %16.10f %16.10f %16.10f\n", i + 1,
-                         allUsedPntVec[i].x(), allUsedPntVec[i].y(), allUsedPntVec[i].z() );
-            }
+                char buf[256];
+
+                for ( int i = ibeg ; i < iend ; i++ )
+                {
+                    snprintf( buf, sizeof( buf ), "%d %16.10f %16.10f %16.10f\n", i + 1,
+                              allUsedPntVec[i].x(), allUsedPntVec[i].y(), allUsedPntVec[i].z() );
+                    out += buf;
+                }
+            } );
             fprintf( fp, "$EndNodes\n" );
 
             //==== Write Tris ====//
             fprintf( fp, "$Elements\n" );
             fprintf( fp, "%d\n", ( int )allFaceVec.size() );
 
-            int ele_cnt = 1;
-            for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+            // The element number is the face's own position in the list, so a chunk can be
+            // written without knowing what came before it.
+            WriteChunked( fp, ( int )allFaceVec.size(), [&]( int ibeg, int iend, string &out )
             {
-                if( allFaceVec[i].m_isQuad )
+                char buf[256];
+
+                for ( int i = ibeg ; i < iend ; i++ )
                 {
-                    fprintf( fp, "%d 3 0 %d %d %d %d \n", ele_cnt, allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                    if( allFaceVec[i].m_isQuad )
+                    {
+                        snprintf( buf, sizeof( buf ), "%d 3 0 %d %d %d %d \n", i + 1, allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                    }
+                    else
+                    {
+                        snprintf( buf, sizeof( buf ), "%d 2 0 %d %d %d \n", i + 1, allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
+                    }
+                    out += buf;
                 }
-                else
-                {
-                    fprintf( fp, "%d 2 0 %d %d %d \n", ele_cnt, allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
-                }
-                ele_cnt++;
-            }
+            } );
 
             fprintf( fp, "$EndElements\n" );
             fclose( fp );
@@ -1787,10 +2342,16 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
             fprintf( fp, "%d %d %d\n", (int)allUsedPntVec.size(), nface, (int)wakes.size() );
 
             //==== Write Pnts ====//
-            for ( int i = 0 ; i < ( int )allUsedPntVec.size() ; i++ )
+            WriteChunked( fp, ( int )allUsedPntVec.size(), [&]( int ibeg, int iend, string &out )
             {
-                fprintf( fp, "%16.10g %16.10g %16.10g\n", allUsedPntVec[i].x(), allUsedPntVec[i].y(), allUsedPntVec[i].z() );
-            }
+                char buf[256];
+
+                for ( int i = ibeg ; i < iend ; i++ )
+                {
+                    snprintf( buf, sizeof( buf ), "%16.10g %16.10g %16.10g\n", allUsedPntVec[i].x(), allUsedPntVec[i].y(), allUsedPntVec[i].z() );
+                    out += buf;
+                }
+            } );
 
             if ( allowquads )
             {
@@ -1798,17 +2359,23 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 fprintf( fp, "%d\n", ( int )allFaceVec.size() );
 
                 //==== Write Faces ====//
-                for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+                WriteChunked( fp, ( int )allFaceVec.size(), [&]( int ibeg, int iend, string &out )
                 {
-                    if( allFaceVec[i].m_isQuad )
+                    char buf[256];
+
+                    for ( int i = ibeg ; i < iend ; i++ )
                     {
-                        fprintf( fp, "4 %d %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                        if( allFaceVec[i].m_isQuad )
+                        {
+                            snprintf( buf, sizeof( buf ), "4 %d %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                        }
+                        else
+                        {
+                            snprintf( buf, sizeof( buf ), "3 %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
+                        }
+                        out += buf;
                     }
-                    else
-                    {
-                        fprintf( fp, "3 %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
-                    }
-                }
+                } );
             }
             else
             {
@@ -1816,74 +2383,102 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 fprintf( fp, "%d\n", ntristrict );
 
                 //==== Write Tris Only ====//
-                for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+                WriteChunked( fp, ( int )allFaceVec.size(), [&]( int ibeg, int iend, string &out )
                 {
-                    fprintf( fp, "3 %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
-                    if( allFaceVec[i].m_isQuad )
+                    char buf[256];
+
+                    for ( int i = ibeg ; i < iend ; i++ )
                     {
-                        fprintf( fp, "3 %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                        snprintf( buf, sizeof( buf ), "3 %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind1, allFaceVec[i].ind2 );
+                        out += buf;
+
+                        if( allFaceVec[i].m_isQuad )
+                        {
+                            snprintf( buf, sizeof( buf ), "3 %d %d %d \n", allFaceVec[i].ind0, allFaceVec[i].ind2, allFaceVec[i].ind3 );
+                            out += buf;
+                        }
                     }
-                }
+                } );
             }
 
             if ( allowquads )
             {
                 //==== Write Component ID ====//
-                for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+                WriteChunked( fp, ( int )allFaceVec.size(), [&]( int ibeg, int iend, string &out )
                 {
-                    int tag = SubSurfaceMgr.GetTag( allFaceVec[i].m_Tags );
-                    int part = SubSurfaceMgr.GetPart( allFaceVec[i].m_Tags );
+                    char buf[256];
 
-                    double uscale = SubSurfaceMgr.m_CompUscale[ part - 1 ];
-                    double wscale = SubSurfaceMgr.m_CompWscale[ part - 1 ];
+                    for ( int i = ibeg ; i < iend ; i++ )
+                    {
+                        int tag = SubSurfaceMgr.GetTag( allFaceVec[i].m_Tags );
+                        int part = SubSurfaceMgr.GetPart( allFaceVec[i].m_Tags );
 
-                    if( allFaceVec[i].m_isQuad )
-                    {
-                        fprintf( fp, "%d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", part, tag,
-                             allUWVec[i][0].x() / uscale, allUWVec[i][0].y() / wscale,
-                             allUWVec[i][1].x() / uscale, allUWVec[i][1].y() / wscale,
-                             allUWVec[i][2].x() / uscale, allUWVec[i][2].y() / wscale,
-                             allUWVec[i][3].x() / uscale, allUWVec[i][3].y() / wscale );
+                        double uscale = SubSurfaceMgr.m_CompUscale[ part - 1 ];
+                        double wscale = SubSurfaceMgr.m_CompWscale[ part - 1 ];
+
+                        if( allFaceVec[i].m_isQuad )
+                        {
+                            snprintf( buf, sizeof( buf ), "%d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", part, tag,
+                                 allUWVec[4 * i + 0].x() / uscale, allUWVec[4 * i + 0].y() / wscale,
+                                 allUWVec[4 * i + 1].x() / uscale, allUWVec[4 * i + 1].y() / wscale,
+                                 allUWVec[4 * i + 2].x() / uscale, allUWVec[4 * i + 2].y() / wscale,
+                                 allUWVec[4 * i + 3].x() / uscale, allUWVec[4 * i + 3].y() / wscale );
+                        }
+                        else
+                        {
+                            snprintf( buf, sizeof( buf ), "%d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", part, tag,
+                                     allUWVec[4 * i + 0].x() / uscale, allUWVec[4 * i + 0].y() / wscale,
+                                     allUWVec[4 * i + 1].x() / uscale, allUWVec[4 * i + 1].y() / wscale,
+                                     allUWVec[4 * i + 2].x() / uscale, allUWVec[4 * i + 2].y() / wscale );
+                        }
+                        out += buf;
                     }
-                    else
-                    {
-                        fprintf( fp, "%d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", part, tag,
-                                 allUWVec[i][0].x() / uscale, allUWVec[i][0].y() / wscale,
-                                 allUWVec[i][1].x() / uscale, allUWVec[i][1].y() / wscale,
-                                 allUWVec[i][2].x() / uscale, allUWVec[i][2].y() / wscale );
-                    }
-                }
+                } );
             }
             else
             {
                 //==== Write Component ID ====//
-                for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+                WriteChunked( fp, ( int )allFaceVec.size(), [&]( int ibeg, int iend, string &out )
                 {
-                    int tag = SubSurfaceMgr.GetTag( allFaceVec[i].m_Tags );
-                    int part = SubSurfaceMgr.GetPart( allFaceVec[i].m_Tags );
+                    char buf[256];
 
-                    double uscale = SubSurfaceMgr.m_CompUscale[ part - 1 ];
-                    double wscale = SubSurfaceMgr.m_CompWscale[ part - 1 ];
-
-                    fprintf( fp, "%d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", part, tag,
-                             allUWVec[i][0].x() / uscale, allUWVec[i][0].y() / wscale,
-                             allUWVec[i][1].x() / uscale, allUWVec[i][1].y() / wscale,
-                             allUWVec[i][2].x() / uscale, allUWVec[i][2].y() / wscale );
-                    if( allFaceVec[i].m_isQuad )
+                    for ( int i = ibeg ; i < iend ; i++ )
                     {
-                        fprintf( fp, "%d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", part, tag,
-                                 allUWVec[i][0].x() / uscale, allUWVec[i][0].y() / wscale,
-                                 allUWVec[i][2].x() / uscale, allUWVec[i][2].y() / wscale,
-                                 allUWVec[i][3].x() / uscale, allUWVec[i][3].y() / wscale );
+                        int tag = SubSurfaceMgr.GetTag( allFaceVec[i].m_Tags );
+                        int part = SubSurfaceMgr.GetPart( allFaceVec[i].m_Tags );
+
+                        double uscale = SubSurfaceMgr.m_CompUscale[ part - 1 ];
+                        double wscale = SubSurfaceMgr.m_CompWscale[ part - 1 ];
+
+                        snprintf( buf, sizeof( buf ), "%d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", part, tag,
+                                 allUWVec[4 * i + 0].x() / uscale, allUWVec[4 * i + 0].y() / wscale,
+                                 allUWVec[4 * i + 1].x() / uscale, allUWVec[4 * i + 1].y() / wscale,
+                                 allUWVec[4 * i + 2].x() / uscale, allUWVec[4 * i + 2].y() / wscale );
+                        out += buf;
+
+                        if( allFaceVec[i].m_isQuad )
+                        {
+                            snprintf( buf, sizeof( buf ), "%d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", part, tag,
+                                     allUWVec[4 * i + 0].x() / uscale, allUWVec[4 * i + 0].y() / wscale,
+                                     allUWVec[4 * i + 2].x() / uscale, allUWVec[4 * i + 2].y() / wscale,
+                                     allUWVec[4 * i + 3].x() / uscale, allUWVec[4 * i + 3].y() / wscale );
+                            out += buf;
+                        }
                     }
-                }
+                } );
             }
 
             // Write parents
-            for ( int i = 0; i < nface; i++ )
+            WriteChunked( fp, nface, [&]( int ibeg, int iend, string &out )
             {
-                fprintf( fp, "%d %d\n", i + 1, i + 1 );
-            }
+                char buf[64];
+
+                for ( int i = ibeg ; i < iend ; i++ )
+                {
+                    snprintf( buf, sizeof( buf ), "%d %d\n", i + 1, i + 1 );
+                    out += buf;
+                }
+            } );
 
             int nwake = wakes.size();
             // Wake line data.
@@ -1962,19 +2557,19 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                     if( allFaceVec[i].m_isQuad )
                     {
                         fprintf( fp, "%d %d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", i + 1, part, tag,
-                             allUWVec[i][0].x() / uscale, allUWVec[i][0].y() / wscale,
-                             allUWVec[i][1].x() / uscale, allUWVec[i][1].y() / wscale,
-                             allUWVec[i][2].x() / uscale, allUWVec[i][2].y() / wscale,
-                             allUWVec[i][0].x() / uscale, allUWVec[i][0].y() / wscale,
-                             allUWVec[i][2].x() / uscale, allUWVec[i][2].y() / wscale,
-                             allUWVec[i][3].x() / uscale, allUWVec[i][3].y() / wscale );
+                             allUWVec[4 * i + 0].x() / uscale, allUWVec[4 * i + 0].y() / wscale,
+                             allUWVec[4 * i + 1].x() / uscale, allUWVec[4 * i + 1].y() / wscale,
+                             allUWVec[4 * i + 2].x() / uscale, allUWVec[4 * i + 2].y() / wscale,
+                             allUWVec[4 * i + 0].x() / uscale, allUWVec[4 * i + 0].y() / wscale,
+                             allUWVec[4 * i + 2].x() / uscale, allUWVec[4 * i + 2].y() / wscale,
+                             allUWVec[4 * i + 3].x() / uscale, allUWVec[4 * i + 3].y() / wscale );
                     }
                     else
                     {
                         fprintf( fp, "%d %d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", i + 1, part, tag,
-                                 allUWVec[i][0].x() / uscale, allUWVec[i][0].y() / wscale,
-                                 allUWVec[i][1].x() / uscale, allUWVec[i][1].y() / wscale,
-                                 allUWVec[i][2].x() / uscale, allUWVec[i][2].y() / wscale );
+                                 allUWVec[4 * i + 0].x() / uscale, allUWVec[4 * i + 0].y() / wscale,
+                                 allUWVec[4 * i + 1].x() / uscale, allUWVec[4 * i + 1].y() / wscale,
+                                 allUWVec[4 * i + 2].x() / uscale, allUWVec[4 * i + 2].y() / wscale );
                     }
                 }
             }
@@ -1991,16 +2586,16 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                     double wscale = SubSurfaceMgr.m_CompWscale[ part - 1 ];
 
                     fprintf( fp, "%d %d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", iface, part, tag,
-                             allUWVec[i][0].x() / uscale, allUWVec[i][0].y() / wscale,
-                             allUWVec[i][1].x() / uscale, allUWVec[i][1].y() / wscale,
-                             allUWVec[i][2].x() / uscale, allUWVec[i][2].y() / wscale );
+                             allUWVec[4 * i + 0].x() / uscale, allUWVec[4 * i + 0].y() / wscale,
+                             allUWVec[4 * i + 1].x() / uscale, allUWVec[4 * i + 1].y() / wscale,
+                             allUWVec[4 * i + 2].x() / uscale, allUWVec[4 * i + 2].y() / wscale );
                     iface++;
                     if( allFaceVec[i].m_isQuad )
                     {
                         fprintf( fp, "%d %d %d %16.10g %16.10g %16.10g %16.10g %16.10g %16.10g\n", iface, part, tag,
-                                 allUWVec[i][0].x() / uscale, allUWVec[i][0].y() / wscale,
-                                 allUWVec[i][2].x() / uscale, allUWVec[i][2].y() / wscale,
-                                 allUWVec[i][3].x() / uscale, allUWVec[i][3].y() / wscale );
+                                 allUWVec[4 * i + 0].x() / uscale, allUWVec[4 * i + 0].y() / wscale,
+                                 allUWVec[4 * i + 2].x() / uscale, allUWVec[4 * i + 2].y() / wscale,
+                                 allUWVec[4 * i + 3].x() / uscale, allUWVec[4 * i + 3].y() / wscale );
                         iface++;
                     }
                 }
@@ -2052,6 +2647,54 @@ void CfdMeshMgrSingleton::WriteTagFiles( string file_name, const vector< SimpFac
         }
     }
 
+    vector < string > gidvec;
+    vector < int > gidpartvec;
+    vector < int > gidsurfvec;
+    SubSurfaceMgr.GetPartData( gidvec, gidpartvec, gidsurfvec );
+
+    int nhingefile = 0;
+    vector < string > hinges;
+    vector < vector < int > > hingedescendantparts;
+    Vehicle *veh = VehicleMgr.GetVehicle();
+    if ( veh )
+    {
+        // Check all geoms, whether they are in mesh or not.
+        std::vector< std::string > comps = veh->GetGeomVec();
+        for ( int icomp = 0; icomp < comps.size(); icomp++ )
+        {
+            Geom * g = veh->FindGeom( comps[icomp] );
+            if ( g )
+            {
+                // A Clone of a hinge articulates its children the same way, so it is a
+                // control surface too.
+                if ( Geom::CastTo< JointRole >( g ) )
+                {
+                    ntagfile++;
+                    nhingefile++;
+
+                    hinges.push_back( comps[icomp] );
+
+                    vector < string > descendants;
+                    g->BuildRigidAttachedDescendantList( descendants );
+
+                    vector < int > descpart;
+                    for ( int ides = 0; ides < descendants.size(); ides++ )
+                    {
+                        vector < int > indvec;
+                        vector_find_val_multiple( gidvec, descendants[ ides ], indvec );
+
+                        for ( int iind = 0; iind < indvec.size(); iind++ )
+                        {
+                            descpart.push_back( gidpartvec[ indvec[ iind ] ] );
+                        }
+                    }
+
+                    hingedescendantparts.push_back( descpart );
+                }
+            }
+        }
+    }
+
     if ( ntagfile > 0 )
     {
         string base_name = GetBasename( file_name );
@@ -2064,6 +2707,7 @@ void CfdMeshMgrSingleton::WriteTagFiles( string file_name, const vector< SimpFac
 
         string taglist_name = subdir + base_fname + ".ALL.taglist";
         string csf_taglist_name = subdir + base_fname + ".ControlSurfaces.taglist";
+        string hinge_taglist_name = subdir + base_fname + ".Hinges.taglist";
 
         StringUtil::change_space_to_underscore( base_fname );
         string base_path_nospace = subdir + base_fname;
@@ -2073,6 +2717,12 @@ void CfdMeshMgrSingleton::WriteTagFiles( string file_name, const vector< SimpFac
         if ( ncsffile > 0 )
         {
             csf_taglist_fid = fopen( csf_taglist_name.c_str(), "w" );
+        }
+
+        FILE* hinge_taglist_fid = nullptr;
+        if ( nhingefile > 0 )
+        {
+            hinge_taglist_fid = fopen( hinge_taglist_name.c_str(), "w" );
         }
 
         if ( taglist_fid )
@@ -2136,12 +2786,64 @@ void CfdMeshMgrSingleton::WriteTagFiles( string file_name, const vector< SimpFac
                     }
                 }
             }
-
-            fclose( taglist_fid );
-
             if ( csf_taglist_fid )
             {
                 fclose( csf_taglist_fid );
+            }
+
+            if ( hinge_taglist_fid )
+            {
+                fprintf( hinge_taglist_fid, "%d\n", nhingefile );
+            }
+
+            for ( int ihinge = 0; ihinge < nhingefile; ihinge++ )
+            {
+                Geom * g = veh->FindGeom( hinges[ ihinge ] );
+                if ( g )
+                {
+                    string hingename = g->GetName() + "_Hinge";
+                    // The taglist records the space-substituted name, so the file has to be
+                    // written under that same name -- and under the space-substituted path --
+                    // or the reader cannot find it.  This is what the part tags above do.
+                    StringUtil::change_space_to_underscore( hingename );
+
+                    string tagfile_name = base_path_nospace + "." + hingename + ".tag";
+                    string tagfile_localname = base_fname + "." + hingename;
+
+                    fprintf( taglist_fid, "%s\n", tagfile_localname.c_str() );
+
+                    if ( hinge_taglist_fid )
+                    {
+                        fprintf( hinge_taglist_fid, "%s\n", tagfile_localname.c_str() );
+                    }
+
+                    FILE* fid = fopen( tagfile_name.c_str(), "w" );
+                    if ( fid )
+                    {
+                        WriteTagFile( fid, hingedescendantparts[ ihinge ], allFaceVec, allowquads );
+
+                        fclose( fid );
+                    }
+                }
+            }
+            if ( hinge_taglist_fid )
+            {
+                fclose( hinge_taglist_fid );
+            }
+
+            fclose( taglist_fid );
+        }
+        else
+        {
+            // These two were opened before the block above, so they have to be closed
+            // even when the main list could not be opened and that block never ran.
+            if ( csf_taglist_fid )
+            {
+                fclose( csf_taglist_fid );
+            }
+            if ( hinge_taglist_fid )
+            {
+                fclose( hinge_taglist_fid );
             }
         }
     }
@@ -2206,6 +2908,74 @@ void CfdMeshMgrSingleton::WriteTagFile( FILE* file_id, int part, int tag, const 
             if( allFaceVec[i].m_isQuad )
             {
                 if ( SubSurfaceMgr.MatchPartAndTag( allFaceVec[i].m_Tags, part, tag ) )
+                {
+                    fprintf( file_id, "%d\n", iface + 1 );
+                }
+                iface++;
+            }
+        }
+    }
+}
+
+void CfdMeshMgrSingleton::WriteTagFile( FILE* file_id, const vector < int > &parts, const vector< SimpFace > &allFaceVec, bool allowquads )
+{
+    //==== Write Tri IDs for each tag =====//
+    int count = 0;
+    if ( allowquads )
+    {
+        for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+        {
+            if ( SubSurfaceMgr.MatchAnyPart( allFaceVec[i].m_Tags, parts ) )
+            {
+                count++;
+            }
+        }
+    }
+    else
+    {
+        for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+        {
+            if ( SubSurfaceMgr.MatchAnyPart( allFaceVec[i].m_Tags, parts ) )
+            {
+                count++;
+            }
+
+            if( allFaceVec[i].m_isQuad )
+            {
+                if ( SubSurfaceMgr.MatchAnyPart( allFaceVec[i].m_Tags, parts ) )
+                {
+                    count++;
+                }
+            }
+        }
+    }
+    fprintf( file_id, "%d\n\n", count );
+
+    if ( allowquads )
+    {
+        for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+        {
+            if ( SubSurfaceMgr.MatchAnyPart( allFaceVec[i].m_Tags, parts ) )
+            {
+                fprintf( file_id, "%d\n", i + 1 );
+            }
+        }
+    }
+    else
+    {
+        int iface = 0;
+
+        for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+        {
+            if ( SubSurfaceMgr.MatchAnyPart( allFaceVec[i].m_Tags, parts ) )
+            {
+                fprintf( file_id, "%d\n", iface + 1 );
+            }
+            iface++;
+
+            if( allFaceVec[i].m_isQuad )
+            {
+                if ( SubSurfaceMgr.MatchAnyPart( allFaceVec[i].m_Tags, parts ) )
                 {
                     fprintf( file_id, "%d\n", iface + 1 );
                 }
@@ -2384,6 +3154,1260 @@ void CfdMeshMgrSingleton::WriteFacet( const string &facet_fn )
     }
 }
 
+// How much of a surface's parameter space the mesh actually covers.  Which of a face's
+// loops bounds it is decided against this.
+static double MeshAreaUW( Surf* srf )
+{
+    if ( !srf || !srf->GetMesh() )
+    {
+        return 0.0;
+    }
+
+    const vector < vec2d > &uw_vec = srf->GetMesh()->GetSimpUWPntVec();
+    const vector < SimpFace > &face_vec = srf->GetMesh()->GetSimpFaceVec();
+
+    double area = 0.0;
+
+    for ( int i = 0; i < ( int )face_vec.size(); i++ )
+    {
+        const SimpFace &f = face_vec[i];
+
+        int ind[4] = { f.ind0, f.ind1, f.ind2, f.ind3 };
+        int ntri = 1;
+        if ( f.m_isQuad )
+        {
+            ntri = 2;
+        }
+
+        for ( int t = 0; t < ntri; t++ )
+        {
+            const vec2d &p0 = uw_vec[ ind[0] ];
+            const vec2d &p1 = uw_vec[ ind[ t + 1 ] ];
+            const vec2d &p2 = uw_vec[ ind[ t + 2 ] ];
+
+            area += 0.5 * std::fabs( ( p1.x() - p0.x() ) * ( p2.y() - p0.y() ) -
+                                     ( p2.x() - p0.x() ) * ( p1.y() - p0.y() ) );
+        }
+    }
+
+    return area;
+}
+
+// Sense of every curve of a loop as that loop's face sees it, in the convention the
+// topology file wants: +1 when the face lies to the left of the curve walked in its
+// own direction, -1 when it lies to the right.
+static void AccumulateLoopSense( const NURBS_Loop &loop, int surf_id, bool cutout_flag, bool flip_flag,
+                                 std::map < int, std::map < int, int > > &curve_face_sense )
+{
+    int loop_sense = loop.Sense( surf_id, cutout_flag, flip_flag );
+
+    if ( loop_sense == 0 )
+    {
+        return;
+    }
+
+    for ( int i = 0; i < ( int )loop.m_OrderedCurves.size(); i++ )
+    {
+        int sense = loop_sense;
+        if ( !loop.m_OrderedCurves[i].second )
+        {
+            sense = -sense;
+        }
+
+        curve_face_sense[ loop.m_OrderedCurves[i].first.m_CurveID ][ surf_id ] = sense;
+    }
+}
+
+// Face number and edge sense that one parent surface of a curve contributes to a
+// topology record.  Both come back zero when that surface never became a face.
+static void GetTopoEdgeFace( int surf_id, const std::map < int, int > &surf_id_face_num,
+                             const std::map < int, std::map < int, int > > &curve_face_sense,
+                             int curve_id, int &face_num, int &sense )
+{
+    face_num = 0;
+    sense = 0;
+
+    std::map < int, int >::const_iterator nit = surf_id_face_num.find( surf_id );
+    if ( nit == surf_id_face_num.end() )
+    {
+        return;
+    }
+
+    face_num = nit->second;
+
+    std::map < int, std::map < int, int > >::const_iterator cit = curve_face_sense.find( curve_id );
+    if ( cit == curve_face_sense.end() )
+    {
+        return;
+    }
+
+    std::map < int, int >::const_iterator sit = cit->second.find( surf_id );
+    if ( sit != cit->second.end() )
+    {
+        sense = sit->second;
+    }
+}
+
+// Report the face only when its sense is known.  A surface can touch a curve without
+// the curve bounding its trimmed region -- MakeExtLoopVec ignores some loops for
+// trimming -- and a face index paired with no sense would be worse than none.
+static void GetTopoEdgeFaceChecked( int surf_id, const std::map < int, int > &surf_id_face_num,
+                                    const std::map < int, std::map < int, int > > &curve_face_sense,
+                                    int curve_id, int &face_num, int &sense )
+{
+    GetTopoEdgeFace( surf_id, surf_id_face_num, curve_face_sense, curve_id, face_num, sense );
+
+    if ( sense == 0 )
+    {
+        face_num = 0;
+    }
+}
+
+// Tessellation lines for one direction of a surface.  Surfaces the mesher builds for
+// itself -- the far field box and the symmetry plane -- have no parent Geom to inherit
+// lines from, so they fall back to a plain subdivision of their own range.
+static void POGSTess( const vector < double > &tess, double lo, double hi, vector < double > &out )
+{
+    out = tess;
+
+    if ( out.size() >= 2 )
+    {
+        return;
+    }
+
+    out.clear();
+    for ( int i = 0; i < 5; i++ )
+    {
+        out.push_back( lo + ( hi - lo ) * i / 4.0 );
+    }
+}
+
+// Whether a point lies inside a component other than its own, which is what makes a
+// sample of an untrimmed surface off the geometry.  This is the test RemoveInteriorTris
+// runs on triangle centers: shoot a ray and count how many times it crosses each other
+// component; an odd count means it started inside that one.
+//
+// The test is made against the model rather than against the mesh of the surface being
+// sampled, because a surface's parameterization does not always cover it evenly -- the
+// mesher collapses a degenerate row, such as the nose of a Pod, to a single node, and
+// every sample along that row is really the same point on the geometry.
+// Would trimming have removed a sample here?
+//
+// The surfaces in these files are not trimmed, so a sample the mesher would have thrown away is
+// marked off the geometry with an iblank of zero instead.  That is the question
+// RemoveInteriorTris asks of a triangle's centre, and it is answered the same way: cast a ray,
+// count the crossings of each other component, and put the answer to SetDeleteTriFlag, which
+// knows what being inside something means for a surface of this kind.
+//
+// Asking only whether the point is inside anything at all is right for a positive skin and
+// backwards for a negative volume or a transparent disk, whose surface is kept exactly where it
+// lies inside the body it cuts.
+//
+// t_vec_vec is the caller's scratch, sized to hold every component; it is cleared here.  It
+// belongs to the caller because this is asked once per sample.
+bool CfdMeshMgrSingleton::PntTrimmedAway( const vec3d &pnt, Surf *srf, double x_dist,
+                                          vector < vector < double > > &t_vec_vec )
+{
+    for ( int c = 0 ; c < ( int )t_vec_vec.size() ; c++ )
+    {
+        t_vec_vec[c].clear();
+    }
+
+    int s_comp_id = srf->GetCompID();
+
+    vec3d p0 = pnt;
+    vec3d p1 = pnt + vec3d( x_dist, 1.0e-4, 1.0e-4 );
+
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        int comp_id = m_SurfVec[i]->GetCompID();
+
+        if ( m_SurfVec[i] == srf || comp_id == s_comp_id ||
+             comp_id < 0 || comp_id >= ( int )t_vec_vec.size() )
+        {
+            continue;
+        }
+
+        if ( srf->GetFeaSymmIndex() >= 0 && m_SurfVec[i]->GetFeaSymmIndex() >= 0 &&
+             srf->GetFeaSymmIndex() != m_SurfVec[i]->GetFeaSymmIndex() )
+        {
+            continue;
+        }
+
+        int itype = m_SurfVec[i]->GetSurfaceCfdType();
+
+        // Transparent, structure and stiffener surfaces do not bound a volume, so they cannot
+        // put a point inside anything -- unless the far field is trimming a symmetry plane.
+        if ( itype != vsp::CFD_TRANSPARENT && itype != vsp::CFD_STRUCTURE &&
+             itype != vsp::CFD_STIFFENER )
+        {
+            m_SurfVec[i]->IntersectLineSeg( p0, p1, t_vec_vec[comp_id] );
+        }
+        else if ( m_SurfVec[i]->GetFarFlag() && srf->GetSymPlaneFlag() &&
+                  GetSettingsPtr()->m_FarCompFlag )
+        {
+            m_SurfVec[i]->IntersectLineSeg( p0, p1, t_vec_vec[comp_id] );
+        }
+    }
+
+    vector < bool > inside( t_vec_vec.size(), false );
+
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        int c = m_SurfVec[i]->GetCompID();
+
+        if ( c < 0 || c >= ( int )inside.size() )
+        {
+            continue;
+        }
+
+        if ( srf->GetSymPlaneFlag() && m_SurfVec[i]->GetFarFlag() &&
+             GetSettingsPtr()->m_FarCompFlag )
+        {
+            // The symmetry plane is kept where it is inside the outer boundary, which is the
+            // other way round from everything else.
+            if ( ( int )( t_vec_vec[c].size() + 1 ) % 2 == 1 )
+            {
+                inside[c] = true;
+            }
+        }
+        else if ( ( int )t_vec_vec[c].size() % 2 == 1 )
+        {
+            inside[c] = true;
+        }
+    }
+
+    return SetDeleteTriFlag( srf->GetSurfaceCfdType(), srf->GetSymPlaneFlag(), inside );
+}
+
+// A CART3D triangulation, unformatted, the way pogs reads it:
+//
+//     WRITE(IU) NVERT,NFACE
+//     WRITE(IU) (X(I),Y(I),Z(I),I=1,NVERT)        coordinates interleaved
+//     WRITE(IU) (IFACE(I,1:3),I=1,NFACE)
+//     WRITE(IU) (ICOMP(I),I=1,NFACE)
+//
+// Coordinates go out single precision -- these files are single by convention, and the
+// routine that normally writes them casts down to REAL even in a double precision build.
+//
+// conn_vec holds three vertex numbers per triangle and comp_vec one component tag.
+static bool WriteCart3DTri( const string &fn, const vector < vec3d > &pnt_vec,
+                            const vector < int > &conn_vec, const vector < int > &comp_vec )
+{
+    UnformattedOut fp;
+
+    if ( !fp.Open( fn ) )
+    {
+        return false;
+    }
+
+    fp.SetSinglePrecision( true );
+
+    fp.BeginRecord();
+    fp.Write( ( int )pnt_vec.size() );
+    fp.Write( ( int )comp_vec.size() );
+    fp.EndRecord();
+
+    fp.BeginRecord();
+    for ( int i = 0; i < ( int )pnt_vec.size(); i++ )
+    {
+        fp.Write( pnt_vec[i].x() );
+        fp.Write( pnt_vec[i].y() );
+        fp.Write( pnt_vec[i].z() );
+    }
+    fp.EndRecord();
+
+    fp.WriteRecord( conn_vec );
+    fp.WriteRecord( comp_vec );
+
+    return true;
+}
+
+// Write a Plot3D grid file.  pogs reads these unformatted, the way egads2srf writes
+// them, so each Fortran WRITE becomes one record and the records have to line up with
+// the READ statements on the other side.
+//
+//     WRITE(IU) NBLOCK
+//     WRITE(IU) (NI(N),NJ(N),1,N=1,NBLOCK)
+//     WRITE(IU) X,Y,Z[,IB]        one record per block
+//
+// iblank_vec is left empty for a file that carries no tags, as the curve file does not.
+static bool WritePlot3DGrid( const string &fn, const vector < vector < int > > &dim_vec,
+                             const vector < vector < vec3d > > &pnt_vec,
+                             const vector < vector < int > > &iblank_vec )
+{
+    UnformattedOut fp;
+
+    if ( !fp.Open( fn ) )
+    {
+        return false;
+    }
+
+    int nblock = dim_vec.size();
+
+    fp.WriteRecord( nblock );
+
+    fp.BeginRecord();
+    for ( int i = 0; i < nblock; i++ )
+    {
+        fp.Write( dim_vec[i] );
+    }
+    fp.EndRecord();
+
+    for ( int i = 0; i < nblock; i++ )
+    {
+        fp.BeginRecord();
+
+        for ( int k = 0; k < 3; k++ )
+        {
+            for ( int j = 0; j < ( int )pnt_vec[i].size(); j++ )
+            {
+                fp.Write( pnt_vec[i][j].v[k] );
+            }
+        }
+
+        if ( i < ( int )iblank_vec.size() )
+        {
+            fp.Write( iblank_vec[i] );
+        }
+
+        fp.EndRecord();
+    }
+
+    return true;
+}
+
+// Write a Plot3D function file.  It is laid out like a grid file, except that each
+// block's dimensions are followed by the number of variables the block carries, and the
+// data is that many arrays rather than an assumed three.
+//
+//     WRITE(IU) NBLOCK
+//     WRITE(IU) (NI(N),NJ(N),1,NVAR,N=1,NBLOCK)
+//     WRITE(IU) Q                 one record per block
+static bool WritePlot3DFunction( const string &fn, const vector < vector < int > > &dim_vec,
+                                 const vector < vector < vector < double > > > &var_vec )
+{
+    UnformattedOut fp;
+
+    if ( !fp.Open( fn ) )
+    {
+        return false;
+    }
+
+    int nblock = dim_vec.size();
+
+    fp.WriteRecord( nblock );
+
+    fp.BeginRecord();
+    for ( int i = 0; i < nblock; i++ )
+    {
+        fp.Write( dim_vec[i] );
+        fp.Write( ( int )var_vec[i].size() );
+    }
+    fp.EndRecord();
+
+    for ( int i = 0; i < nblock; i++ )
+    {
+        fp.BeginRecord();
+        for ( int v = 0; v < ( int )var_vec[i].size(); v++ )
+        {
+            fp.Write( var_vec[i][v] );
+        }
+        fp.EndRecord();
+    }
+
+    return true;
+}
+
+// Write the geometric component file, which names the faces in human readable groups.
+// A component here is one surface of one Geom, named for the Geom, the surface's number
+// within it and the Geom's ID, so a Geom named Wing with a symmetric pair contributes
+// Wing_0_<ID> and Wing_1_<ID>, each owning the faces its surface was split into.
+//
+// The face list accepts ranges as well as single entries; single entries are written
+// throughout, which is always correct whatever order the faces came out in.
+bool CfdMeshMgrSingleton::WritePOGSCompFile( const string &fn, const vector < int > &face_surf_vec )
+{
+    FILE* fp = fopen( fn.c_str(), "w" );
+
+    if ( !fp )
+    {
+        return false;
+    }
+
+    // One component per surface of each Geom, keyed on its name, which holds the Geom's ID.  The
+    // Geom's name alone will not do -- nothing stops two Geoms sharing one -- and nor will the
+    // component id, which is shared by components whose surfaces meet.
+    //
+    // Components come out in the order their first face appears, so the file reads in step
+    // with the face numbering.
+    vector < string > comp_name_vec;
+    vector < vector < int > > comp_face_vec;
+
+    for ( int iface = 0; iface < ( int )face_surf_vec.size(); iface++ )
+    {
+        Surf* srf = FindSurf( m_NURBSSurfVec[ face_surf_vec[iface] ].m_SurfID );
+
+        string name = "Unnamed";
+
+        if ( srf )
+        {
+            if ( !srf->GetName().empty() )
+            {
+                // The surface's number within its Geom, which counts symmetry copies
+                // separately -- the main surface id does not, so a symmetric pair would
+                // otherwise share a name.
+                name = srf->GetName() + "_" + to_string( srf->GetFeaPartSurfNum() ) + "_" + srf->GetGeomID();
+            }
+            else if ( srf->GetFarFlag() )
+            {
+                name = "FarField";
+            }
+            else if ( srf->GetSymPlaneFlag() )
+            {
+                name = "SymmetryPlane";
+            }
+            else
+            {
+                name = "Surface";
+            }
+        }
+
+        int icomp = -1;
+        for ( int i = 0; i < ( int )comp_name_vec.size(); i++ )
+        {
+            if ( comp_name_vec[i] == name )
+            {
+                icomp = i;
+            }
+        }
+
+        if ( icomp < 0 )
+        {
+            icomp = comp_name_vec.size();
+            comp_name_vec.push_back( name );
+            comp_face_vec.push_back( vector < int >() );
+        }
+
+        comp_face_vec[icomp].push_back( iface + 1 );
+    }
+
+    for ( int i = 0; i < ( int )comp_name_vec.size(); i++ )
+    {
+        fprintf( fp, "%s\n", comp_name_vec[i].c_str() );
+
+        for ( int j = 0; j < ( int )comp_face_vec[i].size(); j++ )
+        {
+            if ( j > 0 )
+            {
+                fprintf( fp, "," );
+            }
+            fprintf( fp, "%d", comp_face_vec[i][j] );
+        }
+
+        fprintf( fp, "\n\n" );
+    }
+
+    fclose( fp );
+
+    return true;
+}
+
+// Write the pogs input file.  Only the grid control parameters on the second and third
+// lines matter much to start with, and the user is expected to edit them; these are the
+// defaults egads2srf writes, with the mesh spacing taken from the CFD Mesh base length
+// rather than guessed at.
+bool CfdMeshMgrSingleton::WritePOGSInputFile( const string &fn, const string &rootname, int isym )
+{
+    FILE* fp = fopen( fn.c_str(), "w" );
+
+    if ( !fp )
+    {
+        return false;
+    }
+
+    double sharp = 20.0;        // Dihedral angle above which an edge counts as sharp
+    double turntmax = 30.0;     // Max turning angle
+    double tolsp = 1.0e-6;      // Seam point tolerance
+    double tolonse = 1.0e-5;    // On-seam tolerance
+
+    int npmin = 11;             // Min points in each direction
+    double srmax = GetGridDensityPtr()->m_GrowRatio;         // Max stretching ratio
+    double dsm = GetGridDensityPtr()->GetBaseLen();          // Max grid spacing at curve interior
+    double maxa = 360.0 / GetGridDensityPtr()->m_NCircSeg;   // Max dihedral angle, degrees
+
+    int nfringe = 2;            // Fringe layers
+    double stenqual = 1.0;      // Donor stencil quality below which a point is an orphan
+    double dswall = 1.0e-4;     // Wall normal spacing for the volume grids
+    double dobnd = -10.0;       // Outer boundary marching distance
+
+    fprintf( fp, "%s\n\n", rootname.c_str() );
+    fprintf( fp, "%9.3f%9.3f%14.5E%14.5E   SHARP,TURNTMAX,TOLSP,TOLONSE\n", sharp, turntmax, tolsp, tolonse );
+    fprintf( fp, "%5d%9.3f%14.5E%9.3f   NPMIN,SRMAX,DSM,MAXA\n", npmin, srmax, dsm, maxa );
+    fprintf( fp, "%5d%5d%8.2f%14.5E%8.2f   ISYM,NFRINGE,STENQUAL,DSWALL,DOBND\n", isym, nfringe, stenqual, dswall, dobnd );
+
+    fclose( fp );
+
+    return true;
+}
+
+// Write the faces as Plot3D surface blocks with an iblank tag.  Each block is one face
+// sampled along its own tessellation lines; the surfaces are not trimmed, so a sample
+// that trimming removed is marked off the geometry with an iblank of zero.
+bool CfdMeshMgrSingleton::WritePOGSSurfFile( const string &uvin_fn, const string &uv_fn,
+                                             const vector < int > &face_surf_vec )
+{
+    bool ok = true;
+
+    int nface = face_surf_vec.size();
+
+    // The parameters of every sample, carried alongside so the companion function file
+    // can be written from the same tessellation.
+    vector < vector < int > > uv_dim_vec( nface );
+    vector < vector < vector < double > > > uv_var_vec( nface );
+
+    // Ray length for the interior test, long enough to leave the model from anywhere in it.
+    BndBox big_box;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        big_box.Update( m_SurfVec[i]->GetBBox() );
+    }
+    double x_dist = 1.0 + big_box.GetMax( 0 ) - big_box.GetMin( 0 );
+
+    vector < vector < double > > uvec( nface ), wvec( nface );
+
+    // Held so the same numbers can go out in both forms.
+    vector < vector < vec3d > > all_pnt_vec( nface );
+    vector < vector < int > > all_iblank_vec( nface );
+
+    for ( int iface = 0; iface < nface; iface++ )
+    {
+        Surf* srf = FindSurf( m_NURBSSurfVec[ face_surf_vec[iface] ].m_SurfID );
+
+        POGSTess( srf->GetUTess(), srf->GetSurfCore()->GetMinU(), srf->GetSurfCore()->GetMaxU(), uvec[iface] );
+        POGSTess( srf->GetWTess(), srf->GetSurfCore()->GetMinW(), srf->GetSurfCore()->GetMaxW(), wvec[iface] );
+
+        // The reader takes the normal of a face to be u_vec x v_vec, and wants it
+        // pointing out of the body.  Walking v backwards on a surface whose parametric
+        // normal points inward turns it around, and costs nothing else: the u and w
+        // values written alongside the points stay the ones that name them.
+        if ( srf->GetFlipFlag() )
+        {
+            std::reverse( wvec[iface].begin(), wvec[iface].end() );
+        }
+    }
+
+    for ( int iface = 0; iface < nface; iface++ )
+    {
+        Surf* srf = FindSurf( m_NURBSSurfVec[ face_surf_vec[iface] ].m_SurfID );
+
+        const vector < double > &u = uvec[iface];
+        const vector < double > &w = wvec[iface];
+
+        vector < vec3d > pnt_vec( u.size() * w.size() );
+
+        uv_dim_vec[iface].push_back( ( int )u.size() );
+        uv_dim_vec[iface].push_back( ( int )w.size() );
+        uv_dim_vec[iface].push_back( 1 );
+
+        uv_var_vec[iface].resize( 2 );
+        uv_var_vec[iface][0].resize( pnt_vec.size() );
+        uv_var_vec[iface][1].resize( pnt_vec.size() );
+
+        for ( int j = 0; j < ( int )w.size(); j++ )
+        {
+            for ( int i = 0; i < ( int )u.size(); i++ )
+            {
+                int k = j * u.size() + i;
+
+                pnt_vec[k] = srf->CompPnt( u[i], w[j] );
+
+                uv_var_vec[iface][0][k] = u[i];
+                uv_var_vec[iface][1][k] = w[j];
+            }
+        }
+
+        all_pnt_vec[iface] = pnt_vec;
+    }
+
+    // How many components the crossing table has to hold, from the numbers actually present
+    // rather than from a count plus slack.
+    int ncomp = 0;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        ncomp = max( ncomp, m_SurfVec[i]->GetCompID() + 1 );
+    }
+
+    // Deciding which samples fall inside another component is a ray cast apiece, and it is the
+    // whole cost of writing these files, so it is named on the progress line.
+    addOutputText( "POGS Ray Trace\n" );
+
+    RunRayCastStage( "POGS ray trace", nface, [&]( int iface )
+    {
+        Surf* srf = FindSurf( m_NURBSSurfVec[ face_surf_vec[iface] ].m_SurfID );
+
+        const vector < vec3d > &pnt_vec = all_pnt_vec[iface];
+
+        vector < int > iblank_vec( pnt_vec.size(), 1 );
+
+        // One scratch table per face, so the ray cast does not allocate per sample.
+        vector < vector < double > > t_vec_vec( ncomp );
+
+        for ( int i = 0; i < ( int )pnt_vec.size(); i++ )
+        {
+            if ( PntTrimmedAway( pnt_vec[i], srf, x_dist, t_vec_vec ) )
+            {
+                iblank_vec[i] = 0;
+            }
+        }
+
+        all_iblank_vec[iface] = iblank_vec;
+    } );
+
+    addOutputText( "Writing POGS Files\n" );
+
+    // egads2srf writes these with the u count first and u running fastest, so the reader
+    // takes the first index for u and the second for v.  Match it.
+    vector < vector < int > > grid_dim_vec( nface );
+    for ( int iface = 0; iface < nface; iface++ )
+    {
+        grid_dim_vec[iface].push_back( ( int )uvec[iface].size() );
+        grid_dim_vec[iface].push_back( ( int )wvec[iface].size() );
+        grid_dim_vec[iface].push_back( 1 );
+    }
+
+    ok = WritePlot3DGrid( uvin_fn, grid_dim_vec, all_pnt_vec, all_iblank_vec ) && ok;
+    // ok = WritePlot3DFunction( uv_fn, uv_dim_vec, uv_var_vec ) && ok;
+
+    return ok;
+}
+
+// Say so when a POGS file could not be written.
+//
+// These go out through the progress path and to stdout alike: a run driven from a script sees
+// nothing addOutputText posts, and a silently missing file is the worst way to learn that a
+// disk was full or a directory read only.
+void CfdMeshMgrSingleton::ReportPOGSWrite( const string &fn, bool ok )
+{
+    if ( ok )
+    {
+        return;
+    }
+
+    char str[1024];
+    snprintf( str, sizeof( str ), "POGS: could not write %s\n", fn.c_str() );
+    addOutputText( str );
+    printf( "%s", str );
+}
+
+void CfdMeshMgrSingleton::WritePOGS( const string &pogs_fn )
+{
+    string base = pogs_fn;
+
+    int pos = base.find( ".i.tri" );
+    if ( pos >= 0 )
+    {
+        base.erase( pos );
+    }
+
+    string uvin_fn = base;
+    uvin_fn.append( ".uvin" );
+    string cur_fn = base;
+    cur_fn.append( ".cur" );
+    string topo_fn = base;
+    topo_fn.append( ".topo" );
+    string uv_fn = base;
+    uv_fn.append( ".uv" );  // Currently unused, but filename passed through
+    // string cuv_fn = base;
+    // cuv_fn.append( ".cuv" ); // Currently unused.
+    string gcomp_fn = base;
+    gcomp_fn.append( ".gcomp" );
+    string pogsi_fn = base;
+    pogsi_fn.append( ".pogs.i" );
+
+    // A surface is a face of the topology only if it is part of the triangulation the
+    // topology describes, and the test for that is whether it carries any mesh.  The half
+    // mesh symmetry plane is the case that matters: it slices the geometry and is then
+    // discarded, so the mesh is left open along the cut and the plane is not a face of
+    // it.  The far field's symmetry boundary is meshed and is a face.  Wakes are kept out
+    // of the triangulation, so they are kept out here too.
+    //
+    // A face's number is its position in this list, which is what NFACE counts and what
+    // the triangulation tags its triangles with.  A Surf ID cannot serve: IDs are handed
+    // out when surfaces are loaded, and by this point the far field has renumbered them,
+    // half mesh trimming and duplicate removal have deleted some, and BuildNURBSSurfMap
+    // has passed over any surface that ended up completely enclosed by another component
+    // or is an external negative surface.  So the IDs run past the end of the face list
+    // and have gaps in the middle.
+    vector < int > face_surf_vec;
+    std::map < int, int > surf_id_face_num;
+
+    for ( int i = 0 ; i < ( int )m_NURBSSurfVec.size() ; i++ )
+    {
+        Surf* srf = FindSurf( m_NURBSSurfVec[i].m_SurfID );
+
+        if ( !srf || srf->GetWakeFlag() || !srf->GetMesh() || srf->GetMesh()->GetSimpFaceVec().empty() )
+        {
+            continue;
+        }
+
+        surf_id_face_num[ m_NURBSSurfVec[i].m_SurfID ] = ( int )face_surf_vec.size() + 1;
+        face_surf_vec.push_back( i );
+    }
+
+    // ISYM says what symmetry the body has: 0 for a closed body, 1/2/3 for a half body
+    // on the +x/+y/+z side and the negatives for the other side, 11/12/13 for a full body
+    // that is symmetric about x/y/z = 0.  A half mesh keeps +y.
+    int isym = 0;
+    if ( GetCfdSettingsPtr()->m_HalfMeshFlag )
+    {
+        isym = 2;
+    }
+
+    // Used when comparing W parameter to TMAGIC
+    double tol = 1e-12;
+
+    //==== Find All Points and Tri Counts ====//
+    vector< vec3d > allPntVec;
+    vector< vec3d > wakeAllPntVec;
+    vector < vector < int > > allPntKey;
+    allPntKey.resize( m_SurfVec.size() );
+    vector < vector < int > > allWPntKey;
+    allWPntKey.resize( m_SurfVec.size() );
+    int k = 0;
+    int wk = 0;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        vector< vec3d >& sPntVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
+        allPntKey[i].resize( sPntVec.size() );
+        allWPntKey[i].resize( sPntVec.size() );
+        for ( int v = 0 ; v < ( int )sPntVec.size() ; v++ )
+        {
+            if ( m_SurfVec[i]->GetWakeFlag() )
+            {
+                wakeAllPntVec.push_back( sPntVec[v] );
+                allWPntKey[i][v] = wk;
+                wk++;
+            }
+            else
+            {
+                allPntVec.push_back( sPntVec[v] );
+                allPntKey[i][v] = k;
+                k++;
+            }
+        }
+    }
+
+    //==== Build Map ====//
+    PntNodeCloud pnCloud;
+    pnCloud.AddPntNodes( allPntVec );
+
+    double tol2 = PT_MERGE_TOL;
+    //==== Use NanoFlann to Find Close Points and Group ====//
+    IndexPntNodes( pnCloud, tol2 );
+
+    // //==== Build Wake Map If Available ====//
+    // PntNodeCloud wakepnCloud;
+    // if ( wakeAllPntVec.size() )
+    // {
+    //     wakepnCloud.AddPntNodes( wakeAllPntVec );
+    //     IndexPntNodes( wakepnCloud, tol2 );
+    // }
+
+    //==== Assemble Normal Tris ====//
+    vector< SimpFace > allFaceVec;
+    int ntristrict = 0;
+    vector< int > allSurfIDVec;
+    vector< vector< vec2d > > allUWVec;
+    vector < pair < int, int > > wedges;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        if ( !m_SurfVec[i]->GetWakeFlag() )
+        {
+            vector < SimpFace >& sFaceVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+            vector< vec3d >& sPntVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
+            vector< vec2d >& sUWVec = m_SurfVec[i]->GetMesh()->GetSimpUWPntVec();
+            for ( int t = 0 ; t <  ( int )sFaceVec.size() ; t++ )
+            {
+                SimpFace sface;
+                sface.ind0 = pnCloud.GetNodeUsedIndex( allPntKey[i][sFaceVec[t].ind0] ) + 1;
+                sface.ind1 = pnCloud.GetNodeUsedIndex( allPntKey[i][sFaceVec[t].ind1] ) + 1;
+                sface.ind2 = pnCloud.GetNodeUsedIndex( allPntKey[i][sFaceVec[t].ind2] ) + 1;
+
+                if( sFaceVec[t].m_isQuad )
+                {
+                    sface.m_isQuad = true;
+                    sface.ind3 = pnCloud.GetNodeUsedIndex( allPntKey[i][sFaceVec[t].ind3] ) + 1;
+                    ntristrict++; // Bonus tri for split quad.
+                }
+
+                sface.m_Tags = sFaceVec[t].m_Tags;
+                sface.m_iSurf = i;
+                ntristrict++;
+                allFaceVec.push_back( sface );
+                allSurfIDVec.push_back( m_SurfVec[i]->GetSurfID() );
+
+                vector< vec2d > uwFace( 4 );
+                uwFace[0] = sUWVec[ sFaceVec[t].ind0 ];
+                uwFace[1] = sUWVec[ sFaceVec[t].ind1 ];
+                uwFace[2] = sUWVec[ sFaceVec[t].ind2 ];
+                if( sFaceVec[t].m_isQuad )
+                {
+                    uwFace[3] = sUWVec[ sFaceVec[t].ind3 ];
+                }
+                allUWVec.push_back( uwFace );
+
+            }
+
+        }
+    }
+
+
+    //==== Assemble All Used Points ====//
+    vector< vec3d > allUsedPntVec;
+    for ( int i = 0 ; i < ( int )allPntVec.size() ; i++ )
+    {
+        if ( pnCloud.UsedNode( i ) )
+        {
+            allUsedPntVec.push_back( allPntVec[i] );
+        }
+    }
+
+
+    //=====================================================================================//
+    //==== Write .i.tri File for POGS =====================================================//
+    //=====================================================================================//
+    if ( pogs_fn.length() != 0 )
+    {
+        // Flatten the triangles out first, splitting any quads, so both forms of the
+        // file are written from the same numbers.
+        vector < int > conn_vec;
+        vector < int > comp_vec;
+
+        conn_vec.reserve( 3 * ntristrict );
+        comp_vec.reserve( ntristrict );
+
+        for ( int i = 0 ; i < ( int )allFaceVec.size() ; i++ )
+        {
+            // A triangle is tagged with the number of the face it lies on, the same
+            // number the topology and component files use.  A surface that did not
+            // become a face has none to give.
+            int icomp = 0;
+
+            if ( allFaceVec[i].m_iSurf >= 0 && allFaceVec[i].m_iSurf < ( int )m_SurfVec.size() )
+            {
+                std::map < int, int >::const_iterator it =
+                        surf_id_face_num.find( m_SurfVec[ allFaceVec[i].m_iSurf ]->GetSurfID() );
+
+                if ( it != surf_id_face_num.end() )
+                {
+                    icomp = it->second;
+                }
+            }
+
+            conn_vec.push_back( allFaceVec[i].ind0 );
+            conn_vec.push_back( allFaceVec[i].ind1 );
+            conn_vec.push_back( allFaceVec[i].ind2 );
+            comp_vec.push_back( icomp );
+
+            if( allFaceVec[i].m_isQuad )
+            {
+                conn_vec.push_back( allFaceVec[i].ind0 );
+                conn_vec.push_back( allFaceVec[i].ind2 );
+                conn_vec.push_back( allFaceVec[i].ind3 );
+                comp_vec.push_back( icomp );
+            }
+        }
+
+        ReportPOGSWrite( pogs_fn,
+                         WriteCart3DTri( pogs_fn, allUsedPntVec, conn_vec, comp_vec ) );
+    }
+
+
+
+
+    int nsrf = m_NURBSSurfVec.size();
+
+    std::set < int > used_curve_set;
+
+    // Sense of each curve as seen by each face that walks it.  A curve is walked by at
+    // most two faces, and each of them reports independently whether it lies to the left
+    // or the right of the curve's own direction.
+    std::map < int, std::map < int, int > > curve_face_sense;
+
+    int nface = face_surf_vec.size();
+
+
+    for ( int iface = 0 ; iface < nface ; iface++ )
+    {
+        int i = face_surf_vec[iface];
+        NURBS_Surface& nurbs_surf = m_NURBSSurfVec[i];
+
+        Surf* current_surf = FindSurf( nurbs_surf.m_SurfID );
+        int surf_indx = FindSurfIndx( nurbs_surf.m_SurfID );
+
+        // Every surface knows which way it faces: the flag is set from the Geom the
+        // surface came from, or where the domain surfaces are built.
+        bool flip_flag = false;
+        if ( current_surf )
+        {
+            flip_flag = current_surf->GetFlipFlag();
+        }
+
+        vector < NURBS_Loop >& loop_vec = nurbs_surf.m_NURBSLoopVec;
+
+        // Identify if there are multiple external loops
+        vector < NURBS_Loop > ext_loop_vec, cutout_vec;
+
+        nurbs_surf.MakeExtLoopVec( ext_loop_vec,  cutout_vec );
+
+        // A chain that never closed does not bound anything, so it names no edge and fixes
+        // no orientation.  The IGES and STEP writers refuse these as incomplete loops; do
+        // the same here rather than write an edge with no sense.
+        //
+        // The loops that came back as external are the ones that name edges.  A cutout is
+        // not an edge in its own right -- the face on the other side of it names it -- but
+        // the face that owns the cutout still has a sense to report on it.
+        vector < const NURBS_Loop* > loop_ptr;
+        vector < bool > names_edges;
+
+        for ( int j = 0; j < ext_loop_vec.size(); j++ )
+        {
+            if ( ext_loop_vec[j].m_ClosedFlag )
+            {
+                loop_ptr.push_back( &ext_loop_vec[j] );
+                names_edges.push_back( true );
+            }
+        }
+
+        for ( int j = 0; j < cutout_vec.size(); j++ )
+        {
+            if ( cutout_vec[j].m_ClosedFlag )
+            {
+                loop_ptr.push_back( &cutout_vec[j] );
+                names_edges.push_back( false );
+            }
+        }
+
+        // Which way round a loop is walked depends on whether it bounds the face from
+        // outside or punches a hole in it, and the sense follows from that.  Whether a loop
+        // came back external does not settle it: where a half mesh cuts a body, the cut is
+        // a border curve of the body, so the footprint it traces on the symmetry plane is
+        // not made of intersection curves alone and does not read as a cutout -- though a
+        // hole is exactly what it is.
+        //
+        // What settles it is the mesh.  The boundary encloses everything meshed, so it is
+        // at least as big; a hole is smaller.  Of the loops big enough, the boundary is the
+        // tightest -- which is what keeps a surface trimmed back from its own border, as
+        // the symmetry plane is when a Geom stands in for the far field, from mistaking the
+        // border it no longer reaches for its boundary.
+        double mesh_area = MeshAreaUW( current_surf );
+
+        int iouter = -1;
+        double area_out = 0.0;
+
+        int ilargest = -1;
+        double area_largest = 0.0;
+
+        for ( int j = 0; j < ( int )loop_ptr.size(); j++ )
+        {
+            double area = std::fabs( loop_ptr[j]->SignedAreaUW( nurbs_surf.m_SurfID ) );
+
+            if ( ilargest < 0 || area > area_largest )
+            {
+                area_largest = area;
+                ilargest = j;
+            }
+
+            // Both areas are measured off the same tessellation, so they agree closely
+            // where a loop is the boundary.  The slack is for the last bit of round-off.
+            if ( area >= 0.999 * mesh_area )
+            {
+                if ( iouter < 0 || area < area_out )
+                {
+                    area_out = area;
+                    iouter = j;
+                }
+            }
+        }
+
+        // Nothing meshed on this surface, or no loop big enough to hold what was.
+        if ( iouter < 0 )
+        {
+            iouter = ilargest;
+        }
+
+        for ( int j = 0; j < ( int )loop_ptr.size(); j++ )
+        {
+            if ( names_edges[j] )
+            {
+                const vector < pair < NURBS_Curve, bool > > &oc = loop_ptr[j]->m_OrderedCurves;
+
+                for ( int k = 0; k < ( int )oc.size(); k++ )
+                {
+                    used_curve_set.insert( oc[k].first.m_CurveID );
+                }
+            }
+
+            AccumulateLoopSense( *loop_ptr[j], nurbs_surf.m_SurfID, j != iouter, flip_flag, curve_face_sense );
+        }
+    }
+
+    // The topology file numbers its edges by their position in used_curve_set, and those
+    // numbers are what index the curve file, so both are written from the same walk of
+    // the set.  A curve is written in its own direction, which is the direction the
+    // topology file's edge senses are stated against.
+    vector < vector < vec3d > > edge_curve_vec;
+    edge_curve_vec.reserve( used_curve_set.size() );
+
+    // The same curves in the parameter space of the faces on either side of them.
+    vector < vector < int > > cuv_dim_vec;
+    vector < vector < vector < double > > > cuv_var_vec;
+
+    std::set < int >::iterator cit;
+    for ( cit = used_curve_set.begin(); cit != used_curve_set.end(); cit++ )
+    {
+        NURBS_Curve &nurbs_curve = m_NURBSCurveVec[ *cit ];
+
+        edge_curve_vec.push_back( nurbs_curve.m_PntVec );
+
+        int npnt = nurbs_curve.m_PntVec.size();
+
+        vector < int > dim;
+        dim.push_back( npnt );
+        dim.push_back( 1 );
+        dim.push_back( 1 );
+        cuv_dim_vec.push_back( dim );
+
+        // u and w along the first of the curve's two faces, then along the second.  The
+        // topology file writes the face that exists in its first pair of columns, which
+        // can put the curve's B surface there, so make the same choice here to keep the
+        // two files reading in the same order.
+        int faceA = 0, senseA = 0;
+        int faceB = 0, senseB = 0;
+
+        GetTopoEdgeFaceChecked( nurbs_curve.m_SurfA_ID, surf_id_face_num, curve_face_sense, *cit, faceA, senseA );
+        if ( nurbs_curve.m_SurfB_ID != nurbs_curve.m_SurfA_ID )
+        {
+            GetTopoEdgeFaceChecked( nurbs_curve.m_SurfB_ID, surf_id_face_num, curve_face_sense, *cit, faceB, senseB );
+        }
+
+        const vector < vec3d > *uw_first = &nurbs_curve.m_UWPntVec_A;
+        const vector < vec3d > *uw_second = &nurbs_curve.m_UWPntVec_B;
+
+        if ( faceA == 0 )
+        {
+            uw_first = &nurbs_curve.m_UWPntVec_B;
+            uw_second = &nurbs_curve.m_UWPntVec_A;
+        }
+
+        // The parametric copies are sampled at the same places as the points, so they
+        // line up with them one for one.
+        vector < vector < double > > var( 4 );
+        for ( int v = 0; v < 4; v++ )
+        {
+            var[v].resize( npnt, 0.0 );
+        }
+
+        for ( int i = 0; i < npnt; i++ )
+        {
+            if ( i < ( int )uw_first->size() )
+            {
+                var[0][i] = ( *uw_first )[i].x();
+                var[1][i] = ( *uw_first )[i].y();
+            }
+
+            if ( i < ( int )uw_second->size() )
+            {
+                var[2][i] = ( *uw_second )[i].x();
+                var[3][i] = ( *uw_second )[i].y();
+            }
+        }
+
+        cuv_var_vec.push_back( var );
+    }
+
+    // The pogs input file names the case on its first line, without a path.
+    string rootname = base;
+    size_t slash = rootname.find_last_of( "/\\" );
+    if ( slash != string::npos )
+    {
+        rootname.erase( 0, slash + 1 );
+    }
+
+    ReportPOGSWrite( uvin_fn /* + " or " + uv_fn */, WritePOGSSurfFile( uvin_fn, uv_fn, face_surf_vec ) );
+
+    ReportPOGSWrite( gcomp_fn, WritePOGSCompFile( gcomp_fn, face_surf_vec ) );
+    ReportPOGSWrite( pogsi_fn, WritePOGSInputFile( pogsi_fn, rootname, isym ) );
+
+    // A curve file carries no iblank.
+    vector < vector < int > > cur_dim_vec( edge_curve_vec.size() );
+    for ( int i = 0; i < ( int )edge_curve_vec.size(); i++ )
+    {
+        cur_dim_vec[i].push_back( ( int )edge_curve_vec[i].size() );
+        cur_dim_vec[i].push_back( 1 );
+        cur_dim_vec[i].push_back( 1 );
+    }
+
+    ReportPOGSWrite( cur_fn, WritePlot3DGrid( cur_fn, cur_dim_vec, edge_curve_vec, vector < vector < int > >() ) );
+    // ReportPOGSWrite( cuv_fn, WritePlot3DFunction( cuv_fn, cuv_dim_vec, cuv_var_vec ) );
+
+    FILE* topo_fp = fopen( topo_fn.c_str(), "w" );
+
+    ReportPOGSWrite( topo_fn, topo_fp != nullptr );
+
+    if ( topo_fp )
+    {
+        fprintf( topo_fp, "%6d%6d%6d%23.12E   ISYM,NEDGE,NFACE,SCALE (Symmetry, # Non-degen. Edges & Faces)\n", isym, (int) used_curve_set.size(), nface, 1.0 );
+        int i = 0;
+        std::set < int >::iterator it;
+        for ( it = used_curve_set.begin(); it != used_curve_set.end(); it++ )
+        {
+            int icurve = (*it);
+            NURBS_Curve & nurbs_curve = m_NURBSCurveVec[ icurve ];
+
+            // Column 1 = edge index
+            // Column 2 = face index on one side of edge
+            // Column 3 = sense of edge relative to face (+1 if face is on left side of edge in the positive edge index direction, -1 of opposite)
+            // Column 4 = face index on the other side of edge, 0 if no face
+            // Column 5 = similar to column 3, 0 if no face
+            int faceA = 0, senseA = 0;
+            int faceB = 0, senseB = 0;
+
+            GetTopoEdgeFaceChecked( nurbs_curve.m_SurfA_ID, surf_id_face_num, curve_face_sense, icurve, faceA, senseA );
+
+            // A curve whose two parents are the same surface lies on an open boundary
+            // of that surface -- there is no face on the other side of it.
+            if ( nurbs_curve.m_SurfB_ID != nurbs_curve.m_SurfA_ID )
+            {
+                GetTopoEdgeFaceChecked( nurbs_curve.m_SurfB_ID, surf_id_face_num, curve_face_sense, icurve, faceB, senseB );
+            }
+
+            // A parent surface that never became a face leaves its half of the pair
+            // empty.  The face that does exist belongs in the first pair of columns.
+            if ( faceA == 0 )
+            {
+                std::swap( faceA, faceB );
+                std::swap( senseA, senseB );
+            }
+
+            fprintf( topo_fp, "%8d%8d%8d%8d%8d\n", i + 1, faceA, senseA, faceB, senseB );
+
+            i++;
+        }
+
+        fclose( topo_fp );
+    }
+
+}
+
+// How close the mesh came to the edge lengths it was asked for.
+//
+// Split takes an edge over sqrt(2) times its target and halves it; Collapse takes one under
+// 1/sqrt(2) and removes it.  Anything between is left alone, so the algorithm's own fixed
+// point is a band a factor of two wide and the spread inside it is not something the two
+// operators are trying to close.  This says how wide the spread actually is, which is the
+// thing to watch if that band is ever tightened or a smoother is asked to do the closing.
+//
+// Border edges are not counted: their target is their own length, so they would all score 1.
+// How many faces are worse than a given multiple of their target, counting a face by its
+// worst edge.  This is the number the coloured picture shows.
+static string FaceRatioLine( vector < double > &fr, const char *what )
+{
+    if ( fr.empty() )
+    {
+        return string();
+    }
+
+    int nband = 0, n2 = 0;
+
+    for ( int i = 0 ; i < ( int )fr.size() ; i++ )
+    {
+        if ( fr[i] < 1.414 )
+        {
+            nband++;
+        }
+        if ( fr[i] >= 2.0 )
+        {
+            n2++;
+        }
+    }
+
+    char buf[256];
+    snprintf( buf, sizeof( buf ),
+              "  %-22s %8d faces, inside the band %5.1f%%, at or past 2x %5.1f%%\n",
+              what, ( int )fr.size(), 100.0 * nband / fr.size(), 100.0 * n2 / fr.size() );
+
+    return string( buf );
+}
+
+string CfdMeshMgrSingleton::TargetLengthReport()
+{
+    vector < double > &r = m_LengthRatios;
+
+    if ( r.empty() )
+    {
+        return string();
+    }
+
+    sort( r.begin(), r.end() );
+
+    double sum = 0.0;
+    int n10 = 0, n25 = 0, nband = 0;
+
+    for ( int i = 0 ; i < ( int )r.size() ; i++ )
+    {
+        sum += r[i];
+
+        if ( r[i] > 0.90 && r[i] < 1.10 )
+        {
+            n10++;
+        }
+        if ( r[i] > 0.75 && r[i] < 1.25 )
+        {
+            n25++;
+        }
+        if ( r[i] > 0.707 && r[i] < 1.414 )
+        {
+            nband++;
+        }
+    }
+
+    double npct = 100.0 / ( double )r.size();
+
+    char buf[512];
+    snprintf( buf, sizeof( buf ),
+              "Edge length / target: %d edges, mean %.3f, median %.3f, min %.3f, max %.3f\n"
+              "  within 10%%: %.1f%%   within 25%%: %.1f%%   inside the split/collapse band: %.1f%%\n",
+              ( int )r.size(), sum / ( double )r.size(), r[ r.size() / 2 ], r.front(), r.back(),
+              n10 * npct, n25 * npct, nband * npct );
+
+    return string( buf )
+           + FaceRatioLine( m_FaceLengthRatios, "by face, worst edge:" )
+           + FaceRatioLine( m_BorderFaceLengthRatios, "of those, on a border:" );
+}
+
+void CfdMeshMgrSingleton::RecordResults()
+{
+    m_LastResultID = string();
+
+    Results* res = ResultsMgr.CreateResults( "CFDMesh", "CFD mesh generation results." );
+
+    if ( !res )
+    {
+        return;
+    }
+
+    m_LastResultID = res->GetID();
+
+    bool tight = m_NumBorderEdges == 0 && m_NumOverConnEdges == 0;
+
+    res->Add( new NameValData( "Num_Tris", m_NumMeshTris, "Number of triangles in the mesh." ) );
+    res->Add( new NameValData( "Num_Border_Edges", m_NumBorderEdges, "Number of mesh edges with one triangle on them." ) );
+    res->Add( new NameValData( "Num_Over_Connected_Edges", m_NumOverConnEdges, "Number of mesh edges with more than two triangles on them." ) );
+    res->Add( new NameValData( "Water_Tight", tight, "Flag set when the mesh is closed." ) );
+}
+
 string CfdMeshMgrSingleton::CheckWaterTight()
 {
     vector< Face* > faceVec;
@@ -2535,6 +4559,9 @@ string CfdMeshMgrSingleton::CheckWaterTight()
         }
     }
 
+    m_NumBorderEdges = num_border_edges;
+    m_NumOverConnEdges = moreThanTwoTriPerEdge;
+
     char resultStr[255];
     if ( num_border_edges || moreThanTwoTriPerEdge )
     {
@@ -2559,7 +4586,7 @@ Edge* CfdMeshMgrSingleton::FindAddEdge( unordered_map< int, vector<Edge*> > & ed
 
     if ( iter != edgeMap.end() )    // Found Edge Vec so Check
     {
-        vector<Edge*> eVec = edgeMap[combind];
+        const vector<Edge*> &eVec = iter->second;
         for ( int i = 0 ; i < ( int )eVec.size() ; i++ )
         {
             if ( eVec[i]->ContainsNodes( nodeVec[ind1], nodeVec[ind2] ) )
@@ -2810,6 +4837,8 @@ void CfdMeshMgrSingleton::InitMesh( )
     addOutputText( "MergeBorderEndPoints\n" );
     MergeBorderEndPoints();
 
+    MergeCoincidentTessPnts();
+
     AddWakeCoPlanarSurfaceChains();
 
     // addOutputText( "BuildMesh\n" );  Output in BuildMesh
@@ -3028,6 +5057,31 @@ void CfdMeshMgrSingleton::MergeBorderEndPoints()
     MergeEndPointCloud( cloud, tol );
 }
 
+// Union-find over the points of an IPntCloud, so that "within tol of" can be closed
+// transitively.  Path compression on the lookup, union by nothing in particular -- the sets
+// here are tiny, a handful of chain ends meeting at one corner.
+static int FindPnt( vector< int > &parent, int i )
+{
+    while ( parent[i] != i )
+    {
+        parent[i] = parent[ parent[i] ];
+        i = parent[i];
+    }
+
+    return i;
+}
+
+static void UnionPnts( vector< int > &parent, int a, int b )
+{
+    int ra = FindPnt( parent, a );
+    int rb = FindPnt( parent, b );
+
+    if ( ra != rb )
+    {
+        parent[rb] = ra;
+    }
+}
+
 void CfdMeshMgrSingleton::MergeEndPointCloud( IPntCloud &cloud, double tol )
 {
     list< ISegChain* >::iterator c;
@@ -3037,27 +5091,53 @@ void CfdMeshMgrSingleton::MergeEndPointCloud( IPntCloud &cloud, double tol )
 
     list < IPntGroup* > iPntGroupList;
 
+    // Group the points that are within tol of each other, transitively.
+    //
+    // The point of this routine is that two chains meeting at one place end up sharing one
+    // point.  Grouping by "seed a group, take everything in the radius, move on" does not
+    // deliver that, because nearness is not transitive: with A near B and B near C but A not
+    // near C, whichever way the groups fall A and C are told they are different points, and
+    // whichever of them a chain happens to hold is where that chain ends.
+    //
+    // Union-find gives the transitive closure directly and cannot produce either fault: a
+    // point is in exactly one set, and two points within tol are always in the same one.
+    vector< int > parent( cloud.m_IPnts.size() );
+
+    for ( size_t i = 0 ; i < parent.size() ; i++ )
+    {
+        parent[i] = ( int )i;
+    }
+
     for ( size_t i = 0 ; i < cloud.m_IPnts.size() ; i++ )
     {
-        if ( cloud.m_IPnts[i]->m_GroupedFlag == false )
+        std::vector < std::pair < unsigned int, double > > ret_matches;
+
+        nanoflann::SearchParams params;
+        index.radiusSearch( &cloud.m_IPnts[i]->m_Pnt[0], tol, ret_matches, params );
+
+        for ( size_t j = 0 ; j < ret_matches.size() ; j++ )
         {
-            iPntGroupList.push_back( new IPntGroup );
-            m_DelIPntGroupVec.push_back( iPntGroupList.back() );
-
-            std::vector < std::pair < unsigned int, double > > ret_matches;
-
-            nanoflann::SearchParams params;
-            index.radiusSearch( &cloud.m_IPnts[i]->m_Pnt[0], tol, ret_matches, params );
-
-            for ( size_t j = 0 ; j < ret_matches.size() ; j++ )
-            {
-                unsigned int m_ind = ret_matches[j].first;
-                cloud.m_IPnts[ m_ind ]->m_GroupedFlag = true;
-                iPntGroupList.back()->m_IPntVec.push_back( cloud.m_IPnts[ m_ind ] );
-            }
+            UnionPnts( parent, ( int )i, ( int )ret_matches[j].first );
         }
     }
 
+    //==== Collect Each Set ====//
+    std::unordered_map< int, IPntGroup* > setGroup;
+
+    for ( size_t i = 0 ; i < cloud.m_IPnts.size() ; i++ )
+    {
+        int r = FindPnt( parent, ( int )i );
+
+        if ( !setGroup.count( r ) )
+        {
+            iPntGroupList.push_back( new IPntGroup );
+            m_DelIPntGroupVec.push_back( iPntGroupList.back() );
+            setGroup[r] = iPntGroupList.back();
+        }
+
+        cloud.m_IPnts[i]->m_GroupedFlag = true;
+        setGroup[r]->m_IPntVec.push_back( cloud.m_IPnts[i] );
+    }
 
     //==== Merge Ipnts In Groups ====//
     list< IPntGroup* >::iterator g;
@@ -3075,69 +5155,309 @@ void CfdMeshMgrSingleton::MergeEndPointCloud( IPntCloud &cloud, double tol )
     }
 
     //==== Replace IPnts in Chains ====//
+    //
+    // Which merged point each original became, looked up rather than searched for.
+    std::unordered_map< IPnt*, IPnt* > mergedOf;
+
+    int cnt = 0;
+    for ( g = iPntGroupList.begin() ; g != iPntGroupList.end(); ++g )
+    {
+        for ( int j = 0 ; j < ( int )( *g )->m_IPntVec.size() ; j++ )
+        {
+            mergedOf[ ( *g )->m_IPntVec[j] ] = merged_ipnts[cnt];
+        }
+        cnt++;
+    }
+
     for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
     {
-        IPnt* ip = ( *c )->m_TessVec.front();
-        int cnt = 0;
-        for ( g = iPntGroupList.begin() ; g != iPntGroupList.end(); ++g )
+        std::unordered_map< IPnt*, IPnt* >::iterator mit;
+
+        mit = mergedOf.find( ( *c )->m_TessVec.front() );
+        if ( mit != mergedOf.end() )
         {
-            for ( int j = 0 ; j < ( int )( *g )->m_IPntVec.size() ; j++ )
+            ( *c )->m_TessVec.front() = mit->second;
+        }
+
+        mit = mergedOf.find( ( *c )->m_TessVec.back() );
+        if ( mit != mergedOf.end() )
+        {
+            ( *c )->m_TessVec.back() = mit->second;
+        }
+    }
+}
+
+// Where two curves run on top of one another for a stretch -- an intersection curve along a
+// surface's border, say -- their points lie a hair apart.  A surface that has both curves has to
+// make them one point, and a surface that has only one of the curves cannot follow it.  So the
+// points handed to the triangulator that lie within the chain end tolerance of each other, on a
+// surface they share, are made one point here, for every surface at once.  Two points next to
+// each other on one chain are never made one.
+static bool ShareSurf( IPnt* a, IPnt* b )
+{
+    for ( int i = 0 ; i < ( int )a->m_Puws.size() ; i++ )
+    {
+        for ( int j = 0 ; j < ( int )b->m_Puws.size() ; j++ )
+        {
+            if ( a->m_Puws[i]->m_Surf == b->m_Puws[j]->m_Surf )
             {
-                if ( ip == ( *g )->m_IPntVec[j] )
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void CfdMeshMgrSingleton::MergeCoincidentTessPnts()
+{
+    IPntCloud cloud;
+    std::unordered_map< IPnt*, int > cloudIndex;
+    std::set< std::pair< IPnt*, IPnt* > > neighbours;
+
+    list< ISegChain* >::iterator c;
+    for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
+    {
+        deque< IPnt* > &tv = ( *c )->m_TessVec;
+        for ( int j = 0 ; j < ( int )tv.size() ; j += 2 )
+        {
+            if ( !cloudIndex.count( tv[j] ) )
+            {
+                cloudIndex[ tv[j] ] = ( int )cloud.m_IPnts.size();
+                cloud.m_IPnts.push_back( tv[j] );
+            }
+            if ( j >= 2 )
+            {
+                neighbours.insert( std::make_pair( tv[j - 2], tv[j] ) );
+                neighbours.insert( std::make_pair( tv[j], tv[j - 2] ) );
+            }
+        }
+    }
+
+    if ( cloud.m_IPnts.empty() )
+    {
+        return;
+    }
+
+    double tol = GetGridDensityPtr()->m_MinLen / 100.0;
+    tol = tol * tol;
+
+    IPntTree index( 3, cloud, KDTreeSingleIndexAdaptorParams( 10 ) );
+    index.buildIndex();
+
+    vector< int > parent( cloud.m_IPnts.size() );
+    for ( size_t i = 0 ; i < parent.size() ; i++ )
+    {
+        parent[i] = ( int )i;
+    }
+
+    for ( size_t i = 0 ; i < cloud.m_IPnts.size() ; i++ )
+    {
+        std::vector < std::pair < unsigned int, double > > ret_matches;
+        nanoflann::SearchParams params;
+        index.radiusSearch( &cloud.m_IPnts[i]->m_Pnt[0], tol, ret_matches, params );
+
+        for ( size_t j = 0 ; j < ret_matches.size() ; j++ )
+        {
+            IPnt* a = cloud.m_IPnts[i];
+            IPnt* b = cloud.m_IPnts[ ret_matches[j].first ];
+            if ( a != b && !neighbours.count( std::make_pair( a, b ) ) && ShareSurf( a, b ) )
+            {
+                UnionPnts( parent, ( int )i, ( int )ret_matches[j].first );
+            }
+        }
+    }
+
+    // Each set of more than one point, in the order its first point was met
+    vector< vector< int > > groups;
+    std::unordered_map< int, int > groupOf;
+    for ( size_t i = 0 ; i < cloud.m_IPnts.size() ; i++ )
+    {
+        int r = FindPnt( parent, ( int )i );
+        if ( !groupOf.count( r ) )
+        {
+            groupOf[r] = ( int )groups.size();
+            groups.push_back( vector< int >() );
+        }
+        groups[ groupOf[r] ].push_back( ( int )i );
+    }
+
+    std::unordered_map< IPnt*, IPnt* > mergedOf;
+    for ( int g = 0 ; g < ( int )groups.size() ; g++ )
+    {
+        vector< int > &grp = groups[g];
+        if ( grp.size() < 2 )
+        {
+            continue;
+        }
+
+        // A set reached through a third point can still hold two neighbours
+        bool ok = true;
+        for ( int i = 0 ; i < ( int )grp.size() && ok ; i++ )
+        {
+            for ( int j = i + 1 ; j < ( int )grp.size() && ok ; j++ )
+            {
+                if ( neighbours.count( std::make_pair( cloud.m_IPnts[ grp[i] ], cloud.m_IPnts[ grp[j] ] ) ) )
                 {
-                    ( *c )->m_TessVec.front() = merged_ipnts[cnt];
-                    break;
+                    ok = false;
                 }
             }
-            cnt++;
         }
-        cnt = 0;
-        ip = ( *c )->m_TessVec.back();
-        for ( g = iPntGroupList.begin() ; g != iPntGroupList.end(); ++g )
+        if ( !ok )
         {
-            for ( int j = 0 ; j < ( int )( *g )->m_IPntVec.size() ; j++ )
-            {
-                if ( ip == ( *g )->m_IPntVec[j] )
-                {
-                    ( *c )->m_TessVec.back() = merged_ipnts[cnt];
-                    break;
-                }
-            }
-            cnt++;
+            continue;
         }
+
+        IPnt* mip = new IPnt();
+        m_DelIPntVec.push_back( mip );
+        for ( int i = 0 ; i < ( int )grp.size() ; i++ )
+        {
+            mip->AddPuws( cloud.m_IPnts[ grp[i] ] );
+            mergedOf[ cloud.m_IPnts[ grp[i] ] ] = mip;
+        }
+        mip->CompPnt();
+    }
+
+    if ( mergedOf.empty() )
+    {
+        return;
+    }
+
+    for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
+    {
+        deque< IPnt* > &tv = ( *c )->m_TessVec;
+        for ( int j = 0 ; j < ( int )tv.size() ; j += 2 )
+        {
+            std::unordered_map< IPnt*, IPnt* >::iterator mit = mergedOf.find( tv[j] );
+            if ( mit != mergedOf.end() )
+            {
+                tv[j] = mit->second;
+            }
+        }
+    }
+}
+
+// Two curves that run close together can cross once each is cut into straight segments and
+// taken to the parameters the triangulator works in, though the curves themselves do not.
+// The triangulator cannot hold two constraints that cross.  Split the segments involved, on
+// the chains themselves, until none do: a chain belongs to the surfaces on both sides of it, so
+// both are given the same points.
+void CfdMeshMgrSingleton::RemoveCrossingTessSegs( const vector < vector < ISegChain* > > &surf_chains, int nthread )
+{
+    int n = m_SurfVec.size();
+    int nsplit = 0;
+    int npass = 0;
+    const int maxpass = 8;
+
+    for ( npass = 0; npass < maxpass; npass++ )
+    {
+        vector < vector < pair < ISegChain*, int > > > found( n );
+
+        RunIndexed( n, nthread, [&]( int s )
+        {
+            m_SurfVec[s]->FindCrossingTessSegs( surf_chains[s], found[s] );
+        } );
+
+        map < ISegChain*, set < int > > tosplit;
+        for ( int s = 0; s < n; s++ )
+        {
+            for ( int i = 0; i < ( int )found[s].size(); i++ )
+            {
+                tosplit[ found[s][i].first ].insert( found[s][i].second );
+            }
+        }
+
+        if ( tosplit.empty() )
+        {
+            break;
+        }
+
+        map < ISegChain*, set < int > >::iterator it;
+        for ( it = tosplit.begin(); it != tosplit.end(); ++it )
+        {
+            // From the end, so the indices still to be split do not move.
+            set < int >::reverse_iterator j;
+            for ( j = it->second.rbegin(); j != it->second.rend(); ++j )
+            {
+                it->first->SplitTessSeg( *j, this );
+                nsplit++;
+            }
+        }
+    }
+
+    if ( nsplit > 0 )
+    {
+        const char *left = "";
+        if ( npass == maxpass )
+        {
+            left = ", and some still cross";
+        }
+        printf( "Split %d mesh constraint segments that crossed, in %d passes%s.\n", nsplit, npass, left );
+        fflush( stdout );
     }
 }
 
 void CfdMeshMgrSingleton::BuildMesh()
 {
-    char str[256];
     int n = m_SurfVec.size();
 
-    //==== Mesh Each Surface ====//
-    for ( int s = 0; s < n; s++ )
+#ifdef DEBUG_CFD_MESH
+    BeginDebugSurfFiles();
+#endif
+
+    // Which chains lie on each surface.  Asking the whole chain list once per surface is the
+    // list walked once for every surface; one walk fills them all.
+    vector < vector < ISegChain* > > surf_chains( n );
+
+    list< ISegChain* >::iterator c;
+    for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
     {
-        vector< ISegChain* > surf_chains;
-        list< ISegChain* >::iterator c;
-        for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
+        for ( int s = 0; s < n; s++ )
         {
-            if ( ( ( *c )->m_SurfA == m_SurfVec[s] || ( *c )->m_SurfB == m_SurfVec[s] ) )
+            if ( ( *c )->m_SurfA == m_SurfVec[s] || ( *c )->m_SurfB == m_SurfVec[s] )
             {
-                surf_chains.push_back( ( *c ) );
+                surf_chains[s].push_back( *c );
             }
         }
-
-        vector < vec2d > adduw;
-        ForceSurfaceFixPoints( s, adduw );
-
-        snprintf( str, sizeof( str ), "InitMesh %3d/%3d %s                                          \r", s+1, n, m_SurfVec[s]->GetDisplayName().c_str() );
-        addOutputText( str );
-        m_SurfVec[s]->InitMesh( surf_chains, adduw, this );
     }
-    addOutputText( "\n" );
+
+    // The fix points a structure forces into a surface.  Worked out here because it reads the
+    // mesh's own fix point list, which the surfaces below are not given.
+    vector < vector < vec2d > > adduw( n );
+    for ( int s = 0; s < n; s++ )
+    {
+        ForceSurfaceFixPoints( s, adduw[s] );
+    }
+
+    // Each surface builds its own mesh from its own chains, and reaches nothing the others
+    // touch.  The debug output is the exception: it numbers surfaces and writes them to files
+    // shared across the pass, so with it on the surfaces are taken one at a time.
+    int nthread = 1;
+
+#ifndef DEBUG_CFD_MESH
+    nthread = StageThreadCount( n );
+#endif
+
+    RemoveCrossingTessSegs( surf_chains, nthread );
+
+    BeginProgress( "InitMesh", n, VOCAL_OUTPUT );
+
+    RunIndexed( n, nthread, [&]( int s )
+    {
+        m_SurfVec[s]->InitMesh( surf_chains[s], adduw[s], this );
+
+        m_ProgressDone++;
+        StepProgress( VOCAL_OUTPUT );
+    } );
+
+    EndProgress( VOCAL_OUTPUT );
+
+#ifdef DEBUG_CFD_MESH
+    EndDebugSurfFiles();
+#endif
 }
 
 // Determines if a triangle should be deleted based on its type and whether or not it is inside every other surface
-bool CfdMeshMgrSingleton::SetDeleteTriFlag( int aType, bool symPlane, vector < bool > aInB )
+bool CfdMeshMgrSingleton::SetDeleteTriFlag( int aType, bool symPlane, const vector < bool > &aInB )
 {
     // Always delete Stiffener tris
     if ( aType == vsp::CFD_STIFFENER )
@@ -3230,6 +5550,145 @@ bool CfdMeshMgrSingleton::SetDeleteTriFlag( int aType, bool symPlane, vector < b
     return deleteTri;
 }
 
+// Both interior tests -- the one that votes on triangles and the one that blanks the samples
+// written for POGS -- ask the same question of the same surfaces, and thread on the same terms:
+// they read the surfaces' patches, split them out of a pool that belongs to the thread, and each
+// index writes only its own answer.
+void CfdMeshMgrSingleton::RunRayCastStage( const string &label, int n,
+                                           const std::function< void( int ) > &body )
+{
+    int nthread = StageThreadCount( n );
+
+    BeginProgress( label, n, VOCAL_OUTPUT );
+
+    RunIndexed( n, nthread, [&]( int i )
+    {
+        body( i );
+
+        m_ProgressDone++;
+        StepProgress( VOCAL_OUTPUT );
+    } );
+
+    EndProgress( VOCAL_OUTPUT );
+}
+
+// One surface's share of the interior/exterior test.  It casts a ray from each of its own
+// triangles against every other surface and writes the verdict onto its own faces, so the
+// surfaces are independent of each other here.
+void CfdMeshMgrSingleton::RemoveInteriorTrisOneSurf( int s, double x_dist )
+{
+    int s_comp_id = m_SurfVec[s]->GetCompID();
+
+    // A reference.  The list is only walked here, and copying it would copy a node per triangle.
+    const list <Face*> &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
+
+    // Built once and emptied per triangle.  It is a vector of vectors as wide as the model has
+    // components.
+    int ncross = m_NumComps + 6;
+
+    if ( GetSettingsPtr()->m_SymSplittingOnFlag )
+    {
+        ncross = m_NumComps + 10;   // room for the outer domain and the symmetry plane
+    }
+
+    vector< vector< double > > t_vec_vec( ncross );
+
+    list< Face* >::const_iterator f;
+    for ( f = faceList.begin() ; f != faceList.end(); ++f ) // every triangle
+    {
+        for ( int i = 0 ; i < ncross ; i++ )
+        {
+            t_vec_vec[i].clear();
+        }
+
+        ( *f )->insideSurf.resize( ncross );
+        ( *f )->insideCount.resize( ncross );
+
+        vec3d cp = ( *f )->ComputeCenterPnt( m_SurfVec[s] );
+        vec3d ep = cp + vec3d( x_dist, 1.0e-4, 1.0e-4 );
+
+        for ( int i = 0 ; i < ( int )m_SurfVec.size() ; ++i )
+        {
+            int comp_id = m_SurfVec[i]->GetCompID();
+            if ( i != s && comp_id != s_comp_id ) // Don't check self intersection.
+            {
+                if ( m_SurfVec[s]->GetFeaSymmIndex() >=0 && m_SurfVec[i]->GetFeaSymmIndex() >=0 &&
+                     m_SurfVec[s]->GetFeaSymmIndex() != m_SurfVec[i]->GetFeaSymmIndex() )
+                {
+                    // Do nothing.
+                }
+                else if ( m_SurfVec[i]->GetSurfaceCfdType() != vsp::CFD_TRANSPARENT &&
+                     m_SurfVec[i]->GetSurfaceCfdType() != vsp::CFD_STRUCTURE &&
+                     m_SurfVec[i]->GetSurfaceCfdType() != vsp::CFD_STIFFENER ) // Don't check against transparent, structure, or stiffener surf.
+                {
+                    m_SurfVec[i]->IntersectLineSeg( cp, ep, t_vec_vec[comp_id] );
+                }
+                else if ( m_SurfVec[i]->GetFarFlag() && m_SurfVec[s]->GetSymPlaneFlag() &&
+                          GetSettingsPtr()->m_FarCompFlag ) // Unless trimming sym plane by outer domain
+                {
+                    m_SurfVec[i]->IntersectLineSeg( cp, ep, t_vec_vec[comp_id] );
+                }
+            }
+        }
+
+        // Loop over m_SurfVec instead of component id's.  Components will be addressed multiple times,
+        // but it allows access to m_SurfVec[i]->GetFarFlag() without a reverse lookup on component id.
+        for ( int i = 0 ; i < ( int )m_SurfVec.size() ; ++i )
+        {
+            int c = m_SurfVec[i]->GetCompID();
+
+            if ( c >= 0 && c < ( *f )->insideSurf.size() )
+            {
+                if ( m_SurfVec[s]->GetSymPlaneFlag() && m_SurfVec[i]->GetFarFlag() &&
+                     GetSettingsPtr()->m_FarCompFlag )
+                {
+                    if ( ( int )( t_vec_vec[c].size() + 1 ) % 2 == 1 ) // +1 Reverse action on sym plane wrt outer boundary.
+                    {
+                        ( *f )->insideSurf[c] = true;
+                    }
+                }
+                else
+                {
+
+                    if ( ( int )t_vec_vec[c].size() % 2 == 1)
+                    {
+                        ( *f )->insideSurf[c] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    for ( f = faceList.begin() ; f != faceList.end(); ++f ) // every face
+    {
+        //==== Load Adjoining Faces - NOT Crossing Borders ====//
+        set< Face* > faceSet;
+        ( *f )->LoadAdjFaces( 3, faceSet );
+
+        set<Face*>::iterator sf;
+
+        for ( int i = 0 ; i < ( int )m_SurfVec.size() ; ++i )
+        {
+            int c = m_SurfVec[i]->GetCompID();
+            if ( c >= 0 && c < ( *f )->insideSurf.size() )
+            {
+
+                for ( sf = faceSet.begin() ; sf != faceSet.end() ; ++sf )
+                {
+                    if ( ( *f )->insideSurf[c] )
+                    {
+                        ( *sf )->insideCount[c]++;
+                    }
+                    else
+                    {
+                        ( *sf )->insideCount[c]--;
+                    }
+                }
+            }
+        }
+    }
+}
+
 void CfdMeshMgrSingleton::RemoveInteriorTris()
 {
     debugRayIsect.clear();
@@ -3244,117 +5703,17 @@ void CfdMeshMgrSingleton::RemoveInteriorTris()
     double x_dist = 1.0 + big_box.GetMax( 0 ) - big_box.GetMin( 0 );
 
     //==== Count Number of Component Crossings for Each Component =====//
-    list< Face* >::iterator f;
-    for ( s = 0 ; s < ( int )m_SurfVec.size() ; ++s ) // every surface
+    RunRayCastStage( "Inside/outside", ( int )m_SurfVec.size(), [&]( int is )
     {
-        int s_comp_id = m_SurfVec[s]->GetCompID();
-        list <Face*> faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
-        for ( f = faceList.begin() ; f != faceList.end(); ++f ) // every triangle
-        {
-            vector< vector< double > > t_vec_vec;
+        RemoveInteriorTrisOneSurf( is, x_dist );
+    } );
 
-            if ( GetSettingsPtr()->m_SymSplittingOnFlag )
-            {
-                t_vec_vec.resize( m_NumComps + 10 );  // + 10 to handle possibility of outer domain and symmetry plane.
-                ( *f )->insideSurf.resize( m_NumComps + 10);
-                ( *f )->insideCount.resize( m_NumComps + 10);
-            }
-            else
-            {
-                t_vec_vec.resize( m_NumComps + 6 );
-                ( *f )->insideSurf.resize( m_NumComps + 6);
-                ( *f )->insideCount.resize( m_NumComps + 6);
-            }
-
-            vec3d cp = ( *f )->ComputeCenterPnt( m_SurfVec[s] );
-            vec3d ep = cp + vec3d( x_dist, 1.0e-4, 1.0e-4 );
-
-            for ( int i = 0 ; i < ( int )m_SurfVec.size() ; ++i )
-            {
-                int comp_id = m_SurfVec[i]->GetCompID();
-                if ( i != s && comp_id != s_comp_id ) // Don't check self intersection.
-                {
-                    if ( m_SurfVec[s]->GetFeaSymmIndex() >=0 && m_SurfVec[i]->GetFeaSymmIndex() >= 0 &&
-                         m_SurfVec[s]->GetFeaSymmIndex() != m_SurfVec[i]->GetFeaSymmIndex() )
-                    {
-                        // Do nothing.
-                    }
-                    else if ( m_SurfVec[i]->GetSurfaceCfdType() != vsp::CFD_TRANSPARENT &&
-                         m_SurfVec[i]->GetSurfaceCfdType() != vsp::CFD_STRUCTURE &&
-                         m_SurfVec[i]->GetSurfaceCfdType() != vsp::CFD_STIFFENER ) // Don't check against transparent, structure, or stiffener surf.
-                    {
-                        m_SurfVec[i]->IntersectLineSeg( cp, ep, t_vec_vec[comp_id] );
-                    }
-                    else if ( m_SurfVec[i]->GetFarFlag() && m_SurfVec[s]->GetSymPlaneFlag() &&
-                              GetSettingsPtr()->m_FarCompFlag ) // Unless trimming sym plane by outer domain
-                    {
-                        m_SurfVec[i]->IntersectLineSeg( cp, ep, t_vec_vec[comp_id] );
-                    }
-                }
-            }
-
-            // Loop over m_SurfVec instead of component id's.  Components will be addressed multiple times,
-            // but it allows access to m_SurfVec[i]->GetFarFlag() without a reverse lookup on component id.
-            for ( int i = 0 ; i < ( int )m_SurfVec.size() ; ++i )
-            {
-                int c = m_SurfVec[i]->GetCompID();
-
-                if ( c >= 0 && c < ( *f )->insideSurf.size() )
-                {
-                    if ( m_SurfVec[s]->GetSymPlaneFlag() && m_SurfVec[i]->GetFarFlag() &&
-                         GetSettingsPtr()->m_FarCompFlag )
-                    {
-                        if ( ( int )( t_vec_vec[c].size() + 1 ) % 2 == 1 ) // +1 Reverse action on sym plane wrt outer boundary.
-                        {
-                            ( *f )->insideSurf[c] = true;
-                        }
-                    }
-                    else
-                    {
-
-                        if ( ( int )t_vec_vec[c].size() % 2 == 1)
-                        {
-                            ( *f )->insideSurf[c] = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        for ( f = faceList.begin() ; f != faceList.end(); ++f ) // every face
-        {
-            //==== Load Adjoining Faces - NOT Crossing Borders ====//
-            set< Face* > faceSet;
-            ( *f )->LoadAdjFaces( 3, faceSet );
-
-            set<Face*>::iterator sf;
-
-            for ( int i = 0 ; i < ( int )m_SurfVec.size() ; ++i )
-            {
-                int c = m_SurfVec[i]->GetCompID();
-                if ( c >= 0 && c < ( *f )->insideSurf.size() )
-                {
-
-                    for ( sf = faceSet.begin() ; sf != faceSet.end() ; ++sf )
-                    {
-                        if ( ( *f )->insideSurf[c] )
-                        {
-                            ( *sf )->insideCount[c]++;
-                        }
-                        else
-                        {
-                            ( *sf )->insideCount[c]--;
-                        }
-                    }
-                }
-            }
-        }
-    }
+    list< Face* >::const_iterator f;
 
     //==== Check Vote and Mark Interior Tris =====//
     for ( s = 0 ; s < ( int )m_SurfVec.size() ; ++s )
     {
-        list <Face*> faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
+        const list <Face*> &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
         for ( f = faceList.begin() ; f != faceList.end(); ++f )
         {
             for ( int i = 0 ; i < ( int )m_SurfVec.size() ; ++i )
@@ -3384,7 +5743,7 @@ void CfdMeshMgrSingleton::RemoveInteriorTris()
 
     for ( int a = 0 ; a < ( int )m_SurfVec.size() ; a++ )
     {
-        list< Face * > faceList = m_SurfVec[ a ]->GetMesh()->GetFaceList();
+        const list< Face * > &faceList = m_SurfVec[ a ]->GetMesh()->GetFaceList();
         for ( f = faceList.begin(); f != faceList.end(); ++f )
         {
             // Determine if the triangle should be deleted
@@ -3406,7 +5765,7 @@ void CfdMeshMgrSingleton::RemoveInteriorTris()
         {
             if ( ! m_SurfVec[s]->GetSymPlaneFlag() )
             {
-                list <Face*> faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
+                const list <Face*> &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
                 for ( f = faceList.begin() ; f != faceList.end(); ++f )
                 {
                     vec3d cp = ( *f )->ComputeCenterPnt( m_SurfVec[s] );
@@ -3421,7 +5780,7 @@ void CfdMeshMgrSingleton::RemoveInteriorTris()
             {
                 if ( m_SurfVec[s]->GetSymPlaneFlag() )
                 {
-                    list <Face*> faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
+                    const list <Face*> &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
                     for ( f = faceList.begin() ; f != faceList.end(); ++f )
                     {
                         ( *f )->deleteFlag = true;
@@ -3445,8 +5804,8 @@ void CfdMeshMgrSingleton::ConnectBorderNodes( bool wakeOnly )
     {
         if ( m_SurfVec[s]->GetWakeFlag() == wakeOnly )
         {
-            list <Face*> faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
-            for ( list< Face* >::iterator f = faceList.begin() ; f != faceList.end(); ++f )
+            const list <Face*> &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
+            for ( list< Face* >::const_iterator f = faceList.begin() ; f != faceList.end(); ++f )
             {
                 ( *f )->AddBorderNodes( nodeVec );
             }
@@ -3502,6 +5861,186 @@ void CfdMeshMgrSingleton::MatchBorderNodes( const vector< Node* > & nodeVec )
 
 }
 
+// Color every face by a continuous quality measure, one color per corner.
+//
+// Bins suit tags and reasons, which are labels; a quality is a number, and bucketing one
+// hides everything inside a bucket and invents features at the boundaries.
+//
+// DrawObj::m_FaceColorVec is one color per entry in m_PntVec, which for triangles is one per
+// corner.  Being per corner rather than per node of the mesh, two triangles sharing a node may
+// give it different values, which is what lets a discontinuous quantity draw honestly.
+//
+//   angle    the angle at that corner over 60 degrees, so a sliver goes red at the corner that
+//            is actually bad rather than all over.
+//   length   the mean of the two edges meeting at that corner over the target length there --
+//            edge data drawn as corner data.  Taken as how far off it is either way, so 0.8
+//            and 1.25 match and sqrt(2) lands halfway up the ramp.
+void CfdMeshMgrSingleton::UpdateQualityDrawObjs()
+{
+    m_QualityDO.clear();
+    m_QualityDO.resize( 2 );
+
+    char str[256];
+    snprintf( str, sizeof( str ), "%s_TQUAL", GetID().c_str() );
+    m_QualityDO[0].m_GeomID = string( str );
+    snprintf( str, sizeof( str ), "%s_QQUAL", GetID().c_str() );
+    m_QualityDO[1].m_GeomID = string( str );
+
+    m_QualityDO[0].m_GeomChanged = true;
+    m_QualityDO[1].m_GeomChanged = true;
+
+    // The material still has to be set even though the color comes per vertex.  Color material
+    // only routes the array into ambient and diffuse; specular and emission stay the
+    // material's, and DrawObj's default emission is opaque white, which on its own drives any
+    // lit surface to white however right the colors underneath are.  Set to no highlight and
+    // no glow, which is what a color map wants anyway.
+    for ( int i = 0; i < 2; i++ )
+    {
+        for ( int k = 0; k < 4; k++ )
+        {
+            m_QualityDO[i].m_MaterialInfo.Ambient[k] = 1.0f;
+            m_QualityDO[i].m_MaterialInfo.Diffuse[k] = 1.0f;
+            m_QualityDO[i].m_MaterialInfo.Specular[k] = 0.0f;
+            m_QualityDO[i].m_MaterialInfo.Emission[k] = 0.0f;
+        }
+
+        m_QualityDO[i].m_MaterialInfo.Shininess = 1.0f;
+    }
+
+    m_QualityDOMetric = GetCfdSettingsPtr()->m_ColorTagReason;
+
+    if ( m_QualityDOMetric != vsp::QUALITY_ANGLE && m_QualityDOMetric != vsp::QUALITY_LENGTH )
+    {
+        return;
+    }
+
+    bool bylen = ( m_QualityDOMetric == vsp::QUALITY_LENGTH );
+
+    // What the ramp means, so the picture can be read.  Both ends are fixed rather than taken
+    // from the data, so two meshes colored the same way can be held against each other.
+    for ( int i = 0; i < 2; i++ )
+    {
+        m_QualityDO[i].m_VertexColorFlag = true;
+        m_QualityDO[i].m_ColorScaleFlag = true;
+
+        if ( bylen )
+        {
+            m_QualityDO[i].m_ColorScaleTitle = "Edge length";
+            m_QualityDO[i].m_ColorScaleLoLabel = "2x off";
+            m_QualityDO[i].m_ColorScaleMidLabel = "1.41x off";
+            m_QualityDO[i].m_ColorScaleHiLabel = "on target";
+        }
+        else
+        {
+            m_QualityDO[i].m_ColorScaleTitle = "Worst angle";
+            m_QualityDO[i].m_ColorScaleLoLabel = "0 deg";
+            m_QualityDO[i].m_ColorScaleMidLabel = "30 deg";
+            m_QualityDO[i].m_ColorScaleHiLabel = "60 deg";
+        }
+    }
+
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        const vector< vec3d >& pVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
+        const vector< SimpFace >& fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+
+        for ( int f = 0 ; f < ( int ) fVec.size() ; f++ )
+        {
+            const SimpFace* sface = &fVec[f];
+
+            int n = 3;
+            int ind[4] = { sface->ind0, sface->ind1, sface->ind2, sface->ind3 };
+
+            if ( sface->m_isQuad )
+            {
+                n = 4;
+            }
+
+            int ido = 0;
+
+            if ( sface->m_isQuad )
+            {
+                ido = 1;
+            }
+
+            vec3d norm = cross( pVec[ind[1]] - pVec[ind[0]], pVec[ind[2]] - pVec[ind[0]] );
+            norm.normalize();
+
+            // One value for the whole face, taken from its worst corner.  Coloring each corner
+            // on its own hides the defect: a triangle with two sound corners and one bad one
+            // reads as mostly sound, and the bad corner is the thing worth seeing.  Wing tips
+            // and trailing edges are where that matters.
+            double tface = 1.0;
+
+            for ( int k = 0 ; k < n ; k++ )
+            {
+                const vec3d &a = pVec[ ind[ ( k + n - 1 ) % n ] ];
+                const vec3d &b = pVec[ ind[k] ];
+                const vec3d &c = pVec[ ind[ ( k + 1 ) % n ] ];
+
+                double lab = dist( a, b );
+                double lbc = dist( b, c );
+
+                double t = 1.0;
+
+                if ( bylen )
+                {
+                    // Handled once for the whole face below, from the edges' own targets.
+                    t = 1.0;
+                }
+                else
+                {
+                    if ( lab > 0.0 && lbc > 0.0 )
+                    {
+                        double cosb = dot( a - b, c - b ) / ( lab * lbc );
+
+                        if ( cosb > 1.0 )
+                        {
+                            cosb = 1.0;
+                        }
+                        if ( cosb < -1.0 )
+                        {
+                            cosb = -1.0;
+                        }
+
+                        t = ( acos( cosb ) * 180.0 / M_PI ) / 60.0;
+                    }
+                }
+
+                if ( t < tface )
+                {
+                    tface = t;
+                }
+            }
+
+            if ( bylen )
+            {
+                // Each edge against the target it was built to, worst edge wins.  The target at the face's
+                // centre is a different number wherever the target length varies quickly -- which is exactly
+                // where the mesh struggles -- and does not agree with the edge length report.
+                tface = 1.0;
+
+                if ( sface->m_WorstLenRatio > 0.0 )
+                {
+                    // One octave off target is the bottom of the ramp; sqrt(2), where Split
+                    // and Collapse act, is the middle.
+                    tface = 1.0 - log2( max( sface->m_WorstLenRatio, 1.0 ) );
+                }
+            }
+
+            vec3d rgb = DrawObj::qualityColorRamp( tface );
+
+            for ( int k = 0 ; k < n ; k++ )
+            {
+                m_QualityDO[ ido ].m_PntVec.push_back( pVec[ ind[k] ] );
+                m_QualityDO[ ido ].m_NormVec.push_back( norm );
+                m_QualityDO[ ido ].m_FaceColorVec.push_back( rgb );
+                m_QualityDO[ ido ].m_FaceAlphaVec.push_back( 1.0f );
+            }
+        }
+    }
+}
+
 void CfdMeshMgrSingleton::UpdateDrawObjs()
 {
     SurfaceIntersectionSingleton::UpdateDrawObjs();
@@ -3521,6 +6060,8 @@ void CfdMeshMgrSingleton::UpdateDrawObjs()
         m_ReasonDO[i].m_GeomChanged = true;
         m_ReasonDO[ i + num_reason ].m_GeomChanged = true;
     }
+
+    UpdateQualityDrawObjs();
 
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
@@ -3745,6 +6286,42 @@ void CfdMeshMgrSingleton::LoadDrawObjs( vector< DrawObj* > &draw_obj_vec )
     draw_obj_vec.push_back( &m_BBoxLineStripSymSplit );
     m_BBoxLineSymSplit.m_Visible = m_BBoxLineStripSymSplit.m_Visible;
     draw_obj_vec.push_back( &m_BBoxLineSymSplit );
+
+    // The two quality objects.  Their color is per vertex, so no material is set on them --
+    // see UpdateQualityDrawObjs.
+    if ( m_QualityDOMetric != GetCfdSettingsPtr()->m_ColorTagReason &&
+         ( GetCfdSettingsPtr()->m_ColorTagReason == vsp::QUALITY_ANGLE ||
+           GetCfdSettingsPtr()->m_ColorTagReason == vsp::QUALITY_LENGTH ) )
+    {
+        UpdateQualityDrawObjs();
+    }
+
+    if ( m_QualityDO.size() == 2 )
+    {
+        bool onqual = GetCfdSettingsPtr()->m_ColorFacesFlag &&
+                      ( GetCfdSettingsPtr()->m_ColorTagReason == vsp::QUALITY_ANGLE ||
+                        GetCfdSettingsPtr()->m_ColorTagReason == vsp::QUALITY_LENGTH );
+
+        m_QualityDO[0].m_Visible = onqual;
+        m_QualityDO[1].m_Visible = onqual;
+
+        m_QualityDO[0].m_LineColor = vec3d( 0.4, 0.4, 0.4 );
+        m_QualityDO[1].m_LineColor = vec3d( 0.4, 0.4, 0.4 );
+
+        if ( onqual && !GetCfdSettingsPtr()->m_DrawMeshFlag )
+        {
+            m_QualityDO[0].m_Type = DrawObj::VSP_SHADED_TRIS;
+            m_QualityDO[1].m_Type = DrawObj::VSP_SHADED_QUADS;
+        }
+        else
+        {
+            m_QualityDO[0].m_Type = DrawObj::VSP_CFD_HIDDEN_TRIS;
+            m_QualityDO[1].m_Type = DrawObj::VSP_CFD_HIDDEN_QUADS;
+        }
+
+        draw_obj_vec.push_back( &m_QualityDO[0] );
+        draw_obj_vec.push_back( &m_QualityDO[1] );
+    }
 
     unsigned int num_reason = vsp::NUM_MESH_REASON + 1;
 
@@ -4342,10 +6919,71 @@ void CfdMeshMgrSingleton::SetSimpSubSurfTags( int tag_offset )
     }
 }
 
-void CfdMeshMgrSingleton::Subtag( Surf* surf )
+// How good a face is, by the two measures the mesher can be judged on.
+//
+// The smallest angle says whether it is a usable triangle.  The mean edge length over the
+// target length says whether it is the size that was asked for -- which the angle cannot
+// say, because a triangle can be a perfect equilateral at twice the size it should be.
+void CfdMeshMgrSingleton::SetFaceQuality( SimpFace &face, const vector< vec3d > &xyz, double tgt )
+{
+    int n = 3;
+    int ind[4] = { face.ind0, face.ind1, face.ind2, face.ind3 };
+
+    if ( face.m_isQuad )
+    {
+        n = 4;
+    }
+
+    double lsum = 0.0;
+    double mincos = -1.0;
+
+    for ( int i = 0 ; i < n ; i++ )
+    {
+        const vec3d &a = xyz[ ind[ ( i + n - 1 ) % n ] ];
+        const vec3d &b = xyz[ ind[i] ];
+        const vec3d &c = xyz[ ind[ ( i + 1 ) % n ] ];
+
+        double lab = dist( a, b );
+        double lbc = dist( b, c );
+
+        lsum += lbc;
+
+        if ( lab > 0.0 && lbc > 0.0 )
+        {
+            // Cosine of the corner at b.  The largest cosine is the smallest angle.
+            double cosb = dot( a - b, c - b ) / ( lab * lbc );
+
+            if ( cosb > mincos )
+            {
+                mincos = cosb;
+            }
+        }
+    }
+
+    if ( mincos > 1.0 )
+    {
+        mincos = 1.0;
+    }
+    if ( mincos < -1.0 )
+    {
+        mincos = -1.0;
+    }
+
+    face.m_MinAngle = acos( mincos ) * 180.0 / M_PI;
+
+    face.m_TargetLen = tgt;
+
+    if ( tgt > 0.0 )
+    {
+        face.m_LenRatio = ( lsum / ( double )n ) / tgt;
+    }
+}
+
+void CfdMeshMgrSingleton::Subtag( Surf* surf, std::set< std::vector< int > > &combo )
 {
     vector< SimpFace >& face_vec = surf->GetMesh()->GetSimpFaceVec();
     const vector< vec2d >& pnts = surf->GetMesh()->GetSimpUWPntVec();
+    const vector< vec3d >& xyz = surf->GetMesh()->GetSimpPntVec();
     vector< SimpleSubSurface > simp_s_surfs = GetSimpSubSurfs( surf->GetGeomID(), surf->GetMainSurfID() , surf->GetCompID() );
 
     for ( int f = 0; f < (int)face_vec.size(); f++ )
@@ -4362,16 +7000,26 @@ void CfdMeshMgrSingleton::Subtag( Surf* surf )
             center = ( pnts[face.ind0] + pnts[face.ind1] + pnts[face.ind2] ) * 1 / 3.0;
         }
 
-        surf->InterpTargetMap( center.x(), center.y(), face.m_reason );
+        double tgt = surf->InterpTargetMap( center.x(), center.y(), face.m_reason );
+
+        // The two quality measures, taken here because this is already a pass over every
+        // face and the target length at its centre is already being asked for.
+        SetFaceQuality( face, xyz, tgt );
+
+        // The centre is in this patch's parameters.  Subsurfaces are drawn in the Geom's,
+        // so a patch built from two pieces of the surface has to say which piece this face
+        // sits on before the question means anything.
+        double uo, wo;
+        bool onsurf = surf->ToOriginalUW( center.x(), center.y(), uo, wo );
 
         for ( int s = 0; s < (int)simp_s_surfs.size(); s++ )
         {
-            if ( simp_s_surfs[s].Subtag( vec3d( center.x(), center.y(), 0 ) ) && surf->GetCompID() >= 0 )
+            if ( onsurf && simp_s_surfs[s].Subtag( vec3d( uo, wo, 0 ) ) && surf->GetCompID() >= 0 )
             {
                 face.m_Tags.push_back( simp_s_surfs[s].m_Tag );
             }
         }
-        SubSurfaceMgr.m_TagCombos.insert( face.m_Tags );
+        combo.insert( face.m_Tags );
     }
 }
 
@@ -4548,12 +7196,18 @@ void CfdMeshMgrSingleton::UpdateDisplaySettings()
 
         GetCfdSettingsPtr()->m_DrawBorderFlag = m_Vehicle->GetCfdSettingsPtr()->m_DrawBorderFlag.Get();
         GetCfdSettingsPtr()->m_DrawIsectFlag = m_Vehicle->GetCfdSettingsPtr()->m_DrawIsectFlag.Get();
-        GetCfdSettingsPtr()->m_DrawRawFlag = m_Vehicle->GetCfdSettingsPtr()->m_DrawRawFlag.Get();
-        GetCfdSettingsPtr()->m_DrawBinAdaptFlag = m_Vehicle->GetCfdSettingsPtr()->m_DrawBinAdaptFlag.Get();
+        GetCfdSettingsPtr()->m_DrawJoinFlag = m_Vehicle->GetCfdSettingsPtr()->m_DrawJoinFlag.Get();
         GetCfdSettingsPtr()->m_DrawCurveFlag = m_Vehicle->GetCfdSettingsPtr()->m_DrawCurveFlag.Get();
         GetCfdSettingsPtr()->m_DrawPntsFlag = m_Vehicle->GetCfdSettingsPtr()->m_DrawPntsFlag.Get();
     }
 }
+
+static void RegisterCfdMeshAnalysis()
+{
+    CfdMeshMgr.RegisterAnalysis();
+}
+
+static AnalysisRegistrar g_CfdMeshRegistrar( RegisterCfdMeshAnalysis );
 
 void CfdMeshMgrSingleton::RegisterAnalysis()
 {

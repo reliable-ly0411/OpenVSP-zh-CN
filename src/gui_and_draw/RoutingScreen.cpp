@@ -238,12 +238,12 @@ RoutingScreen::RoutingScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Rou
 
     m_DesignLayout.SetSameLineFlag( true );
     m_DesignLayout.AddOutput( m_LengthOutput, "Length", " %7.6f", m_DesignLayout.GetW() * 0.5 );
-    m_DesignLayout.AddOutput( m_SymmLengthOutput, "Symm Length", " %7.6f" );
+    m_DesignLayout.AddOutput( m_SymmLengthOutput, "Symm Length", " %7.6f", m_DesignLayout.GetX() - m_DesignLayout.GetStartX() );
 
     m_DesignLayout.ForceNewLine();
 
     m_DesignLayout.AddOutput( m_MassOutput, "Mass", " %7.6f", m_DesignLayout.GetW() * 0.5 );
-    m_DesignLayout.AddOutput( m_SymmMassOutput, "Symm Mass", " %7.6f" );
+    m_DesignLayout.AddOutput( m_SymmMassOutput, "Symm Mass", " %7.6f", m_DesignLayout.GetX() - m_DesignLayout.GetStartX() );
 
     m_SelectionFlag = false;
     m_AddMultipleFlag = false;
@@ -304,8 +304,8 @@ bool RoutingScreen::Update()
 
                 if ( parent )
                 {
-                    WingGeom* wing_ptr = dynamic_cast< WingGeom* >( parent );
-                    if ( wing_ptr )
+                    WingGeom* behavior_wing = dynamic_cast< WingGeom* >( parent->GetBehaviorGeom() );
+                    if ( behavior_wing )
                     {
                         wing_parent = true;
                     }
@@ -527,8 +527,8 @@ void RoutingScreen::UpdateBrowser()
                 m_SurfChoice.SetVal( rpt->m_SurfIndx() );
 
 
-                WingGeom* wing_parent = dynamic_cast < WingGeom * > ( parent_geom );
-                if ( wing_parent )
+                WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent_geom->GetBehaviorGeom() );
+                if ( behavior_wing )
                 {
                     char etaMN[7];
                     int indx = 0;

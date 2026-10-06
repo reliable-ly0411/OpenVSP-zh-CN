@@ -98,6 +98,10 @@ ManageTextureScreen::ManageTextureScreen( ScreenMgr * mgr ) : BasicScreen( mgr, 
     m_GlWin = new VSPGUI::VspSubGlWindow( w->x(), w->y(), w->w(), w->h(), mgr, DrawObj::VSP_TEX_PREVIEW );
     texGLGroup->end();
 
+    // It is drawn in the space left above "Add...", so it belongs to the border group, not to the
+    // group made last
+    m_BorderLayout.GetGroup()->add( texGLGroup );
+
 }
 
 ManageTextureScreen::~ManageTextureScreen()
@@ -141,7 +145,7 @@ bool ManageTextureScreen::Update()
 
     for ( int i = 0; i < ( int )geom_vec.size(); i++ )
     {
-        int geom_type = geom_vec[i]->GetType().m_Type;
+        int geom_type = geom_vec[i]->GetBehaviorType();
 
         if ( geom_type != BLANK_GEOM_TYPE &&
              geom_type != HINGE_GEOM_TYPE ) // TODO: Any other types that don't support textures?

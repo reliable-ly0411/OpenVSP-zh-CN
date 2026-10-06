@@ -362,7 +362,8 @@ end
 
 [filepath,basename,~] = fileparts(fname);
 
-taglistname = [filepath filesep basename '.taglist'];
+% fullfile keeps the geometry's own directory, so this works from any cwd.
+taglistname = fullfile(filepath, [basename '.ALL.taglist']);
 
 
 itagname=[];
@@ -387,12 +388,13 @@ if ( exist(taglistname, 'file') )
 
         [~,tagbasename,~] = fileparts(tagfile);
 
-        tagfilename = [filepath filesep tagbasename '.tag'];
+        tagfilename = fullfile(filepath, [tagbasename '.tag']);
 
 
         if ( exist(tagfilename, 'file') )
             tfp = fopen( tagfilename );
 
+            ntagface = fscanf(tfp, '%d', 1);
             % Read in tag data.
             itag{i} = fscanf(tfp, '%d');
 
@@ -404,8 +406,6 @@ if ( exist(taglistname, 'file') )
                 patch('Faces',con(:,itag{i})','Vertices',p','FaceColor','w')
                 axis equal
                 axis off
-                h = plotwakes( wedata, p );
-                set(h,'LineWidth',5);
                 %set(h,'Color','k');
                 title(['Tag ' itagname{i}], 'Interpreter', 'none')
             end

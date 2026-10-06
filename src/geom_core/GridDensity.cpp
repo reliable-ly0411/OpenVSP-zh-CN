@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include <cmath>
+#include <mutex>
 
 #include "GridDensity.h"
 #include "Geom.h"
@@ -343,6 +344,12 @@ BaseSimpleSource::BaseSimpleSource()
     m_DrawObjID = GenerateRandomID( 8 );
 }
 
+void BaseSimpleSource::SetDrawObjID( const string & id )
+{
+    m_DrawObjID = id;
+    NameDrawObjs();
+}
+
 vector< vec3d > BaseSimpleSource::CreateSphere( double rad, const vec3d& loc )
 {
     int i;
@@ -383,11 +390,16 @@ PointSimpleSource::PointSimpleSource()
 
     m_WLoc = 0.0;
 
-    m_PointDO.m_GeomID = m_DrawObjID;
+    NameDrawObjs();
     m_PointDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     m_PointDO.m_Type = DrawObj::VSP_LINE_STRIP;
     m_PointDO.m_LineWidth = 1.0;
     m_PointDO.m_LineColor = vec3d( 100.0 / 255, 100.0 / 255, 100.0 / 255 );
+}
+
+void PointSimpleSource::NameDrawObjs()
+{
+    m_PointDO.m_GeomID = m_DrawObjID;
 }
 
 void PointSimpleSource::CopyFrom( BaseSource* s )
@@ -467,23 +479,29 @@ LineSimpleSource::LineSimpleSource()
 
     m_WLoc2 = 0.0;
 
-    m_LineDO1.m_GeomID = m_DrawObjID + "1";
+    NameDrawObjs();
+
     m_LineDO1.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     m_LineDO1.m_Type = DrawObj::VSP_LINE_STRIP;
     m_LineDO1.m_LineWidth = 1.0;
     m_LineDO1.m_LineColor = vec3d( 100.0 / 255, 100.0 / 255, 100.0 / 255 );
 
-    m_LineDO2.m_GeomID = m_DrawObjID + "2";
     m_LineDO2.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     m_LineDO2.m_Type = DrawObj::VSP_LINE_STRIP;
     m_LineDO2.m_LineWidth = 1.0;
     m_LineDO2.m_LineColor = vec3d( 100.0 / 255, 100.0 / 255, 100.0 / 255 );
 
-    m_LineDO3.m_GeomID = m_DrawObjID + "3";
     m_LineDO3.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     m_LineDO3.m_Type = DrawObj::VSP_LINES;
     m_LineDO3.m_LineWidth = 1.0;
     m_LineDO3.m_LineColor = vec3d( 100.0 / 255, 100.0 / 255, 100.0 / 255 );
+}
+
+void LineSimpleSource::NameDrawObjs()
+{
+    m_LineDO1.m_GeomID = m_DrawObjID + "1";
+    m_LineDO2.m_GeomID = m_DrawObjID + "2";
+    m_LineDO3.m_GeomID = m_DrawObjID + "3";
 }
 
 void LineSimpleSource::CopyFrom( BaseSource* s )
@@ -678,19 +696,18 @@ BoxSimpleSource::BoxSimpleSource()
 
     m_WLoc2 = 0.0;
 
-    m_BoxDO1.m_GeomID = m_DrawObjID + "1";
+    NameDrawObjs();
+
     m_BoxDO1.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     m_BoxDO1.m_Type = DrawObj::VSP_LINE_LOOP;
     m_BoxDO1.m_LineWidth = 1.0;
     m_BoxDO1.m_LineColor = vec3d( 100.0 / 255, 100.0 / 255, 100.0 / 255 );
 
-    m_BoxDO2.m_GeomID = m_DrawObjID + "2";
     m_BoxDO2.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     m_BoxDO2.m_Type = DrawObj::VSP_LINE_LOOP;
     m_BoxDO2.m_LineWidth = 1.0;
     m_BoxDO2.m_LineColor = vec3d( 100.0 / 255, 100.0 / 255, 100.0 / 255 );
 
-    m_BoxDO3.m_GeomID = m_DrawObjID + "3";
     m_BoxDO3.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     m_BoxDO3.m_Type = DrawObj::VSP_LINES;
     m_BoxDO3.m_LineWidth = 1.0;
@@ -703,6 +720,13 @@ void BoxSimpleSource::ComputeCullPnts()
     m_CullMaxPnt = m_MaxPnt + vec3d( m_Rad, m_Rad, m_Rad );
 }
 
+
+void BoxSimpleSource::NameDrawObjs()
+{
+    m_BoxDO1.m_GeomID = m_DrawObjID + "1";
+    m_BoxDO2.m_GeomID = m_DrawObjID + "2";
+    m_BoxDO3.m_GeomID = m_DrawObjID + "3";
+}
 
 void BoxSimpleSource::CopyFrom( BaseSource* s )
 {
@@ -873,19 +897,25 @@ ConstLineSimpleSource::ConstLineSimpleSource()
 
     m_Val = 0.0;
 
-    m_SpheresDO.m_GeomID = m_DrawObjID + "1";
+    NameDrawObjs();
+
     m_SpheresDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     m_SpheresDO.m_Type = DrawObj::VSP_WIRE_MESH;
     m_SpheresDO.m_LineWidth = 1.0;
     m_SpheresDO.m_LineColor = vec3d( 100.0 / 255, 100.0 / 255, 100.0 / 255 );
 
-    m_LinesDO.m_GeomID = m_DrawObjID + "2";
     m_LinesDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     m_LinesDO.m_Type = DrawObj::VSP_LINE_STRIP;
     m_LinesDO.m_LineWidth = 1.0;
     m_LinesDO.m_LineColor = vec3d( 100.0 / 255, 100.0 / 255, 100.0 / 255 );
 
     m_GeomPtr = nullptr;
+}
+
+void ConstLineSimpleSource::NameDrawObjs()
+{
+    m_SpheresDO.m_GeomID = m_DrawObjID + "1";
+    m_LinesDO.m_GeomID = m_DrawObjID + "2";
 }
 
 void ConstLineSimpleSource::CopyFrom( BaseSource* s )
@@ -912,6 +942,10 @@ void ConstLineSimpleSource::AdjustLen( double val )
 {
     m_Len = m_Len * val;
 }
+
+// Code-Eli keeps scratch space in each patch, so a surface may only be evaluated by one
+// thread at a time.
+static std::mutex s_ConstLineEvalMutex;
 
 double ConstLineSimpleSource::GetTargetLen( double base_len, vec3d & pos, const string & geomid, const int & surfindx, const double & u, const double &w )
 {
@@ -960,7 +994,13 @@ double ConstLineSimpleSource::GetTargetLen( double base_len, vec3d & pos, const 
 
                 uw = m_UWPts[imatch] + t * ( m_UWPts[imatch + 1] - m_UWPts[imatch] );
 
-                vec3d p = m_GeomPtr->CompPnt01( m_SurfIndx, uw.x(), uw.y() );
+                vec3d p;
+                {
+                    // The mesher asks for target lengths from several threads at once, and every
+                    // one of them lands on this one Geom surface.
+                    std::lock_guard< std::mutex > lock( s_ConstLineEvalMutex );
+                    p = m_GeomPtr->CompPnt01( m_SurfIndx, uw.x(), uw.y() );
+                }
 
                 double d2 = dist_squared( pos, p );
 

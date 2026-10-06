@@ -20,7 +20,7 @@
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
-SurfaceIntersectionScreen::SurfaceIntersectionScreen( ScreenMgr* mgr ) : TabScreen( mgr, 375, 545, "Trimmed Surfaces", "", 150 )
+SurfaceIntersectionScreen::SurfaceIntersectionScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 545, "Trimmed Surfaces", "", 150 )
 {
     m_Vehicle = m_ScreenMgr->GetVehiclePtr();
 
@@ -77,9 +77,6 @@ void SurfaceIntersectionScreen::CreateGlobalTab()
     m_GlobalTabLayout.AddDividerBox( "Geometry Control" );
     m_GlobalTabLayout.AddYGap();
 
-    m_GlobalTabLayout.AddSlider( m_RelCurveTolSlider, "Curve Adaptation Tolerance", 0.01, "%7.5f" );
-    m_GlobalTabLayout.AddYGap();
-
     m_GlobalTabLayout.AddButton( m_IntersectSubsurfaces, "Intersect Subsurfaces" );
     m_GlobalTabLayout.AddYGap();
 
@@ -114,8 +111,25 @@ void SurfaceIntersectionScreen::CreateGlobalTab()
     m_GlobalTabLayout.SetSameLineFlag( false );
 
     m_GlobalTabLayout.AddYGap();
+    m_GlobalTabLayout.AddButton( m_SplitJoinSurfs, "Split and Join Surfaces" );
+
+    m_GlobalTabLayout.AddYGap();
+    m_GlobalTabLayout.SetButtonWidth( m_GlobalTabLayout.GetW() / 3 );
+    m_GlobalTabLayout.SetSameLineFlag( true );
+    m_GlobalTabLayout.SetFitWidthFlag( false );
+
     m_GlobalTabLayout.AddButton( m_ToCubicToggle, "Demote Surfs to Cubic" );
-    m_GlobalTabLayout.AddSlider( m_ToCubicTolSlider, "Cubic Tolerance", 10, "%5.4g", 0, true );
+    m_GlobalTabLayout.SetFitWidthFlag( true );
+    m_GlobalTabLayout.AddSlider( m_ToCubicTolSlider, "Tolerance", 10, "%5.4g", 0, true );
+    m_GlobalTabLayout.ForceNewLine();
+
+    m_GlobalTabLayout.SetSameLineFlag( false );
+    m_GlobalTabLayout.SetFitWidthFlag( true );
+
+    m_GlobalTabLayout.AddYGap();
+    m_GlobalTabLayout.AddDividerBox("Process Control");
+    m_GlobalTabLayout.AddYGap();
+    m_GlobalTabLayout.AddButton( m_ParallelMesh, "Run Multi-threaded" );
 
     globalTab->show();
 }
@@ -134,12 +148,13 @@ void SurfaceIntersectionScreen::CreateDisplayTab()
     m_DisplayTabLayout.AddYGap();
     m_DisplayTabLayout.AddButton( m_DrawIsect, "Show Intersection Curves");
     m_DisplayTabLayout.AddButton( m_DrawBorder, "Show Border Curves");
+    m_DisplayTabLayout.AddButton( m_DrawJoin, "Show Patch Join Curves");
     m_DisplayTabLayout.AddYGap();
     m_DisplayTabLayout.AddButton( m_ShowCurve, "Show Curves");
     m_DisplayTabLayout.AddButton( m_ShowPts, "Show Points");
     m_DisplayTabLayout.AddYGap();
     m_DisplayTabLayout.AddButton( m_ShowRaw, "Show Raw Curve");
-    m_DisplayTabLayout.AddButton( m_ShowBinAdapt, "Show Binary Adapted");
+    m_DisplayTabLayout.AddButton( m_ShowCubic, "Show Adapted Cubic");
 
     displayTab->show();
 }
@@ -151,63 +166,13 @@ void SurfaceIntersectionScreen::CreateOutputTab()
 
     m_OutputTabLayout.SetGroupAndScreen( outputTabGroup, this );
 
-    m_OutputTabLayout.AddDividerBox("Export Options");
+    int button_width = 55;
+    int input_width = 280;
+
+    m_OutputTabLayout.AddDividerBox( "Trimmed CAD Options" );
     m_OutputTabLayout.AddYGap();
-
-    m_OutputTabLayout.SetButtonWidth( 175 );
-
-    m_OutputTabLayout.AddButton( m_ExportRaw, "Export Raw Points" );
-
-    m_OutputTabLayout.AddYGap();
-
-    m_OutputTabLayout.AddDividerBox("Export File Names");
-    m_OutputTabLayout.AddYGap();
-
     m_OutputTabLayout.SetFitWidthFlag( false );
     m_OutputTabLayout.SetSameLineFlag( true );
-
-    int button_width = 55;
-    m_OutputTabLayout.SetButtonWidth( button_width );
-    int input_width = 280;
-    m_OutputTabLayout.SetInputWidth( input_width );
-
-    m_OutputTabLayout.AddButton(m_CurvFile, ".curv");
-    m_OutputTabLayout.AddOutput(m_CurvOutput);
-    m_OutputTabLayout.SetButtonWidth( m_OutputTabLayout.GetRemainX() );
-    m_OutputTabLayout.AddButton(m_SelectCurvFile, "...");
-
-    m_OutputTabLayout.ForceNewLine();
-    m_OutputTabLayout.SetButtonWidth( button_width );
-    m_OutputTabLayout.AddButton(m_Plot3DFile, ".p3d");
-    m_OutputTabLayout.AddOutput(m_Plot3DOutput);
-    m_OutputTabLayout.SetButtonWidth( m_OutputTabLayout.GetRemainX() );
-    m_OutputTabLayout.AddButton(m_SelectPlot3DFile, "...");
-
-    m_OutputTabLayout.AddYGap();
-
-    m_OutputTabLayout.ForceNewLine();
-    m_OutputTabLayout.SetFitWidthFlag( true );
-    m_OutputTabLayout.AddDividerBox("Surfaces and Intersection Curves");
-    m_OutputTabLayout.ForceNewLine();
-    m_OutputTabLayout.SetFitWidthFlag( false );
-
-    m_OutputTabLayout.SetButtonWidth( button_width );
-    m_OutputTabLayout.AddButton(m_SrfFile, ".srf");
-    m_OutputTabLayout.AddOutput(m_SrfOutput);
-    m_OutputTabLayout.SetButtonWidth( m_OutputTabLayout.GetRemainX() );
-    m_OutputTabLayout.AddButton(m_SelectSrfFile, "...");
-    m_OutputTabLayout.ForceNewLine();
-
-    m_OutputTabLayout.SetFitWidthFlag( true );
-    m_OutputTabLayout.AddButton( m_XYZIntCurves, "Include X,Y,Z Intersection Curves");
-    m_OutputTabLayout.SetFitWidthFlag( false );
-    m_OutputTabLayout.ForceNewLine();
-
-    m_OutputTabLayout.AddYGap();
-    m_OutputTabLayout.SetFitWidthFlag( true );
-    m_OutputTabLayout.AddDividerBox( "Trimmed CAD Options" );
-    m_OutputTabLayout.ForceNewLine();
-    m_OutputTabLayout.SetFitWidthFlag( false );
     m_OutputTabLayout.InitWidthHeightVals();
 
     m_OutputTabLayout.SetButtonWidth( m_OutputTabLayout.GetRemainX() / 4 );
@@ -264,7 +229,7 @@ void SurfaceIntersectionScreen::CreateOutputTab()
     //m_OutputTabLayout.SetButtonWidth( m_OutputTabLayout.GetRemainX() / 3 );
     //m_OutputTabLayout.AddButton( m_STEPMergePointsToggle, "Merge Points" );
     //m_OutputTabLayout.SetFitWidthFlag( true );
-    m_OutputTabLayout.AddSlider( m_STEPTolSlider, "STEP Tolerance", 10, "%5.4g", 0, true );
+    m_OutputTabLayout.AddSlider( m_STEPTolSlider, "Tolerance", 10, "%5.4g", 0, true );
     //m_OutputTabLayout.SetFitWidthFlag( false );
     //m_OutputTabLayout.ForceNewLine();
 
@@ -397,13 +362,13 @@ bool SurfaceIntersectionScreen::Update()
 
 void SurfaceIntersectionScreen::UpdateGlobalTab()
 {
-    m_RelCurveTolSlider.Update( m_Vehicle->GetISectSettingsPtr()->m_RelCurveTol.GetID() );
-
     //===== Geometry Control =====//
     m_IntersectSubsurfaces.Update( m_Vehicle->GetISectSettingsPtr()->m_IntersectSubSurfs.GetID() );
 
+    m_SplitJoinSurfs.Update( m_Vehicle->GetISectSettingsPtr()->m_SplitJoinSurfsFlag.GetID() );
     m_ToCubicToggle.Update( m_Vehicle->GetISectSettingsPtr()->m_DemoteSurfsCubicFlag.GetID() );
     m_ToCubicTolSlider.Update( m_Vehicle->GetISectSettingsPtr()->m_CubicSurfTolerance.GetID() );
+    m_ParallelMesh.Update( m_Vehicle->GetISectSettingsPtr()->m_ParallelMeshFlag.GetID() );
 
     if ( m_Vehicle->GetISectSettingsPtr()->m_DemoteSurfsCubicFlag.Get() )
     {
@@ -423,9 +388,10 @@ void SurfaceIntersectionScreen::UpdateDisplayTab()
 
     m_DrawIsect.Update( m_Vehicle->GetISectSettingsPtr()->m_DrawIsectFlag.GetID() );
     m_DrawBorder.Update( m_Vehicle->GetISectSettingsPtr()->m_DrawBorderFlag.GetID() );
+    m_DrawJoin.Update( m_Vehicle->GetISectSettingsPtr()->m_DrawJoinFlag.GetID() );
 
     m_ShowRaw.Update( m_Vehicle->GetISectSettingsPtr()->m_DrawRawFlag.GetID() );
-    m_ShowBinAdapt.Update( m_Vehicle->GetISectSettingsPtr()->m_DrawBinAdaptFlag.GetID() );
+    m_ShowCubic.Update( m_Vehicle->GetISectSettingsPtr()->m_DrawCubicFlag.GetID() );
 
     m_ShowCurve.Update( m_Vehicle->GetISectSettingsPtr()->m_DrawCurveFlag.GetID() );
     m_ShowPts.Update( m_Vehicle->GetISectSettingsPtr()->m_DrawPntsFlag.GetID() );
@@ -435,26 +401,14 @@ void SurfaceIntersectionScreen::UpdateDisplayTab()
 
 void SurfaceIntersectionScreen::UpdateOutputTab()
 {
-    string curvname = m_Vehicle->GetISectSettingsPtr()->GetExportFileName( vsp::INTERSECT_CURV_FILE_NAME );
-    m_CurvOutput.Update( StringUtil::truncateFileName( curvname, 40 ).c_str() );
-    string plot3dname = m_Vehicle->GetISectSettingsPtr()->GetExportFileName( vsp::INTERSECT_PLOT3D_FILE_NAME );
-    m_Plot3DOutput.Update( StringUtil::truncateFileName( plot3dname, 40 ).c_str() );
-    string srfname = m_Vehicle->GetISectSettingsPtr()->GetExportFileName( vsp::INTERSECT_SRF_FILE_NAME );
-    m_SrfOutput.Update( StringUtil::truncateFileName( srfname, 40 ).c_str() );
     string igsname = m_Vehicle->GetISectSettingsPtr()->GetExportFileName( vsp::INTERSECT_IGES_FILE_NAME );
     m_IGESOutput.Update( StringUtil::truncateFileName( igsname, 40 ).c_str() );
     string stpname = m_Vehicle->GetISectSettingsPtr()->GetExportFileName( vsp::INTERSECT_STEP_FILE_NAME );
     m_STEPOutput.Update( StringUtil::truncateFileName( stpname, 40 ).c_str() );
 
     //==== Update File Output Flags ====//
-    m_CurvFile.Update( m_Vehicle->GetISectSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_CURV_FILE_NAME )->GetID() );
-    m_Plot3DFile.Update( m_Vehicle->GetISectSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_PLOT3D_FILE_NAME )->GetID() );
-    m_SrfFile.Update( m_Vehicle->GetISectSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_SRF_FILE_NAME )->GetID() );
     m_IGESFile.Update( m_Vehicle->GetISectSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_IGES_FILE_NAME )->GetID() );
     m_STEPFile.Update( m_Vehicle->GetISectSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_STEP_FILE_NAME )->GetID() );
-
-    m_ExportRaw.Update( m_Vehicle->GetISectSettingsPtr()->m_ExportRawFlag.GetID() );
-    m_XYZIntCurves.Update( m_Vehicle->GetISectSettingsPtr()->m_XYZIntCurveFlag.GetID() );
 
     //m_STEPMergePointsToggle.Update( m_Vehicle->GetISectSettingsPtr()->m_STEPMergePoints.GetID() );
     m_STEPTolSlider.Update( m_Vehicle->GetISectSettingsPtr()->m_STEPTol.GetID() );
@@ -469,13 +423,11 @@ void SurfaceIntersectionScreen::UpdateOutputTab()
     if ( !m_Vehicle->GetISectSettingsPtr()->GetExportFileFlag( vsp::INTERSECT_STEP_FILE_NAME )->Get() )
     {
         //m_STEPMergePointsToggle.Deactivate();
-        m_STEPTolSlider.Deactivate();
         m_STEPRepGroup.Deactivate();
     }
     else
     {
         //m_STEPMergePointsToggle.Activate();
-        m_STEPTolSlider.Activate();
         m_STEPRepGroup.Activate();
     }
 
@@ -693,31 +645,7 @@ void SurfaceIntersectionScreen::GuiDeviceGlobalTabCallback( GuiDevice* device )
 
 void SurfaceIntersectionScreen::GuiDeviceOutputTabCallback( GuiDevice* device )
 {
-    if ( device == &m_SelectSrfFile )
-    {
-        string newfile = m_ScreenMgr->FileChooser( "Select .srf file.", "*.srf", vsp::SAVE );
-        if ( newfile.compare( "" ) != 0 )
-        {
-            m_Vehicle->GetISectSettingsPtr()->SetExportFileName( newfile, vsp::INTERSECT_SRF_FILE_NAME );
-        }
-    }
-    else if ( device == &m_SelectCurvFile )
-    {
-        string newfile = m_ScreenMgr->FileChooser( "Select GridTool .curv file.", "*.curv", vsp::SAVE );
-        if ( newfile.compare( "" ) != 0 )
-        {
-            m_Vehicle->GetISectSettingsPtr()->SetExportFileName( newfile, vsp::INTERSECT_CURV_FILE_NAME );
-        }
-    }
-    else if ( device == &m_SelectPlot3DFile )
-    {
-        string newfile = m_ScreenMgr->FileChooser( "Select Plot3D .p3d file.", "*.p3d", vsp::SAVE );
-        if ( newfile.compare( "" ) != 0 )
-        {
-            m_Vehicle->GetISectSettingsPtr()->SetExportFileName( newfile, vsp::INTERSECT_PLOT3D_FILE_NAME );
-        }
-    }
-    else if ( device == &m_SelectIGESFile )
+    if ( device == &m_SelectIGESFile )
     {
         string newfile = m_ScreenMgr->FileChooser( "Select IGES .igs file.", "*.igs", vsp::SAVE );
         if ( newfile.compare( "" ) != 0 )

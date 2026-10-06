@@ -21,6 +21,7 @@
 #include "Vec2d.h"
 #include "VspUtil.h"
 #include "StlHelper.h"
+#include "StringUtil.h"
 
 #include "VSP_Geom_API.h"
 
@@ -97,6 +98,18 @@ SubSurface::~SubSurface()
 
 void SubSurface::ParmChanged( Parm* parm_ptr, int type )
 {
+    Vehicle* veh = VehicleMgr.GetVehicle();
+
+    // Before the deferred return: a deferred change is still a change.
+    if ( veh )
+    {
+        Geom* geom = veh->FindGeom( m_CompID );
+        if ( geom )
+        {
+            geom->SetDirtyFlag( GeomBase::SUBSURF );
+        }
+    }
+
     if ( type == Parm::SET )
     {
         m_LateUpdateFlag = true;
@@ -105,10 +118,43 @@ void SubSurface::ParmChanged( Parm* parm_ptr, int type )
 
     Update();
 
-    Vehicle* veh = VehicleMgr.GetVehicle();
     if ( veh )
     {
+        // Update the owning Geom too; a subsurface's Parms do not reach GeomBase::ParmChanged.
+        Geom* geom = veh->FindGeom( m_CompID );
+        if ( geom )
+        {
+            geom->Update();
+        }
+
         veh->ParmChanged( parm_ptr, type );
+    }
+}
+
+void SubSurface::SetName( const string& name, bool removeslashes )
+{
+    // Mark the owner dirty only on a real change, compared as stored; a Clone's copied
+    // subsurfaces are renamed every pass.
+    string new_name = name;
+    if ( removeslashes )
+    {
+        StringUtil::remove_all( new_name, '/' );
+    }
+    bool changed = ( new_name != m_Name );
+
+    ParmContainer::SetName( name, removeslashes );
+
+    if ( changed )
+    {
+        Vehicle* veh = VehicleMgr.GetVehicle();
+        if ( veh )
+        {
+            Geom* geom = veh->FindGeom( m_CompID );
+            if ( geom )
+            {
+                geom->SetDirtyFlag( GeomBase::SUBSURF );
+            }
+        }
     }
 }
 
@@ -571,19 +617,19 @@ void SubSurface::UpdateOrientation()
     else if ( m_FeaOrientationType() == vsp::FEA_ORIENT_COMP_X )
     {
         orient = vec3d( 1.0, 0, 0 );
-        Matrix4d model_matrix = geom->getModelMatrix();
+        Matrix4d model_matrix = geom->GetShapeMatrix();
         orient = model_matrix.xformnorm( orient );
     }
     else if ( m_FeaOrientationType() == vsp::FEA_ORIENT_COMP_Y )
     {
         orient = vec3d( 0, 1.0, 0 );
-        Matrix4d model_matrix = geom->getModelMatrix();
+        Matrix4d model_matrix = geom->GetShapeMatrix();
         orient = model_matrix.xformnorm( orient );
     }
     else if ( m_FeaOrientationType() == vsp::FEA_ORIENT_COMP_Z )
     {
         orient = vec3d( 0, 0, 1.0 );
-        Matrix4d model_matrix = geom->getModelMatrix();
+        Matrix4d model_matrix = geom->GetShapeMatrix();
         orient = model_matrix.xformnorm( orient );
     }
     else if ( m_FeaOrientationType() == vsp::FEA_ORIENT_OML_R )
@@ -1545,7 +1591,7 @@ EditCurveXSec* SSXSecCurve::ConvertToEdit()
 }
 
 //==== Change IDs =====//
-void SSXSecCurve::ChangeID( string id )
+void SSXSecCurve::ChangeID( const string &id )
 {
     SubSurface::ChangeID( id );
     if ( m_XSCurve )
@@ -1934,31 +1980,32 @@ void SSControlSurf::Update()
 
     double umax = geom->GetUMax(0);
 
-    if ( WingGeom * wing = dynamic_cast< WingGeom* > ( geom ) )
+    // Eta is converted by the wing shown; the subsurface may be on a Clone of it.
+    if ( WingGeom * behavior_wing = dynamic_cast< WingGeom* > ( geom->GetBehaviorGeom() ) )
     {
         if ( m_EtaFlag() )
         {
-            m_UStart = wing->EtatoU( m_EtaStart() ) / umax;
-            m_UEnd = wing->EtatoU( m_EtaEnd() ) / umax;
+            m_UStart = behavior_wing->EtatoU( m_EtaStart() ) / umax;
+            m_UEnd = behavior_wing->EtatoU( m_EtaEnd() ) / umax;
         }
         else
         {
-            m_EtaStart = wing->UtoEta( m_UStart() * umax );
-            m_EtaEnd = wing->UtoEta( m_UEnd() * umax );
+            m_EtaStart = behavior_wing->UtoEta( m_UStart() * umax );
+            m_EtaEnd = behavior_wing->UtoEta( m_UEnd() * umax );
         }
     }
-    else if ( PropGeom * prop = dynamic_cast< PropGeom* > ( geom ) )
+    else if ( PropGeom * behavior_prop = dynamic_cast< PropGeom* > ( geom->GetBehaviorGeom() ) )
     {
-        m_EtaStart.SetLowerLimit( prop->GetR0() );
+        m_EtaStart.SetLowerLimit( behavior_prop->GetR0() );
         if ( m_EtaFlag() )
         {
-            m_UStart = prop->EtatoU( m_EtaStart() ) / umax;
-            m_UEnd = prop->EtatoU( m_EtaEnd() ) / umax;
+            m_UStart = behavior_prop->EtatoU( m_EtaStart() ) / umax;
+            m_UEnd = behavior_prop->EtatoU( m_EtaEnd() ) / umax;
         }
         else
         {
-            m_EtaStart = prop->UtoEta( m_UStart() * umax );
-            m_EtaEnd = prop->UtoEta( m_UEnd() * umax );
+            m_EtaStart = behavior_prop->UtoEta( m_UStart() * umax );
+            m_EtaEnd = behavior_prop->UtoEta( m_UEnd() * umax );
         }
     }
 

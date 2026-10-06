@@ -70,8 +70,10 @@ protected:
     Choice m_ModeChoice;
     vector < string > m_ModeIDs;
 
+    ToggleButton m_SplitJoinSurfs;
     ToggleButton m_ToCubicToggle;
     SliderAdjRangeInput m_ToCubicTolSlider;
+    ToggleButton m_ParallelMesh;
 
     //===== Display Tab Items =====//
 
@@ -79,37 +81,24 @@ protected:
 
     ToggleButton m_DrawIsect;
     ToggleButton m_DrawBorder;
+    ToggleButton m_DrawJoin;
 
     ToggleButton m_ShowRaw;
-    ToggleButton m_ShowBinAdapt;
-    SliderAdjRangeInput m_RelCurveTolSlider;
+    ToggleButton m_ShowCubic;
 
     ToggleButton m_ShowCurve;
     ToggleButton m_ShowPts;
 
     //===== Output Tab Items =====//
 
-    ToggleButton m_CurvFile;
-    ToggleButton m_Plot3DFile;
     ToggleButton m_IGESFile;
     ToggleButton m_STEPFile;
 
-    ToggleButton m_SrfFile;
-    ToggleButton m_XYZIntCurves;
-
-    TriggerButton m_SelectCurvFile;
-    TriggerButton m_SelectPlot3DFile;
-    TriggerButton m_SelectSrfFile;
     TriggerButton m_SelectIGESFile;
     TriggerButton m_SelectSTEPFile;
 
-    StringOutput m_CurvOutput;
-    StringOutput m_Plot3DOutput;
-    StringOutput m_SrfOutput;
     StringOutput m_IGESOutput;
     StringOutput m_STEPOutput;
-
-    ToggleButton m_ExportRaw;
 
     SliderAdjRangeInput m_STEPTolSlider;
     //ToggleButton m_SplitSubSurfsToggle;

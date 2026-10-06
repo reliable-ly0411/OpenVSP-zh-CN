@@ -6,6 +6,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "Geom.h"
+#include "GeomInterface.h"
 
 #include "AuxiliaryGeom.h"
 #include "Vehicle.h"
@@ -22,7 +23,9 @@
 #include "VspUtil.h"
 using namespace vsp;
 
+#include <atomic>
 #include <float.h>
+#include <algorithm>
 
 //==== Constructor ====//
 GeomType::GeomType()
@@ -109,6 +112,12 @@ GeomBase::GeomBase( Vehicle* vehicle_ptr )
     m_TessDirty = true;
     m_HighlightDirty = true;
     m_FeaDirty = true;
+    m_AppearanceDirty = true;
+    m_UpdateAppearance = false;
+    m_NameDirty = true;
+    m_UpdateName = false;
+    m_SubSurfDirty = true;
+    m_UpdateSubSurf = false;
     // This flag is only set true when global scale is updated.
     m_GlobalScaleDirty = false;
 
@@ -233,11 +242,26 @@ void GeomBase::SetDirtyFlags( Parm* parm_ptr )
     {
         m_XFormDirty = true;
     }
+    else if ( gname == string("Behavior") )
+    {
+        // A Clone's Behavior flags choose what it copies, so a change dirties every copy pass.
+        m_XFormDirty = true;
+        m_SurfDirty = true;
+        m_AppearanceDirty = true;
+        m_NameDirty = true;
+        m_SubSurfDirty = true;
+    }
     else
     {
         m_SurfDirty = true;
     }
 
+}
+
+void GeomBase::SetName( const string& name, bool removeslashes )
+{
+    ParmContainer::SetName( name, removeslashes );
+    m_NameDirty = true;
 }
 
 void GeomBase::SetDirtyFlag( int dflag )
@@ -261,6 +285,18 @@ void GeomBase::SetDirtyFlag( int dflag )
     else if ( dflag == GLOBAL_SCALE )
     {
         m_GlobalScaleDirty = true;
+    }
+    else if ( dflag == APPEARANCE )
+    {
+        m_AppearanceDirty = true;
+    }
+    else if ( dflag == NAME )
+    {
+        m_NameDirty = true;
+    }
+    else if ( dflag == SUBSURF )
+    {
+        m_SubSurfDirty = true;
     }
 }
 
@@ -349,16 +385,7 @@ int GeomBase::CountParents( int count )
 
 bool GeomBase::IsParentJoint() const
 {
-    GeomBase* parentPtr = m_Vehicle->FindGeom( m_ParentID );
-    if ( parentPtr )
-    {
-        HingeGeom* hingeParentPtr = dynamic_cast < HingeGeom* > ( parentPtr );
-        if ( hingeParentPtr )
-        {
-            return true;
-        }
-    }
-    return false;
+    return Geom::CastTo< JointRole >( m_Vehicle->FindGeom( m_ParentID ) ) != nullptr;
 }
 
 //==== Changes parent of existing Geom, places in new parent's child vector & removes from old parent's child vector ====//
@@ -769,7 +796,8 @@ void GeomXForm::UpdateAttachParms()
             return;
         }
 
-        WingGeom* wing_parent = dynamic_cast < WingGeom * > ( parent );
+        // EtatoU depends only on the wing's shape, so a Clone of a wing answers it too.
+        WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent->GetBehaviorGeom() );
 
         double umax = parent->GetMainUMapMax( 0 );
         double lmax = parent->GetMainSurfPtr( 0 )->GetLMax();
@@ -811,13 +839,13 @@ void GeomXForm::UpdateAttachParms()
             m_LLoc.Set( val / lmax );
         }
 
-        if ( wing_parent )
+        if ( behavior_wing )
         {
             if ( m_TransAttachFlag() == vsp::ATTACH_TRANS_EtaMN || m_RotAttachFlag() == vsp::ATTACH_ROT_EtaMN ) // Eta is active.
             {
                 if ( m_TransAttachFlag() != vsp::ATTACH_TRANS_UV && m_RotAttachFlag() != vsp::ATTACH_ROT_UV ) // U is not active.
                 {
-                    double u = wing_parent->EtatoU( m_EtaLoc() ) / umax;
+                    double u = behavior_wing->EtatoU( m_EtaLoc() ) / umax;
 
                     double r;
                     r = u;
@@ -846,7 +874,7 @@ void GeomXForm::UpdateAttachParms()
                 if ( m_TransAttachFlag() != vsp::ATTACH_TRANS_RST && m_RotAttachFlag() != vsp::ATTACH_ROT_RST ) // R is not active
                 {
                     double u, w;
-                    u = wing_parent->EtatoU( m_EtaLoc() ) / umax;
+                    u = behavior_wing->EtatoU( m_EtaLoc() ) / umax;
                     w = m_WLoc();
                     double r, s, t;
                     r = u;
@@ -863,7 +891,7 @@ void GeomXForm::UpdateAttachParms()
 
                 if ( m_TransAttachFlag() != vsp::ATTACH_TRANS_LMN && m_RotAttachFlag() != vsp::ATTACH_ROT_LMN ) // L is not active
                 {
-                    double u = wing_parent->EtatoU( m_EtaLoc() ) / umax;
+                    double u = behavior_wing->EtatoU( m_EtaLoc() ) / umax;
 
                     double r;
                     r = u;
@@ -880,13 +908,13 @@ void GeomXForm::UpdateAttachParms()
             {
                 if ( m_TransAttachFlag() == vsp::ATTACH_TRANS_UV || m_RotAttachFlag() == vsp::ATTACH_ROT_UV ) // UV is active
                 {
-                    m_EtaLoc = wing_parent->UtoEta( m_ULoc() * umax );
+                    m_EtaLoc = behavior_wing->UtoEta( m_ULoc() * umax );
                 }
                 else if ( m_TransAttachFlag() == vsp::ATTACH_TRANS_RST || m_RotAttachFlag() == vsp::ATTACH_ROT_RST ) // RST is active
                 {
                     double r = m_RLoc();
                     double u = r;
-                    m_EtaLoc = wing_parent->UtoEta( u * umax );
+                    m_EtaLoc = behavior_wing->UtoEta( u * umax );
                 }
                 else if ( m_TransAttachFlag() == vsp::ATTACH_TRANS_LMN || m_RotAttachFlag() == vsp::ATTACH_ROT_LMN ) // LMN is active
                 {
@@ -894,11 +922,11 @@ void GeomXForm::UpdateAttachParms()
                     double r;
                     parent->ConvertLtoR( 0, l, r );
                     double u = r;
-                    m_EtaLoc = wing_parent->UtoEta( u * umax );
+                    m_EtaLoc = behavior_wing->UtoEta( u * umax );
                 }
                 else // Nothing is active, use U value anyway.
                 {
-                    m_EtaLoc = wing_parent->UtoEta( m_ULoc() * umax );
+                    m_EtaLoc = behavior_wing->UtoEta( m_ULoc() * umax );
                 }
             }
         }
@@ -1101,14 +1129,11 @@ void GeomXForm::ComposeAttachMatrix()
 
     Geom* parent = m_Vehicle->FindGeom( GetParentID() );
 
-    if ( parent )
+    JointRole* jointparent = Geom::CastTo< JointRole >( parent );
+    if ( jointparent )
     {
-        HingeGeom* hingeparent = dynamic_cast < HingeGeom* > ( parent );
-        if ( hingeparent )
-        {
-            m_AttachMatrix = hingeparent->GetJointMatrix();
-            return;
-        }
+        m_AttachMatrix = jointparent->GetJointMatrix();
+        return;
     }
 
     // If both attachment flags set to none, return identity
@@ -1127,17 +1152,18 @@ void GeomXForm::ComposeAttachMatrix()
 
         if ( parent )
         {
-            AuxiliaryGeom* auxthis = dynamic_cast < AuxiliaryGeom* > ( this );
+            // Asked of the role, so a Clone of a super cone or a human behaves the same.
+            AuxiliaryRole* auxthis = Geom::CastTo < AuxiliaryRole > ( this );
             if ( auxthis )
             {
-                if ( auxthis->m_AuxuliaryGeomMode() == vsp::AUX_GEOM_SUPER_CONE )
+                if ( auxthis->GetAuxiliaryMode() == vsp::AUX_GEOM_SUPER_CONE )
                 {
-                    bool axisaligned = auxthis->m_SCWorldAligned();
+                    bool axisaligned = auxthis->GetAuxWorldAligned();
 
-                    HumanGeom* humanparent = dynamic_cast < HumanGeom* > ( parent );
+                    HumanVertRole* humanparent = Geom::CastTo < HumanVertRole > ( parent );
                     if ( humanparent )
                     {
-                        parentMat = humanparent->GetDesignEyeMatrix( axisaligned );
+                        parentMat = humanparent->BuildDesignEyeMatrix( axisaligned );
                     }
                     else
                     {
@@ -1159,7 +1185,8 @@ void GeomXForm::ComposeAttachMatrix()
         bool revertCompTrans = false;
         bool revertCompRot = false;
 
-        WingGeom* wing_parent = dynamic_cast < WingGeom * > ( parent );
+        // EtatoU depends only on the wing's shape, so a Clone of a wing answers it too.
+        WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent->GetBehaviorGeom() );
 
         // Parent CompXXXCoordSys methods query the positioned m_SurfVec[0] surface,
         // not m_MainSurfVec[0].  Consequently, m_ModelMatrix is already implied in
@@ -1192,10 +1219,10 @@ void GeomXForm::ComposeAttachMatrix()
         {
             double l = m_EtaLoc();
 
-            if ( wing_parent )
+            if ( behavior_wing )
             {
                 double umax = parent->GetMainUMapMax( 0 );
-                double u = wing_parent->EtatoU( m_EtaLoc() ) / umax;
+                double u = behavior_wing->EtatoU( m_EtaLoc() ) / umax;
 
                 double r = u;
                 parent->ConvertRtoL( 0, r, l );
@@ -1240,10 +1267,10 @@ void GeomXForm::ComposeAttachMatrix()
         {
             double l = m_EtaLoc();
 
-            if ( wing_parent )
+            if ( behavior_wing )
             {
                 double umax = parent->GetMainUMapMax( 0 );
-                double u = wing_parent->EtatoU( m_EtaLoc() ) / umax;
+                double u = behavior_wing->EtatoU( m_EtaLoc() ) / umax;
 
                 double r = u;
                 parent->ConvertRtoL( 0, r, l );
@@ -1253,6 +1280,17 @@ void GeomXForm::ComposeAttachMatrix()
             {
                 revertCompRot = true; // Any Geom without a surface reverts to the component matrix.
             }
+        }
+
+        // On a flipped shape the RST normal points inward; reverse it and the second axis so it
+        // points outward, as in the UW frame.
+        bool rst_frame = m_RotAttachFlag() == vsp::ATTACH_ROT_RST || m_RotAttachFlag() == vsp::ATTACH_ROT_LMN ||
+                         m_RotAttachFlag() == vsp::ATTACH_ROT_EtaMN;
+        if ( rst_frame && !revertCompRot && parent->GetFlipReversesNormal() )
+        {
+            vec3d xdir, ydir, zdir;
+            rotMat.getBasis( xdir, ydir, zdir );
+            rotMat.setBasis( xdir, -1.0 * ydir, -1.0 * zdir );
         }
 
         if ( m_RotAttachFlag() == vsp::ATTACH_ROT_COMP || revertCompRot )
@@ -1583,10 +1621,13 @@ void GeomXForm::BuildRigidAttachedDescendantList( vector< string > &descendant )
 Geom::Geom( Vehicle* vehicle_ptr ) : GeomXForm( vehicle_ptr )
 {
     m_UpdateBlock = false;
+    m_UpdateStamp = 0;
 
     m_Name = "Geom";
     m_Type.m_Type = GEOM_GEOM_TYPE;
     m_Type.m_Name = m_Name;
+
+    m_ExportMainSurf = false;
 
     m_TessU.Init( "Tess_U", "Shape", this, 8, 2,  1000 );
     m_TessU.SetDescript( "Number of tessellated curves in the U direction" );
@@ -1622,6 +1663,9 @@ Geom::Geom( Vehicle* vehicle_ptr ) : GeomXForm( vehicle_ptr )
     m_SymPlanFlag.Init( "Sym_Planar_Flag", "Sym", this, 0, 0, SYM_XY | SYM_XZ | SYM_YZ );
     m_SymAxFlag.Init( "Sym_Axial_Flag", "Sym", this, 0, 0, SYM_ROT_Z );
     m_SymRotN.Init( "Sym_Rot_N", "Sym", this, 2, 2, 1000 );
+
+    m_FlipFlag.Init( "Flip_Flag", "Sym", this, 0, 0, SYM_XY | SYM_XZ | SYM_YZ );
+    m_FlipFlag.SetDescript( "Flags for which planes the shape is flipped about" );
 
     // Mass Properties
     m_Density.Init( "Density", "Mass_Props", this, 1, 0.0, 1e12 );
@@ -1872,11 +1916,27 @@ void Geom::Update( bool fullupdate )
     if ( m_XFormDirty )
         UpdateCopyXFormParms();
 
+    // Deactivated where the flip does not apply.
+    if ( FlipApplies() )
+    {
+        m_FlipFlag.Activate();
+    }
+    else
+    {
+        m_FlipFlag.Deactivate();
+    }
+
     if ( m_SurfDirty )
         UpdateCopySurfParms();
 
     if ( m_TessDirty )
         UpdateCopyTessParms();
+
+    if ( m_AppearanceDirty )
+        UpdateCopyAppearance();
+
+    if ( m_NameDirty )
+        UpdateCopyName();
 
     if ( m_XFormDirty )
         UpdateXForm();
@@ -1922,11 +1982,17 @@ void Geom::Update( bool fullupdate )
         UpdateSurfVec();
     }
 
+    if ( m_SubSurfDirty )
+        UpdateCopySubSurfs();
+
     if ( fullupdate ) // Option to make FitModel and similar things faster.
     {
-        for ( int i = 0 ; i < ( int )m_SubSurfVec.size() ; i++ )
+        if ( m_XFormDirty || m_SurfDirty || m_SubSurfDirty ) // Everything except m_TessDirty
         {
-            m_SubSurfVec[i]->Update();  // Can be protected by m_SurfDirty, except for call to UpdateDrawObj - perhaps should be split out.  Some may depend on m_SurfVec, but could be switched to m_MainSurfVec instead.
+            for ( int i = 0 ; i < ( int )m_SubSurfVec.size() ; i++ )
+            {
+                m_SubSurfVec[i]->Update();
+            }
         }
 
         if ( m_XFormDirty || m_SurfDirty ) // Everything except m_TessDirty
@@ -1977,6 +2043,7 @@ void Geom::Update( bool fullupdate )
         if ( m_XFormDirty || m_SurfDirty || m_TessDirty )
         {
             UpdateDrawObj();  // Needs to happen for both XForm and Surf updates.
+            UpdateMarkerDrawObj();
         }
 
         if ( m_XFormDirty || m_SurfDirty || m_HighlightDirty )
@@ -2004,10 +2071,29 @@ void Geom::Update( bool fullupdate )
 
     m_GlobalScaleDirty = false;
 
+    m_UpdateAppearance = false;
+    if ( m_AppearanceDirty )
+        m_UpdateAppearance = true;
+    m_AppearanceDirty = false;
+
+    m_UpdateName = false;
+    if ( m_NameDirty )
+        m_UpdateName = true;
+    m_NameDirty = false;
+
+    m_UpdateSubSurf = false;
+    if ( m_SubSurfDirty )
+        m_UpdateSubSurf = true;
+    m_SubSurfDirty = false;
+
     UpdateChildren( fullupdate );
     UpdateStepChildren( fullupdate );
 
     m_UpdatedParmVec.clear();
+
+    static std::atomic < long long > update_stamp( 0 );
+    m_UpdateStamp = ++update_stamp;
+
     m_UpdateBlock = false;
 }
 
@@ -2030,6 +2116,22 @@ void Geom::GetUWTess01( const int &indx, vector < double > &u, vector < double >
     {
         w[j] = vtess[j] / wmx;
     }
+}
+
+// The tessellation lines of one surface, in that surface's own parameter space.  This is
+// the same set of lines OpenVSP tessellates the Geom along, so anything downstream that
+// wants to sample the surface the way the user asked for it starts here.
+void Geom::GetUWTessSurf( const int &indx, vector < double > &u, vector < double > &w, const int &n_ref )
+{
+    u.clear();
+    w.clear();
+
+    if ( indx < 0 || indx >= ( int )m_SurfVec.size() )
+    {
+        return;
+    }
+
+    GetUWTess( m_SurfVec[indx], m_CapUMinSuccess[ m_MainSurfIndxVec[indx] ], m_CapUMaxSuccess[ m_MainSurfIndxVec[indx] ], false, u, w, n_ref );
 }
 
 void Geom::GetUWTess( const VspSurf &surf, bool capUMinSuccess, bool capUMaxSuccess, bool degen, vector< double > &utess, vector< double > &vtess, const int & n_ref ) const
@@ -2194,6 +2296,10 @@ void Geom::UpdateSymmAttach( int num_main )
     relTrans = symmOriginMat;
     relTrans.affineInverse();
     relTrans.matMult( m_ModelMatrix.data() );
+
+    // The flip goes innermost, so the shape is reflected in place before it is placed.  It is
+    // kept out of the model matrix, which children hang off and position is read back from.
+    relTrans.matMult( GetFlipMat().data() );
 
     for ( int i = 0 ; i < ( int )m_TransMatVec.size() ; i++ )
     {
@@ -2401,14 +2507,14 @@ void Geom::UpdateChildren( bool fullupdate )
                 }
             }
 
-            // We are a hinge, children are force attached.
-            if ( GetType().m_Type == HINGE_GEOM_TYPE )
+            // We provide a joint, children are force attached.
+            if ( Geom::CastTo< JointRole >( this ) )
             {
                 child->m_XFormDirty = true;
             }
 
             // If the child is an Auxiliary
-            if ( child->GetType().m_Type == AUXILIARY_GEOM_TYPE )
+            if ( child->GetBehaviorType() == AUXILIARY_GEOM_TYPE )
             {
                 if ( m_UpdateSurf )
                 {
@@ -2478,7 +2584,38 @@ void Geom::UpdateStepChildren( bool fullupdate )
                 }
             }
 
-            if ( child->GetType().m_Type == GEAR_GEOM_TYPE )
+            if ( child->GetType().m_Type == CLONE_GEOM_TYPE )
+            {
+                // Mark each pass of the Clone from the matching change here.
+                if ( m_UpdateXForm )
+                {
+                    child->m_XFormDirty = true;
+                }
+                if ( m_UpdateSurf )
+                {
+                    child->m_SurfDirty = true;
+                }
+                // A Clone shows the tessellation of these surfaces.
+                if ( m_UpdateTess )
+                {
+                    child->m_TessDirty = true;
+                }
+                // Name, colours and subsurfaces are not Parms, so they are flagged explicitly.
+                if ( m_UpdateAppearance )
+                {
+                    child->m_AppearanceDirty = true;
+                }
+                if ( m_UpdateName )
+                {
+                    child->m_NameDirty = true;
+                }
+                if ( m_UpdateSubSurf )
+                {
+                    child->m_SubSurfDirty = true;
+                }
+            }
+
+            if ( child->GetBehaviorType() == GEAR_GEOM_TYPE )
             {
                 // Gear stepchildren are used for stow and mechanism attach points.  These are updated
                 // in UpdateSurface(), so any change in this Geom that could change an attach point
@@ -2506,39 +2643,58 @@ void Geom::UpdateStepChildren( bool fullupdate )
     m_StepChildIDVec = updated_child_vec;
 }
 
-void Geom::UpdateBBox( )
+void Geom::UpdateMainBBox()
 {
-    BndBox empty_box;
-    UpdateBBox( 0, empty_box );
-}
+    m_MainBBox.Reset();
 
-void Geom::UpdateBBox( int istart, const BndBox & start_box )
-{
-    BndBox new_box = start_box;
-
-    //==== Load Bounding Box ====//
-    BndBox main_box;
-    for ( int i = istart ; i < GetNumMainSurfs() ; i++ )
+    for ( int i = 0 ; i < GetNumMainSurfs() ; i++ )
     {
         BndBox bb;
         m_MainSurfVec[i].GetBoundingBox( bb );
         if ( !bb.IsEmpty() )
         {
-            main_box.Update( bb );
+            m_MainBBox.Update( bb );
         }
     }
 
+    m_ScaleIndependentMainBBox = m_MainBBox;
+}
+
+BndBox Geom::PlaceMainBBox( const BndBox & main_box ) const
+{
+    BndBox placed_box;
+
     if ( !main_box.IsEmpty() )
     {
-        BndBox placed_box;
         for ( int isymm = 0; isymm < m_SymmTransMatVec.size(); isymm++ )
         {
             BndBox bb = main_box;
             bb.Transform( m_SymmTransMatVec[ isymm ] );
             placed_box.Update( bb );
         }
-        new_box.Update( placed_box );
     }
+
+    if ( PlacedBBoxIncludesOrigin() )
+    {
+        // Added after placement, since rotating a box stretched to the origin would oversize it.
+        // Added even with no shape.
+        for ( int isymm = 0; isymm < m_SymmTransMatVec.size(); isymm++ )
+        {
+            vec3d origin;
+            origin.Transform( m_SymmTransMatVec[ isymm ] );
+            placed_box.Update( origin );
+        }
+    }
+
+    return placed_box;
+}
+
+void Geom::UpdateBBox( )
+{
+    UpdateMainBBox();
+
+    BndBox new_box = PlaceMainBBox( m_MainBBox );
+    BndBox new_scale_independent_box = PlaceMainBBox( m_ScaleIndependentMainBBox );
 
     // If the surface vec size is zero ( like blank geom )
     // set bbox to zero size
@@ -2546,9 +2702,10 @@ void Geom::UpdateBBox( int istart, const BndBox & start_box )
     if ( !GetNumTotalSurfs() )
     {
         new_box.Update( vec3d(0,0,0) );
+        new_scale_independent_box.Update( vec3d(0,0,0) );
     }
 
-    if ( new_box != m_BBox )
+    if ( new_box != m_BBox || new_scale_independent_box != m_ScaleIndependentBBox )
     {
         m_BbXLen = new_box.GetMax( 0 ) - new_box.GetMin( 0 );
         m_BbYLen = new_box.GetMax( 1 ) - new_box.GetMin( 1 );
@@ -2559,7 +2716,7 @@ void Geom::UpdateBBox( int istart, const BndBox & start_box )
         m_BbZMin = new_box.GetMin( 2 );
 
         m_BBox = new_box;
-        m_ScaleIndependentBBox = m_BBox;
+        m_ScaleIndependentBBox = new_scale_independent_box;
     }
 }
 
@@ -3240,6 +3397,81 @@ void Geom::UpdateDrawObj()
     }
 
     UpdateDegenDrawObj();
+}
+
+void Geom::UpdateMarkerDrawObj()
+{
+    Geom* source = GetMarkerGeom();
+    if ( source )
+    {
+        source->BuildMarkerDrawObjs( this, m_MarkerDrawObj_vec );
+    }
+    else
+    {
+        m_MarkerDrawObj_vec.clear();
+    }
+}
+
+void Geom::LoadMarkerDrawObjs( vector< DrawObj* > & draw_obj_vec )
+{
+    Geom* source = GetMarkerGeom();
+    if ( !source )
+    {
+        return;
+    }
+
+    source->SetMarkerVisibility( this, m_MarkerDrawObj_vec );
+
+    for ( int i = 0; i < ( int )m_MarkerDrawObj_vec.size(); i++ )
+    {
+        draw_obj_vec.push_back( &m_MarkerDrawObj_vec[i] );
+    }
+}
+
+bool Geom::ShowsMarkers()
+{
+    return ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || m_Vehicle->IsGeomActive( m_ID );
+}
+
+void Geom::FlipDrawObjs( const vector< DrawObj* > &dobj_vec )
+{
+    Matrix4d flip_mat = GetFlipMat();
+
+    Matrix4d identity;
+    double m[16];
+    double id[16];
+    flip_mat.getMat( m );
+    identity.getMat( id );
+    if ( std::equal( m, m + 16, id ) )
+    {
+        return;
+    }
+
+    Matrix4d to_local = m_ModelMatrix;
+    to_local.affineInverse();
+
+    Matrix4d reflect = m_ModelMatrix;
+    reflect.matMult( flip_mat.data() );
+    reflect.matMult( to_local.data() );
+
+    bool rewind = GetFlipReversesNormal();
+
+    for ( int i = 0; i < ( int )dobj_vec.size(); i++ )
+    {
+        DrawObj* dobj = dobj_vec[i];
+
+        reflect.xformvec( dobj->m_PntVec );
+        reflect.xformnormvec( dobj->m_NormVec );
+
+        if ( rewind && dobj->m_Type == DrawObj::VSP_SHADED_TRIS )
+        {
+            for ( int j = 0; j + 2 < ( int )dobj->m_PntVec.size(); j += 3 )
+            {
+                std::swap( dobj->m_PntVec[ j + 1 ], dobj->m_PntVec[ j + 2 ] );
+                std::swap( dobj->m_NormVec[ j + 1 ], dobj->m_NormVec[ j + 2 ] );
+            }
+        }
+    }
 }
 
 void Geom::UpdateDegenDrawObj()
@@ -4176,7 +4408,8 @@ void Geom::LoadMainDrawObjs( vector< DrawObj* > & draw_obj_vec )
 
                 // Reload texture infos.
                 m_WireShadeDrawObj_vec[i].m_TextureInfos.clear();
-                vector<Texture*> texList = m_GuiDraw.getTextureMgr()->FindTextureVec( m_GuiDraw.getTextureMgr()->GetTextureVec() );
+                TextureMgr* tex_mgr = GetDrawTextureMgr();
+                vector<Texture*> texList = tex_mgr->FindTextureVec( tex_mgr->GetTextureVec() );
                 for ( int j = 0; j < (int)texList.size(); j++ )
                 {
                     DrawObj::TextureInfo info;
@@ -4206,6 +4439,10 @@ void Geom::LoadMainDrawObjs( vector< DrawObj* > & draw_obj_vec )
         draw_obj_vec.push_back( &m_WireShadeDrawObj_vec[i] );
     }
 
+    if ( LoadsMarkersAsMain() )
+    {
+        LoadMarkerDrawObjs( draw_obj_vec );
+    }
 }
 
 //==== Load All Draw Objects ====//
@@ -4251,6 +4488,11 @@ void Geom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
     {
         m_FeatureDrawObj_vec[i].m_Visible = m_GuiDraw.GetDisplayType() == DISPLAY_TYPE::DISPLAY_BEZIER && m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN );
         draw_obj_vec.push_back( &m_FeatureDrawObj_vec[i] );
+    }
+
+    if ( !LoadsMarkersAsMain() )
+    {
+        LoadMarkerDrawObjs( draw_obj_vec );
     }
 
     // Load Subsurfaces
@@ -4483,6 +4725,7 @@ void Geom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
 void Geom::SetColor( double r, double g, double b )
 {
     m_GuiDraw.SetWireColor( r, g, b );
+    m_AppearanceDirty = true;
 }
 
 vec3d Geom::GetColor() const
@@ -4493,16 +4736,24 @@ vec3d Geom::GetColor() const
 void Geom::SetMaterialToDefault()
 {
     m_GuiDraw.SetMaterialToDefault();
+    m_AppearanceDirty = true;
 }
 
 void Geom::SetMaterial( const std::string &name, double ambi[], double diff[], double spec[], double emis[], double shin )
 {
     m_GuiDraw.SetMaterial( name, ambi, diff, spec, emis, shin );
+    m_AppearanceDirty = true;
 }
 
-Material * Geom::GetMaterial()
+const Material * Geom::GetMaterial() const
 {
     return m_GuiDraw.getMaterial();
+}
+
+void Geom::SetMaterial( const Material &mat )
+{
+    m_GuiDraw.getMaterial()->SetMaterial( &mat );
+    m_AppearanceDirty = true;
 }
 
 //==== Create Degenerate Geometry ====//
@@ -4685,6 +4936,11 @@ int Geom::GetSymFlag() const
 //==== Return Pointer to Surface indx ====//
 const VspSurf* Geom::GetSurfPtr( int indx ) const
 {
+    if ( m_ExportMainSurf )
+    {
+        return GetMainSurfPtr( indx );
+    }
+
     if ( indx >= 0 && indx < GetNumTotalSurfs() )
     {
         // m_SurfVec is filled by Update, so it can be short of the count before the first one.
@@ -4711,7 +4967,7 @@ const VspSurf* Geom::GetMainSurfPtr( int indx ) const
 
 vector < int > Geom::GetNonSurfaceTypeVec()
 {
-    return { BLANK_GEOM_TYPE, HINGE_GEOM_TYPE, HUMAN_GEOM_TYPE, MESH_GEOM_TYPE, NGON_GEOM_TYPE, PT_CLOUD_GEOM_TYPE, WIRE_FRAME_GEOM_TYPE };
+    return { BLANK_GEOM_TYPE, HINGE_GEOM_TYPE, HUMAN_GEOM_TYPE, MESH_GEOM_TYPE, NGON_GEOM_TYPE, PT_CLOUD_GEOM_TYPE, ROUTING_GEOM_TYPE, WIRE_FRAME_GEOM_TYPE };
 }
 
 // This is a massive layering violation.  It requires knowledge of the numeric values of the different enums.
@@ -4719,10 +4975,12 @@ vector < int > Geom::GetNonSurfaceTypeVec()
 // Or an optional method implemented by only non-surface types.
 bool Geom::isNonSurfaceType()
 {
+    // Uses the behaviour type, so a Clone of a non-surface Geom counts.  The fallback below
+    // catches a Clone not yet updated, whose surface vector is still empty.
     vector < int > nst = GetNonSurfaceTypeVec();
     for ( int i = 0; i < nst.size(); i++ )
     {
-        if ( m_Type.m_Type == nst[i] )
+        if ( GetBehaviorType() == nst[i] )
         {
             return true;
         }
@@ -4848,13 +5106,110 @@ bool Geom::GetFlipNormal( int indx ) const
     return false;
 }
 
+// The flip's reversal is applied here rather than to the surfaces, so a Clone copies the
+// surfaces unreversed.
 bool Geom::GetMainFlipNormal( int indx ) const
 {
+    bool flip = false;
     if ( indx >=0 && indx < m_MainSurfVec.size() )
     {
-        return m_MainSurfVec[indx].GetFlipNormal();
+        flip = m_MainSurfVec[indx].GetFlipNormal();
     }
-    return false;
+
+    // Applied even without a surface, for meshes and vertex sets.
+    return flip != GetFlipReversesNormal();
+}
+
+int Geom::GetFlipFlag() const
+{
+    if ( !FlipApplies() )
+    {
+        return 0;
+    }
+    return m_FlipFlag();
+}
+
+bool Geom::FlipApplies() const
+{
+    int type = GetBehaviorType();
+    return type != BLANK_GEOM_TYPE && type != ROUTING_GEOM_TYPE;
+}
+
+int Geom::GetNumFlipPlanes() const
+{
+    int n = 0;
+
+    // Off where the flip does not apply, even if Flip_Flag is set.
+    if ( !FlipApplies() )
+    {
+        return n;
+    }
+
+    int flag = GetFlipFlag();
+
+    if ( flag & SYM_XY )
+    {
+        n++;
+    }
+
+    if ( flag & SYM_XZ )
+    {
+        n++;
+    }
+
+    if ( flag & SYM_YZ )
+    {
+        n++;
+    }
+
+    return n;
+}
+
+// An odd number of planes reverses the shape.
+bool Geom::GetFlipReversesNormal() const
+{
+    return ( GetNumFlipPlanes() % 2 ) == 1;
+}
+
+// Built like the symmetry reflections.  Reflections about coordinate planes commute.
+Matrix4d Geom::GetFlipMat() const
+{
+    Matrix4d flip_mat;
+    Matrix4d Ref;
+
+    if ( !FlipApplies() )
+    {
+        return flip_mat;
+    }
+
+    int flag = GetFlipFlag();
+
+    if ( flag & SYM_XY )
+    {
+        Ref.loadXYRef();
+        flip_mat.matMult( Ref );
+    }
+
+    if ( flag & SYM_XZ )
+    {
+        Ref.loadXZRef();
+        flip_mat.matMult( Ref );
+    }
+
+    if ( flag & SYM_YZ )
+    {
+        Ref.loadYZRef();
+        flip_mat.matMult( Ref );
+    }
+
+    return flip_mat;
+}
+
+Matrix4d Geom::GetShapeMatrix() const
+{
+    Matrix4d mat = GetFlipMat();
+    mat.postMult( m_ModelMatrix );
+    return mat;
 }
 
 double Geom::GetUMax( int indx ) const
@@ -5291,13 +5646,25 @@ vector < vec3d > Geom::GetAirfoilCoordinates( double foilsurf_u_location )
     return ordered_vec;
 }
 
-void Geom::WriteAirfoilFiles( FILE* meta_fid )
+void Geom::WriteAirfoilFiles( FILE* meta_fid, const string &name, const string &id )
 {
     // This function writes out the Bezier control points for all untwisted unit length airfoils.
     Vehicle* veh = VehicleMgr.GetVehicle();
     if ( !veh || !meta_fid || m_MainSurfVec.size() == 0 )
     {
         return;
+    }
+
+    // A Clone passes its own name and ID so the files are named after it.
+    string geom_name = name;
+    string geom_id = id;
+    if ( geom_name.empty() )
+    {
+        geom_name = m_Name;
+    }
+    if ( geom_id.empty() )
+    {
+        geom_id = m_ID;
     }
 
     // Adjust Tessellation
@@ -5383,11 +5750,11 @@ void Geom::WriteAirfoilFiles( FILE* meta_fid )
 
         for ( /* j */; j < utess_vec[i]; j++ )
         {
-            string af_file_name = m_Name + "_";
+            string af_file_name = geom_name + "_";
 
             if ( veh->m_AFAppendGeomIDFlag() )
             {
-                af_file_name += ( m_ID + "_" );
+                af_file_name += ( geom_id + "_" );
             }
 
             af_file_name += to_string( foil_cnt );
@@ -5411,8 +5778,8 @@ void Geom::WriteAirfoilFiles( FILE* meta_fid )
 
             fprintf( meta_fid, "########################################\n" );
             fprintf( meta_fid, "Airfoil File Name, %s\n", af_file_name.c_str() );
-            fprintf( meta_fid, "Geom Name, %s\n", m_Name.c_str() );
-            fprintf( meta_fid, "Geom ID, %s\n", m_ID.c_str() );
+            fprintf( meta_fid, "Geom Name, %s\n", geom_name.c_str() );
+            fprintf( meta_fid, "Geom ID, %s\n", geom_id.c_str() );
             fprintf( meta_fid, "Airfoil Index, %d\n", foil_cnt );
             fprintf( meta_fid, "XSec Flag, %d\n", xsec_flag );
 
@@ -5867,15 +6234,31 @@ void Geom::WritePovRay( FILE* fid, int comp_num )
                 v2 = pnts[xs + 1][p + 1];
                 v3 = pnts[xs][p + 1];
 
-                fprintf( fid, "smooth_triangle { \n" );
-                WritePovRayTri( fid, v0, n0 );
-                WritePovRayTri( fid, v2, n2 );
-                WritePovRayTri( fid, v1, n1, false );
+                // A surface whose normal is flipped is wound the other way round.
+                if ( GetFlipNormal( i ) )
+                {
+                    fprintf( fid, "smooth_triangle { \n" );
+                    WritePovRayTri( fid, v0, n0 );
+                    WritePovRayTri( fid, v1, n1 );
+                    WritePovRayTri( fid, v2, n2, false );
 
-                fprintf( fid, "smooth_triangle { \n" );
-                WritePovRayTri( fid, v0, n0 );
-                WritePovRayTri( fid, v3, n3 );
-                WritePovRayTri( fid, v2, n2, false );
+                    fprintf( fid, "smooth_triangle { \n" );
+                    WritePovRayTri( fid, v0, n0 );
+                    WritePovRayTri( fid, v2, n2 );
+                    WritePovRayTri( fid, v3, n3, false );
+                }
+                else
+                {
+                    fprintf( fid, "smooth_triangle { \n" );
+                    WritePovRayTri( fid, v0, n0 );
+                    WritePovRayTri( fid, v2, n2 );
+                    WritePovRayTri( fid, v1, n1, false );
+
+                    fprintf( fid, "smooth_triangle { \n" );
+                    WritePovRayTri( fid, v0, n0 );
+                    WritePovRayTri( fid, v3, n3 );
+                    WritePovRayTri( fid, v2, n2, false );
+                }
             }
         }
     }
@@ -5899,6 +6282,11 @@ void Geom::WritePovRayTri( FILE* fid, const vec3d& v, const vec3d& n, bool comma
 //==== Create TMesh Vector ====//
 vector< TMesh* > Geom::CreateTMeshVec( bool skipnegflipnormal, const int & n_ref ) const
 {
+    if ( m_ExportMainSurf )
+    {
+        return CreateTMeshVec( m_MainSurfVec, skipnegflipnormal, n_ref );
+    }
+
     return CreateTMeshVec( m_SurfVec, skipnegflipnormal, n_ref );
 }
 
@@ -6068,6 +6456,8 @@ void Geom::DelSubSurf( int ind )
         m_SubSurfVec.erase( m_SubSurfVec.begin() + ind );
     }
 
+    m_SubSurfDirty = true;
+
     SubSurfaceMgr.ReSuffixGroupNames( GetID() );
 }
 
@@ -6148,6 +6538,8 @@ SubSurface* Geom::AddSubSurf( int type, int surfindex )
         AddSubSurf( ssurf );
     }
 
+    m_SubSurfDirty = true;
+
     SubSurfaceMgr.ReSuffixGroupNames( GetID() );
 
     return ssurf;
@@ -6210,6 +6602,8 @@ void Geom::ReorderSubSurf( const string & id, int action )
     int new_index = ReorderVectorIndex( m_SubSurfVec, curr_index, action );
 
     SubSurfaceMgr.SetCurrSubSurfInd( new_index );
+
+    m_SubSurfDirty = true;
 }
 
 //==== Highlight Active Subsurface ====//
@@ -6314,6 +6708,27 @@ bool Geom::ValidGeomFeaStructInd( int index )
     return false;
 }
 
+void Geom::TakeCfdMeshSourcesAfter( int n, vector< BaseSource* > & source_vec )
+{
+    if ( n < 0 )
+    {
+        n = 0;
+    }
+
+    for ( int i = n ; i < ( int )m_MainSourceVec.size() ; i++ )
+    {
+        source_vec.push_back( m_MainSourceVec[i] );
+    }
+
+    m_MainSourceVec.resize( n );
+
+    // Move the selection only if the current source was removed.
+    if ( GetCurrSourceID() >= ( int )m_MainSourceVec.size() )
+    {
+        SetCurrSourceID( ( int )m_MainSourceVec.size() - 1 );
+    }
+}
+
 void Geom::DelAllSources()
 {
     for ( int i = 0 ; i < ( int )m_MainSourceVec.size() ; i++ )
@@ -6356,13 +6771,20 @@ void Geom::UpdateSources()
 
     for ( int i = 0 ; i < nmain ; i++ )
     {
-        assert( ncopy == m_SurfSymmMap[ m_MainSourceVec[i]->m_MainSurfIndx.Get() ].size() );
+        int imain = m_MainSourceVec[i]->m_MainSurfIndx.Get();
+
+        // A source on a surface the Geom does not have -- a Blank has none -- is left out.
+        if ( imain < 0 || imain >= ( int )m_SurfSymmMap.size() || ( int )m_SurfSymmMap[ imain ].size() < ncopy )
+        {
+            continue;
+        }
 
         for ( int j = 0; j < ncopy; j++ )
         {
             m_SimpSourceVec.push_back( CreateSimpleSource( m_MainSourceVec[i]->GetType() ) );
             int k = m_SimpSourceVec.size() - 1;
             m_SimpSourceVec[k]->CopyFrom( m_MainSourceVec[i] );
+            m_SimpSourceVec[k]->SetDrawObjID( m_MainSourceVec[i]->GetID() + "_" + to_string( j ) );
             m_SimpSourceVec[k]->m_SurfIndx = m_SurfSymmMap[ m_MainSourceVec[i]->m_MainSurfIndx.Get() ][j];
             m_SimpSourceVec[k]->Update( this );
         }
@@ -6911,6 +7333,9 @@ void GeomXSec::UpdateDrawObj()
     relTrans.matMult( m_ModelMatrix.data() );
     relTrans.postMult( m_AttachMatrix.data() );
 
+    // The shape's placement, so the flip goes innermost.
+    relTrans.matMult( GetFlipMat().data() );
+
     unsigned int nxsec = m_XSecSurf.NumXSec();
     m_XSecDrawObj_vec.resize( nxsec, DrawObj() );
 
@@ -6936,6 +7361,9 @@ void GeomXSec::UpdateHighlightDrawObj()
     relTrans.affineInverse();
     relTrans.matMult( m_ModelMatrix.data() );
     relTrans.postMult( m_AttachMatrix.data() );
+
+    // The shape's placement, so the flip goes innermost.
+    relTrans.matMult( GetFlipMat().data() );
 
     XSec* axs = m_XSecSurf.FindXSec( m_ActiveXSec() );
     if ( axs )

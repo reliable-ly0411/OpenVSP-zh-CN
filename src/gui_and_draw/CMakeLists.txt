@@ -39,6 +39,9 @@ BEMOptionsScreen.cpp
 BORScreen.cpp
 CfdMeshScreen.cpp
 ClippingScreen.cpp
+CloneDeleteDialog.cpp
+CloneNameSuffixScreen.cpp
+CloneScreen.cpp
 CobraScreen.cpp
 CompGeomScreen.cpp
 ConformalScreen.cpp
@@ -105,6 +108,7 @@ StructScreen.cpp
 StructAssemblyScreen.cpp
 STEPOptionsScreen.cpp
 STEPStructureOptionsScreen.cpp
+SplitStitchOptionsScreen.cpp
 STLOptionsScreen.cpp
 SubGLWindow.cpp
 SurfaceIntersectionScreen.cpp
@@ -134,6 +138,9 @@ BEMOptionsScreen.h
 BORScreen.h
 CfdMeshScreen.h
 ClippingScreen.h
+CloneDeleteDialog.h
+CloneNameSuffixScreen.h
+CloneScreen.h
 CobraScreen.h
 CompGeomScreen.h
 ConformalScreen.h
@@ -200,6 +207,7 @@ StructScreen.h
 StructAssemblyScreen.h
 STEPOptionsScreen.h
 STEPStructureOptionsScreen.h
+SplitStitchOptionsScreen.h
 STLOptionsScreen.h
 SubGLWindow.h
 SurfaceIntersectionScreen.h

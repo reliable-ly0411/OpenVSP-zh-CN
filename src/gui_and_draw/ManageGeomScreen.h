@@ -18,6 +18,7 @@
 #include "AuxiliaryGeomScreen.h"
 #include "BlankScreen.h"
 #include "BORScreen.h"
+#include "CloneScreen.h"
 #include "ConformalScreen.h"
 #include "CustomScreen.h"
 #include "DrawObj.h"
@@ -130,6 +131,7 @@ protected:
     TreeWithIcons* m_GeomBrowser;
 
     TriggerButton m_DeleteButton;
+    TriggerButton m_CloneButton;
     TriggerButton m_CopyButton;
     TriggerButton m_PasteButton;
     TriggerButton m_CutButton;

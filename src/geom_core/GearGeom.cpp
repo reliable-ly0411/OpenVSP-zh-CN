@@ -673,7 +673,8 @@ void Bogie::UpdateStowAttachParms()
             return;
         }
 
-        WingGeom* wing_parent = dynamic_cast < WingGeom * > ( parent );
+        // Only EtatoU is used; it depends on shape alone, so a Clone of a wing works too.
+        WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent->GetBehaviorGeom() );
 
         double umax = parent->GetUMapMax( m_StowSurfIndx() );
         double lmax = parent->GetSurfPtr( m_StowSurfIndx() )->GetLMax();
@@ -715,13 +716,13 @@ void Bogie::UpdateStowAttachParms()
             m_StowLLoc.Set( val / lmax );
         }
 
-        if ( wing_parent )
+        if ( behavior_wing )
         {
             if ( m_StowTransAttachFlag() == vsp::ATTACH_TRANS_EtaMN || m_StowRotAttachFlag() == vsp::ATTACH_ROT_EtaMN ) // Eta is active.
             {
                 if ( m_StowTransAttachFlag() != vsp::ATTACH_TRANS_UV && m_StowRotAttachFlag() != vsp::ATTACH_ROT_UV ) // U is not active.
                 {
-                    double u = wing_parent->EtatoU( m_StowEtaLoc() ) / umax;
+                    double u = behavior_wing->EtatoU( m_StowEtaLoc() ) / umax;
 
                     double r;
                     r = u;
@@ -750,7 +751,7 @@ void Bogie::UpdateStowAttachParms()
                 if ( m_StowTransAttachFlag() != vsp::ATTACH_TRANS_RST && m_StowRotAttachFlag() != vsp::ATTACH_ROT_RST ) // R is not active
                 {
                     double u, w;
-                    u = wing_parent->EtatoU( m_StowEtaLoc() ) / umax;
+                    u = behavior_wing->EtatoU( m_StowEtaLoc() ) / umax;
                     w = m_StowWLoc();
                     double r, s, t;
                     r = u;
@@ -767,7 +768,7 @@ void Bogie::UpdateStowAttachParms()
 
                 if ( m_StowTransAttachFlag() != vsp::ATTACH_TRANS_LMN && m_StowRotAttachFlag() != vsp::ATTACH_ROT_LMN ) // L is not active
                 {
-                    double u = wing_parent->EtatoU( m_StowEtaLoc() ) / umax;
+                    double u = behavior_wing->EtatoU( m_StowEtaLoc() ) / umax;
 
                     double r;
                     r = u;
@@ -784,13 +785,13 @@ void Bogie::UpdateStowAttachParms()
             {
                 if ( m_StowTransAttachFlag() == vsp::ATTACH_TRANS_UV || m_StowRotAttachFlag() == vsp::ATTACH_ROT_UV ) // UV is active
                 {
-                    m_StowEtaLoc = wing_parent->UtoEta( m_StowULoc() * umax );
+                    m_StowEtaLoc = behavior_wing->UtoEta( m_StowULoc() * umax );
                 }
                 else if ( m_StowTransAttachFlag() == vsp::ATTACH_TRANS_RST || m_StowRotAttachFlag() == vsp::ATTACH_ROT_RST ) // RST is active
                 {
                     double r = m_StowRLoc();
                     double u = r;
-                    m_StowEtaLoc = wing_parent->UtoEta( u * umax );
+                    m_StowEtaLoc = behavior_wing->UtoEta( u * umax );
                 }
                 else if ( m_StowTransAttachFlag() == vsp::ATTACH_TRANS_LMN || m_StowRotAttachFlag() == vsp::ATTACH_ROT_LMN ) // LMN is active
                 {
@@ -798,11 +799,11 @@ void Bogie::UpdateStowAttachParms()
                     double r;
                     parent->ConvertLtoR( m_StowSurfIndx(), l, r );
                     double u = r;
-                    m_StowEtaLoc = wing_parent->UtoEta( u * umax );
+                    m_StowEtaLoc = behavior_wing->UtoEta( u * umax );
                 }
                 else // Nothing is active, use U value anyway.
                 {
-                    m_StowEtaLoc = wing_parent->UtoEta( m_StowULoc() * umax );
+                    m_StowEtaLoc = behavior_wing->UtoEta( m_StowULoc() * umax );
                 }
             }
         }
@@ -948,7 +949,8 @@ void Bogie::UpdateMechAttachParms()
             return;
         }
 
-        WingGeom* wing_parent = dynamic_cast < WingGeom * > ( parent );
+        // Only EtatoU is used; it depends on shape alone, so a Clone of a wing works too.
+        WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent->GetBehaviorGeom() );
 
         double umax = parent->GetUMapMax( m_MechSurfIndx() );
         double lmax = parent->GetSurfPtr( m_MechSurfIndx() )->GetLMax();
@@ -990,11 +992,11 @@ void Bogie::UpdateMechAttachParms()
             m_MechLLoc.Set( val / lmax );
         }
 
-        if ( wing_parent )
+        if ( behavior_wing )
         {
             if ( m_MechTransAttachFlag() == vsp::ATTACH_TRANS_EtaMN ) // Eta is active.
             {
-                double u = wing_parent->EtatoU( m_MechEtaLoc() ) / umax;
+                double u = behavior_wing->EtatoU( m_MechEtaLoc() ) / umax;
 
                 double r;
                 r = u;
@@ -1031,13 +1033,13 @@ void Bogie::UpdateMechAttachParms()
             {
                 if ( m_MechTransAttachFlag() == vsp::ATTACH_TRANS_UV ) // UV is active
                 {
-                    m_MechEtaLoc = wing_parent->UtoEta( m_MechULoc() * umax );
+                    m_MechEtaLoc = behavior_wing->UtoEta( m_MechULoc() * umax );
                 }
                 else if ( m_MechTransAttachFlag() == vsp::ATTACH_TRANS_RST ) // RST is active
                 {
                     double r = m_MechRLoc();
                     double u = r;
-                    m_MechEtaLoc = wing_parent->UtoEta( u * umax );
+                    m_MechEtaLoc = behavior_wing->UtoEta( u * umax );
                 }
                 else if ( m_MechTransAttachFlag() == vsp::ATTACH_TRANS_LMN ) // LMN is active
                 {
@@ -1045,11 +1047,11 @@ void Bogie::UpdateMechAttachParms()
                     double r;
                     parent->ConvertLtoR( m_MechSurfIndx(), l, r );
                     double u = r;
-                    m_MechEtaLoc = wing_parent->UtoEta( u * umax );
+                    m_MechEtaLoc = behavior_wing->UtoEta( u * umax );
                 }
                 else // Nothing is active, use U value anyway.
                 {
-                    m_MechEtaLoc = wing_parent->UtoEta( m_MechULoc() * umax );
+                    m_MechEtaLoc = behavior_wing->UtoEta( m_MechULoc() * umax );
                 }
             }
         }
@@ -1364,15 +1366,16 @@ void Bogie::ComposeStowAttachMatrix()
 
     if ( parent )
     {
-        HingeGeom* hingeparent = dynamic_cast < HingeGeom* > ( parent );
-        if ( hingeparent )
+        JointRole* jointparent = Geom::CastTo< JointRole >( parent );
+        if ( jointparent )
         {
-            m_StowAttachMatrix = hingeparent->GetJointMatrix();
+            m_StowAttachMatrix = jointparent->GetJointMatrix();
 
             Matrix4d gmm = m_GearModelMatrix;
             gmm.affineInverse();
 
             m_StowAttachMatrix.postMult( gmm.data() );
+            FlipAttachMatrix( m_StowAttachMatrix );
             return;
         }
     }
@@ -1398,7 +1401,8 @@ void Bogie::ComposeStowAttachMatrix()
         bool revertCompTrans = false;
         bool revertCompRot = false;
 
-        WingGeom* wing_parent = dynamic_cast < WingGeom * > ( parent );
+        // Only EtatoU is used; it depends on shape alone, so a Clone of a wing works too.
+        WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent->GetBehaviorGeom() );
 
         // Parent CompXXXCoordSys methods query the positioned m_RetSurfVec[0] surface,
         // not m_RetMainSurfVec[0].  Consequently, m_ModelMatrix is already implied in
@@ -1431,10 +1435,10 @@ void Bogie::ComposeStowAttachMatrix()
         {
             double l = m_StowEtaLoc();
 
-            if ( wing_parent )
+            if ( behavior_wing )
             {
                 double umax = parent->GetUMapMax( m_StowSurfIndx() );
-                double u = wing_parent->EtatoU( m_StowEtaLoc() ) / umax;
+                double u = behavior_wing->EtatoU( m_StowEtaLoc() ) / umax;
 
                 double r = u;
                 parent->ConvertRtoL( m_StowSurfIndx(), r, l );
@@ -1489,10 +1493,10 @@ void Bogie::ComposeStowAttachMatrix()
         {
             double l = m_StowEtaLoc();
 
-            if ( wing_parent )
+            if ( behavior_wing )
             {
                 double umax = parent->GetUMapMax( m_StowSurfIndx() );
-                double u = wing_parent->EtatoU( m_StowEtaLoc() ) / umax;
+                double u = behavior_wing->EtatoU( m_StowEtaLoc() ) / umax;
 
                 double r = u;
                 parent->ConvertRtoL( m_StowSurfIndx(), r, l );
@@ -1528,6 +1532,18 @@ void Bogie::ComposeStowAttachMatrix()
     gmm.affineInverse();
 
     m_StowAttachMatrix.postMult( gmm.data() );
+    FlipAttachMatrix( m_StowAttachMatrix );
+}
+
+// The gear's flip is applied innermost, so a frame taken from another Geom is reflected on
+// both sides to keep the bogie at that frame.
+void Bogie::FlipAttachMatrix( Matrix4d &attach_mat ) const
+{
+    Matrix4d flip_mat = m_GearFlipMat;
+    Matrix4d mat = flip_mat;
+    mat.matMult( attach_mat.data() );
+    mat.matMult( flip_mat.data() );
+    attach_mat = mat;
 }
 
 void Bogie::ComposeMechAttachMatrix()
@@ -1539,15 +1555,16 @@ void Bogie::ComposeMechAttachMatrix()
 
     if ( parent )
     {
-        HingeGeom* hingeparent = dynamic_cast < HingeGeom* > ( parent );
-        if ( hingeparent )
+        JointRole* jointparent = Geom::CastTo< JointRole >( parent );
+        if ( jointparent )
         {
-            m_MechAttachMatrix = hingeparent->GetJointMatrix();
+            m_MechAttachMatrix = jointparent->GetJointMatrix();
 
             Matrix4d gmm = m_GearModelMatrix;
             gmm.affineInverse();
 
             m_MechAttachMatrix.postMult( gmm.data() );
+            FlipAttachMatrix( m_MechAttachMatrix );
             return;
         }
     }
@@ -1571,7 +1588,8 @@ void Bogie::ComposeMechAttachMatrix()
 
         bool revertCompTrans = false;
 
-        WingGeom* wing_parent = dynamic_cast < WingGeom * > ( parent );
+        // Only EtatoU is used; it depends on shape alone, so a Clone of a wing works too.
+        WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent->GetBehaviorGeom() );
 
         // Parent CompXXXCoordSys methods query the positioned m_RetSurfVec[0] surface,
         // not m_RetMainSurfVec[0].  Consequently, m_ModelMatrix is already implied in
@@ -1604,10 +1622,10 @@ void Bogie::ComposeMechAttachMatrix()
         {
             double l = m_MechEtaLoc();
 
-            if ( wing_parent )
+            if ( behavior_wing )
             {
                 double umax = parent->GetUMapMax( m_MechSurfIndx() );
-                double u = wing_parent->EtatoU( m_MechEtaLoc() ) / umax;
+                double u = behavior_wing->EtatoU( m_MechEtaLoc() ) / umax;
 
                 double r = u;
                 parent->ConvertRtoL( m_MechSurfIndx(), r, l );
@@ -1631,6 +1649,7 @@ void Bogie::ComposeMechAttachMatrix()
     gmm.affineInverse();
 
     m_MechAttachMatrix.postMult( gmm.data() );
+    FlipAttachMatrix( m_MechAttachMatrix );
 }
 
 void Bogie::BuildRetractMatrix( Matrix4d &ret_mat, vec3d &knee_pt, vec3d &knee_ax, double k, int isymm ) const
@@ -2248,77 +2267,78 @@ void Bogie::Scale( double s )
     m_MechStrutDL *= s;
 }
 
-void Bogie::UpdateDrawObj( const Matrix4d &relTrans )
+void Bogie::BuildDrawObjs( const Matrix4d &relTrans, const string &id_prefix, vector< DrawObj > &dobj_vec )
 {
-    m_SuspensionTravelLinesDO.m_PntVec.clear();
-    m_SuspensionTravelPointsDO.m_PntVec.clear();
+    int ifirst = dobj_vec.size();
+    dobj_vec.resize( ifirst + NUM_BOGIE_DRAWOBJS );
 
-    m_AxisDO.m_PntVec.clear();
-    m_AxisArrowDO.m_PntVec.clear();
-    m_AxisArrowDO.m_NormVec.clear();
-    m_AxisCircleDO.m_PntVec.clear();
-    m_StrutDO.m_PntVec.clear();
+    DrawObj &axis_do = dobj_vec[ ifirst + BOGIE_AXIS ];
+    DrawObj &axis_circle_do = dobj_vec[ ifirst + BOGIE_AXIS_CIRCLE ];
+    DrawObj &axis_arrow_do = dobj_vec[ ifirst + BOGIE_AXIS_ARROW ];
+    DrawObj &strut_do = dobj_vec[ ifirst + BOGIE_STRUT ];
+    DrawObj &travel_lines_do = dobj_vec[ ifirst + BOGIE_TRAVEL_LINES ];
+    DrawObj &travel_points_do = dobj_vec[ ifirst + BOGIE_TRAVEL_POINTS ];
 
-    m_SuspensionTravelLinesDO.m_GeomID = m_ID + "LSuspension";
-    m_SuspensionTravelLinesDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_SuspensionTravelLinesDO.m_LineWidth = 2.0;
-    m_SuspensionTravelLinesDO.m_Type = DrawObj::VSP_LINES;
-    m_SuspensionTravelLinesDO.m_LineColor = vec3d( 0, 1, 0 );
-    m_SuspensionTravelLinesDO.m_GeomChanged = true;
+    string id = id_prefix + m_ID;
 
-    m_SuspensionTravelPointsDO.m_GeomID = m_ID + "PSuspension";
-    m_SuspensionTravelPointsDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_SuspensionTravelPointsDO.m_PointSize = 12.0;
-    m_SuspensionTravelPointsDO.m_Type = DrawObj::VSP_POINTS;
-    m_SuspensionTravelPointsDO.m_PointColor = vec3d( 0, 0, 0 );
-    m_SuspensionTravelPointsDO.m_GeomChanged = true;
+    travel_lines_do.m_GeomID = id + "LSuspension";
+    travel_lines_do.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    travel_lines_do.m_LineWidth = 2.0;
+    travel_lines_do.m_Type = DrawObj::VSP_LINES;
+    travel_lines_do.m_LineColor = vec3d( 0, 1, 0 );
+    travel_lines_do.m_GeomChanged = true;
 
-    m_AxisDO.m_GeomID = m_ID + "MAxis";
-    m_AxisDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_AxisDO.m_LineWidth = 2.0;
-    m_AxisDO.m_Type = DrawObj::VSP_LINES;
-    m_AxisDO.m_LineColor = vec3d( 0, 0, 0 );
-    m_AxisDO.m_GeomChanged = true;
+    travel_points_do.m_GeomID = id + "PSuspension";
+    travel_points_do.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    travel_points_do.m_PointSize = 12.0;
+    travel_points_do.m_Type = DrawObj::VSP_POINTS;
+    travel_points_do.m_PointColor = vec3d( 0, 0, 0 );
+    travel_points_do.m_GeomChanged = true;
 
-    m_AxisCircleDO.m_GeomID = m_ID + "MCircle";
-    m_AxisCircleDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_AxisCircleDO.m_LineWidth = 2.0;
-    m_AxisCircleDO.m_Type = DrawObj::VSP_LINES;
-    m_AxisCircleDO.m_LineColor = vec3d( 0, 0, 0 );
-    m_AxisCircleDO.m_GeomChanged = true;
+    axis_do.m_GeomID = id + "MAxis";
+    axis_do.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    axis_do.m_LineWidth = 2.0;
+    axis_do.m_Type = DrawObj::VSP_LINES;
+    axis_do.m_LineColor = vec3d( 0, 0, 0 );
+    axis_do.m_GeomChanged = true;
 
-    m_AxisArrowDO.m_GeomID = m_ID + "MArrow";
-    m_AxisArrowDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_AxisArrowDO.m_LineWidth = 1.0;
-    m_AxisArrowDO.m_Type = DrawObj::VSP_SHADED_TRIS;
-    m_AxisArrowDO.m_GeomChanged = true;
+    axis_circle_do.m_GeomID = id + "MCircle";
+    axis_circle_do.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    axis_circle_do.m_LineWidth = 2.0;
+    axis_circle_do.m_Type = DrawObj::VSP_LINES;
+    axis_circle_do.m_LineColor = vec3d( 0, 0, 0 );
+    axis_circle_do.m_GeomChanged = true;
+
+    axis_arrow_do.m_GeomID = id + "MArrow";
+    axis_arrow_do.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    axis_arrow_do.m_LineWidth = 1.0;
+    axis_arrow_do.m_Type = DrawObj::VSP_SHADED_TRIS;
+    axis_arrow_do.m_GeomChanged = true;
 
     for ( int i = 0; i < 4; i++ )
     {
-        m_AxisArrowDO.m_MaterialInfo.Ambient[i] = 0.2f;
-        m_AxisArrowDO.m_MaterialInfo.Diffuse[i] = 0.1f;
-        m_AxisArrowDO.m_MaterialInfo.Specular[i] = 0.7f;
-        m_AxisArrowDO.m_MaterialInfo.Emission[i] = 0.0f;
+        axis_arrow_do.m_MaterialInfo.Ambient[i] = 0.2f;
+        axis_arrow_do.m_MaterialInfo.Diffuse[i] = 0.1f;
+        axis_arrow_do.m_MaterialInfo.Specular[i] = 0.7f;
+        axis_arrow_do.m_MaterialInfo.Emission[i] = 0.0f;
     }
-    m_AxisArrowDO.m_MaterialInfo.Diffuse[3] = 0.5f;
-    m_AxisArrowDO.m_MaterialInfo.Shininess = 5.0f;
+    axis_arrow_do.m_MaterialInfo.Diffuse[3] = 0.5f;
+    axis_arrow_do.m_MaterialInfo.Shininess = 5.0f;
 
 
-    m_StrutDO.m_GeomID = m_ID + "MStrut";
-    m_StrutDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_StrutDO.m_LineWidth = 2.0;
-    m_StrutDO.m_Type = DrawObj::VSP_LINES;
-    m_StrutDO.m_LineColor = vec3d( 0, 0, 0 );
-    m_StrutDO.m_GeomChanged = true;
+    strut_do.m_GeomID = id + "MStrut";
+    strut_do.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    strut_do.m_LineWidth = 2.0;
+    strut_do.m_Type = DrawObj::VSP_LINES;
+    strut_do.m_LineColor = vec3d( 0, 0, 0 );
+    strut_do.m_GeomChanged = true;
 
-    int isymm = 0;
+    travel_lines_do.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_EXTENDED ) ) );
+    travel_lines_do.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_COMPRESSED ) ) );
 
-    m_SuspensionTravelLinesDO.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_EXTENDED ) ) );
-    m_SuspensionTravelLinesDO.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_COMPRESSED ) ) );
-
-    m_SuspensionTravelPointsDO.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_EXTENDED ) ) );
-    m_SuspensionTravelPointsDO.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_NOMINAL ) ) );
-    m_SuspensionTravelPointsDO.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_COMPRESSED ) ) );
+    travel_points_do.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_EXTENDED ) ) );
+    travel_points_do.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_NOMINAL ) ) );
+    travel_points_do.m_PntVec.push_back( relTrans.xform( GetPivotPoint( 0, vsp::GEAR_SUSPENSION_COMPRESSED ) ) );
 
     if ( !m_PivotPtVec.empty() )
     {
@@ -2334,21 +2354,21 @@ void Bogie::UpdateDrawObj( const Matrix4d &relTrans )
         vec3d axend = relTrans.xform( m_StrutAttachPt + axlen * m_Axis );
 
         vec3d u = axend - axstart;
-        MakeCircleArrow(axstart + 0.6 * u, u, 0.5 * axlen, 0.5 * axlen, m_AxisCircleDO, m_AxisArrowDO );
+        MakeCircleArrow(axstart + 0.6 * u, u, 0.5 * axlen, 0.5 * axlen, axis_circle_do, axis_arrow_do );
 
-        MakeDashedLine( axstart,  axend, 4, m_AxisDO.m_PntVec );
+        MakeDashedLine( axstart,  axend, 4, axis_do.m_PntVec );
 
         for ( int i = 0; i < m_PivotPtVec.size(); i++ )
         {
-            m_StrutDO.m_PntVec.push_back( axstart );
-            m_StrutDO.m_PntVec.push_back( relTrans.xform( m_KneePtVec[i] ) );
-            m_StrutDO.m_PntVec.push_back( relTrans.xform( m_KneePtVec[i] ) );
-            m_StrutDO.m_PntVec.push_back( relTrans.xform( m_PivotPtVec[i] ) );
+            strut_do.m_PntVec.push_back( axstart );
+            strut_do.m_PntVec.push_back( relTrans.xform( m_KneePtVec[i] ) );
+            strut_do.m_PntVec.push_back( relTrans.xform( m_KneePtVec[i] ) );
+            strut_do.m_PntVec.push_back( relTrans.xform( m_PivotPtVec[i] ) );
 
             vec3d knee_axstart = relTrans.xform( m_KneePtVec[i] );
             vec3d knee_axend = relTrans.xform( m_KneePtVec[i] + axlen * m_KneeAxVec[i] );
 
-            MakeDashedLine( knee_axstart,  knee_axend, 4, m_AxisDO.m_PntVec );
+            MakeDashedLine( knee_axstart,  knee_axend, 4, axis_do.m_PntVec );
         }
     }
 
@@ -2358,26 +2378,11 @@ void Bogie::UpdateDrawObj( const Matrix4d &relTrans )
     // // {
     // //     bogietheta = m_BogieTheta();
     // // }
-    // m_SuspensionTravelPointsDO.m_PntVec.push_back( relTrans.xform( GetMeanContactPoint( 0,  vsp::TIRE_STATIC_LODED_CONTACT, vsp::GEAR_SUSPENSION_NOMINAL, bogietheta * M_PI / 180.0 ) ) );
+    // travel_points_do.m_PntVec.push_back( relTrans.xform( GetMeanContactPoint( 0,  vsp::TIRE_STATIC_LODED_CONTACT, vsp::GEAR_SUSPENSION_NOMINAL, bogietheta * M_PI / 180.0 ) ) );
     // if ( m_Symmetrical() )
     // {
-    //     m_SuspensionTravelPointsDO.m_PntVec.push_back( relTrans.xform( GetMeanContactPoint( 1,  vsp::TIRE_STATIC_LODED_CONTACT, vsp::GEAR_SUSPENSION_NOMINAL, bogietheta * M_PI / 180.0 ) ) );
+    //     travel_points_do.m_PntVec.push_back( relTrans.xform( GetMeanContactPoint( 1,  vsp::TIRE_STATIC_LODED_CONTACT, vsp::GEAR_SUSPENSION_NOMINAL, bogietheta * M_PI / 180.0 ) ) );
     // }
-
-    if ( m_Symmetrical() )
-    {
-        isymm++;
-    }
-}
-
-void Bogie::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
-{
-    draw_obj_vec.push_back( &m_AxisDO );
-    draw_obj_vec.push_back( &m_AxisCircleDO );
-    draw_obj_vec.push_back( &m_AxisArrowDO );
-    draw_obj_vec.push_back( &m_StrutDO );
-    draw_obj_vec.push_back( &m_SuspensionTravelLinesDO );
-    draw_obj_vec.push_back( &m_SuspensionTravelPointsDO );
 }
 
 xmlNodePtr Bogie::EncodeXml( xmlNodePtr & node )
@@ -2677,31 +2682,13 @@ void Bogie::AppendMainSurf( vector < VspSurf > &surfvec, int gear_config ) const
 bool Bogie::IsStowParentJoint()
 {
     Vehicle *veh = VehicleMgr.GetVehicle();
-    GeomBase* parentPtr = veh->FindGeom( m_StowParentID );
-    if ( parentPtr )
-    {
-        HingeGeom* hingeParentPtr = dynamic_cast < HingeGeom* > ( parentPtr );
-        if ( hingeParentPtr )
-        {
-            return true;
-        }
-    }
-    return false;
+    return Geom::CastTo< JointRole >( veh->FindGeom( m_StowParentID ) ) != nullptr;
 }
 
 bool Bogie::IsMechParentJoint()
 {
     Vehicle *veh = VehicleMgr.GetVehicle();
-    GeomBase* parentPtr = veh->FindGeom( m_MechParentID );
-    if ( parentPtr )
-    {
-        HingeGeom* hingeParentPtr = dynamic_cast < HingeGeom* > ( parentPtr );
-        if ( hingeParentPtr )
-        {
-            return true;
-        }
-    }
-    return false;
+    return Geom::CastTo< JointRole >( veh->FindGeom( m_MechParentID ) ) != nullptr;
 }
 
 //===============================================================================//
@@ -2828,6 +2815,9 @@ void GearGeom::UpdateSurf()
     relTrans.affineInverse();
     relTrans.matMult( m_ModelMatrix.data() );
     relTrans.postMult( m_AttachMatrix.data() );
+
+    // The flip goes innermost.
+    relTrans.matMult( GetFlipMat().data() );
 
     // Set local based on global.
     if ( !m_CGLocalFlag() )
@@ -2975,6 +2965,7 @@ void GearGeom::UpdateXForm()
         if ( m_Bogies[i] )
         {
             m_Bogies[i]->m_GearModelMatrix = m_ModelMatrix;
+            m_Bogies[i]->m_GearFlipMat = GetFlipMat();
         }
     }
 }
@@ -3060,16 +3051,6 @@ void GearGeom::UpdateMainTessVec()
 void GearGeom::UpdateTessVec()
 {
     Geom::UpdateTessVec();
-    ApplySymm( m_MainNominalCGPointVec, m_NominalCGPointVec );
-
-
-    BndBox cgbox;
-    cgbox.Update( m_MainMinCGPoint );
-    cgbox.Update( m_MainMaxCGPoint );
-    vector < SimpleFeatureTess > tessvec(1);
-    tessvec[0].m_ptline.push_back( cgbox.GetBBoxDrawLines() );
-
-    ApplySymm( tessvec, m_LimitsCGPointVec );
 }
 
 void GearGeom::UpdateMainDegenGeomPreview()
@@ -3117,80 +3098,105 @@ void GearGeom::UpdateMainDegenGeomPreview()
     }
 }
 
-void GearGeom::UpdateDrawObj()
+// Each bogie's suspension travel, retraction and strut, and the nominal CG and its limits,
+// placed by placer.  The CG is in the gear's own frame, so it moves with a Clone.
+void GearGeom::BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec )
 {
-    Geom::UpdateDrawObj();
-
-    Matrix4d relTrans = m_AttachMatrix;
-    relTrans.affineInverse();
-    relTrans.matMult( m_ModelMatrix.data() );
-    relTrans.postMult( m_AttachMatrix.data() );
-
     int nbogies = m_Bogies.size();
+    int nbogie_do = nbogies * Bogie::NUM_BOGIE_DRAWOBJS;
 
-    for ( int i = 0; i < nbogies; i++ )
+    // A change of global scale alone leaves the bogies as they were drawn.
+    if ( !m_GlobalScaleDirty || ( int )marker_vec.size() != nbogie_do + NUM_GEAR_CG_MARKERS )
     {
-        if ( m_Bogies[i] )
+        marker_vec.clear();
+
+        for ( int i = 0; i < nbogies; i++ )
         {
-            if ( !m_GlobalScaleDirty )
+            if ( m_Bogies[i] )
             {
-                m_Bogies[i]->UpdateDrawObj( relTrans );
+                m_Bogies[i]->BuildDrawObjs( placer->getModelMatrix(), placer->GetID(), marker_vec );
             }
         }
+
+        // Built from directions as well as points, so the flip is put in afterwards.
+        vector< DrawObj* > bogie_do_vec;
+        for ( int i = 0; i < ( int )marker_vec.size(); i++ )
+        {
+            bogie_do_vec.push_back( &marker_vec[i] );
+        }
+        placer->FlipDrawObjs( bogie_do_vec );
+
+        nbogie_do = marker_vec.size();
+        marker_vec.resize( nbogie_do + NUM_GEAR_CG_MARKERS );
     }
 
+    DrawObj &cg_nominal = marker_vec[ nbogie_do + GEAR_CG_NOMINAL ];
+    DrawObj &cg_limits = marker_vec[ nbogie_do + GEAR_CG_LIMITS ];
 
-    m_CGNominalDrawObj.m_PntVec = m_NominalCGPointVec;
-    m_CGNominalDrawObj.m_GeomChanged = true;
+    cg_nominal.m_PntVec.clear();
+    cg_limits.m_PntVec.clear();
 
+    BndBox cgbox;
+    cgbox.Update( m_MainMinCGPoint );
+    cgbox.Update( m_MainMaxCGPoint );
 
-    m_CGLimitsDrawObj.m_PntVec.clear();
-    for ( int i = 0 ; i < m_LimitsCGPointVec.size() ; i++ )
+    // With no ground plane or bogie there are no surfaces; use placer's own position.
+    vector< Matrix4d > copy_vec;
+    vector< Matrix4d > trans_vec = placer->GetTransMatVec();
+    int nmain = placer->GetNumMainSurfs();
+    if ( nmain < 1 || trans_vec.empty() )
     {
-        for( int j = 0; j < m_LimitsCGPointVec[i].m_ptline.size(); j++ )
+        copy_vec.push_back( placer->GetShapeMatrix() );
+    }
+    else
+    {
+        for ( int i = 0; i < placer->GetNumSymmCopies() && i * nmain < ( int )trans_vec.size(); i++ )
         {
-            m_CGLimitsDrawObj.m_PntVec.insert( m_CGLimitsDrawObj.m_PntVec.end(), m_LimitsCGPointVec[i].m_ptline[j].begin(), m_LimitsCGPointVec[i].m_ptline[j].end() );
+            copy_vec.push_back( trans_vec[ i * nmain ] );
         }
     }
-    m_CGLimitsDrawObj.m_GeomChanged = true;
 
+    for ( int i = 0; i < ( int )copy_vec.size() && !m_MainNominalCGPointVec.empty(); i++ )
+    {
+        const Matrix4d &trans_mat = copy_vec[ i ];
+
+        cg_nominal.m_PntVec.push_back( trans_mat.xform( m_MainNominalCGPointVec[0] ) );
+
+        vector< vec3d > lines = cgbox.GetBBoxDrawLines();
+        trans_mat.xformvec( lines );
+        cg_limits.m_PntVec.insert( cg_limits.m_PntVec.end(), lines.begin(), lines.end() );
+    }
+
+    cg_nominal.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    cg_nominal.m_GeomID = placer->GetID() + string( "cgnominal" );
+    cg_nominal.m_PointSize = 10.0;
+    cg_nominal.m_PointColor = vec3d( 0.5, 0.5, 0.5 );
+    cg_nominal.m_Type = DrawObj::VSP_POINTS;
+    cg_nominal.m_GeomChanged = true;
+
+    cg_limits.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    cg_limits.m_GeomID = placer->GetID() + string( "cgrange" );
+    cg_limits.m_LineWidth = 4.0;
+    cg_limits.m_LineColor = vec3d( 0.5, 0.5, 0.5 );
+    cg_limits.m_Type = DrawObj::VSP_LINES;
+    cg_limits.m_GeomChanged = true;
 }
 
-void GearGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
+void GearGeom::SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec )
 {
-    Geom::LoadDrawObjs( draw_obj_vec );
+    int nbogie_do = ( int )marker_vec.size() - NUM_GEAR_CG_MARKERS;
 
-    vector< DrawObj* > bogie_draw_obj_vec;
-    int nbogies = m_Bogies.size();
-    for ( int i = 0; i < nbogies; i++ )
+    bool bogie_visible = placer->ShowsMarkers();
+    for ( int i = 0; i < nbogie_do; i++ )
     {
-        if ( m_Bogies[i] )
-        {
-            m_Bogies[i]->LoadDrawObjs( bogie_draw_obj_vec );
-        }
+        marker_vec[i].m_Visible = bogie_visible;
     }
 
-    for ( int i = 0; i < bogie_draw_obj_vec.size(); i++ )
+    bool cg_visible = placer->GetSetFlag( vsp::SET_SHOWN );
+    for ( int i = std::max( nbogie_do, 0 ); i < ( int )marker_vec.size(); i++ )
     {
-        bogie_draw_obj_vec[i]->m_Visible = ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || m_Vehicle->IsGeomActive( m_ID );
-        draw_obj_vec.push_back( bogie_draw_obj_vec[i] );
+        marker_vec[i].m_Visible = cg_visible;
     }
-
-    m_CGNominalDrawObj.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_CGNominalDrawObj.m_GeomID = m_ID + string( "cgnominal" );
-    m_CGNominalDrawObj.m_Visible = GetSetFlag( vsp::SET_SHOWN );
-    m_CGNominalDrawObj.m_PointSize = 10.0;
-    m_CGNominalDrawObj.m_PointColor = vec3d( 0.5, 0.5, 0.5 );
-    m_CGNominalDrawObj.m_Type = DrawObj::VSP_POINTS;
-    draw_obj_vec.push_back( &m_CGNominalDrawObj );
-
-    m_CGLimitsDrawObj.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_CGLimitsDrawObj.m_GeomID = m_ID + string( "cgrange" );
-    m_CGLimitsDrawObj.m_Visible = GetSetFlag( vsp::SET_SHOWN );
-    m_CGLimitsDrawObj.m_LineWidth = 4.0;
-    m_CGLimitsDrawObj.m_LineColor = vec3d( 0.5, 0.5, 0.5 );
-    m_CGLimitsDrawObj.m_Type = DrawObj::VSP_LINES;
-    draw_obj_vec.push_back( &m_CGLimitsDrawObj );
 }
 
 //==== Compute Rotation Center ====//
@@ -3487,25 +3493,29 @@ void GearGeom::DelBogie( const string &id )
     DelBogie( idel );
 }
 
-void GearGeom::UpdateBBox( )
+// The ground plane (main surface zero) is sized from the model box, so it is left out; the
+// Geom's position stands in for it in PlaceMainBBox.
+void GearGeom::UpdateMainBBox()
 {
-    // Add GearGeom origin point to represent ground plane without scale.
-    BndBox gnd_box;
-    for ( int isymm = 0; isymm < m_SymmTransMatVec.size(); isymm++ )
-    {
-        vec3d origin;
-        origin.Transform( m_SymmTransMatVec[ isymm ] );
-        gnd_box.Update( origin );
-    }
+    m_MainBBox.Reset();
 
-    // Fill m_BBox and m_ScaleIndependentBBox while skipping ground plane.
-    // Call at the end so m_Bb*Len and m_Bb*Min are updated correctly.
     int istart = 0;
     if ( m_IncludeNominalGroundPlane() )
     {
         istart = 1;
     }
-    Geom::UpdateBBox( istart, gnd_box );
+
+    for ( int i = istart ; i < GetNumMainSurfs() ; i++ )
+    {
+        BndBox bb;
+        m_MainSurfVec[i].GetBoundingBox( bb );
+        if ( !bb.IsEmpty() )
+        {
+            m_MainBBox.Update( bb );
+        }
+    }
+
+    m_ScaleIndependentMainBBox = m_MainBBox;
 }
 
 void GearGeom::BuildOnePtBasis( const string &cp1, int isymm1, int suspension1, int tire1,
@@ -4028,118 +4038,24 @@ bool GearGeom::GetSteerAngle( const string &cp1, const string &cp2, const string
     return false;
 }
 
-bool GearGeom::GetTwoPtPivotInWorld( const string &cp1, int isymm1, int suspension1,
-                                     const string &cp2, int isymm2, int suspension2,
-                                     vec3d &ptaxis, vec3d &axis ) const
+void GearGeom::GetNominalPtNormal( vec3d &pt, vec3d &normal ) const
 {
-    bool ret = GetTwoPtPivot( cp1, isymm1, suspension1, cp2, isymm2, suspension2, ptaxis, axis );
-    ptaxis = m_ModelMatrix.xform( ptaxis );
-    axis = m_ModelMatrix.xformnorm( axis );
-    return ret;
+    pt = vec3d();
+    normal = vec3d( 0, 0, 1 );
 }
 
-bool GearGeom::GetTwoPtAftAxleAxisInWorld( const string &cp1, int isymm1, int suspension1,
-                                           const string &cp2, int isymm2, int suspension2,
-                                           double thetabogie, vec3d &ptaxis, vec3d &axis ) const
-{
-    bool ret = GetTwoPtAftAxleAxis( cp1, isymm1, suspension1, cp2, isymm2, suspension2, thetabogie, ptaxis, axis );
-    ptaxis = m_ModelMatrix.xform( ptaxis );
-    axis = m_ModelMatrix.xformnorm( axis );
-    return ret;
-}
 
-bool GearGeom::GetTwoPtFwdAxleAxisInWorld( const string &cp1, int isymm1, int suspension1,
-                                           const string &cp2, int isymm2, int suspension2,
-                                           double thetabogie, vec3d &ptaxis, vec3d &axis ) const
+void GearGeom::GetCG( vec3d &cgnom, vector < vec3d > &cgbounds ) const
 {
-    bool ret = GetTwoPtFwdAxleAxis( cp1, isymm1, suspension1, cp2, isymm2, suspension2, thetabogie, ptaxis, axis );
-    ptaxis = m_ModelMatrix.xform( ptaxis );
-    axis = m_ModelMatrix.xformnorm( axis );
-    return ret;
-}
-
-bool GearGeom::GetTwoPtMeanContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                   const string &cp2, int isymm2, int suspension2, int tire2,
-                                                   double thetabogie, vec3d &pt, vec3d &normal, bool &usepivot, double &mintheta, double &maxtheta ) const
-{
-    vec3d p1, p2;
-    bool ret = GetTwoPtMeanContactPtNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, thetabogie, pt, normal, p1, p2, usepivot, mintheta, maxtheta );
-    pt = m_ModelMatrix.xform( pt );
-    normal = m_ModelMatrix.xformnorm( normal );
-    return ret;
-}
-
-bool GearGeom::GetTwoPtAftContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                  const string &cp2, int isymm2, int suspension2, int tire2,
-                                                  double thetabogie, double thetawheel, vec3d &pt, vec3d &normal ) const
-{
-    vec3d p1, p2;
-    bool ret = GetTwoPtAftContactPtNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, thetabogie, thetawheel, pt, normal, p1, p2 );
-    pt = m_ModelMatrix.xform( pt );
-    normal = m_ModelMatrix.xformnorm( normal );
-    return ret;
-}
-
-bool GearGeom::GetTwoPtFwdContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                  const string &cp2, int isymm2, int suspension2, int tire2,
-                                                  double thetabogie, double thetawheel, vec3d &pt, vec3d &normal ) const
-{
-    vec3d p1, p2;
-    bool ret = GetTwoPtFwdContactPtNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, thetabogie, thetawheel, pt, normal, p1, p2 );
-    pt = m_ModelMatrix.xform( pt );
-    normal = m_ModelMatrix.xformnorm( normal );
-    return ret;
-}
-
-bool GearGeom::GetTwoPtSideContactPtsNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                    const string &cp2, int isymm2, int suspension2, int tire2,
-                                                    vec3d &p1, vec3d &p2, vec3d &normal ) const
-{
-    bool ret = GetTwoPtSideContactPtsNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, p1, p2, normal );
-    p1 = m_ModelMatrix.xform( p1 );
-    p2 = m_ModelMatrix.xform( p2 );
-    normal = m_ModelMatrix.xformnorm( normal );
-    return ret;
-}
-
-bool GearGeom::GetOnePtSideContactPtAxisNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                                       double thetabogie, double thetawheel, double thetaroll, vec3d &p1, vec3d &axis, vec3d &normal, int &ysign ) const
-{
-    bool ret = GetOnePtSideContactPtAxisNormal( cp1, isymm1, suspension1, tire1, thetabogie, thetawheel, thetaroll, p1, axis, normal, ysign);
-    p1 = m_ModelMatrix.xform( p1 );
-    axis = m_ModelMatrix.xformnorm( axis );
-    normal = m_ModelMatrix.xformnorm( normal );
-    return ret;
-}
-
-bool GearGeom::GetPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
-                                   const string &cp2, int isymm2, int suspension2, int tire2,
-                                   const string &cp3, int isymm3, int suspension3, int tire3,
-                                   vec3d &pt, vec3d &normal ) const
-{
-    bool ret = GetPtNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, cp3, isymm3, suspension3, tire3, pt, normal );
-    pt = m_ModelMatrix.xform( pt );
-    normal = m_ModelMatrix.xformnorm( normal );
-    return ret;
-}
-
-void GearGeom::GetNominalPtNormalInWorld( vec3d &pt, vec3d &normal ) const
-{
-    pt = m_ModelMatrix.xform( vec3d() );
-    normal = m_ModelMatrix.xformnorm( vec3d( 0, 0, 1 ) );
-}
-
-void GearGeom::GetCGInWorld( vec3d &cgnom, vector < vec3d > &cgbounds ) const
-{
-    cgnom = m_ModelMatrix.xform( m_MainNominalCGPointVec[0] );
+    cgnom = m_MainNominalCGPointVec[0];
 
     BndBox cgbox;
     cgbox.Update( m_MainMinCGPoint );
     cgbox.Update( m_MainMaxCGPoint );
 
     cgbounds = cgbox.GetCornerPnts();
-    m_ModelMatrix.xformvec( cgbounds );
 }
+
 
 bool GearGeom::GetContactPointVecNormal( const string &cp1, int isymm1, int suspension1, int tire1,
                                          const string &cp2, int isymm2, int suspension2, int tire2,
@@ -4177,18 +4093,151 @@ bool GearGeom::GetContactPointVecNormal( const string &cp1, int isymm1, int susp
     return false;
 }
 
-bool GearGeom::GetContactPointVecNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+bool GearContactRole::GetTwoPtPivotInWorld( const string &cp1, int isymm1, int suspension1,
+                                     const string &cp2, int isymm2, int suspension2,
+                                     vec3d &ptaxis, vec3d &axis ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    bool ret = GetTwoPtPivot( cp1, isymm1, suspension1, cp2, isymm2, suspension2, ptaxis, axis );
+    ptaxis = mat.xform( ptaxis );
+    axis = mat.xformnorm( axis );
+    return ret;
+}
+
+bool GearContactRole::GetTwoPtAftAxleAxisInWorld( const string &cp1, int isymm1, int suspension1,
+                                           const string &cp2, int isymm2, int suspension2,
+                                           double thetabogie, vec3d &ptaxis, vec3d &axis ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    bool ret = GetTwoPtAftAxleAxis( cp1, isymm1, suspension1, cp2, isymm2, suspension2, thetabogie, ptaxis, axis );
+    ptaxis = mat.xform( ptaxis );
+    axis = mat.xformnorm( axis );
+    return ret;
+}
+
+bool GearContactRole::GetTwoPtFwdAxleAxisInWorld( const string &cp1, int isymm1, int suspension1,
+                                           const string &cp2, int isymm2, int suspension2,
+                                           double thetabogie, vec3d &ptaxis, vec3d &axis ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    bool ret = GetTwoPtFwdAxleAxis( cp1, isymm1, suspension1, cp2, isymm2, suspension2, thetabogie, ptaxis, axis );
+    ptaxis = mat.xform( ptaxis );
+    axis = mat.xformnorm( axis );
+    return ret;
+}
+
+bool GearContactRole::GetTwoPtMeanContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                                   const string &cp2, int isymm2, int suspension2, int tire2,
+                                                   double thetabogie, vec3d &pt, vec3d &normal, bool &usepivot, double &mintheta, double &maxtheta ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    vec3d p1, p2;
+    bool ret = GetTwoPtMeanContactPtNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, thetabogie, pt, normal, p1, p2, usepivot, mintheta, maxtheta );
+    pt = mat.xform( pt );
+    normal = mat.xformnorm( normal );
+    return ret;
+}
+
+bool GearContactRole::GetTwoPtAftContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                                  const string &cp2, int isymm2, int suspension2, int tire2,
+                                                  double thetabogie, double thetawheel, vec3d &pt, vec3d &normal ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    vec3d p1, p2;
+    bool ret = GetTwoPtAftContactPtNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, thetabogie, thetawheel, pt, normal, p1, p2 );
+    pt = mat.xform( pt );
+    normal = mat.xformnorm( normal );
+    return ret;
+}
+
+bool GearContactRole::GetTwoPtFwdContactPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                                  const string &cp2, int isymm2, int suspension2, int tire2,
+                                                  double thetabogie, double thetawheel, vec3d &pt, vec3d &normal ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    vec3d p1, p2;
+    bool ret = GetTwoPtFwdContactPtNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, thetabogie, thetawheel, pt, normal, p1, p2 );
+    pt = mat.xform( pt );
+    normal = mat.xformnorm( normal );
+    return ret;
+}
+
+bool GearContactRole::GetTwoPtSideContactPtsNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                                    const string &cp2, int isymm2, int suspension2, int tire2,
+                                                    vec3d &p1, vec3d &p2, vec3d &normal ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    bool ret = GetTwoPtSideContactPtsNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, p1, p2, normal );
+    p1 = mat.xform( p1 );
+    p2 = mat.xform( p2 );
+    normal = mat.xformnorm( normal );
+    return ret;
+}
+
+bool GearContactRole::GetOnePtSideContactPtAxisNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                                       double thetabogie, double thetawheel, double thetaroll, vec3d &p1, vec3d &axis, vec3d &normal, int &ysign ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    bool ret = GetOnePtSideContactPtAxisNormal( cp1, isymm1, suspension1, tire1, thetabogie, thetawheel, thetaroll, p1, axis, normal, ysign);
+    p1 = mat.xform( p1 );
+    axis = mat.xformnorm( axis );
+    normal = mat.xformnorm( normal );
+    return ret;
+}
+
+bool GearContactRole::GetPtNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
+                                   const string &cp2, int isymm2, int suspension2, int tire2,
+                                   const string &cp3, int isymm3, int suspension3, int tire3,
+                                   vec3d &pt, vec3d &normal ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    bool ret = GetPtNormal( cp1, isymm1, suspension1, tire1, cp2, isymm2, suspension2, tire2, cp3, isymm3, suspension3, tire3, pt, normal );
+    pt = mat.xform( pt );
+    normal = mat.xformnorm( normal );
+    return ret;
+}
+
+void GearContactRole::GetNominalPtNormalInWorld( vec3d &pt, vec3d &normal ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    GetNominalPtNormal( pt, normal );
+    pt = mat.xform( pt );
+    normal = mat.xformnorm( normal );
+}
+
+void GearContactRole::GetCGInWorld( vec3d &cgnom, vector < vec3d > &cgbounds ) const
+{
+    Matrix4d mat = GetRoleShapeMatrix();
+
+    GetCG( cgnom, cgbounds );
+    cgnom = mat.xform( cgnom );
+    mat.xformvec( cgbounds );
+}
+
+bool GearContactRole::GetContactPointVecNormalInWorld( const string &cp1, int isymm1, int suspension1, int tire1,
                                                 const string &cp2, int isymm2, int suspension2, int tire2,
                                                 const string &cp3, int isymm3, int suspension3, int tire3,
                                                 vector < vec3d > &ptvec, vec3d &normal ) const
 {
+    Matrix4d mat = GetRoleShapeMatrix();
+
     bool ret = GetContactPointVecNormal( cp1,  isymm1,  suspension1,  tire1,
                                          cp2,  isymm2,  suspension2, tire2,
                                          cp3,  isymm3,  suspension3, tire3,
                                          ptvec, normal );
 
-    m_ModelMatrix.xformvec( ptvec );
-    normal = m_ModelMatrix.xformnorm( normal );
+    mat.xformvec( ptvec );
+    normal = mat.xformnorm( normal );
 
     return ret;
 }

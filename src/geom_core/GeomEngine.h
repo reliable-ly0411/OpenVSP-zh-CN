@@ -23,7 +23,8 @@ public:
     virtual void Update( bool fullupdate = true );
     virtual void UpdateFlags();
 
-    virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
+    virtual void BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec );
+    virtual void SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec );
 
     virtual bool IsModelScaleSensitive();
 
@@ -65,17 +66,15 @@ protected:
     virtual void Extend( VspSurf &surf, const double & u, bool extbefore );
     virtual void UpdateEngine();
     virtual void UpdateLCurve();
-    virtual void UpdateBBox();
+    virtual void UpdateMainBBox();
     virtual void UpdateXForm();
-
-    virtual void UpdateHighlightDrawObj();
 
     bool m_engine_spec[ vsp::ENGINE_LOC_NUM ];
 
     VspSurf m_OrigSurf;
-    vector<DrawObj> m_EngineDrawObj_vec;
 
-    BndBox m_ScaleIndependentMainBBox;
+    // The main surface without the inlet or exhaust extension, which is sized from the model box.
+    BndBox m_UnextendedMainBBox;
 };
 
 #endif // !defined(VSPGEOMENGINE__INCLUDED_)

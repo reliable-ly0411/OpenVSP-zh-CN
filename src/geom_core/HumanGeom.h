@@ -15,6 +15,7 @@
 #include <unordered_set>
 
 #include "Geom.h"
+#include "GeomInterface.h"
 #include "XSec.h"
 
 #include "Vec3d.h"
@@ -23,18 +24,69 @@
 #include "Vsp1DCurve.h"
 #include "ResultsMgr.h"
 
-// Pinocchio #includes
-#include "pinocchioApi.h"
+// Pinocchio types, defined where the rigging is done.
+namespace Pinocchio
+{
+class Mesh;
+class Skeleton;
+struct DataSkeleton;
+class Attachment;
+}
 
 #define REAL_T float
 
-#define NUM_MESH_TRI 5768
-#define NUM_MESH_VERT 2943
 
 #define NUM_SKEL 25
 #define NUM_SKEL_VERT 17
 
-class HumanGeom : public Geom {
+// The half mesh every human is posed from.
+#define NUM_MESH_TRI 5768
+#define NUM_MESH_VERT 2943
+
+
+//==== A Geom whose shape is one vertex set, mirrored and placed ====//
+// Implemented by HumanGeom.  Vertices are kept in the Geom's own frame and expanded per
+// symmetric copy on output, with a fixed triangle connectivity.  A Clone borrows the vertices.
+class HumanVertRole : virtual public GeomInterface
+{
+public:
+    // The eyes, in this Geom's own frame, and the head direction; a super cone is placed from them.
+    virtual vec3d GetDesignEyePtInSelf() const = 0;
+    virtual Matrix4d GetVisionBasis() const = 0;
+
+    // The behavior type this role belongs to; checked by Geom::CastTo.
+    static int BehaviorType()   { return HUMAN_GEOM_TYPE; }
+
+    virtual ~HumanVertRole()   {}
+
+    // The vertices, in the Geom's own frame, before symmetry or placement.
+    virtual const vector < vec3d > & GetMainVerts() const = 0;
+
+    // The eye placed at the asked Geom, and one eye per symmetric copy.
+    Matrix4d BuildDesignEyeMatrix( bool axisaligned ) const;
+    void BuildDesignEyeVec( vector < vec3d > & eyevec ) const;
+
+protected:
+    // One vertex set per symmetric copy, each put through the matching transform.
+    static void ExpandMainVerts( const vector < vec3d > &main_verts,
+                                 const vector < Matrix4d > &trans_mat_vec,
+                                 vector < vector < vec3d > > &verts );
+
+    // The triangles stitched onto those vertex sets, tagged as geom_ptr.
+    static vector < TMesh* > BuildHumanTMeshVec( const vector < vector < vec3d > > &verts,
+                                                 const vector < bool > &flipnormal,
+                                                 const Geom* geom_ptr );
+
+    // The same triangles, as one draw object.
+    static void BuildHumanDrawObjs( const vector < vector < vec3d > > &verts,
+                                    const vector < bool > &flipnormal,
+                                    vector < DrawObj > &draw_obj_vec );
+
+    // The vertices' extent.
+    static void BuildHumanBndBox( const vector < vector < vec3d > > &verts, BndBox &bbox );
+};
+
+class HumanGeom : public Geom, public HumanVertRole {
 public:
     HumanGeom(Vehicle *vehicle_ptr);
 
@@ -113,6 +165,8 @@ public:
     virtual void ValidateParms( );
 
     virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
+    virtual void BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec );
+    virtual void SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec );
 
     virtual int  GetNumXSecSurfs() const
     {
@@ -141,8 +195,9 @@ public:
     void CopyVertsToSkel( const vector < vec3d > & sv );
 
     virtual void GetDesignEyeVec( vector < vec3d > & eyevec ) const;
-    virtual vec3d GetMainDesignEye() const;
-    virtual Matrix4d GetDesignEyeMatrix( bool axisaligned ) const;
+
+    virtual vec3d GetDesignEyePtInSelf() const;
+    virtual Matrix4d GetVisionBasis() const   { return m_TVision; }
 
     IntParm m_LenUnit;
     IntParm m_MassUnit;
@@ -204,7 +259,10 @@ protected:
     virtual void ScaleTriangles();
     virtual void UpdateSurf();
 
+public:
+    // The triangle connectivity, shared by every human.
     static const int m_half_tris[NUM_MESH_TRI][3];
+protected:
     static const int m_skel_indx[NUM_SKEL];
 
     // The anthropometric model reconstructs geometry as Y = Ybar + Q * X, where X is
@@ -251,6 +309,14 @@ private:
 
 
     vector < vec3d > m_MainVerts;
+
+public:
+    virtual const vector < vec3d > & GetMainVerts() const
+    {
+        return m_MainVerts;
+    }
+
+protected:
 
     vector < vec3d > m_SkelVerts;
     vector < vec3d > m_PoseSkelVerts;

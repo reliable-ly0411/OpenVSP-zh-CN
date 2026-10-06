@@ -33,20 +33,21 @@ public:
 
     bool m_DrawMeshFlag;
     bool m_ColorFacesFlag;
+    bool m_ParallelMeshFlag;
+    bool m_SplitJoinSurfsFlag;
     int m_ColorTagReason;
 
     bool m_DrawSourceWakeFlag;
 
     bool m_DrawBorderFlag;
     bool m_DrawIsectFlag;
+    bool m_DrawJoinFlag;
     bool m_DrawRawFlag;
-    bool m_DrawBinAdaptFlag;
+    bool m_DrawCubicFlag;
     bool m_DrawCurveFlag;
     bool m_DrawPntsFlag;
 
     double m_RelCurveTol;
-    bool m_ExportRawFlag;
-    double m_ExportRelCurveTol;
 
     bool m_IntersectSubSurfs;
 
@@ -64,8 +65,6 @@ public:
     int m_SelectedDegenSetIndex;
     bool m_UseMode;
     string m_ModeID;
-
-    bool m_XYZIntCurveFlag;
 
     double m_STEPTol;
     bool m_STEPMergePoints;
@@ -106,6 +105,8 @@ public:
 
     bool m_FarManLocFlag;
     bool m_FarAbsSizeFlag;
+
+    int m_POGSNRef;
 
     string m_FarGeomID;
 

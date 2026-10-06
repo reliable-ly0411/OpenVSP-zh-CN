@@ -32,6 +32,7 @@
 #include <cfloat>
 
 #include "StringUtil.h"
+#include "HingeGeom.h"
 #include "Vehicle.h"
 #include "VehicleMgr.h"
 
@@ -3929,7 +3930,25 @@ void PGMesh::WriteVSPGeomPnts( FILE* file_id, const Matrix4d & XFormMat )
     }
 }
 
-void PGMesh::WriteVSPGeomFaces( FILE* file_id )
+// A face's nodes in reverse order, keeping the first node (and its repeat at the end) in place.
+static void ReverseFaceNodes( vector < PGNode* > &nodVec )
+{
+    if ( nodVec.size() > 2 )
+    {
+        std::reverse( nodVec.begin() + 1, nodVec.end() - 1 );
+    }
+}
+
+// A face's triangles, each with reversed winding.
+static void ReverseTriNodes( vector < PGNode* > &nodVec )
+{
+    for ( int i = 0; i + 2 < ( int )nodVec.size(); i += 3 )
+    {
+        std::swap( nodVec[ i + 1 ], nodVec[ i + 2 ] );
+    }
+}
+
+void PGMesh::WriteVSPGeomFaces( FILE* file_id, bool flipnormal )
 {
     fprintf( file_id, "%d\n", (int)m_FaceList.size() );
 
@@ -3941,6 +3960,10 @@ void PGMesh::WriteVSPGeomFaces( FILE* file_id )
         bool faceError = false;
         vector < PGNode* > nodVec;
         ( *f )->GetNodes( nodVec );
+        if ( flipnormal )
+        {
+            ReverseFaceNodes( nodVec );
+        }
 
         if ( nodVec.size() > 0 )
         {
@@ -3980,7 +4003,7 @@ void PGMesh::WriteVSPGeomFaces( FILE* file_id )
     }
 }
 
-void PGMesh::WriteVSPGeomParts( FILE* file_id )
+void PGMesh::WriteVSPGeomParts( FILE* file_id, bool flipnormal )
 {
     //==== Write Component IDs for each Tri =====//
     int tag;
@@ -3990,6 +4013,10 @@ void PGMesh::WriteVSPGeomParts( FILE* file_id )
     {
         vector < PGNode* > nodVec;
         ( *f )->GetNodes( nodVec );
+        if ( flipnormal )
+        {
+            ReverseFaceNodes( nodVec );
+        }
 
         // index to size-1 because first/last point is repeated.
         int npt = nodVec.size() - 1;
@@ -4095,7 +4122,7 @@ void PGMesh::WriteVSPGeomWakes( FILE* file_id ) const
     }
 }
 
-void PGMesh::WriteVSPGeomAlternateTris( FILE* file_id )
+void PGMesh::WriteVSPGeomAlternateTris( FILE* file_id, bool flipnormal )
 {
     //==== Write Out Tris ====//
     list< PGFace* >::iterator f;
@@ -4103,6 +4130,10 @@ void PGMesh::WriteVSPGeomAlternateTris( FILE* file_id )
     {
         vector < PGNode* > nodVec;
         ( *f )->GetNodesAsTris( nodVec );
+        if ( flipnormal )
+        {
+            ReverseTriNodes( nodVec );
+        }
 
         int npt = nodVec.size();
 
@@ -4122,7 +4153,7 @@ void PGMesh::WriteVSPGeomAlternateTris( FILE* file_id )
     }
 }
 
-void PGMesh::WriteVSPGeomAlternateParts( FILE* file_id )
+void PGMesh::WriteVSPGeomAlternateParts( FILE* file_id, bool flipnormal )
 {
     //==== Write Component IDs for each Tri =====//
     int tag;
@@ -4132,6 +4163,10 @@ void PGMesh::WriteVSPGeomAlternateParts( FILE* file_id )
     {
         vector < PGNode* > nodVec;
         ( *f )->GetNodesAsTris( nodVec );
+        if ( flipnormal )
+        {
+            ReverseTriNodes( nodVec );
+        }
 
         int npt = nodVec.size();
 
@@ -4168,6 +4203,37 @@ void PGMesh::WriteVSPGeomParents( FILE* file_id )
     {
         fprintf( file_id, "%d %d\n", (*f)->m_ID, (*f)->m_Parent->m_ID );
     }
+}
+
+void PGMesh::WriteTagFile( FILE* file_id, const vector < int > &parts )
+{
+    //==== Write Tri IDs for each tag =====//
+
+    int count = 0;
+    list< PGFace* >::iterator f;
+    for ( f = m_FaceList.begin() ; f != m_FaceList.end(); ++f )
+    {
+        int singletag = ( *f )->m_Tag;
+
+        if ( m_PGMulti->MatchAnyPart( singletag, parts ) )
+        {
+            count++;
+        }
+    }
+    fprintf( file_id, "%d\n\n", count );
+
+    int iface = 1;
+    for ( f = m_FaceList.begin() ; f != m_FaceList.end(); ++f )
+    {
+        int singletag = ( *f )->m_Tag;
+
+        if ( m_PGMulti->MatchAnyPart( singletag, parts ) )
+        {
+            fprintf( file_id, "%d\n", iface );
+        }
+        iface++;
+    }
+    fprintf( file_id, "\n" );
 }
 
 void PGMesh::WriteTagFile( FILE* file_id, const int part, const int tag )
@@ -4769,7 +4835,7 @@ fnalt pnalt tnalt un1 vn2...unn vnn              // Last face then part then tag
                                               // Loop to next mesh
 */
 
-void PGMulti::WriteVSPGeom( FILE* file_id, const Matrix4d & XFormMat  )
+void PGMulti::WriteVSPGeom( FILE* file_id, const Matrix4d & XFormMat, bool flipnormal )
 {
     fprintf( file_id, "# vspgeom v3\n" );
 
@@ -4789,12 +4855,12 @@ void PGMulti::WriteVSPGeom( FILE* file_id, const Matrix4d & XFormMat  )
     {
         PGMesh *pgm = m_MeshVec[imesh];
 
-        pgm->WriteVSPGeomFaces( file_id );
-        pgm->WriteVSPGeomParts( file_id );
+        pgm->WriteVSPGeomFaces( file_id, flipnormal );
+        pgm->WriteVSPGeomParts( file_id, flipnormal );
         pgm->WriteVSPGeomParents( file_id );
         pgm->WriteVSPGeomWakes( file_id );
-        pgm->WriteVSPGeomAlternateTris( file_id );
-        pgm->WriteVSPGeomAlternateParts( file_id );
+        pgm->WriteVSPGeomAlternateTris( file_id, flipnormal );
+        pgm->WriteVSPGeomAlternateParts( file_id, flipnormal );
 
     }
 }
@@ -4865,6 +4931,55 @@ void PGMulti::WriteTagFiles( const string& file_name, vector < string > &all_fna
         }
     }
 
+
+    vector < string > gidvec;
+    vector < int > gidpartvec;
+    vector < int > gidsurfvec;
+    GetPartData( gidvec, gidpartvec, gidsurfvec );
+
+    int nhingefile = 0;
+    vector < string > hinges;
+    vector < vector < int > > hingedescendantparts;
+    Vehicle *veh = VehicleMgr.GetVehicle();
+    if ( veh )
+    {
+        // Check all geoms, whether they are in mesh or not.
+        std::vector< std::string > comps = veh->GetGeomVec();
+        for ( int icomp = 0; icomp < comps.size(); icomp++ )
+        {
+            Geom * g = veh->FindGeom( comps[icomp] );
+            if ( g )
+            {
+                // A Clone of a hinge articulates its children the same way, so it is a
+                // control surface too.
+                if ( Geom::CastTo< JointRole >( g ) )
+                {
+                    ntagfile++;
+                    nhingefile++;
+
+                    hinges.push_back( comps[icomp] );
+
+                    vector < string > descendants;
+                    g->BuildRigidAttachedDescendantList( descendants );
+
+                    vector < int > descpart;
+                    for ( int ides = 0; ides < descendants.size(); ides++ )
+                    {
+                        vector < int > indvec;
+                        vector_find_val_multiple( gidvec, descendants[ ides ], indvec );
+
+                        for ( int iind = 0; iind < indvec.size(); iind++ )
+                        {
+                            descpart.push_back( gidpartvec[ indvec[ iind ] ] );
+                        }
+                    }
+
+                    hingedescendantparts.push_back( descpart );
+                }
+            }
+        }
+    }
+
     if ( ntagfile > 0 )
     {
         string base_name = GetBasename( file_name );
@@ -4877,12 +4992,19 @@ void PGMulti::WriteTagFiles( const string& file_name, vector < string > &all_fna
 
         string taglist_name = base_name + ".ALL.taglist";
         string csf_taglist_name = base_name + ".ControlSurfaces.taglist";
+        string hinge_taglist_name = base_name + ".Hinges.taglist";
 
         FILE* taglist_fid = fopen( taglist_name.c_str(), "w" );
         FILE* csf_taglist_fid = nullptr;
         if ( ncsffile > 0 )
         {
             csf_taglist_fid = fopen( csf_taglist_name.c_str(), "w" );
+        }
+
+        FILE* hinge_taglist_fid = nullptr;
+        if ( nhingefile > 0 )
+        {
+            hinge_taglist_fid = fopen( hinge_taglist_name.c_str(), "w" );
         }
 
         if ( taglist_fid )
@@ -4955,12 +5077,72 @@ void PGMulti::WriteTagFiles( const string& file_name, vector < string > &all_fna
                     }
                 }
             }
-
-            fclose( taglist_fid );
-
             if ( csf_taglist_fid )
             {
                 fclose( csf_taglist_fid );
+            }
+
+            if ( hinge_taglist_fid )
+            {
+                all_fnames.push_back( hinge_taglist_name );
+                fprintf( hinge_taglist_fid, "%d\n", nhingefile );
+            }
+
+            for ( int ihinge = 0; ihinge < nhingefile; ihinge++ )
+            {
+                Geom * g = veh->FindGeom( hinges[ ihinge ] );
+                if ( g )
+                {
+                    string hingename = g->GetName() + "_Hinge";
+                    // The taglist records the space-substituted name, so the file has to be
+                    // written under that same name -- and under the space-substituted path --
+                    // or the reader cannot find it.  This is what the part tags above do.
+                    StringUtil::change_space_to_underscore( hingename );
+
+                    string tagfile_name = base_path_nospace + "." + hingename + ".tag";
+                    string tagfile_localname = base_fname + "." + hingename;
+
+                    fprintf( taglist_fid, "%s\n", tagfile_localname.c_str() );
+
+                    if ( hinge_taglist_fid )
+                    {
+                        fprintf( hinge_taglist_fid, "%s\n", tagfile_localname.c_str() );
+                    }
+
+                    FILE* fid = fopen( tagfile_name.c_str(), "w" );
+                    if ( fid )
+                    {
+                        all_fnames.push_back( tagfile_name );
+
+                        // Iterate through meshes coarse to fine.
+                        for ( int imesh = m_MeshVec.size() - 1; imesh >= 0; imesh-- )
+                        {
+                            PGMesh *pgm = m_MeshVec[imesh];
+                            pgm->WriteTagFile( fid, hingedescendantparts[ ihinge ] );
+                        }
+
+                        fclose( fid );
+                    }
+                }
+            }
+            if ( hinge_taglist_fid )
+            {
+                fclose( hinge_taglist_fid );
+            }
+
+            fclose( taglist_fid );
+        }
+        else
+        {
+            // These two were opened before the block above, so they have to be closed
+            // even when the main list could not be opened and that block never ran.
+            if ( csf_taglist_fid )
+            {
+                fclose( csf_taglist_fid );
+            }
+            if ( hinge_taglist_fid )
+            {
+                fclose( hinge_taglist_fid );
             }
         }
     }
@@ -5285,6 +5467,24 @@ string PGMulti::GetGID( const int& tag )
     string gid_bare = gid.substr( 0, 10 );
 
     return gid_bare;
+}
+
+bool PGMulti::MatchAnyPart( const vector < int > & tags, const vector < int > &parts )
+{
+    if ( !tags.empty() )
+    {
+        return vector_contains_val( parts, tags[0] );
+    }
+    return false;
+}
+
+bool PGMulti::MatchAnyPart( int singletag, const vector < int > &parts ) const
+{
+    if ( m_TagKeys.size() >= singletag )
+    {
+        return MatchAnyPart( m_TagKeys[ singletag - 1 ], parts );
+    }
+    return false;
 }
 
 bool PGMulti::MatchPartAndTag( const vector < int > & tags, const int part, const int tag )

@@ -72,7 +72,7 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_PersistenceLayout.AddY( m_OptionsLayout.GetY() );
 
     // Set up Slot for Component Label Layout in top left corner of Persistent Space to the Right
-    m_PersistenceLayout.AddSubGroupLayout( m_ComponentLabelLayout, TYPICAL_INPUT_WIDTH * 2 + 20, m_PersistenceLayout.GetStdHeight() );
+    m_PersistenceLayout.AddSubGroupLayout( m_ComponentLabelLayout, TYPICAL_INPUT_WIDTH * 2 + 20, m_PersistenceLayout.GetStdHeight() * 2 );
 
     // Create Scroll Group for Component Label
     m_ComponentLabelScrollGroup = m_ComponentLabelLayout.AddFlScroll( m_PersistenceLayout.GetStdHeight() * 2 );
@@ -857,7 +857,7 @@ void ParasiteDragScreen::UpdateSrefChoice()
             {
                 snprintf( str, sizeof( str ),  "%d_%s", i, geom->GetName().c_str() );
 
-                if ( geom->GetType().m_Type == MS_WING_GEOM_TYPE )
+                if ( geom->GetBehaviorType() == MS_WING_GEOM_TYPE )
                 {
                     m_RefWingChoice.AddItem( str );
                     WingCompIDMap[g_IDs[i]] = iwing;
@@ -1673,8 +1673,8 @@ void ParasiteDragScreen::UpdateIncorporateDropDowns()
 
                 for ( size_t j = 1; j < m_grouped[i].GetItems().size(); ++j )
                 {
-                    if ( veh->FindGeom( veh->FindGeom( rowVec[i].GeomID )->GetAncestorID( j ) )->GetType().m_Type != HINGE_GEOM_TYPE &&
-                        veh->FindGeom( veh->FindGeom( rowVec[i].GeomID )->GetAncestorID( j ) )->GetType().m_Type != BLANK_GEOM_TYPE)
+                    if ( veh->FindGeom( veh->FindGeom( rowVec[i].GeomID )->GetAncestorID( j ) )->GetBehaviorType() != HINGE_GEOM_TYPE &&
+                        veh->FindGeom( veh->FindGeom( rowVec[i].GeomID )->GetAncestorID( j ) )->GetBehaviorType() != BLANK_GEOM_TYPE)
                     {
                         if ( rowVec[i].GeomShapeType !=
                                 veh->FindGeom( veh->FindGeom( rowVec[i].GeomID )->GetAncestorID( j ) )->GetSurfType(0) )
@@ -2064,7 +2064,7 @@ string ParasiteDragScreen::GetComponentTableLabel( int subsurfFlag, const string
     {
         if ( rowVec[index].MasterRow )
         {
-            if ( veh->FindGeom( rowVec[index].GeomID )->GetType().m_Type == CUSTOM_GEOM_TYPE )
+            if ( veh->FindGeom( rowVec[index].GeomID )->GetBehaviorType() == CUSTOM_GEOM_TYPE )
             {
                 snprintf( str, sizeof( str ),  "(+) %s", rowVec[index].Label.c_str() );
             }

@@ -22,6 +22,7 @@
 #include "StlHelper.h"
 #include "Vehicle.h"
 #include "VSPAEROMgr.h"
+#include "HingeGeom.h"
 #include "WingGeom.h"
 #include "PropGeom.h"
 #include "FileUtil.h"
@@ -34,6 +35,28 @@ VspAeroControlSurf::VspAeroControlSurf()
 {
     isGrouped = false;
     iReflect = false;
+    isHinge = false;
+}
+
+bool VspAeroControlSurf::isMatch( const VspAeroControlSurf &cs ) const
+{
+    if ( !cs.isHinge &&
+         !isHinge &&
+         cs.parentGeomId == parentGeomId &&
+         cs.SSID == SSID &&
+         cs.iReflect == iReflect )
+    {
+        return true;
+    }
+
+    if ( cs.isHinge &&
+         isHinge &&
+         cs.parentGeomId == parentGeomId )
+    {
+        return true;
+    }
+
+    return false;
 }
 
 //==== Constructor ====//
@@ -149,14 +172,15 @@ VSPAEROMgrSingleton::VSPAEROMgrSingleton() : ParmContainer()
 
     // m_NumWakeNodes no longer must be a power of two.
     // m_NumWakeNodes.SetPowShift( 2, 0 ); // Must come before Init
-    m_NumWakeNodes.Init( "RootWakeNodes", groupname, this, 8, 0, 10e12 );
-    m_NumWakeNodes.SetDescript( "Number of Wake Nodes (f(n^2))" );
+    m_NumWakeNodes.Init( "RootWakeNodes", groupname, this, 8, 0, 1e12 );
+    m_NumWakeNodes.SetDescript( "Number of Wake Nodes" );
 
     // This sets all the filename members to the appropriate value (for example: empty strings if there is no vehicle)
     UpdateFilenames();
 
     m_SolverProcessKill = false;
     m_SlicerProcessKill = false;
+    m_SolverThreadActive = false;
 
     // Plot limits
     m_ConvergenceXMinIsManual.Init( "m_ConvergenceXMinIsManual", groupname, this, 0, 0, 1 );
@@ -394,7 +418,6 @@ void VSPAEROMgrSingleton::Renew()
     m_ControlSurfaceGroupVec.clear();
 
     m_CompleteControlSurfaceVec.clear();
-    m_ActiveControlSurfaceVec.clear();
 
     for(size_t i = 0; i < m_RotorDiskVec.size(); ++i)
     {
@@ -550,8 +573,6 @@ void VSPAEROMgrSingleton::Update()
 
     UpdateControlSurfaceGroups();
 
-    UpdateActiveControlSurfVec();
-
     UpdateSetupParmLimits();
 
     UpdateUnsteadyGroups();
@@ -573,28 +594,34 @@ void VSPAEROMgrSingleton::UpdateSref()
 
         if( refgeom )
         {
-            if( refgeom->GetType().m_Type == MS_WING_GEOM_TYPE )
+            if( refgeom->GetBehaviorType() == MS_WING_GEOM_TYPE )
             {
-                WingGeom* refwing = ( WingGeom* ) refgeom;
+                // The reference area comes from the shape, so from the Geom copied.
+                WingGeom* behavior_wing = dynamic_cast< WingGeom* >( refgeom->GetBehaviorGeom() );
+
+                if ( !behavior_wing )
+                {
+                    return;
+                }
 
                 if ( m_SCurveFlag() )
                 {
-                    m_Sref.Set( refwing->m_CurvedArea() );
+                    m_Sref.Set( behavior_wing->m_CurvedArea() );
                 }
                 else
                 {
-                    m_Sref.Set( refwing->m_TotalArea() );
+                    m_Sref.Set( behavior_wing->m_TotalArea() );
                 }
 
-                m_bref.Set( refwing->m_TotalSpan() );
+                m_bref.Set( behavior_wing->m_TotalSpan() );
 
                 if ( m_MACFlag() )
                 {
-                    m_cref.Set( refwing->m_MAC() );
+                    m_cref.Set( behavior_wing->m_MAC() );
                 }
                 else
                 {
-                    m_cref.Set( refwing->m_TotalChord() );
+                    m_cref.Set( behavior_wing->m_TotalChord() );
                 }
 
                 m_Sref.Deactivate();
@@ -806,8 +833,12 @@ void VSPAEROMgrSingleton::UpdateRotorDisks()
                             temp.back()->SetName(str);
                         }
 
-                        string dia_id = geom->FindParm("Diameter", "Design");
-                        temp.back()->m_Diameter.Set(ParmMgr.FindParm(dia_id)->Get());
+                        // The rotor the disk describes -- this Geom or the one it copies.
+                        RotorRole* rotor = Geom::CastTo< RotorRole >( geom );
+                        if ( rotor )
+                        {
+                            temp.back()->m_Diameter.Set( rotor->GetRotorDiameter() );
+                        }
 
                         temp.back()->m_XYZ = geom->CompPnt01( iSubsurf, 0, 0 );
 
@@ -829,26 +860,24 @@ void VSPAEROMgrSingleton::UpdateRotorDisks()
 
                         // Set hub diameter from geometry
                         bool hub_set = false;
-                        XSecSurf* xsecsurf = geom->GetXSecSurf( 0 );
-                        if ( xsecsurf )
+                        double hubdia = 0.0;
+                        if ( rotor )
                         {
-                            XSec* xsec = xsecsurf->FindXSec( 0 );
-                            if ( xsec && xsec->GetType() == vsp::XSEC_PROP )
+                            if ( rotor->GetRotorHubDiameter( hubdia ) )
                             {
                                 if ( temp.back()->m_AutoHubDiaFlag() )
                                 {
-                                    PropXSec* prop_xsec = dynamic_cast <PropXSec*> ( xsec );
-                                    temp.back()->m_HubDiameter.Set( 2 * prop_xsec->m_RadiusFrac.GetResult() ); // radius to diameter
+                                    temp.back()->m_HubDiameter.Set( hubdia );
                                     temp.back()->m_HubDiameter.Deactivate();
                                     hub_set = true;
                                 }
                             }
                             else
                             {
+                                // No hub described; keep the user's value.
                                 temp.back()->m_AutoHubDiaFlag.Set( false );
                                 temp.back()->m_AutoHubDiaFlag.Deactivate();
                             }
-
                         }
 
                         if ( !hub_set )
@@ -901,24 +930,43 @@ void VSPAEROMgrSingleton::UpdateControlSurfaceGroups()
             for ( size_t j = 0; j < m_CompleteControlSurfaceVec.size(); ++j )
             {
                 // If Control Surface ID AND Reflection Number Match - Replace Subsurf within Control Surface Group
-                if ( m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].SSID == m_CompleteControlSurfaceVec[j].SSID &&
-                        m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].iReflect == m_CompleteControlSurfaceVec[j].iReflect )
+                if ( m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].isMatch( m_CompleteControlSurfaceVec[j] ) )
                 {
                     m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].fullName = m_CompleteControlSurfaceVec[j].fullName;
                     m_CompleteControlSurfaceVec[j].isGrouped = true;
                     m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].isGrouped = true;
                 }
             }
+
+            bool remove_flag = false;
+
             // Remove Deleted Sub Surfaces and Sub Surfaces with Parent Geoms That No Longer Exist
             Geom* parent = VehicleMgr.GetVehicle()->FindGeom( m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].parentGeomId );
 
-            SubSurface* ss = nullptr;
-            if ( parent ) ss = parent->GetSubSurf( m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].SSID );
-
-            if ( !parent || !ss || ( ss && parent->GetNumSymmCopies() <= m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].iReflect ) )
+            if ( !parent )
             {
-                m_ControlSurfaceGroupVec[i]->RemoveSubSurface( m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].SSID,
-                        m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].iReflect );
+                remove_flag = true;
+            }
+            else
+            {
+                if ( !m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].isHinge )
+                {
+                    SubSurface* ss = parent->GetSubSurf( m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].SSID );
+                    if ( !ss || ( ss && parent->GetNumSymmCopies() <= m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k].iReflect ) )
+                    {
+                        remove_flag = true;
+                    }
+                }
+                else if ( !Geom::CastTo< JointRole >( parent ) )
+                {
+                    // A Clone stops being a joint when its original goes or changes.
+                    remove_flag = true;
+                }
+            }
+
+            if ( remove_flag )
+            {
+                m_ControlSurfaceGroupVec[i]->RemoveControlSurface( m_ControlSurfaceGroupVec[i]->m_ControlSurfVec[k] );
                 k--;
             }
         }
@@ -940,9 +988,12 @@ void VSPAEROMgrSingleton::CleanCompleteControlSurfVec()
             {
                 m_CompleteControlSurfaceVec.erase( m_CompleteControlSurfaceVec.begin() + i );
             }
-            else if ( !geom->GetSubSurf( m_CompleteControlSurfaceVec[i].SSID ) )
+            else
             {
-                m_CompleteControlSurfaceVec.erase( m_CompleteControlSurfaceVec.begin() + i );
+                if ( !m_CompleteControlSurfaceVec[i].isHinge && !geom->GetSubSurf( m_CompleteControlSurfaceVec[i].SSID ) )
+                {
+                    m_CompleteControlSurfaceVec.erase( m_CompleteControlSurfaceVec.begin() + i );
+                }
             }
         }
     }
@@ -961,26 +1012,50 @@ void VSPAEROMgrSingleton::UpdateCompleteControlSurfVec()
             Geom *g = veh->FindGeom( geom_vec[i] );
             if ( g )
             {
-                vector < SubSurface* > sub_surf_vec = g->GetSubSurfVec();
-                for ( size_t j = 0; j < sub_surf_vec.size(); ++j )
+                // A Clone of a hinge articulates its children the same way, so it offers a
+                // control surface too.
+                if ( Geom::CastTo< JointRole >( g ) )
                 {
-                    SubSurface *ssurf = sub_surf_vec[j];
-                    if ( ssurf )
+                    // All-moving control surfaces need VSPAERO support, so only with -exp for now.
+                    if ( veh->GetExperimental() )
                     {
-                        for ( size_t iReflect = 0; iReflect < g->GetNumSymmCopies(); ++iReflect )
-                        {
-                            if ( ssurf->GetType() == vsp::SS_CONTROL || ssurf->GetType() == vsp::SS_RECTANGLE )
-                            {
-                                // Create New CS Parm Container
-                                VspAeroControlSurf newSurf;
-                                newSurf.SSID = ssurf->GetID();
-                                char str[256];
-                                snprintf( str, sizeof( str ),  "%s_Surf%zu_%s", g->GetName().c_str(), iReflect, ssurf->GetName().c_str() );
-                                newSurf.fullName = string( str );
-                                newSurf.parentGeomId = ssurf->GetParentContainer();
-                                newSurf.iReflect = iReflect;
+                    // Create New CS Parm Container
+                    VspAeroControlSurf newSurf;
+                    newSurf.SSID = "";
+                    char str[256];
+                    snprintf( str, sizeof( str ),  "%s_Hinge", g->GetName().c_str() );
+                    newSurf.fullName = string( str );
+                    newSurf.parentGeomId = g->GetID();
+                    newSurf.iReflect = -1;
+                    newSurf.isHinge = true;
 
-                                m_CompleteControlSurfaceVec.push_back( newSurf );
+                    m_CompleteControlSurfaceVec.push_back( newSurf );
+                    }
+                }
+                else
+                {
+                    vector < SubSurface* > sub_surf_vec = g->GetSubSurfVec();
+                    for ( size_t j = 0; j < sub_surf_vec.size(); ++j )
+                    {
+                        SubSurface *ssurf = sub_surf_vec[j];
+                        if ( ssurf )
+                        {
+                            for ( size_t iReflect = 0; iReflect < g->GetNumSymmCopies(); ++iReflect )
+                            {
+                                if ( ssurf->GetType() == vsp::SS_CONTROL )
+                                {
+                                    // Create New CS Parm Container
+                                    VspAeroControlSurf newSurf;
+                                    newSurf.SSID = ssurf->GetID();
+                                    char str[256];
+                                    snprintf( str, sizeof( str ),  "%s_Surf%zu_%s", g->GetName().c_str(), iReflect, ssurf->GetName().c_str() );
+                                    newSurf.fullName = string( str );
+                                    newSurf.parentGeomId = ssurf->GetParentContainer();
+                                    newSurf.iReflect = iReflect;
+                                    newSurf.isHinge = false;
+
+                                    m_CompleteControlSurfaceVec.push_back( newSurf );
+                                }
                             }
                         }
                     }
@@ -992,17 +1067,13 @@ void VSPAEROMgrSingleton::UpdateCompleteControlSurfVec()
     }
 }
 
-void VSPAEROMgrSingleton::UpdateActiveControlSurfVec()
+vector < VspAeroControlSurf > * VSPAEROMgrSingleton::GetActiveCSVecPtr()
 {
-    m_ActiveControlSurfaceVec.clear();
     if ( m_CurrentCSGroupIndex != -1 )
     {
-        vector < VspAeroControlSurf > sub_surf_vec = m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->m_ControlSurfVec;
-        for ( size_t j = 0; j < sub_surf_vec.size(); ++j )
-        {
-            m_ActiveControlSurfaceVec.push_back( sub_surf_vec[j] );
-        }
+        return & ( m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->m_ControlSurfVec );
     }
+    return nullptr;
 }
 
 void VSPAEROMgrSingleton::AddLinkableParms( vector < string > & linkable_parm_vec, const string & link_container_id )
@@ -1058,17 +1129,12 @@ void VSPAEROMgrSingleton::InitControlSurfaceGroups()
             {
                 // Check if the control surface is available
                 m_CurrentCSGroupIndex = j;
-                UpdateActiveControlSurfVec();
                 vector < VspAeroControlSurf > ungrouped_vec = GetAvailableCSVec();
                 bool is_available = false;
 
                 for ( size_t k = 0; k < ungrouped_vec.size(); k++ )
                 {
-                    if ( ( m_CompleteControlSurfaceVec[i].fullName == ungrouped_vec[k].fullName ) &&
-                        ( m_CompleteControlSurfaceVec[i].parentGeomId == ungrouped_vec[k].parentGeomId ) &&
-                        ( m_CompleteControlSurfaceVec[i].SSID == ungrouped_vec[k].SSID ) &&
-                        ( m_CompleteControlSurfaceVec[i].isGrouped == ungrouped_vec[k].isGrouped ) &&
-                        ( m_CompleteControlSurfaceVec[i].iReflect == ungrouped_vec[k].iReflect ) )
+                    if ( m_CompleteControlSurfaceVec[i].isMatch( ungrouped_vec[k] ) )
                     {
                         is_available = true;
                         break;
@@ -1077,15 +1143,20 @@ void VSPAEROMgrSingleton::InitControlSurfaceGroups()
 
                 if ( !m_ControlSurfaceGroupVec[j]->m_ControlSurfVec.empty() && is_available )
                 {
-                    // Construct a default group name
-                    string curr_csg_id = m_CompleteControlSurfaceVec[i].parentGeomId + "_" + m_CompleteControlSurfaceVec[i].SSID;
+                    bool match = false;
+                    if ( !m_CompleteControlSurfaceVec[i].isHinge )
+                    {
+                        if ( m_CompleteControlSurfaceVec[i].parentGeomId == m_ControlSurfaceGroupVec[j]->m_ParentGeomBaseID &&
+                             m_CompleteControlSurfaceVec[i].SSID == m_ControlSurfaceGroupVec[j]->m_ControlSurfVec[0].SSID )
+                        {
+                            match = true;
+                        }
+                    }
 
-                    snprintf( str, sizeof( str ),  "%s_%s", m_ControlSurfaceGroupVec[j]->m_ParentGeomBaseID.c_str(),
-                        m_ControlSurfaceGroupVec[j]->m_ControlSurfVec[0].SSID.c_str() );
-                    if ( curr_csg_id == str ) // Update Existing Control Surface Group
+                    if ( match ) // Update Existing Control Surface Group
                     {
                         csg = m_ControlSurfaceGroupVec[j];
-                        csg->AddSubSurface( m_CompleteControlSurfaceVec[i] );
+                        csg->AddControlSurface( m_CompleteControlSurfaceVec[i] );
                         m_ControlSurfaceGroupVec.back() = csg;
                         exists = true;
                         break;
@@ -1099,9 +1170,16 @@ void VSPAEROMgrSingleton::InitControlSurfaceGroups()
                 if ( geom )
                 {
                     csg = new ControlSurfaceGroup;
-                    csg->AddSubSurface( m_CompleteControlSurfaceVec[i] );
-                    snprintf( str, sizeof( str ),  "%s_%s", geom->GetName().c_str(),
-                        geom->GetSubSurf( m_CompleteControlSurfaceVec[i].SSID )->GetName().c_str() );
+                    csg->AddControlSurface( m_CompleteControlSurfaceVec[i] );
+                    if ( !m_CompleteControlSurfaceVec[i].isHinge )
+                    {
+                        snprintf( str, sizeof( str ),  "%s_%s", geom->GetName().c_str(), geom->GetSubSurf( m_CompleteControlSurfaceVec[i].SSID )->GetName().c_str() );
+                    }
+                    else
+                    {
+                        snprintf( str, sizeof( str ),  "%s", geom->GetName().c_str() );
+                    }
+
                     csg->SetName( str );
                     csg->m_ParentGeomBaseID = m_CompleteControlSurfaceVec[i].parentGeomId;
                     m_ControlSurfaceGroupVec.push_back( csg );
@@ -1176,7 +1254,17 @@ string VSPAEROMgrSingleton::ComputeGeometry()
         {
             for ( size_t i = 0; i < m_ControlSurfaceGroupVec[iCSG]->m_ControlSurfVec.size(); i++ )
             {
-                sub_vec.push_back( m_ControlSurfaceGroupVec[iCSG]->m_ControlSurfVec[i].SSID );
+                const VspAeroControlSurf &cs = m_ControlSurfaceGroupVec[iCSG]->m_ControlSurfVec[i];
+
+                // An all-moving surface is driven by a hinge, not by a subsurface, and
+                // carries no SSID.  Pushing its empty ID would make sub_vec non-empty and
+                // so turn on subsurface intersection for a model that has none.
+                if ( cs.isHinge || cs.SSID.empty() )
+                {
+                    continue;
+                }
+
+                sub_vec.push_back( cs.SSID );
             }
         }
     }
@@ -1252,7 +1340,12 @@ string VSPAEROMgrSingleton::CreateSetupFile()
 {
     string retStr = string();
 
-    Update(); // Ensure correct control surface and rotor groups when this function is called through the API
+    // Ensure correct control surface and rotor groups when this function is called through the API.
+    // The GUI updated the manager before launching the solver thread, which must not mutate it.
+    if ( !m_SolverThreadActive )
+    {
+        Update();
+    }
 
     Vehicle *veh = VehicleMgr.GetVehicle();
     if ( !veh )
@@ -1813,8 +1906,13 @@ Optional input of logFile allows outputting to a log file or the console
 */
 string VSPAEROMgrSingleton::ComputeSolver( FILE * logFile )
 {
-    Update(); // Force update to ensure correct number of unstead groups, actuator disks, etc when run though the API.
-    UpdateFilenames(); // Do we really need this? is also called by Update() moments before
+    // Force update to ensure correct number of unsteady groups, actuator disks, etc when run through the API.
+    // When running in the GUI's solver thread, the state was updated on the GUI thread just before launch and
+    // the GUI concurrently reads it -- it must not be mutated here.
+    if ( !m_SolverThreadActive )
+    {
+        Update();
+    }
 
     std::vector <string> res_id_vector;
 
@@ -3524,20 +3622,19 @@ void VSPAEROMgrSingleton::AddControlSurfaceGroup()
     m_CurrentCSGroupIndex = m_ControlSurfaceGroupVec.size() - 1;
 
     m_SelectedGroupedCS.clear();
-    UpdateActiveControlSurfVec();
 
     HighlightSelected( CONTROL_SURFACE );
 }
 
 void VSPAEROMgrSingleton::RemoveControlSurfaceGroup()
 {
-    if ( m_CurrentCSGroupIndex != -1 )
+    if ( GetActiveCSVecPtr() )
     {
-        for ( size_t i = 0; i < m_ActiveControlSurfaceVec.size(); ++i )
+        for ( size_t i = 0; i < GetActiveCSVecPtr()->size(); ++i )
         {
             for ( size_t j = 0; j < m_CompleteControlSurfaceVec.size(); ++j )
             {
-                if ( m_CompleteControlSurfaceVec[j].SSID == m_ActiveControlSurfaceVec[i].SSID )
+                if ( m_CompleteControlSurfaceVec[j].isMatch( ( * GetActiveCSVecPtr() )[ i ] ) )
                 {
                     m_CompleteControlSurfaceVec[j].isGrouped = false;
                 }
@@ -3557,7 +3654,6 @@ void VSPAEROMgrSingleton::RemoveControlSurfaceGroup()
         }
     }
     m_SelectedGroupedCS.clear();
-    UpdateActiveControlSurfVec();
     UpdateControlSurfaceGroupSuffix();
 }
 
@@ -3570,12 +3666,11 @@ void VSPAEROMgrSingleton::AddSelectedToCSGroup()
 
         for ( size_t i = 0; i < selected.size(); ++i )
         {
-            m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->AddSubSurface( ungrouped_vec[ selected[ i ] - 1 ] );
+            m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->AddControlSurface( ungrouped_vec[ selected[ i ] - 1 ] );
         }
     }
     m_SelectedUngroupedCS.clear();
     m_SelectedGroupedCS.clear();
-    UpdateActiveControlSurfVec();
 }
 
 void VSPAEROMgrSingleton::AddAllToCSGroup()
@@ -3585,60 +3680,63 @@ void VSPAEROMgrSingleton::AddAllToCSGroup()
         vector < VspAeroControlSurf > ungrouped_vec = GetAvailableCSVec();
         for ( size_t i = 0; i < ungrouped_vec.size(); ++i )
         {
-            m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->AddSubSurface( ungrouped_vec[ i ] );
+            m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->AddControlSurface( ungrouped_vec[ i ] );
         }
     }
     m_SelectedUngroupedCS.clear();
     m_SelectedGroupedCS.clear();
-    UpdateActiveControlSurfVec();
 }
 
 void VSPAEROMgrSingleton::RemoveSelectedFromCSGroup()
 {
     vector < int > selected = m_SelectedGroupedCS;
-    if ( m_CurrentCSGroupIndex != -1 )
+    if ( GetActiveCSVecPtr() )
     {
+        // The removal below shrinks the very vector GetActiveCSVecPtr points at, so the
+        // selection indices are only meaningful against a copy taken before any removal.
+        // RemoveAllFromCSGroup, just below, already works this way.
+        vector< VspAeroControlSurf > active = *GetActiveCSVecPtr();
+
         for ( size_t i = 0; i < selected.size(); ++i )
         {
-            m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->RemoveSubSurface( m_ActiveControlSurfaceVec[selected[i] - 1].SSID,
-                    m_ActiveControlSurfaceVec[selected[i] - 1].iReflect );
+            int isel = selected[ i ] - 1;
+
+            if ( isel < 0 || isel >= ( int )active.size() )
+            {
+                continue;
+            }
+
+            m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->RemoveControlSurface( active[ isel ] );
             for ( size_t j = 0; j < m_CompleteControlSurfaceVec.size(); ++j )
             {
-                if ( m_ActiveControlSurfaceVec[selected[i] - 1].SSID == m_CompleteControlSurfaceVec[j].SSID )
+                if ( active[ isel ].isMatch( m_CompleteControlSurfaceVec[j] ) )
                 {
-                    if ( m_ActiveControlSurfaceVec[selected[i] - 1].iReflect == m_CompleteControlSurfaceVec[j].iReflect )
-                    {
-                        m_CompleteControlSurfaceVec[ j ].isGrouped = false;
-                    }
+                    m_CompleteControlSurfaceVec[ j ].isGrouped = false;
                 }
             }
         }
     }
     m_SelectedGroupedCS.clear();
-    UpdateActiveControlSurfVec();
 }
 
 void VSPAEROMgrSingleton::RemoveAllFromCSGroup()
 {
-    if ( m_CurrentCSGroupIndex != -1 )
+    if ( GetActiveCSVecPtr() )
     {
-        for ( size_t i = 0; i < m_ActiveControlSurfaceVec.size(); ++i )
+        vector< VspAeroControlSurf > active = *GetActiveCSVecPtr();
+        for ( size_t i = 0; i < active.size(); ++i )
         {
-            m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->RemoveSubSurface( m_ActiveControlSurfaceVec[i].SSID, m_ActiveControlSurfaceVec[i].iReflect );
+            m_ControlSurfaceGroupVec[ m_CurrentCSGroupIndex ]->RemoveControlSurface( active[i] );
             for ( size_t j = 0; j < m_CompleteControlSurfaceVec.size(); ++j )
             {
-                if ( m_ActiveControlSurfaceVec[i].SSID == m_CompleteControlSurfaceVec[j].SSID )
+                if ( active[i].isMatch( m_CompleteControlSurfaceVec[j] ) )
                 {
-                    if ( m_ActiveControlSurfaceVec[i].iReflect == m_CompleteControlSurfaceVec[j].iReflect )
-                    {
-                        m_CompleteControlSurfaceVec[ j ].isGrouped = false;
-                    }
+                    m_CompleteControlSurfaceVec[ j ].isGrouped = false;
                 }
             }
         }
     }
     m_SelectedGroupedCS.clear();
-    UpdateActiveControlSurfVec();
 }
 
 string VSPAEROMgrSingleton::GetCurrentCSGGroupName()
@@ -3661,14 +3759,15 @@ vector < VspAeroControlSurf > VSPAEROMgrSingleton::GetAvailableCSVec()
     {
         bool grouped = false;
 
-        for ( size_t j = 0; j < m_ActiveControlSurfaceVec.size(); j++ )
+        if ( GetActiveCSVecPtr() )
         {
-            if ( ( strcmp( m_CompleteControlSurfaceVec[i].SSID.c_str(), m_ActiveControlSurfaceVec[j].SSID.c_str() ) == 0 ) && 
-                 ( m_CompleteControlSurfaceVec[i].iReflect == m_ActiveControlSurfaceVec[j].iReflect ) &&
-                 ( strcmp( m_CompleteControlSurfaceVec[i].fullName.c_str(), m_ActiveControlSurfaceVec[j].fullName.c_str() ) == 0 ) )
+            for ( size_t j = 0; j < GetActiveCSVecPtr()->size(); j++ )
             {
-                grouped = true;
-                break;
+                if ( m_CompleteControlSurfaceVec[i].isMatch( ( * GetActiveCSVecPtr() )[ j ] ) )
+                {
+                    grouped = true;
+                    break;
+                }
             }
         }
 
@@ -3802,7 +3901,7 @@ void VSPAEROMgrSingleton::UpdateHighlighted( vector < DrawObj* > & draw_obj_vec 
     int sub_surf_indx;
     if ( m_CurrentCSGroupIndex != -1 )
     {
-        vector < VspAeroControlSurf > cont_surf_vec = m_ActiveControlSurfaceVec;
+        vector < VspAeroControlSurf > cont_surf_vec = * GetActiveCSVecPtr();
         vector < VspAeroControlSurf > cont_surf_vec_ungrouped = GetAvailableCSVec();
         if ( m_SelectedGroupedCS.empty() && m_SelectedUngroupedCS.empty() )
         {
@@ -3866,7 +3965,11 @@ string VSPAEROMgrSingleton::ComputeCpSlices( FILE * logFile )
 {
     string resID = string();
 
-    UpdateFilenames();
+    // Do not mutate manager state from the solver thread -- filenames were set on the GUI thread at launch.
+    if ( !m_SolverThreadActive )
+    {
+        UpdateFilenames();
+    }
 
     if ( !FileExist( m_AdbFile ) )
     {
@@ -3966,7 +4069,11 @@ string VSPAEROMgrSingleton::ExecuteCpSlicer( FILE * logFile )
 
 void VSPAEROMgrSingleton::ComputeQuadTreeSlices( FILE * logFile )
 {
-    UpdateFilenames();
+    // Do not mutate manager state from the solver thread -- filenames were set on the GUI thread at launch.
+    if ( !m_SolverThreadActive )
+    {
+        UpdateFilenames();
+    }
 
     if ( !FileExist( m_AdbFile ) )
     {
@@ -4427,9 +4534,9 @@ map < pair < string, int >, vector < int > > VSPAEROMgrSingleton::GetVSPAEROGeom
             continue;
         }
 
-        if ( geom->GetType().m_Type == BLANK_GEOM_TYPE ||
-             geom->GetType().m_Type == HINGE_GEOM_TYPE ||
-             geom->GetType().m_Type == PT_CLOUD_GEOM_TYPE ) // Skip these types.
+        if ( geom->GetBehaviorType() == BLANK_GEOM_TYPE ||
+             geom->GetBehaviorType() == HINGE_GEOM_TYPE ||
+             geom->GetBehaviorType() == PT_CLOUD_GEOM_TYPE ) // Skip these types.
         {
             continue;
         }
@@ -4450,16 +4557,17 @@ map < pair < string, int >, vector < int > > VSPAEROMgrSingleton::GetVSPAEROGeom
 
         // Human and Mesh types will run in VSPAERO panel method... support accordingly
         size_t num_surf = 0;
-        if ( geom->GetType().m_Type == HUMAN_GEOM_TYPE )
+        if ( geom->GetBehaviorType() == HUMAN_GEOM_TYPE )
         {
             num_surf = 1;
         }
-        else if ( geom->GetType().m_Type == MESH_GEOM_TYPE )
+        else if ( geom->GetBehaviorType() == MESH_GEOM_TYPE )
         {
-            MeshGeom* mesh = dynamic_cast<MeshGeom*>( geom );
+            // Ask the interface, so a Clone of a mesh counts its triangles.
+            TMeshRole* mesh = Geom::CastTo< TMeshRole >( geom );
             assert( mesh );
 
-            num_surf = (int)mesh->m_TMeshVec.size();
+            num_surf = (int)mesh->GetTMeshVecInSelf().size();
         }
         else
         {
@@ -4646,19 +4754,19 @@ void VSPAEROMgrSingleton::UpdateUnsteadyGroups()
 
             if ( !grouped )
             {
-                if ( geom->GetType().m_Type == PROP_GEOM_TYPE )
+                if ( geom->GetBehaviorType() == PROP_GEOM_TYPE )
                 {
-                    PropGeom* prop = dynamic_cast<PropGeom*>( geom );
-                    assert( prop );
-                    if ( prop->m_PropMode() != vsp::PROP_DISK )
+                    PropGeom* behavior_prop = dynamic_cast<PropGeom*>( geom->GetBehaviorGeom() );
+                    assert( behavior_prop );
+                    if ( behavior_prop->m_PropMode() != vsp::PROP_DISK )
                     {
                         ungrouped_props.emplace_back( std::make_pair( geom_set_vec[i], s ) );
                     }
                 }
                 else if ( !vspaero_geom_index_map[std::make_pair( geom_set_vec[i], s )].empty() &&
-                          geom->GetType().m_Type != BLANK_GEOM_TYPE &&
-                          geom->GetType().m_Type != PT_CLOUD_GEOM_TYPE &&
-                          geom->GetType().m_Type != HINGE_GEOM_TYPE ) // TODO: Check if point cloud works in panel method?
+                          geom->GetBehaviorType() != BLANK_GEOM_TYPE &&
+                          geom->GetBehaviorType() != PT_CLOUD_GEOM_TYPE &&
+                          geom->GetBehaviorType() != HINGE_GEOM_TYPE ) // TODO: Check if point cloud works in panel method?
                 {
                     ungrouped_comps.emplace_back( std::make_pair( geom_set_vec[i], s ) );
                 }
@@ -4678,18 +4786,18 @@ void VSPAEROMgrSingleton::UpdateUnsteadyGroups()
 
             if ( parent && ( parent->GetSetFlag( set ) || parent->GetSetFlag( degenset ) ) )
             {
-                if ( parent->GetType().m_Type == PROP_GEOM_TYPE )
+                if ( parent->GetBehaviorType() == PROP_GEOM_TYPE )
                 {
-                    PropGeom* prop = dynamic_cast<PropGeom*>( parent );
-                    assert( prop );
-                    if ( prop->m_PropMode() == vsp::PROP_DISK )
+                    PropGeom* behavior_prop = dynamic_cast<PropGeom*>( parent->GetBehaviorGeom() );
+                    assert( behavior_prop );
+                    if ( behavior_prop->m_PropMode() == vsp::PROP_DISK )
                     {
                         break;
                     }
                 }
-                else if ( parent->GetType().m_Type == BLANK_GEOM_TYPE ||
-                          parent->GetType().m_Type == HINGE_GEOM_TYPE ||
-                          parent->GetType().m_Type == PT_CLOUD_GEOM_TYPE )
+                else if ( parent->GetBehaviorType() == BLANK_GEOM_TYPE ||
+                          parent->GetBehaviorType() == HINGE_GEOM_TYPE ||
+                          parent->GetBehaviorType() == PT_CLOUD_GEOM_TYPE )
                 {
                     continue; // TODO: Check if point cloud works in panel method?
                 }
@@ -6222,6 +6330,7 @@ xmlNodePtr ControlSurfaceGroup::EncodeXml( xmlNodePtr & node )
             XmlUtil::AddStringNode( csnode, "SSID", m_ControlSurfVec[i].SSID );
             XmlUtil::AddStringNode( csnode, "ParentGeomID", m_ControlSurfVec[i].parentGeomId );
             XmlUtil::AddIntNode( csnode, "iReflect", m_ControlSurfVec[i].iReflect );
+            XmlUtil::AddIntNode( csnode, "isHinge", m_ControlSurfVec[i].isHinge );
         }
 
         ParmContainer::EncodeXml( node );
@@ -6237,6 +6346,7 @@ xmlNodePtr ControlSurfaceGroup::DecodeXml( xmlNodePtr & node )
     string SSID;
 
     int iReflect = 0;
+    bool isHinge = false;
     VspAeroControlSurf newSurf;
 
     if ( node )
@@ -6251,16 +6361,17 @@ xmlNodePtr ControlSurfaceGroup::DecodeXml( xmlNodePtr & node )
             newSurf.SSID = IDMgr.RemapRefID( XmlUtil::FindString( csnode, "SSID", SSID ) );
             newSurf.parentGeomId = IDMgr.RemapRefID( XmlUtil::FindString( csnode, "ParentGeomID", ParentGeomID ) );
             newSurf.iReflect = XmlUtil::FindInt( csnode, "iReflect", iReflect );
-            AddSubSurface( newSurf );
+            newSurf.isHinge = XmlUtil::FindInt( csnode, "isHinge", isHinge );
+            AddControlSurface( newSurf );
         }
 
-        ParmContainer::DecodeXml( node ); // Comes after AddSubSurface() to prevent overwriting of newly initialized Parms
+        ParmContainer::DecodeXml( node ); // Comes after AddControlSurface() to prevent overwriting of newly initialized Parms
     }
 
     return node;
 }
 
-void ControlSurfaceGroup::AddSubSurface( const VspAeroControlSurf &control_surf )
+void ControlSurfaceGroup::AddControlSurface( const VspAeroControlSurf &control_surf )
 {
     // Add deflection gain parm to ControlSurfaceGroup container
     Parm* p = ParmMgr.CreateParm( vsp::PARM_DOUBLE_TYPE );
@@ -6271,20 +6382,27 @@ void ControlSurfaceGroup::AddSubSurface( const VspAeroControlSurf &control_surf 
         //  parm name: control_surf->fullName (example: MainWing_Surf1_Aileron)
         //  group: "ControlSurfaceGroup"
         //  initial value: control_surf->deflection_gain
-        snprintf( str, sizeof( str ),  "Surf_%s_%u_Gain", control_surf.SSID.c_str(), control_surf.iReflect );
+        if ( !control_surf.isHinge )
+        {
+            snprintf( str, sizeof( str ),  "Surf_%s_%u_Gain", control_surf.SSID.c_str(), control_surf.iReflect );
+        }
+        else
+        {
+            snprintf( str, sizeof( str ),  "Hinge_%s_Gain", control_surf.parentGeomId.c_str() );
+        }
         p->Init( str, m_GroupName, this, 1.0, -1.0e6, 1.0e6 );
-        p->SetDescript( "Deflection gain for the individual sub surface to be used for control mixing and allocation within the control surface group" );
+        p->SetDescript( "Deflection gain for the individual sub surface or hinge to be used for control mixing and allocation within the control surface group" );
         m_DeflectionGainVec.push_back( p );
     }
 
     m_ControlSurfVec.push_back( control_surf );
 }
 
-void ControlSurfaceGroup::RemoveSubSurface( const string & ssid, int reflec_num )
+void ControlSurfaceGroup::RemoveControlSurface( const VspAeroControlSurf &control_surf )
 {
     for ( int i = m_ControlSurfVec.size() - 1; i >= 0; i-- ) // Iterate in reverse as vector is changing size.
     {
-        if ( m_ControlSurfVec[i].SSID == ssid && m_ControlSurfVec[i].iReflect == reflec_num )
+        if ( m_ControlSurfVec[i].isMatch( control_surf ) )
         {
             m_ControlSurfVec.erase( m_ControlSurfVec.begin() + i );
             delete m_DeflectionGainVec[i];
@@ -6475,9 +6593,10 @@ void UnsteadyGroup::Update()
 
         if ( geom )
         {
-            if ( geom->GetType().m_Type == PROP_GEOM_TYPE )
+            if ( geom->GetBehaviorType() == PROP_GEOM_TYPE )
             {
-                PropGeom* prop = dynamic_cast<PropGeom*>( geom );
+                // Blades from the Geom copied; placement and name from this one.
+                RotorRole* prop = Geom::CastTo< RotorRole >( geom );
                 assert( prop );
 
                 is_rotor = true;
@@ -6499,10 +6618,10 @@ void UnsteadyGroup::Update()
                 o_vec = trans_mat.xform( cen );
                 r_vec = trans_mat.xform( rotdir ) - o_vec;
 
-                rotor_dia = prop->m_Diameter.Get();
+                rotor_dia = prop->GetRotorDiameter();
 
                 // Set group name
-                m_Name = prop->GetName();
+                m_Name = geom->GetName();
             }
         }
     }

@@ -738,7 +738,11 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     assert( r >= 0 );
     r = se->RegisterEnumValue( "CFD_CONTROL_TYPE", "CFD_FAR_LOC_Z", CFD_FAR_LOC_Z );
     assert( r >= 0 );
-    r = se->RegisterEnumValue( "CFD_CONTROL_TYPE", "CFD_SRF_XYZ_FLAG", CFD_SRF_XYZ_FLAG );
+    r = se->RegisterEnumValue( "CFD_CONTROL_TYPE", "CFD_SPLIT_JOIN_SURFS_FLAG", CFD_SPLIT_JOIN_SURFS_FLAG );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "CFD_CONTROL_TYPE", "CFD_PARALLEL_MESH_FLAG", CFD_PARALLEL_MESH_FLAG );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "CFD_CONTROL_TYPE", "CFD_POGS_NUM_REFINE", CFD_POGS_NUM_REFINE );
     assert( r >= 0 );
 
 
@@ -763,6 +767,8 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     r = se->RegisterEnumValue( "CFD_MESH_EXPORT_TYPE", "CFD_FACET_FILE_NAME", CFD_FACET_FILE_NAME );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "CFD_MESH_EXPORT_TYPE", "CFD_VSPGEOM_FILE_NAME", CFD_VSPGEOM_FILE_NAME );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "CFD_MESH_EXPORT_TYPE", "CFD_POGS_FILE_NAME", CFD_POGS_FILE_NAME );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "CFD_MESH_EXPORT_TYPE", "CFD_NUM_FILE_NAMES", CFD_NUM_FILE_NAMES );
     assert( r >= 0 );
@@ -860,6 +866,18 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     assert( r >= 0 );
 
 
+    r = se->RegisterEnum( "CLONE_DELETE_TYPE" );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "CLONE_DELETE_TYPE", "CLONE_DELETE_LEAVE_EMPTY", CLONE_DELETE_LEAVE_EMPTY );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "CLONE_DELETE_TYPE", "CLONE_DELETE_WITH_ORIGINAL", CLONE_DELETE_WITH_ORIGINAL );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "CLONE_DELETE_TYPE", "CLONE_DELETE_REPLACE", CLONE_DELETE_REPLACE );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "CLONE_DELETE_TYPE", "CLONE_DELETE_NUM_TYPES", CLONE_DELETE_NUM_TYPES );
+    assert( r >= 0 );
+
+
     r = se->RegisterEnum( "COLLISION_ERRORS" );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "COLLISION_ERRORS", "COLLISION_OK", COLLISION_OK );
@@ -915,6 +933,8 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     r = se->RegisterEnumValue( "COMPUTATION_FILE_TYPE", "CFD_VSPGEOM_TYPE", CFD_VSPGEOM_TYPE );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "COMPUTATION_FILE_TYPE", "VSPAERO_VSPGEOM_TYPE", VSPAERO_VSPGEOM_TYPE );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "COMPUTATION_FILE_TYPE", "CFD_POGS_TYPE", CFD_POGS_TYPE );
     assert( r >= 0 );
 
 
@@ -1058,6 +1078,8 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     assert( r >= 0 );
     r = se->RegisterEnumValue( "ERROR_CODE", "VSP_COULD_NOT_CREATE_BACKGROUND3D", vsp::VSP_COULD_NOT_CREATE_BACKGROUND3D );
     assert( r >= 0 );
+    r = se->RegisterEnumValue( "ERROR_CODE", "VSP_CLONE_ORIGINAL_LOST", vsp::VSP_CLONE_ORIGINAL_LOST );
+    assert( r >= 0 );
     r = se->RegisterEnumValue( "ERROR_CODE", "VSP_NUM_ERROR_CODE", vsp::VSP_NUM_ERROR_CODE );
     assert( r >= 0 );
 
@@ -1128,6 +1150,10 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     assert( r >= 0 );
     r = se->RegisterEnumValue( "EXPORT_TYPE", "EXPORT_STEP_STRUCTURE", EXPORT_STEP_STRUCTURE );
     assert( r >= 0 );
+    r = se->RegisterEnumValue( "EXPORT_TYPE", "EXPORT_STEP_STITCH", EXPORT_STEP_STITCH );
+    assert( r >= 0 );
+    r = se->RegisterEnumValue( "EXPORT_TYPE", "EXPORT_IGES_STITCH", EXPORT_IGES_STITCH );
+    assert( r >= 0 );
 
     r = se->RegisterEnum( "FEA_BC_MODE" );
     assert( r >= 0 );
@@ -1184,12 +1210,6 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     r = se->RegisterEnumValue( "FEA_EXPORT_TYPE", "FEA_STL_FILE_NAME", FEA_STL_FILE_NAME );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "FEA_EXPORT_TYPE", "FEA_GMSH_FILE_NAME", FEA_GMSH_FILE_NAME );
-    assert( r >= 0 );
-    r = se->RegisterEnumValue( "FEA_EXPORT_TYPE", "FEA_SRF_FILE_NAME", FEA_SRF_FILE_NAME );
-    assert( r >= 0 );
-    r = se->RegisterEnumValue( "FEA_EXPORT_TYPE", "FEA_CURV_FILE_NAME", FEA_CURV_FILE_NAME );
-    assert( r >= 0 );
-    r = se->RegisterEnumValue( "FEA_EXPORT_TYPE", "FEA_PLOT3D_FILE_NAME", FEA_PLOT3D_FILE_NAME );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "FEA_EXPORT_TYPE", "FEA_IGES_FILE_NAME", FEA_IGES_FILE_NAME );
     assert( r >= 0 );
@@ -1676,6 +1696,8 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "NGON_MESH_GEOM_SCREEN", NGON_MESH_GEOM_SCREEN );
     assert( r >= 0 );
+    r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "CLONE_GEOM_SCREEN", CLONE_GEOM_SCREEN );
+    assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "NUM_GEOM_SCREENS", NUM_GEOM_SCREENS );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_GEOM_SCREEN", "ALL_GEOM_SCREENS", ALL_GEOM_SCREENS );
@@ -1705,6 +1727,9 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     r = se->RegisterEnumValue( "GUI_VSP_SCREEN", "VSP_CFD_MESH_SCREEN", VSP_CFD_MESH_SCREEN );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_VSP_SCREEN", "VSP_CLIPPING_SCREEN", VSP_CLIPPING_SCREEN );
+    assert( r >= 0 );
+
+    r = se->RegisterEnumValue( "GUI_VSP_SCREEN", "VSP_CLONE_NAME_SUFFIX_SCREEN", VSP_CLONE_NAME_SUFFIX_SCREEN );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_VSP_SCREEN", "VSP_COMP_GEOM_SCREEN", VSP_COMP_GEOM_SCREEN );
     assert( r >= 0 );
@@ -1810,6 +1835,8 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
     assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_VSP_SCREEN", "VSP_WAVEDRAG_SCREEN", VSP_WAVEDRAG_SCREEN );
     assert( r >= 0 );
+    r = se->RegisterEnumValue( "GUI_VSP_SCREEN", "VSP_SPLIT_STITCH_OPTIONS_SCREEN", VSP_SPLIT_STITCH_OPTIONS_SCREEN );
+    assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_VSP_SCREEN", "VSP_MAIN_SCREEN", VSP_MAIN_SCREEN );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "GUI_VSP_SCREEN", "VSP_NUM_SCREENS", VSP_NUM_SCREENS );
@@ -1853,12 +1880,6 @@ void ScriptMgrSingleton::RegisterEnums( asIScriptEngine* se )
 
 
     r = se->RegisterEnum( "INTERSECT_EXPORT_TYPE" );
-    assert( r >= 0 );
-    r = se->RegisterEnumValue( "INTERSECT_EXPORT_TYPE", "INTERSECT_SRF_FILE_NAME", INTERSECT_SRF_FILE_NAME );
-    assert( r >= 0 );
-    r = se->RegisterEnumValue( "INTERSECT_EXPORT_TYPE", "INTERSECT_CURV_FILE_NAME", INTERSECT_CURV_FILE_NAME );
-    assert( r >= 0 );
-    r = se->RegisterEnumValue( "INTERSECT_EXPORT_TYPE", "INTERSECT_PLOT3D_FILE_NAME", INTERSECT_PLOT3D_FILE_NAME );
     assert( r >= 0 );
     r = se->RegisterEnumValue( "INTERSECT_EXPORT_TYPE", "INTERSECT_IGES_FILE_NAME", INTERSECT_IGES_FILE_NAME );
     assert( r >= 0 );
@@ -3994,6 +4015,10 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     assert( r >= 0 ); // TODO: Example
 
 
+    r = se->RegisterGlobalFunction( "void AddDesignVarLimits( const string & in parm_id, int type, double lowerlimit, double upperlimit )", asFUNCTION( vsp::AddDesignVarLimits ), asCALL_CDECL );
+    assert( r >= 0 ); // TODO: Example
+
+
     r = se->RegisterGlobalFunction( "void DeleteAllDesignVars()", asFUNCTION( vsp::DeleteAllDesignVars ), asCALL_CDECL );
     assert( r >= 0 ); // TODO: Example
 
@@ -4025,9 +4050,6 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     //==== CFD Mesh ====//
 
     r = se->RegisterGlobalFunction( "string GetComputationFileName( int file_type )", asFUNCTION( vsp::GetComputationFileName ), asCALL_CDECL );
-    assert( r >= 0 );
-
-    r = se->RegisterGlobalFunction( "void RegisterCFDMeshAnalyses()", asFUNCTION( vsp::RegisterCFDMeshAnalyses ), asCALL_CDECL );
     assert( r >= 0 );
 
     r = se->RegisterGlobalFunction( "void SetComputationFileName( int file_type, const string & in file_name )", asFUNCTION( vsp::SetComputationFileName ), asCALL_CDECL );
@@ -4578,15 +4600,15 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     assert( r >= 0 );
 
 
-    r = se->RegisterGlobalFunction( "void DeleteGeom(const string & in geom_id)", asFUNCTION( vsp::DeleteGeom ), asCALL_CDECL );
+    r = se->RegisterGlobalFunction( "void DeleteGeom(const string & in geom_id, int clone_delete = CLONE_DELETE_LEAVE_EMPTY)", asFUNCTION( vsp::DeleteGeom ), asCALL_CDECL );
     assert( r >= 0 );
 
 
-    r = se->RegisterGlobalFunction( "void DeleteGeomVec( array<string>@+ del_arr )", asMETHOD( ScriptMgrSingleton, DeleteGeomVec ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    r = se->RegisterGlobalFunction( "void DeleteGeomVec( array<string>@+ del_arr, int clone_delete = CLONE_DELETE_LEAVE_EMPTY )", asMETHOD( ScriptMgrSingleton, DeleteGeomVec ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
     assert( r >= 0 );
 
 
-    r = se->RegisterGlobalFunction( "void CutGeomToClipboard(const string & in geom_id)", asFUNCTION( vsp::CutGeomToClipboard ), asCALL_CDECL );
+    r = se->RegisterGlobalFunction( "void CutGeomToClipboard(const string & in geom_id, int clone_delete = CLONE_DELETE_LEAVE_EMPTY)", asFUNCTION( vsp::CutGeomToClipboard ), asCALL_CDECL );
     assert( r >= 0 );
 
 
@@ -4613,6 +4635,23 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     assert( r >= 0 );
 
 
+    r = se->RegisterGlobalFunction( "void SetGeomCloneOriginal( const string & in clone_id, const string & in original_id )", asFUNCTION( vsp::SetGeomCloneOriginal ), asCALL_CDECL );
+    assert( r >= 0 );
+    r = se->RegisterGlobalFunction( "string GetGeomCloneOriginal( const string & in clone_id )", asFUNCTION( vsp::GetGeomCloneOriginal ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "void SetGeomCloneNameSuffix( const string & in clone_id, const string & in name_suffix )", asFUNCTION( vsp::SetGeomCloneNameSuffix ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string GetGeomCloneNameSuffix( const string & in clone_id )", asFUNCTION( vsp::GetGeomCloneNameSuffix ), asCALL_CDECL );
+    assert( r >= 0 );
+
+    r = se->RegisterGlobalFunction( "string ReplaceCloneGeom( const string & in clone_id )", asFUNCTION( vsp::ReplaceCloneGeom ), asCALL_CDECL );
+    assert( r >= 0 );
+    r = se->RegisterGlobalFunction( "array<string>@+ CloneGeomVec( array<string>@+ geom_arr, const string & in name_suffix = \"_Clone\" )", asMETHOD( ScriptMgrSingleton, CloneGeomVec ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+    r = se->RegisterGlobalFunction( "array<string>@+ FindGeomClones( array<string>@+ geom_arr )", asMETHOD( ScriptMgrSingleton, FindGeomClones ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
     r = se->RegisterGlobalFunction( "void SetGeomName( const string & in geom_id, const string & in name )", asFUNCTION( vsp::SetGeomName ), asCALL_CDECL );
     assert( r >= 0 );
 
@@ -6145,6 +6184,10 @@ void ScriptMgrSingleton::RegisterAPI( asIScriptEngine* se )
     assert( r >= 0 );
 
 
+    r = se->RegisterGlobalFunction( "array<vec3d>@+ ControlSurfaceHingeLine( const string & in id, const int & in surf_indx )", asMETHOD( ScriptMgrSingleton, ControlSurfaceHingeLine ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
+    assert( r >= 0 );
+
+
     r = se->RegisterGlobalFunction( "array<vec3d>@+ CompVecPnt01(const string & in geom_id, const int & in surf_indx, array<double>@+ us, array<double>@+ ws )", asMETHOD( ScriptMgrSingleton, CompVecPnt01 ), asCALL_THISCALL_ASGLOBAL, &ScriptMgr );
     assert( r >= 0 );
 
@@ -7292,12 +7335,30 @@ CScriptArray* ScriptMgrSingleton::GetBORLowerCSTCoefs( const string & bor_id )
     return GetProxyDoubleArray();
 }
 
-void ScriptMgrSingleton::DeleteGeomVec( CScriptArray* del_arr )
+void ScriptMgrSingleton::DeleteGeomVec( CScriptArray* del_arr, int clone_delete )
 {
     vector < string > del_vec;
     FillSTLVector( del_arr, del_vec );
 
-    vsp::DeleteGeomVec( del_vec );
+    vsp::DeleteGeomVec( del_vec, clone_delete );
+}
+
+CScriptArray* ScriptMgrSingleton::CloneGeomVec( CScriptArray* geom_arr, const string & name_suffix )
+{
+    vector < string > geom_vec;
+    FillSTLVector( geom_arr, geom_vec );
+
+    m_ProxyStringArray = vsp::CloneGeomVec( geom_vec, name_suffix );
+    return GetProxyStringArray();
+}
+
+CScriptArray* ScriptMgrSingleton::FindGeomClones( CScriptArray* geom_arr )
+{
+    vector < string > geom_vec;
+    FillSTLVector( geom_arr, geom_vec );
+
+    m_ProxyStringArray = vsp::FindGeomClones( geom_vec );
+    return GetProxyStringArray();
 }
 
 void ScriptMgrSingleton::SetXSecPnts( const string& xsec_id, CScriptArray* pnt_arr )
@@ -8215,6 +8276,12 @@ void ScriptMgrSingleton::GetUWTess01(const string &geom_id, const int &surf_indx
 
     FillASArray( out_us, us );
     FillASArray( out_ws, ws );
+}
+
+CScriptArray* ScriptMgrSingleton::ControlSurfaceHingeLine( const std::string & id, const int & surf_indx )
+{
+    m_ProxyVec3dArray = vsp::ControlSurfaceHingeLine( id, surf_indx );
+    return GetProxyVec3dArray();
 }
 
 //=== Register Measure Functions ===//

@@ -552,6 +552,28 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_XFormLayout.AddSlider( m_RotOriginSlider, "Rot Origin(X)", 1.0, "%5.3f" );
     m_XFormLayout.AddYGap();
 
+    // Flip reflects the shape itself across these planes, rather than adding a copy.
+    m_XFormLayout.AddDividerBox( "Flip" );
+
+    m_XFormLayout.AddSubGroupLayout( m_FlipLayout, m_XFormLayout.GetW(), m_FlipLayout.GetStdHeight() + m_FlipLayout.GetGapHeight() );
+
+    m_FlipLayout.SetFitWidthFlag( false );
+    m_FlipLayout.SetSameLineFlag( true );
+
+    m_FlipLayout.AddLabel( "Planes:", 74 );
+    m_FlipLayout.SetButtonWidth( m_FlipLayout.GetRemainX() / 3 );
+    m_FlipLayout.AddButton( m_XYFlipToggle, "XY", vsp::SYM_XY );
+    m_FlipLayout.AddButton( m_XZFlipToggle, "XZ", vsp::SYM_XZ );
+    m_FlipLayout.AddButton( m_YZFlipToggle, "YZ", vsp::SYM_YZ );
+    m_FlipLayout.ForceNewLine();
+    m_FlipLayout.AddYGap();
+
+    m_XFormLayout.AddY( m_FlipLayout.GetH() );
+
+    m_XFormLayout.InitWidthHeightVals();
+    m_XFormLayout.SetFitWidthFlag( true );
+    m_XFormLayout.SetSameLineFlag( false );
+
     m_XFormLayout.AddDividerBox( "Symmetry" );
 
     m_XFormLayout.AddSubGroupLayout( m_SymmLayout, m_XFormLayout.GetW(), 4 * m_SymmLayout.GetStdHeight() + 3 * m_SymmLayout.GetGapHeight() );
@@ -1720,14 +1742,15 @@ bool GeomScreen::Update()
 
         if ( parent )
         {
-            WingGeom* wing_ptr = dynamic_cast< WingGeom* >( parent );
-            if ( wing_ptr )
+            // Use the parent's behavior, so a child of a wing Clone gets the eta and MN attach options.
+            WingGeom* behavior_wing = dynamic_cast< WingGeom* >( parent->GetBehaviorGeom() );
+            if ( behavior_wing )
             {
                 wing_parent = true;
             }
 
-            RoutingGeom* routing_ptr = dynamic_cast< RoutingGeom* >( parent );
-            if ( routing_ptr )
+            RoutingGeom* behavior_route = dynamic_cast< RoutingGeom* >( parent->GetBehaviorGeom() );
+            if ( behavior_route )
             {
                 routing_parent = true;
             }
@@ -1747,7 +1770,7 @@ bool GeomScreen::Update()
     m_ColorPicker.Update( geom_ptr->GetColor() );
 
     //==== Material ====//
-    Material * mat = geom_ptr->GetMaterial();
+    const Material * mat = geom_ptr->GetMaterial();
 
     UpdateMaterialNames();
     m_MaterialChoice.UpdateItems();
@@ -1822,6 +1845,9 @@ bool GeomScreen::Update()
     m_XYSymToggle.Update( geom_ptr->m_SymPlanFlag.GetID() );
     m_XZSymToggle.Update( geom_ptr->m_SymPlanFlag.GetID() );
     m_YZSymToggle.Update( geom_ptr->m_SymPlanFlag.GetID() );
+    m_XYFlipToggle.Update( geom_ptr->m_FlipFlag.GetID() );
+    m_XZFlipToggle.Update( geom_ptr->m_FlipFlag.GetID() );
+    m_YZFlipToggle.Update( geom_ptr->m_FlipFlag.GetID() );
     m_AxialToggleGroup.Update( geom_ptr->m_SymAxFlag.GetID() );
     m_AxialNSlider.Update( geom_ptr->m_SymRotN.GetID() );
 
@@ -2771,6 +2797,9 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
     {
         vec3d c = m_ColorPicker.GetColor();
         geom_ptr->SetColor( ( int )c.x(), ( int )c.y(), ( int )c.z() );
+
+        // Color is not a Parm, so update here.
+        geom_ptr->Update();
     }
     else if ( device == &m_MaterialChoice )
     {
@@ -2786,11 +2815,18 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
         {
             geom_ptr->SetMaterialToDefault();
         }
+
+        geom_ptr->Update();
     }
     else if ( device == &m_CustomMaterialButton )
     {
         ( ( MaterialEditScreen* ) ( m_ScreenMgr->GetScreen( vsp::VSP_MATERIAL_EDIT_SCREEN ) ) )->m_OrigColor = geom_ptr->GetMaterial()->m_Name;
-        geom_ptr->GetMaterial()->m_Name = "Custom";
+
+        Material custom;
+        custom.SetMaterial( geom_ptr->GetMaterial() );
+        custom.m_Name = "Custom";
+        geom_ptr->SetMaterial( custom );
+        geom_ptr->Update();
         m_ScreenMgr->ShowScreen( vsp::VSP_MATERIAL_EDIT_SCREEN );
     }
     else if ( device == &m_ScaleAcceptButton )
@@ -2815,11 +2851,14 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
         {
             ssurf->Update();
         }
+        // Adding a subsurface changes no Parm, so update here.
+        geom_ptr->Update();
         SetCurrSubSurf( geom_ptr->NumSubSurfs() - 1 );
     }
     else if ( device == &m_DelSubSurfButton )
     {
         geom_ptr->DelSubSurf( SubSurfaceMgr.GetCurrSurfInd() );
+        geom_ptr->Update();
         SetCurrSubSurf( geom_ptr->NumSubSurfs() - 1 );
     }
     else if ( device == &m_SSMoveTopButton )
@@ -2828,6 +2867,7 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
         if ( subsurf )
         {
             geom_ptr->ReorderSubSurf( subsurf->GetID(), vsp::REORDER_MOVE_TOP );
+            geom_ptr->Update();
         }
     }
     else if ( device == &m_SSMoveUpButton )
@@ -2836,6 +2876,7 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
         if ( subsurf )
         {
             geom_ptr->ReorderSubSurf( subsurf->GetID(), vsp::REORDER_MOVE_UP );
+            geom_ptr->Update();
         }
     }
     else if ( device == &m_SSMoveDownButton )
@@ -2844,6 +2885,7 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
         if ( subsurf )
         {
             geom_ptr->ReorderSubSurf( subsurf->GetID(), vsp::REORDER_MOVE_DOWN );
+            geom_ptr->Update();
         }
     }
     else if ( device == &m_SSMoveBotButton )
@@ -2852,6 +2894,7 @@ void GeomScreen::GuiDeviceCallBack( GuiDevice* device )
         if ( subsurf )
         {
             geom_ptr->ReorderSubSurf( subsurf->GetID(), vsp::REORDER_MOVE_BOTTOM );
+            geom_ptr->Update();
         }
     }
     else if ( device == &m_SubNameInput )

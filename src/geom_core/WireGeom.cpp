@@ -438,72 +438,7 @@ void WireGeom::UpdateDrawObj()
 {
     UpdateXFormPts();
 
-    m_LineDO.m_PntVec.clear();
-    m_LineDO.m_GeomChanged = true;
-
-    // A wireframe that is a single row or column of points -- a Plot3D file of curves reads
-    // in that way, one block per curve with a j dimension of one -- has no quads to make a
-    // mesh out of, and drawing it as one shows nothing.  Draw the polyline instead, and
-    // leave no shaded DrawObj for Geom to make a mesh of.
-    int nrow = ( int ) m_XFormPts.size();
-    int ncol = 0;
-    if ( nrow > 0 )
-    {
-        ncol = ( int ) m_XFormPts[0].size();
-    }
-
-    if ( ( nrow == 1 && ncol > 1 ) || ( ncol == 1 && nrow > 1 ) )
-    {
-        m_WireShadeDrawObj_vec.clear();
-
-        vector < vec3d > line_pnts;
-        if ( ncol == 1 )
-        {
-            line_pnts.reserve( nrow );
-            for ( int i = 0; i < nrow; i++ )
-            {
-                line_pnts.push_back( m_XFormPts[i][0] );
-            }
-        }
-        else
-        {
-            line_pnts = m_XFormPts[0];
-        }
-
-        // VSP_LINES takes a point pair per segment.
-        m_LineDO.m_PntVec.reserve( 2 * ( line_pnts.size() - 1 ) );
-        for ( int i = 0; i < ( int ) line_pnts.size() - 1; i++ )
-        {
-            m_LineDO.m_PntVec.push_back( line_pnts[i] );
-            m_LineDO.m_PntVec.push_back( line_pnts[i + 1] );
-        }
-    }
-    else
-    {
-        // Keep the existing DrawObj alive across updates -- assigning the meshes in place
-        // reuses their heap allocations from the previous update.
-        if ( m_WireShadeDrawObj_vec.size() != 1 )
-        {
-            m_WireShadeDrawObj_vec.clear();
-            m_WireShadeDrawObj_vec.resize( 1 );
-        }
-        m_WireShadeDrawObj_vec[0].m_FlipNormals = false;
-        m_WireShadeDrawObj_vec[0].m_GeomChanged = true;
-
-        m_WireShadeDrawObj_vec[0].m_PntMesh.resize( 1 );
-        m_WireShadeDrawObj_vec[0].m_PntMesh[0] = m_XFormPts;
-        m_WireShadeDrawObj_vec[0].m_NormMesh.resize( 1 );
-        m_WireShadeDrawObj_vec[0].m_NormMesh[0] = m_XFormNorm;
-
-        // Dummy texture coordinates matching the point mesh shape.
-        m_WireShadeDrawObj_vec[0].m_uTexMesh.resize( 1 );
-        m_WireShadeDrawObj_vec[0].m_uTexMesh[0].resize( m_XFormPts.size() );
-        for ( int i = 0; i < m_XFormPts.size(); i++ )
-        {
-            m_WireShadeDrawObj_vec[0].m_uTexMesh[0][i].assign( m_XFormPts[0].size(), 0.0 );
-        }
-        m_WireShadeDrawObj_vec[0].m_vTexMesh = m_WireShadeDrawObj_vec[0].m_uTexMesh;
-    }
+    BuildWireDrawObjs( m_XFormPts, m_XFormNorm, m_WireShadeDrawObj_vec, m_LineDO );
 
     m_HighlightDrawObj.m_PntVec = m_BBox.GetBBoxDrawLines();
     m_HighlightDrawObj.m_GeomChanged = true;
@@ -560,6 +495,14 @@ void WireGeom::UpdateDrawObj()
             m_FeatureDrawObj_vec[1].m_LineColor = vec3d( 0, 1, 0 );
             m_FeatureDrawObj_vec[1].m_LineWidth = 3.0;
             m_FeatureDrawObj_vec[1].m_GeomChanged = true;
+
+            // Each is named and drawn as the point pairs it holds.
+            for ( int k = 0; k < 2; k++ )
+            {
+                m_FeatureDrawObj_vec[k].m_GeomID = m_ID + "Feature_" + std::to_string( k );
+                m_FeatureDrawObj_vec[k].m_Screen = DrawObj::VSP_MAIN_SCREEN;
+                m_FeatureDrawObj_vec[k].m_Type = DrawObj::VSP_LINES;
+            }
         }
     }
 }
@@ -568,20 +511,7 @@ void WireGeom::LoadDrawObjs( vector< DrawObj* > & draw_obj_vec )
 {
     Geom::LoadDrawObjs( draw_obj_vec );
 
-    // Empty unless the wireframe is one point wide, in which case it holds the polyline and
-    // there is no shaded DrawObj beside it.
-    m_LineDO.m_GeomID = m_ID + "Line";
-    m_LineDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_LineDO.m_Type = DrawObj::VSP_LINES;
-    m_LineDO.m_LineWidth = 2.0;
-    m_LineDO.m_LineColor = vec3d( m_GuiDraw.GetWireColor().x() / 255.0,
-                                  m_GuiDraw.GetWireColor().y() / 255.0,
-                                  m_GuiDraw.GetWireColor().z() / 255.0 );
-    m_LineDO.m_Visible = GetSetFlag( vsp::SET_SHOWN ) &&
-                         m_GuiDraw.GetDisplayType() == vsp::DISPLAY_TYPE::DISPLAY_BEZIER &&
-                         m_GuiDraw.GetDrawType() != vsp::DRAW_TYPE::GEOM_DRAW_NONE;
-
-    draw_obj_vec.push_back( &m_LineDO );
+    LoadWireLineDrawObj( m_LineDO, draw_obj_vec );
 }
 
 //==== Get Total Transformation Matrix from Original Points ====//
@@ -589,6 +519,7 @@ Matrix4d WireGeom::GetTotalTransMat() const
 {
     Matrix4d retMat;
     retMat.initMat( m_ScaleMatrix );
+    retMat.postMult( GetFlipMat() );
     retMat.postMult( m_ModelMatrix );
 
     return retMat;
@@ -602,12 +533,12 @@ void WireGeom::ApplyScale( double currentScale )
 }
 
 
-//==== Placing the rearranged grid, and drawing it ====//
+//==== WirePtRole: shared by WireGeom and a Clone of one ====//
 
-void WireGeom::BuildWireXFormPts( const vector < vector < vec3d > > &main_pts, const Matrix4d &trans,
-                                      bool invert,
-                                      vector < vector < vec3d > > &xform_pts,
-                                      vector < vector < vec3d > > &xform_norm )
+void WirePtRole::BuildWireXFormPts( const vector < vector < vec3d > > &main_pts, const Matrix4d &trans,
+                                    bool invert,
+                                    vector < vector < vec3d > > &xform_pts,
+                                    vector < vector < vec3d > > &xform_norm )
 {
     unsigned int num_i = main_pts.size();
 
@@ -658,7 +589,7 @@ void WireGeom::BuildWireXFormPts( const vector < vector < vec3d > > &main_pts, c
     }
 }
 
-void WireGeom::BuildWireBndBox( const vector < vector < vec3d > > &xform_pts, BndBox &bbox )
+void WirePtRole::BuildWireBndBox( const vector < vector < vec3d > > &xform_pts, BndBox &bbox )
 {
     bbox.Reset();
 
@@ -671,10 +602,48 @@ void WireGeom::BuildWireBndBox( const vector < vector < vec3d > > &xform_pts, Bn
     }
 }
 
-void WireGeom::BuildWireDrawObjs( const vector < vector < vec3d > > &xform_pts,
-                                      const vector < vector < vec3d > > &xform_norm,
-                                      vector < DrawObj > &draw_obj_vec )
+void WirePtRole::BuildWireDrawObjs( const vector < vector < vec3d > > &xform_pts,
+                                    const vector < vector < vec3d > > &xform_norm,
+                                    vector < DrawObj > &draw_obj_vec, DrawObj &line_do )
 {
+    line_do.m_PntVec.clear();
+    line_do.m_GeomChanged = true;
+
+    int nrow = ( int ) xform_pts.size();
+    int ncol = 0;
+    if ( nrow > 0 )
+    {
+        ncol = ( int ) xform_pts[0].size();
+    }
+
+    if ( ( nrow == 1 && ncol > 1 ) || ( ncol == 1 && nrow > 1 ) )
+    {
+        draw_obj_vec.clear();
+
+        vector < vec3d > line_pnts;
+        if ( ncol == 1 )
+        {
+            line_pnts.reserve( nrow );
+            for ( int i = 0; i < nrow; i++ )
+            {
+                line_pnts.push_back( xform_pts[i][0] );
+            }
+        }
+        else
+        {
+            line_pnts = xform_pts[0];
+        }
+
+        // VSP_LINES takes a point pair per segment.
+        line_do.m_PntVec.reserve( 2 * ( line_pnts.size() - 1 ) );
+        for ( int i = 0; i < ( int ) line_pnts.size() - 1; i++ )
+        {
+            line_do.m_PntVec.push_back( line_pnts[i] );
+            line_do.m_PntVec.push_back( line_pnts[i + 1] );
+        }
+        return;
+    }
+
     // Keep the existing DrawObj alive across updates -- assigning the meshes in place reuses
     // their heap allocations from the previous update.
     if ( draw_obj_vec.size() != 1 )
@@ -701,6 +670,28 @@ void WireGeom::BuildWireDrawObjs( const vector < vector < vec3d > > &xform_pts,
         draw_obj_vec[0].m_uTexMesh[0][i].resize( xform_pts[i].size(), 0.0 );
         draw_obj_vec[0].m_vTexMesh[0][i].resize( xform_pts[i].size(), 0.0 );
     }
+}
+
+void WirePtRole::LoadWireLineDrawObj( DrawObj &line_do, vector< DrawObj* > &draw_obj_vec )
+{
+    Geom* geom = dynamic_cast< Geom* >( this );
+    if ( !geom )
+    {
+        return;
+    }
+
+    line_do.m_GeomID = geom->GetID() + "Line";
+    line_do.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+    line_do.m_Type = DrawObj::VSP_LINES;
+    line_do.m_LineWidth = 2.0;
+    line_do.m_LineColor = vec3d( geom->m_GuiDraw.GetWireColor().x() / 255.0,
+                                 geom->m_GuiDraw.GetWireColor().y() / 255.0,
+                                 geom->m_GuiDraw.GetWireColor().z() / 255.0 );
+    line_do.m_Visible = geom->GetSetFlag( vsp::SET_SHOWN ) &&
+                        geom->m_GuiDraw.GetDisplayType() == vsp::DISPLAY_TYPE::DISPLAY_BEZIER &&
+                        geom->m_GuiDraw.GetDrawType() != vsp::DRAW_TYPE::GEOM_DRAW_NONE;
+
+    draw_obj_vec.push_back( &line_do );
 }
 
 void WireGeom::UpdateXFormPts()
@@ -1016,21 +1007,19 @@ bool WireGeom::CheckInverted()
     return false;
 }
 
-//==== Create TMesh Vector ====//
-vector< TMesh* > WireGeom::CreateTMeshVec( bool skipnegflipnormal, const int & n_ref ) const
+vector< TMesh* > WirePtRole::BuildWireTMeshVec( const vector < vector < vec3d > > &xform_pts,
+                                                bool invert, const Geom* geom_ptr )
 {
     vector < TMesh* > tmeshvec;
 
-    int num_pnts, num_cross;
-
-    num_cross = ( int ) m_XFormPts.size();
+    int num_cross = ( int ) xform_pts.size();
 
     if ( num_cross == 0 )
     {
         return tmeshvec;
     }
 
-    num_pnts = ( int ) m_XFormPts[0].size();
+    int num_pnts = ( int ) xform_pts[0].size();
 
     if ( num_pnts == 0 )
     {
@@ -1044,23 +1033,29 @@ vector< TMesh* > WireGeom::CreateTMeshVec( bool skipnegflipnormal, const int & n
     {
         for ( int j = 1; j < num_pnts; j++ )
         {
-            if ( m_InvertFlag() ^ m_OtherInvertFlag ) // Bitwise XOR
+            if ( invert )
             {
-                tMesh->AddTri( m_XFormPts[ i - 1 ][ j - 1 ], m_XFormPts[ i ][ j ], m_XFormPts[ i ][ j - 1 ], iQuad );
-                tMesh->AddTri( m_XFormPts[ i - 1 ][ j - 1 ], m_XFormPts[ i - 1 ][ j ], m_XFormPts[ i ][ j ], iQuad );
+                tMesh->AddTri( xform_pts[ i - 1 ][ j - 1 ], xform_pts[ i ][ j ], xform_pts[ i ][ j - 1 ], iQuad );
+                tMesh->AddTri( xform_pts[ i - 1 ][ j - 1 ], xform_pts[ i - 1 ][ j ], xform_pts[ i ][ j ], iQuad );
             }
             else
             {
-                tMesh->AddTri( m_XFormPts[ i - 1 ][ j - 1 ], m_XFormPts[ i ][ j - 1 ], m_XFormPts[ i ][ j ], iQuad );
-                tMesh->AddTri( m_XFormPts[ i - 1 ][ j - 1 ], m_XFormPts[ i ][ j ], m_XFormPts[ i - 1 ][ j ], iQuad );
+                tMesh->AddTri( xform_pts[ i - 1 ][ j - 1 ], xform_pts[ i ][ j - 1 ], xform_pts[ i ][ j ], iQuad );
+                tMesh->AddTri( xform_pts[ i - 1 ][ j - 1 ], xform_pts[ i ][ j ], xform_pts[ i - 1 ][ j ], iQuad );
             }
             iQuad++;
         }
     }
-    tMesh->LoadGeomAttributes( this );
+    tMesh->LoadGeomAttributes( geom_ptr );
 
     tmeshvec.push_back( tMesh );
     return tmeshvec;
+}
+
+//==== Create TMesh Vector ====//
+vector< TMesh* > WireGeom::CreateTMeshVec( bool skipnegflipnormal, const int & n_ref ) const
+{
+    return BuildWireTMeshVec( m_XFormPts, GetWireInvert(), this );
 }
 
 //==== Create Degenerate Geometry ====//
@@ -1096,12 +1091,6 @@ void WireGeom::CreateDegenGeom( vector<DegenGeom> &dgs, bool preview, const int 
         }
     }
 
-    int surftype = DegenGeom::SURFACE_TYPE;
-    if ( m_WireType() == 1 )
-    {
-        surftype = DegenGeom::BODY_TYPE;
-    }
-
     int cfdsurftype = vsp::CFD_NORMAL;
     if ( m_NegativeVolumeFlag() )
     {
@@ -1109,7 +1098,8 @@ void WireGeom::CreateDegenGeom( vector<DegenGeom> &dgs, bool preview, const int 
     }
 
     dgs.resize( 1 );
-    Geom::CreateDegenGeom( dgs[0], m_XFormPts, m_XFormNorm, uwpnts, false, 0, preview, m_InvertFlag(), surftype, cfdsurftype, nullptr );
+    // The same flip the triangles and normals use.
+    Geom::CreateDegenGeom( dgs[0], m_XFormPts, m_XFormNorm, uwpnts, false, 0, preview, GetWireInvert(), GetWireDegenType(), cfdsurftype, nullptr );
 }
 
 int WireGeom::GetNumTotalHrmSurfs() const

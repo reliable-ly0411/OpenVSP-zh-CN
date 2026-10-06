@@ -7,6 +7,7 @@
 
 #include "HingeGeom.h"
 #include "Vehicle.h"
+#include "VehicleMgr.h"
 
 
 //==== Constructor ====//
@@ -336,36 +337,11 @@ void HingeGeom::UpdateXForm()
 
     UpdateMotionFlagsLimits();
 
-
-    // Initialize the joint matrix to identity.
-    m_JointMatrix.loadIdentity();
-
-    // Do everything to build joint motion.
-    vec3d trans;
-    trans.v[ m_PrimaryDir() ] = m_JointTranslate();
-
-    m_JointMatrix.translatev( trans );
-
-    if ( m_PrimaryDir.Get() == vsp::X_DIR )
-    {
-        m_JointMatrix.rotateX( m_JointRotate() );
-    }
-    else if ( m_PrimaryDir.Get() == vsp::Y_DIR )
-    {
-        m_JointMatrix.rotateY( m_JointRotate() );
-    }
-    else
-    {
-        m_JointMatrix.rotateZ( m_JointRotate() );
-    }
-
-
     // Move joint according to ModelMatrix.
     // Update m_ModelMatrix again -- rotations included this time.
     Geom::UpdateXForm();
-    double mat[16];
-    m_ModelMatrix.getMat( mat );
-    m_JointMatrix.postMult( mat );
+
+    m_JointMatrix = BuildFlippedJointMatrix( m_JointTranslate(), m_JointRotate(), m_ModelMatrix, GetFlipMat() );
 
 
     vector < vec3d > dirs(3);
@@ -395,13 +371,7 @@ void HingeGeom::UpdateXForm()
 
 void HingeGeom::UpdateMotionFlagsLimits()
 {
-    SetParmLimits( m_JointTranslate, m_JointTranslateFlag,
-                   m_JointTransMin, m_JointTransMinFlag,
-                   m_JointTransMax, m_JointTransMaxFlag );
-
-    SetParmLimits( m_JointRotate, m_JointRotateFlag,
-                   m_JointRotMin, m_JointRotMinFlag,
-                   m_JointRotMax, m_JointRotMaxFlag );
+    SetJointParmLimits( m_JointTranslate, m_JointRotate );
 }
 
 void HingeGeom::SetParmLimits( Parm & p, const Parm & pflag, const Parm & pmin, const Parm & pminflag, const Parm & pmax, const Parm & pmaxflag )
@@ -433,51 +403,12 @@ void HingeGeom::SetParmLimits( Parm & p, const Parm & pflag, const Parm & pmin, 
 
 void HingeGeom::UpdateDrawObj()
 {
-    double axlen = 1.0;
-
-    Vehicle *veh = VehicleMgr.GetVehicle();
-    if ( veh )
-    {
-        axlen = veh->m_AxisLength();
-    }
-
-    // Evaluate points for visualization.
-    vec3d jointOrigin = m_JointMatrix.xform(vec3d(0.0, 0.0, 0.0 ) );
     vec3d baseOrigin = m_ModelMatrix.xform(vec3d(0.0, 0.0, 0.0 ) );
-
-    vector < vec3d > baseAxis(3);
-    vector < vec3d > jointAxis(3);
-    for ( int i = 0; i < 3; i++ )
-    {
-        vec3d pt = vec3d( 0.0, 0.0, 0.0 );
-        pt.v[i] = axlen;
-        baseAxis[i] = m_ModelMatrix.xform(pt );
-        jointAxis[i] = m_JointMatrix.xform(pt );
-    }
 
     m_HighlightDrawObj.m_PntVec.resize(1);
     m_HighlightDrawObj.m_PntVec[0] = baseOrigin;
     m_HighlightDrawObj.m_PointSize = 10.0;
     m_HighlightDrawObj.m_GeomChanged = true;
-
-    if ( m_FeatureDrawObj_vec.size() != 6 )
-    {
-        m_FeatureDrawObj_vec.clear();
-        m_FeatureDrawObj_vec.resize( 6 );
-    }
-    for ( int i = 0; i < 6; i++ )
-    {
-        m_FeatureDrawObj_vec[i].m_PntVec.clear();
-    }
-    for ( int i = 0; i < 3; i++ )
-    {
-        m_FeatureDrawObj_vec[i].m_PntVec.push_back(baseOrigin );
-        m_FeatureDrawObj_vec[i].m_PntVec.push_back(baseAxis[i] );
-        vec3d c;
-        c.v[i] = 1.0;
-        m_FeatureDrawObj_vec[i].m_LineColor = c;
-        m_FeatureDrawObj_vec[i].m_GeomChanged = true;
-    }
 
     //=== Attach Axis ===//
     if ( m_AxisDrawObj_vec.size() != 3 )
@@ -495,72 +426,156 @@ void HingeGeom::UpdateDrawObj()
         m_AxisDrawObj_vec[i].m_GeomChanged = true;
     }
 
-    for ( int i = 0; i < 3; i++ )
-    {
-        int k = i + 3;
-        MakeDashedLine(jointOrigin, jointAxis[i], 8, m_FeatureDrawObj_vec[k].m_PntVec );
-        vec3d c;
-        c.v[i] = 1.0;
-        m_FeatureDrawObj_vec[k].m_LineColor = c;
-        m_FeatureDrawObj_vec[k].m_GeomChanged = true;
-    }
-
-    m_MotionLinesDO.m_PntVec.clear();
-    m_MotionArrowsDO.m_PntVec.clear();
-    m_MotionArrowsDO.m_NormVec.clear();
-
-    // MakeCircleArrow flags these itself, but it only runs for a rotating joint.  A
-    // translating one fills the arrows through the vector form of MakeArrowhead, which knows
-    // nothing of the DrawObj, and a joint that does neither is left with the points cleared
-    // and nothing to say so.  Either way the renderer would go on drawing the last arrow.
-    m_MotionLinesDO.m_GeomChanged = true;
-    m_MotionArrowsDO.m_GeomChanged = true;
-
-    if ( m_JointRotateFlag.Get() )
-    {
-        vec3d u = baseAxis[ m_PrimaryDir() ] - baseOrigin;
-        MakeCircleArrow(baseOrigin + 0.6 * u, u, 0.5 * axlen, 0.5 * axlen, m_MotionLinesDO, m_MotionArrowsDO );
-    }
-    if ( m_JointTranslateFlag.Get() )
-    {
-        MakeArrowhead(baseAxis[ m_PrimaryDir() ], baseAxis[ m_PrimaryDir() ] - baseOrigin, 0.5 * axlen * 0.5, m_MotionArrowsDO.m_PntVec, m_MotionArrowsDO.m_NormVec );
-    }
-
-    m_PrimaryLineDO.m_PntVec.clear();
-    m_PrimaryLineDO.m_GeomChanged = true;
-
-    if ( m_PrimaryType() == POINT3D || m_PrimaryType() == SURFPT )
-    {
-        m_PrimaryLineDO.m_PntVec.push_back(baseOrigin );
-        m_PrimaryLineDO.m_PntVec.push_back( m_PrimEndpt );
-        m_PrimaryLineDO.m_LineWidth = 2.0;
-        m_PrimaryLineDO.m_Type = DrawObj::VSP_LINES;
-        vec3d c;
-        c.v[ m_PrimaryDir() ] = 1.0;
-        m_PrimaryLineDO.m_LineColor = c;
-    }
-    else if ( m_PrimaryType() == UDIR || m_PrimaryType() == WDIR || m_PrimaryType() == NDIR )
+    if ( m_PrimaryType() == UDIR || m_PrimaryType() == WDIR || m_PrimaryType() == NDIR )
     {
         m_HighlightDrawObj.m_PntVec.push_back( m_PrimEndpt );
     }
 }
 
-void HingeGeom::LoadMainDrawObjs(vector< DrawObj* > & draw_obj_vec)
+// The joint frame, the frame its children are carried to, the allowed motion, and the primary
+// direction line, placed by placer.  A Clone is posed by its own deflection.
+void HingeGeom::BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec )
 {
-    char str[256];
+    JointRole* joint = Geom::CastTo< JointRole >( placer );
+    if ( !joint )
+    {
+        marker_vec.clear();
+        return;
+    }
 
-    bool isactive = m_Vehicle->IsGeomActive( m_ID );
+    double axlen = 1.0;
 
-    // Add just the first three m_FeatureDrawObj_vec
+    Vehicle *veh = VehicleMgr.GetVehicle();
+    if ( veh )
+    {
+        axlen = veh->m_AxisLength();
+    }
+
+    Matrix4d model_matrix = placer->getModelMatrix();
+    Matrix4d joint_matrix = joint->GetJointMatrix();
+
+    // Evaluate points for visualization.
+    vec3d jointOrigin = joint_matrix.xform(vec3d(0.0, 0.0, 0.0 ) );
+    vec3d baseOrigin = model_matrix.xform(vec3d(0.0, 0.0, 0.0 ) );
+
+    vector < vec3d > baseAxis(3);
+    vector < vec3d > jointAxis(3);
     for ( int i = 0; i < 3; i++ )
     {
-        m_FeatureDrawObj_vec[i].m_Screen = DrawObj::VSP_MAIN_SCREEN;
-        snprintf( str, sizeof( str ),  "%d", i );
-        m_FeatureDrawObj_vec[i].m_GeomID = m_ID + "_Feature_" + str;
-        m_FeatureDrawObj_vec[i].m_Visible = ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || isactive;
-        m_FeatureDrawObj_vec[i].m_LineWidth = 2.0;
-        m_FeatureDrawObj_vec[i].m_Type = DrawObj::VSP_LINES;
-        draw_obj_vec.push_back( &m_FeatureDrawObj_vec[i] );
+        vec3d pt = vec3d( 0.0, 0.0, 0.0 );
+        pt.v[i] = axlen;
+        baseAxis[i] = model_matrix.xform(pt );
+        jointAxis[i] = joint_matrix.xform(pt );
+    }
+
+    if ( marker_vec.size() != NUM_HINGE_MARKERS )
+    {
+        marker_vec.clear();
+        marker_vec.resize( NUM_HINGE_MARKERS );
+    }
+    for ( int i = 0; i < NUM_HINGE_MARKERS; i++ )
+    {
+        marker_vec[i].m_PntVec.clear();
+        marker_vec[i].m_NormVec.clear();
+        marker_vec[i].m_Screen = DrawObj::VSP_MAIN_SCREEN;
+        marker_vec[i].m_GeomChanged = true;
+    }
+
+    for ( int i = 0; i < 3; i++ )
+    {
+        marker_vec[i].m_PntVec.push_back(baseOrigin );
+        marker_vec[i].m_PntVec.push_back(baseAxis[i] );
+        vec3d c;
+        c.v[i] = 1.0;
+        marker_vec[i].m_LineColor = c;
+    }
+
+    for ( int i = 0; i < 3; i++ )
+    {
+        int k = i + 3;
+        MakeDashedLine(jointOrigin, jointAxis[i], 8, marker_vec[k].m_PntVec );
+        vec3d c;
+        c.v[i] = 1.0;
+        marker_vec[k].m_LineColor = c;
+    }
+
+    for ( int i = 0; i < 6; i++ )
+    {
+        marker_vec[i].m_GeomID = placer->GetID() + "_Feature_" + std::to_string( i );
+        marker_vec[i].m_LineWidth = 2.0;
+        marker_vec[i].m_Type = DrawObj::VSP_LINES;
+    }
+
+    DrawObj &motion_arrows = marker_vec[ HINGE_MARKER_MOTION_ARROWS ];
+    DrawObj &motion_lines = marker_vec[ HINGE_MARKER_MOTION_LINES ];
+    DrawObj &primary_line = marker_vec[ HINGE_MARKER_PRIMARY_LINE ];
+
+    if ( m_JointRotateFlag.Get() )
+    {
+        vec3d u = baseAxis[ m_PrimaryDir() ] - baseOrigin;
+        MakeCircleArrow(baseOrigin + 0.6 * u, u, 0.5 * axlen, 0.5 * axlen, motion_lines, motion_arrows );
+    }
+    if ( m_JointTranslateFlag.Get() )
+    {
+        MakeArrowhead(baseAxis[ m_PrimaryDir() ], baseAxis[ m_PrimaryDir() ] - baseOrigin, 0.5 * axlen * 0.5, motion_arrows.m_PntVec, motion_arrows.m_NormVec );
+    }
+
+    motion_arrows.m_GeomID = placer->GetID() + "MArrows";
+    motion_arrows.m_LineWidth = 1.0;
+    motion_arrows.m_Type = DrawObj::VSP_SHADED_TRIS;
+
+    for ( int i = 0; i < 4; i++ )
+    {
+        motion_arrows.m_MaterialInfo.Ambient[i] = 0.2f;
+        motion_arrows.m_MaterialInfo.Diffuse[i] = 0.1f;
+        motion_arrows.m_MaterialInfo.Specular[i] = 0.7f;
+        motion_arrows.m_MaterialInfo.Emission[i] = 0.0f;
+    }
+    motion_arrows.m_MaterialInfo.Diffuse[3] = 0.5f;
+    motion_arrows.m_MaterialInfo.Shininess = 5.0f;
+
+    motion_lines.m_GeomID = placer->GetID() + "MLines";
+    motion_lines.m_LineWidth = 2.0;
+    motion_lines.m_Type = DrawObj::VSP_LINES;
+
+    primary_line.m_GeomID = placer->GetID() + "PrimLines";
+    primary_line.m_LineWidth = 2.0;
+    primary_line.m_Type = DrawObj::VSP_LINES;
+
+    if ( m_PrimaryType() == POINT3D || m_PrimaryType() == SURFPT )
+    {
+        // The direction target, carried from this hinge's frame into placer's.
+        Matrix4d to_local = m_ModelMatrix;
+        to_local.affineInverse();
+
+        primary_line.m_PntVec.push_back(baseOrigin );
+        primary_line.m_PntVec.push_back( model_matrix.xform( to_local.xform( m_PrimEndpt ) ) );
+        vec3d c;
+        c.v[ m_PrimaryDir() ] = 1.0;
+        primary_line.m_LineColor = c;
+    }
+
+    // The flip reverses the motion; the frames themselves are not reflected.
+    placer->FlipDrawObjs( { &motion_lines, &motion_arrows, &primary_line } );
+}
+
+void HingeGeom::SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec )
+{
+    bool visible = placer->ShowsMarkers();
+    for ( int i = 0; i < ( int )marker_vec.size(); i++ )
+    {
+        marker_vec[i].m_Visible = visible;
+    }
+}
+
+// The frame the joint turns about is what there is of a Hinge to pick.
+void HingeGeom::LoadMainDrawObjs(vector< DrawObj* > & draw_obj_vec)
+{
+    SetMarkerVisibility( this, m_MarkerDrawObj_vec );
+
+    for ( int i = 0; i < 3 && i < ( int )m_MarkerDrawObj_vec.size(); i++ )
+    {
+        draw_obj_vec.push_back( &m_MarkerDrawObj_vec[i] );
     }
 }
 
@@ -592,52 +607,132 @@ void HingeGeom::LoadDrawObjs(vector< DrawObj* > & draw_obj_vec)
         draw_obj_vec.push_back( &m_AxisDrawObj_vec[i] );
     }
 
-    // Add the remaining m_FeatureDrawObj_vec
-    for ( int i = 3; i < m_FeatureDrawObj_vec.size(); i++ )
+    // The rest of the markers: the joint's own frame and its motion.
+    for ( int i = 3; i < ( int )m_MarkerDrawObj_vec.size(); i++ )
     {
-        m_FeatureDrawObj_vec[i].m_Screen = DrawObj::VSP_MAIN_SCREEN;
-        snprintf( str, sizeof( str ),  "%d", i );
-        m_FeatureDrawObj_vec[i].m_GeomID = m_ID + "_Feature_" + str;
-        m_FeatureDrawObj_vec[i].m_Visible = ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || isactive;
-        m_FeatureDrawObj_vec[i].m_LineWidth = 2.0;
-        m_FeatureDrawObj_vec[i].m_Type = DrawObj::VSP_LINES;
-        draw_obj_vec.push_back( &m_FeatureDrawObj_vec[i] );
+        draw_obj_vec.push_back( &m_MarkerDrawObj_vec[i] );
     }
-
-    m_MotionArrowsDO.m_GeomID = m_ID + "MArrows";
-    m_MotionArrowsDO.m_Visible = ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || isactive;
-    m_MotionArrowsDO.m_LineWidth = 1.0;
-    m_MotionArrowsDO.m_Type = DrawObj::VSP_SHADED_TRIS;
-
-    for ( int i = 0; i < 4; i++ )
-    {
-        m_MotionArrowsDO.m_MaterialInfo.Ambient[i] = 0.2f;
-        m_MotionArrowsDO.m_MaterialInfo.Diffuse[i] = 0.1f;
-        m_MotionArrowsDO.m_MaterialInfo.Specular[i] = 0.7f;
-        m_MotionArrowsDO.m_MaterialInfo.Emission[i] = 0.0f;
-    }
-    m_MotionArrowsDO.m_MaterialInfo.Diffuse[3] = 0.5f;
-    m_MotionArrowsDO.m_MaterialInfo.Shininess = 5.0f;
-
-
-    m_MotionLinesDO.m_GeomID = m_ID + "MLines";
-    m_MotionLinesDO.m_Visible = ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || isactive;
-    m_MotionLinesDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_MotionLinesDO.m_LineWidth = 2.0;
-    m_MotionLinesDO.m_Type = DrawObj::VSP_LINES;
-
-    m_PrimaryLineDO.m_GeomID = m_ID + "PrimLines";
-    m_PrimaryLineDO.m_Visible = ( m_GuiDraw.GetDispFeatureFlag() && GetSetFlag( vsp::SET_SHOWN ) ) || isactive;
-    m_PrimaryLineDO.m_Screen = DrawObj::VSP_MAIN_SCREEN;
-    m_PrimaryLineDO.m_LineWidth = 2.0;
-    m_PrimaryLineDO.m_Type = DrawObj::VSP_LINES;
-
-    draw_obj_vec.push_back( &m_MotionArrowsDO );
-    draw_obj_vec.push_back( &m_MotionLinesDO );
-    draw_obj_vec.push_back( &m_PrimaryLineDO );
 }
 
-Matrix4d HingeGeom::GetJointMatrix()
+Matrix4d HingeGeom::GetJointMatrix() const
 {
     return m_JointMatrix;
+}
+
+// The deflection is passed in, so a Clone can pose the joint by its own angle.
+Matrix4d HingeGeom::BuildJointMatrix( double translate, double rotate, const Matrix4d &model_matrix ) const
+{
+    Matrix4d joint_matrix;
+
+    vec3d trans;
+    trans.v[ m_PrimaryDir() ] = translate;
+
+    joint_matrix.translatev( trans );
+
+    if ( m_PrimaryDir.Get() == vsp::X_DIR )
+    {
+        joint_matrix.rotateX( rotate );
+    }
+    else if ( m_PrimaryDir.Get() == vsp::Y_DIR )
+    {
+        joint_matrix.rotateY( rotate );
+    }
+    else
+    {
+        joint_matrix.rotateZ( rotate );
+    }
+
+    double mat[16];
+    model_matrix.getMat( mat );
+    joint_matrix.postMult( mat );
+
+    return joint_matrix;
+}
+
+bool HingeGeom::GetJointTransMotion( bool &min_set, double &min_val, bool &max_set, double &max_val ) const
+{
+    min_set = m_JointTransMinFlag();
+    min_val = m_JointTransMin();
+    max_set = m_JointTransMaxFlag();
+    max_val = m_JointTransMax();
+
+    return m_JointTranslateFlag();
+}
+
+bool HingeGeom::GetJointRotMotion( bool &min_set, double &min_val, bool &max_set, double &max_val ) const
+{
+    min_set = m_JointRotMinFlag();
+    min_val = m_JointRotMin();
+    max_set = m_JointRotMaxFlag();
+    max_val = m_JointRotMax();
+
+    return m_JointRotateFlag();
+}
+
+void HingeGeom::SetJointParmLimits( Parm &translate, Parm &rotate )
+{
+    SetParmLimits( translate, m_JointTranslateFlag,
+                   m_JointTransMin, m_JointTransMinFlag,
+                   m_JointTransMax, m_JointTransMaxFlag );
+
+    SetParmLimits( rotate, m_JointRotateFlag,
+                   m_JointRotMin, m_JointRotMinFlag,
+                   m_JointRotMax, m_JointRotMaxFlag );
+}
+
+// The frame children of this joint hang off.  Built without the flip, which would turn a
+// child's shape inside out.
+Matrix4d JointRole::GetJointMatrix() const
+{
+    return BuildJointMatrix( GetJointTranslate(), GetJointRotate(), GetRoleModelMatrix() );
+}
+
+// The joint motion seen through the flip: reflect, move, reflect back.  The result is still
+// rigid, so the frame stays unreflected; only the motion is flipped.  A plane containing the axis reverses
+// the rotation; a plane normal to the axis reverses the translation.
+Matrix4d JointRole::BuildFlippedJointMatrix( double translate, double rotate, const Matrix4d &model_matrix, const Matrix4d &flip_mat ) const
+{
+    Matrix4d frame = model_matrix;
+    frame.matMult( flip_mat );
+
+    Matrix4d joint_matrix = BuildJointMatrix( translate, rotate, frame );
+
+    // Each reflection is its own inverse and they commute, so the same matrix undoes it.
+    joint_matrix.matMult( flip_mat );
+
+    return joint_matrix;
+}
+
+// The direction the joint translates along, in world coordinates, reflected by the flip to
+// match BuildFlippedJointMatrix.  Under an odd number of reflections the joint rotates the
+// opposite way about this axis.
+vec3d JointRole::GetJointAxis() const
+{
+    Matrix4d mat = GetRoleModelMatrix();
+    Matrix4d flip_mat = GetRoleFlipMat();
+
+    vec3d pt( 0.0, 0.0, 0.0 );
+    pt.v[ GetJointPrimaryDir() ] = 1.0;
+
+    vec3d local = flip_mat.xform( pt ) - flip_mat.xform( vec3d( 0.0, 0.0, 0.0 ) );
+
+    vec3d origin = mat.xform( vec3d( 0.0, 0.0, 0.0 ) );
+
+    vec3d axis = mat.xform( local ) - origin;
+    axis.normalize();
+
+    return axis;
+}
+
+// GetJointAxis, reversed under an odd number of reflections, where the joint turns the other
+// way about the line it moves along.
+vec3d JointRole::GetJointRotationAxis() const
+{
+    vec3d axis = GetJointAxis();
+    if ( GetRoleShapeFlipNormal() )
+    {
+        axis = axis * -1.0;
+    }
+
+    return axis;
 }

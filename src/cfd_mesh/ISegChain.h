@@ -35,6 +35,7 @@ using namespace std;
 class ISegChain;
 class SharedPnt;
 class ISeg;
+class ISegSplit;
 class IPntBin;
 class SurfaceIntersectionSingleton;
 class Ipnt;
@@ -54,6 +55,40 @@ public:
     virtual ~Puw();
     Surf* m_Surf;
     vec2d m_UW;
+};
+
+//==== Triangle edge an intersection point lies on ====//
+// A segment of an intersection curve is found between two flat triangles, one from each
+// surface's patch, and each of its ends lies on an edge of one of them.  The segment next along
+// the curve lies in the triangle on the other side of that edge, so the two share it.
+struct IPntEdge
+{
+    enum { NONE, U_LINE, W_LINE, DIAGONAL };
+
+    IPntEdge()
+    {
+        m_Kind = NONE;
+        m_SurfID = -1;
+        m_Val[0] = m_Val[1] = m_Val[2] = m_Val[3] = 0.0;
+        m_Side = 0;
+        m_Along = 0.0;
+    }
+
+    int m_Kind;
+
+    // The surface the edge is on
+    int m_SurfID;
+
+    // A patch border: the u or w it runs along.  A patch's diagonal: the patch's u and w bounds.
+    double m_Val[4];
+
+    // Which side of the edge the segment is on: for a border, +1 where its patch lies above the
+    // line and -1 below; for a diagonal, which of the patch's two triangles
+    int m_Side;
+
+    // Where along the edge the point is: the other parameter on a border, the fraction of the
+    // way from the patch's first corner to its opposite one on a diagonal
+    double m_Along;
 };
 
 //==== Shared Intersection Point ====//
@@ -78,12 +113,15 @@ public:
     void AddSegRef( ISeg* seg );
     void RemoveSegRef( ISeg* seg );
 
-    int m_Index;
     bool m_UsedFlag;
     bool m_GroupedFlag;
     vec3d m_Pnt;
     deque< Puw* >  m_Puws;
     deque< ISeg* > m_Segs;
+
+    // The edge the point lies on, and the point of the segment across it, where there is one
+    IPntEdge m_Edge;
+    IPnt* m_Partner;
 };
 
 //==== Intersection Segment ====//
@@ -105,7 +143,7 @@ public:
     double MinDist( IPnt* ip  );
     void JoinBack( ISeg* seg );
     void JoinFront( ISeg* seg );
-    ISeg* Split( Surf* sPtr, vec2d & uw, SurfaceIntersectionSingleton *MeshMgr );
+    ISeg* Split( const ISegSplit &split, SurfaceIntersectionSingleton *MeshMgr );
 
     bool Match( ISeg* seg );
 
@@ -118,11 +156,23 @@ class ISegSplit
 {
 public:
 
+    ISegSplit()
+    {
+        m_Index = 0;
+        m_Fract = 0.0;
+        m_Surf = nullptr;
+        m_OtherFlag = false;
+    }
+
     int m_Index;
     double m_Fract;
     Surf* m_Surf;
     vec2d m_UW;
     vec3d m_Pnt;
+
+    // The split in the parameters of the chain's other surface, where they are known
+    bool m_OtherFlag;
+    vec2d m_UWOther;
 };
 
 //==== Bound Box Surrounding ISeg Chains ====//
@@ -173,6 +223,9 @@ public:
 
     void AddSeg( ISeg* seg, bool frontFlag );
 
+    // Add seg at the front or back, turned so its end joinIPnt is next to the chain
+    void AddSeg( ISeg* seg, bool frontFlag, IPnt* joinIPnt );
+
     double MatchDist( ISeg* s );
     double ChainDist( ISegChain* B );
     bool Match( ISegChain* B );
@@ -180,6 +233,9 @@ public:
     void Intersect( Surf* surfPtr, ISegChain* B );
 
     void AddSplit( Surf* surfPtr, int index, const vec2d &int_pnt, double t );
+
+    // A split whose parameters on the chain's other surface are known too
+    void AddSplit( Surf* surfPtr, int index, const vec2d &int_pnt, double t, const vec2d &uw_other );
     bool AddBorderSplit( Puw* uw ); // Return true if split successfully added
 
     void MergeSplits();
@@ -192,7 +248,16 @@ public:
     void TransferTess();
     void ApplyTess( SurfaceIntersectionSingleton *MeshMgr );
 
+    // Splits the j'th segment the mesher is given, m_TessVec[ 2j ] to m_TessVec[ 2j + 2 ], in
+    // two.  Its midpoint becomes a vertex and a midpoint is added to each half.  The end
+    // points are kept, so the chains they are merged with are untouched.
+    void SplitTessSeg( int j, SurfaceIntersectionSingleton *MeshMgr );
+
+    void BuildDistTableGeom();
+    void BuildDistTableGeomB();
     void SpreadDensity( );
+    void SpreadDensityA( );
+    void SpreadDensityB( );
     void CalcDensity( SimpleGridDensity* grid_den, list< MapSource* > & splitSources );
     void Tessellate();
     void TessEndPts();
@@ -214,6 +279,13 @@ public:
 
     bool m_BorderFlag;
     int m_SSIntersectIndex; // Corresponds to index in FeaStructure m_FeaSubSurfVec
+
+    // A crease where two pieces were joined into one patch, not a subsurface the user drew
+    bool m_PatchJoinFlag;
+
+    // The parameter line of each parent the chain runs along, where it is one
+    ParmLine m_ALine;
+    ParmLine m_BLine;
 
     ISegChain* m_WakeAttachChain;
 

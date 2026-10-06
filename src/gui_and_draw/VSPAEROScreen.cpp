@@ -68,7 +68,7 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
     // Execute
     m_ConstantAreaLayout.AddY( m_ConsoleLayout.GetH() );
     int execute_height = 3 * m_ConstantAreaLayout.GetStdHeight();
-    m_ConstantAreaLayout.AddSubGroupLayout( m_ExecuteLayout, m_ConstantAreaLayout.GetW(), execute_height );
+    m_ConstantAreaLayout.AddSubGroupLayout( m_ExecuteLayout, m_ConstantAreaLayout.GetRemainX() - window_border_width, execute_height );
 
     m_ExecuteLayout.SetButtonWidth( m_ExecuteLayout.GetW() / 2 );
 
@@ -152,7 +152,7 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
     m_CaseSetupLayout.SetFitWidthFlag( true );
     m_CaseSetupLayout.AddChoice( m_GeomThinSetChoice, "", bw + m_CaseSetupLayout.GetW() * 0.5 );
     m_CaseSetupLayout.SetChoiceButtonWidth( bw );
-    m_CaseSetupLayout.AddChoice( m_GeomSetChoice, "Thick Set", m_CaseSetupLayout.GetW() * 0.5 );
+    m_CaseSetupLayout.AddChoice( m_GeomSetChoice, "Thick Set", m_CaseSetupLayout.GetX() - m_CaseSetupLayout.GetStartX() );
     m_CaseSetupLayout.ForceNewLine();
 
     m_CaseSetupLayout.SetSameLineFlag( true );
@@ -363,7 +363,7 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
     m_MomentRefLayout.AddChoice( m_CGSetChoice, "", bw + m_MomentRefLayout.GetW() * 0.5 );
 
     m_MomentRefLayout.SetChoiceButtonWidth( bw );
-    m_MomentRefLayout.AddChoice( m_CGDegenSetChoice, "Thin Set:", m_MomentRefLayout.GetW() * 0.5 );
+    m_MomentRefLayout.AddChoice( m_CGDegenSetChoice, "Thin Set:", m_MomentRefLayout.GetX() - m_MomentRefLayout.GetStartX() );
     m_MomentRefLayout.SetChoiceButtonWidth( 0 );
 
     m_MomentRefLayout.ForceNewLine();
@@ -426,7 +426,7 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
     // Other Setup Parms Layout
     m_AdvancedLeftLayout.AddSubGroupLayout( m_OtherParmsLayout,
         m_AdvancedLeftLayout.GetW(),
-        13 * m_AdvancedLeftLayout.GetStdHeight() +
+        14 * m_AdvancedLeftLayout.GetStdHeight() +
          5 * m_AdvancedLeftLayout.GetDividerHeight() +
          4 * m_AdvancedLeftLayout.GetGapHeight() );
     m_AdvancedLeftLayout.AddY( m_OtherParmsLayout.GetH() );
@@ -947,9 +947,6 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
 
     // Show the starting tab
     overview_tab->show();
-
-    // Flags to control Kill thread functionality
-    m_SolverThreadIsRunning = false;
 }
 
 VSPAEROScreen::~VSPAEROScreen()
@@ -962,7 +959,15 @@ bool VSPAEROScreen::Update()
 
     Vehicle *veh = VehicleMgr.GetVehicle();
 
-    VSPAEROMgr.Update();
+    // While the solver thread is active it owns VSPAEROMgr's state.  Updating the
+    // manager here would mutate that state (UpdateFilenames clears and rebuilds
+    // the file name strings) while the solver thread reads it -- a race that can
+    // crash.  The remainder of this method only reads manager state, which is
+    // safe because the solver thread does not mutate it while running.
+    if ( !VSPAEROMgr.m_SolverThreadActive )
+    {
+        VSPAEROMgr.Update();
+    }
 
     if (veh)
     {
@@ -1245,12 +1250,11 @@ void * solver_thread_fun( void *data )
         // Store local copy.
         bool stopbeforerun = vsmgr->m_StopBeforeRun;
 
-        vsscreen->m_SolverThreadIsRunning = true;
-
         // EXECUTE SOLVER
         vsmgr->ComputeSolver();
 
-        vsscreen->m_SolverThreadIsRunning = false;
+        // Return ownership of the manager's state to the GUI thread.
+        vsmgr->m_SolverThreadActive = false;
 
         if ( !stopbeforerun )
         {
@@ -1311,6 +1315,13 @@ void VSPAEROScreen::LaunchVSPAERO()
                     break;
                 }
             }
+
+            // Bring the manager fully up to date on the GUI thread, then hand
+            // ownership of its state to the solver thread.  The flag is set
+            // before the thread starts so there is no window where the GUI still
+            // believes it may mutate the manager.
+            VSPAEROMgr.Update();
+            VSPAEROMgr.m_SolverThreadActive = true;
 
             m_SolverProcess.StartThread( solver_thread_fun, ( void* ) &m_SolverPair );
         }
@@ -1725,7 +1736,7 @@ void VSPAEROScreen::UpdateRefWing()
             {
                 snprintf( str, sizeof( str ),  "%d_%s", i, g->GetName().c_str());
 
-                if (g->GetType().m_Type == MS_WING_GEOM_TYPE)
+                if (g->GetBehaviorType() == MS_WING_GEOM_TYPE)
                 {
                     m_RefWingChoice.AddItem(str);
                     WingCompIDMap[geomVec[i]] = iwing;
@@ -1739,7 +1750,7 @@ void VSPAEROScreen::UpdateRefWing()
 
     //    Update selected value
     string refGeomID = VSPAEROMgr.m_RefGeomID;
-    if ( refGeomID.empty() && !m_WingGeomVec.empty() )
+    if ( refGeomID.empty() && !m_WingGeomVec.empty() && !VSPAEROMgr.m_SolverThreadActive )
     {
         // Handle case default case.
         refGeomID = m_WingGeomVec[0];
@@ -1908,7 +1919,7 @@ void VSPAEROScreen::UpdateVSPAEROButtons()
 {
     Vehicle* veh = VehicleMgr.GetVehicle();
     // Solver Button
-    if ( !veh->GetVSPAEROFound() || m_SolverThreadIsRunning)
+    if ( !veh->GetVSPAEROFound() || VSPAEROMgr.m_SolverThreadActive )
     {
         m_SolverButton.Deactivate();
     }
@@ -1917,7 +1928,7 @@ void VSPAEROScreen::UpdateVSPAEROButtons()
         m_SolverButton.Activate();
     }
     // Kill Solver Button
-    if (m_SolverThreadIsRunning)
+    if ( VSPAEROMgr.m_SolverThreadActive )
     {
         m_KillSolverButton.Activate();
     }
@@ -1937,7 +1948,7 @@ void VSPAEROScreen::UpdateVSPAEROButtons()
     }
 
     // Viewer Button
-    if ( !veh->GetVIEWERFound() || m_SolverThreadIsRunning || m_ViewerProcess.IsRunning() || !FileExist(VSPAEROMgr.m_AdbFile))
+    if ( !veh->GetVIEWERFound() || VSPAEROMgr.m_SolverThreadActive || m_ViewerProcess.IsRunning() || !FileExist(VSPAEROMgr.m_AdbFile))
     {
         m_ViewerButton.Deactivate();
     }
@@ -2035,9 +2046,9 @@ void VSPAEROScreen::UpdateControlSurfaceBrowsers()
     SelectControlSurfaceBrowser(curr_cs_index + 1);
 
     m_GroupedCSBrowser->clear();
-    if (VSPAEROMgr.GetCurrentCSGroupIndex() != -1)
+    if ( VSPAEROMgr.GetActiveCSVecPtr() )
     {
-        vector < VspAeroControlSurf > grouped_cs = VSPAEROMgr.GetActiveCSVec();
+        vector < VspAeroControlSurf > grouped_cs = * VSPAEROMgr.GetActiveCSVecPtr();
         m_GroupEditNameInput.Update( VSPAEROMgr.GetCurrentCSGGroupName() );
         for (size_t i = 0; i < grouped_cs.size(); ++i)
         {
@@ -2211,10 +2222,10 @@ void VSPAEROScreen::UpdateDeflectionGainScrollGroup()
 {
     int button_width = 300;
     int input_width = 60;
-    if ( VSPAEROMgr.GetCurrentCSGroupIndex() != -1 )
+    if ( VSPAEROMgr.GetActiveCSVecPtr() )
     {
         ControlSurfaceGroup* cs = VSPAEROMgr.GetControlSurfaceGroupVec()[ VSPAEROMgr.GetCurrentCSGroupIndex() ];
-        vector < VspAeroControlSurf > cs_vec = VSPAEROMgr.GetActiveCSVec();
+        vector < VspAeroControlSurf > cs_vec = * VSPAEROMgr.GetActiveCSVecPtr();
 
         if ( cs_vec.size() != m_NumVarDeflection )
         {
@@ -2297,7 +2308,6 @@ void VSPAEROScreen::ControlSurfaceGroupBrowserCallback()
         {
             VSPAEROMgr.SetCurrentCSGroupIndex( last - 1 );
             VSPAEROMgr.m_SelectedGroupedCS.clear();
-            VSPAEROMgr.UpdateActiveControlSurfVec();
         }
     }
     VSPAEROMgr.HighlightSelected( VSPAEROMgr.CONTROL_SURFACE );
@@ -2353,14 +2363,17 @@ void VSPAEROScreen::SelectUngroupedListBrowser( int cur_index )
 void VSPAEROScreen::GroupedCSBrowserCallback()
 {
     vector < int > selected;
-    vector < VspAeroControlSurf > active_item_vec = VSPAEROMgr.GetActiveCSVec();
-    if ( !active_item_vec.empty() )
+    if ( VSPAEROMgr.GetActiveCSVecPtr() )
     {
-        for ( size_t i = 1; i <= m_GroupedCSBrowser->size(); ++i )
+        vector < VspAeroControlSurf > active_item_vec = * VSPAEROMgr.GetActiveCSVecPtr();
+        if ( !active_item_vec.empty() )
         {
-            if ( m_GroupedCSBrowser->selected( i ) )
+            for ( size_t i = 1; i <= m_GroupedCSBrowser->size(); ++i )
             {
-                selected.push_back( i );
+                if ( m_GroupedCSBrowser->selected( i ) )
+                {
+                    selected.push_back( i );
+                }
             }
         }
     }
