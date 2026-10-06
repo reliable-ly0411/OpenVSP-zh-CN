@@ -26,6 +26,8 @@ NASA/OpenVSP 官方汉化。维护架构与强制规则统一见 [`AGENTS.md`](A
 从 [Releases](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases) 下载与系统对应的
 ZIP 和 `SHA256SUMS.txt`，校验后解压。发布包不会覆盖系统目录。
 
+以下命令以已发布的 3.53.0 为例；自动同步构建的下载方式见“上游更新与发布”。
+
 Ubuntu 24.04 x86_64：
 
 ```bash
@@ -79,16 +81,27 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
-1. `Watch OpenVSP Upstream` 每周检查官方 `main`，发现更新时只创建计划 Issue。
-2. 人工启动 `Prepare OpenVSP Upstream Update` 后，工作流把汉化差异移植到新上游，生成
-   同时继承旧汉化与新上游的审查提交；发生冲突即停止。
-3. 人工完成补译、审查和双平台验收后，创建 `<版本>-Codex-AI-zh-CN` 不可变标签；
-   `Build and Release Localized OpenVSP` 构建 Linux/Windows ZIP、校验中文命令行和依赖、
-   生成 SHA-256，并发布标签对应的源码归档。
+1. `Sync and Build OpenVSP Upstream` 每周一北京时间 11:17 检查官方 `main`（GitHub
+   定时运行可能延迟），也可在 Actions 手动运行；`upstream_ref` 留空跟随配置分支，或填
+   官方标签/提交，例如 `OpenVSP_3.54.0`。
+2. 发现更新后自动合并并保留旧汉化与官方上游的双父历史，同步当前版本字段及“未发布”
+   说明；本仓库工作流单独保留。实际代码冲突会停止并在 Actions 中报告。
+3. 自动调用 Linux/Windows 构建，执行本地化守卫、翻译回归、模型冒烟、中文 CLI、
+   动态库及压缩包检查；只有两平台均通过才快进 `main`。并发更新不会被强制覆盖。
+4. 构建 ZIP 在对应运行的 `localized-linux` / `localized-windows` Artifacts 下载，保留
+   14 天，名称包含提交 SHA。候选分支保留用于排查和回滚。自动构建可能含新增英文界面，
+   不代表 GUI 已人工验收；下方历史版本结论只适用于对应发布版本。
+5. 正式发布仍需完成补译与 GUI 验收、整理与标签一致的更新说明，再创建
+   `<版本>-Codex-AI-zh-CN` 标签；现有发布流程生成双平台 ZIP、SHA-256 及更新说明。
 
 同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
 
 ## 未发布
+
+- 上游检查改为自动合并、双平台构建通过后同步主分支，沿用每周一计划并支持手动运行。
+  同步与构建在同一工作流内衔接，保留 Git 历史、已有标签和构建失败时的候选分支。
+- 自动同步只更新当前版本字段并追加上游差异链接，历史发布记录保留；构建产物从 Actions
+  下载，正式 Release 使用原有不可变标签流程。
 
 - 修正 README 首页遗漏的当前基线版本号为 3.53.0；发布工作流改用不绑定版本的标签格式
   提示，检查脚本按源码版本生成标签示例。

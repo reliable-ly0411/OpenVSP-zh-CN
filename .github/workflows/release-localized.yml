@@ -1,6 +1,12 @@
 name: Build and Release Localized OpenVSP
 
 on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact candidate commit to build without creating a release
+        required: true
+        type: string
   pull_request:
     branches: [main]
   push:
@@ -22,7 +28,9 @@ permissions:
   contents: read
 
 env:
-  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || github.sha }}
+  SOURCE_REF: ${{ inputs.source_ref || (github.event_name == 'workflow_dispatch' && inputs.tag) || github.sha }}
+  VERIFY_RELEASE_TAG: ${{ !inputs.source_ref && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) }}
+  RELEASE_TAG: ${{ inputs.source_ref || github.event_name == 'workflow_dispatch' && inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || github.sha }}
 
 concurrency:
   group: localized-${{ github.event_name }}-${{ github.ref }}
@@ -31,6 +39,8 @@ concurrency:
 jobs:
   build:
     name: Build ${{ matrix.name }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -46,13 +56,13 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
+          ref: ${{ env.SOURCE_REF }}
 
       - name: Verify tag and localization guard on Linux
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+          if [[ "$VERIFY_RELEASE_TAG" != true ]]; then
             python3 scripts/check_localization_release.py
           else
             python3 scripts/check_localization_release.py --expected-tag "$RELEASE_TAG"
@@ -62,12 +72,16 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+          if ($env:VERIFY_RELEASE_TAG -ne 'true') {
             python -X utf8 scripts/check_localization_release.py
           } else {
             python -X utf8 scripts/check_localization_release.py --expected-tag "$env:RELEASE_TAG"
           }
           if ($LASTEXITCODE -ne 0) { throw 'Localization guard failed' }
+
+      - name: Upstream synchronization regression tests
+        if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s scripts -p test_sync_upstream.py -v
 
       - name: Translation regression tests
         shell: bash
@@ -189,7 +203,7 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: build
-    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
+    if: ${{ !inputs.source_ref && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.publish == true)) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -197,7 +211,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
+          ref: ${{ env.SOURCE_REF }}
 
       - name: Download verified packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
