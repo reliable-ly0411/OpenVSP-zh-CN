@@ -72,7 +72,7 @@ jobs:
 
       - name: Report unchanged upstream
         if: steps.sync.outputs.changed == 'false'
-        run: echo '官方上游已包含在 main 中，本次无需重复构建。' >> "$GITHUB_STEP_SUMMARY"
+        run: echo '官方上游已包含在 main 中；继续检查是否需要补发当前自动构建。' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report preparation failure
         if: failure()

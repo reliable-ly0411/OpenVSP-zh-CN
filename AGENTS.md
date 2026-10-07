@@ -42,13 +42,16 @@
 
 ## 上游同步与发布规则
 
-- `Sync and Build OpenVSP Upstream` 每周自动同步官方 `main`，也支持手动触发。
+- `Sync Build and Publish OpenVSP Upstream` 每周自动同步官方 `main`，也支持手动触发。
 - `Prepare OpenVSP Upstream Update` 作为可复用准备流程生成双父候选提交；只保留本仓库
   的工作流文件，真实代码冲突时停止，不自动选择一方。
 - 候选提交通过 Linux/Windows 构建、本地化守卫、翻译回归和打包检查后，才以普通 push
   快进 `main`。构建失败或主分支并发前进时保留候选分支，不强制覆盖。
-- 自动同步更新当前版本元数据及“未发布”说明；构建包保留在 Actions Artifacts 14 天。
-  自动构建不代表新增界面已全部补译或 GUI 已人工验收。
+- 自动同步更新当前版本元数据，把待发布变化整理为自动预发布标签对应的章节。
+  双平台通过并同步主分支后，自动公开预发布 Release，包含双平台包、SHA-256 和更新说明；
+  Actions Artifacts 另保留 14 天。没有新上游提交时，也应补发缺失的当前自动版本。
+- 自动预发布使用 `<版本>-Codex-AI-zh-CN-auto.<上游提交前12位>` 不可变标签，保留稳定版
+  Latest 标记，明确新增界面可能含英文和 GUI 未人工验收；发布前下载并校验所有资产。
 - 审查、补译和 Linux/Windows 验收完成后，才可创建
   `<版本>-Codex-AI-zh-CN` 标签；同版本修复使用递增的不可变 `-rN` 标签。
 - 每次代码、构建或发布相关修改都必须更新 `README_zh-CN.md` 的版本变化；发布前把

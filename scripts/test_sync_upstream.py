@@ -82,7 +82,7 @@ class SyncTests(unittest.TestCase):
         notes = (self.root / 'README_zh-CN.md').read_text()
         self.assertIn('当前软件版本：OpenVSP 3.54.0', notes)
         self.assertTrue(notes.endswith(self.history))
-        self.assertIn('auto.' + upstream[:12], notes)
+        self.assertIn('## 3.54.0-Codex-AI-zh-CN-auto.' + upstream[:12], notes)
         self.git('commit', '-m', 'validated merge')
         self.assertEqual(self.git('rev-list', '--parents', '-n', '1', 'HEAD').split()[1:], [self.localized, upstream])
         result = self.run_sync()

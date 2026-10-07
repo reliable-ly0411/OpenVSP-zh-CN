@@ -81,22 +81,33 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
-1. `Sync and Build OpenVSP Upstream` 每周一北京时间 11:17 检查官方 `main`（GitHub
+1. `Sync Build and Publish OpenVSP Upstream` 每周一北京时间 11:17 检查官方 `main`（GitHub
    定时运行可能延迟），也可在 Actions 手动运行；`upstream_ref` 留空跟随配置分支，或填
    官方标签/提交，例如 `OpenVSP_3.54.0`。
 2. 发现更新后自动合并并保留旧汉化与官方上游的双父历史，同步当前版本字段及“未发布”
    说明；本仓库工作流单独保留。实际代码冲突会停止并在 Actions 中报告。
 3. 自动调用 Linux/Windows 构建，执行本地化守卫、翻译回归、模型冒烟、中文 CLI、
    动态库及压缩包检查；只有两平台均通过才快进 `main`。并发更新不会被强制覆盖。
-4. 构建 ZIP 在对应运行的 `localized-linux` / `localized-windows` Artifacts 下载，保留
-   14 天，名称包含提交 SHA。候选分支保留用于排查和回滚。自动构建可能含新增英文界面，
-   不代表 GUI 已人工验收；下方历史版本结论只适用于对应发布版本。
+4. 同步成功后自动公开到 [Releases](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases)，
+   使用 `<版本>-Codex-AI-zh-CN-auto.<上游提交前12位>` 不可变预发布标签，附带双平台
+   ZIP、SHA-256 和对应更新说明；正式版本的 Latest 标记保留。自动构建可能含新增英文界面，
+   GUI 未人工验收。Actions Artifacts 另保留 14 天，候选分支用于排查和回滚。
+   即使没有新的上游提交，尚未发布的当前自动构建也会被构建并补发；已发布版本不会覆盖。
 5. 正式发布仍需完成补译与 GUI 验收、整理与标签一致的更新说明，再创建
    `<版本>-Codex-AI-zh-CN` 标签；现有发布流程生成双平台 ZIP、SHA-256 及更新说明。
 
 同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
 
 ## 未发布
+
+## 3.54.0-Codex-AI-zh-CN-auto.db6c6fe8f4ec
+
+- 补齐自动同步后的 Releases 发布环节：双平台构建通过并同步主分支后，以预发布方式
+  公开 Linux/Windows ZIP、SHA-256 和本节更新说明；没有新上游提交时也会补发缺失版本。
+- 本地同步/发布回归共 10 项、自动版本守卫与 actionlint 检查通过；远端编译、打包与
+  下载校验以本标签对应的 Actions 记录为准。
+- 预发布标签与官方基线固定绑定，发布资产先上传草稿、下载校验后再公开；不替换已有
+  标签或资产，不将自动构建标成已通过 GUI 人工验收的稳定版。
 
 - 首次同步 3.54.0 时人工解决几何体名称显示冲突，保留中文显示及上游克隆自动名称的
   编辑限制。新上游功能尚未逐页补译，自动构建不作为 GUI 验收结论。

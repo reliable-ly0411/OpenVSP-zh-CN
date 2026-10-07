@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "src" / "cmake" / "VSP_Version.cmake"
 RELEASE_NOTES_FILE = ROOT / "README_zh-CN.md"
 TAG_RE = re.compile(
-    r"^(?P<version>\d+\.\d+\.\d+)-Codex-AI-zh-CN(?:-r[1-9]\d*)?$"
+    r"^(?P<version>\d+\.\d+\.\d+)-Codex-AI-zh-CN(?:-r[1-9]\d*|-auto\.(?P<upstream>[0-9a-f]{12}))?$"
 )
 
 
@@ -121,11 +121,14 @@ def main() -> None:
         match = TAG_RE.fullmatch(args.expected_tag)
         if not match:
             raise SystemExit(
-                "发布标签必须为 <版本>-Codex-AI-zh-CN 或其 -rN 重发版本，"
+                "发布标签必须为 <版本>-Codex-AI-zh-CN、-rN 重发版或 -auto.<上游提交前12位>，"
                 f"例如 {version}-Codex-AI-zh-CN-r2"
             )
         if match.group("version") != version:
             raise SystemExit(f"标签版本 {match.group('version')} 与源码版本 {version} 不一致")
+        # 自动预发布标签固定到官方基线，避免错误版本对应到其他源码。
+        if match.group("upstream") and match.group("upstream") != metadata["base_commit"][:12]:
+            raise SystemExit("自动预发布标签与官方基线提交不一致")
         verify_release_notes(args.expected_tag)
         require_text("src/gui_and_draw/MainVSPScreen.cpp", f"汉化版本：{args.expected_tag}\\n")
 

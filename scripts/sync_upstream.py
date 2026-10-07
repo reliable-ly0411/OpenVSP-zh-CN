@@ -46,7 +46,7 @@ def update_metadata(metadata: dict, upstream: str) -> str:
     )
     previous = metadata["base_commit"]
     notes = (
-        f"## 未发布\n\n- 自动同步官方 OpenVSP {version}：`{previous[:12]}` → `{upstream[:12]}`。\n"
+        f"## 未发布\n\n## {build_name}\n\n- 自动同步官方 OpenVSP {version}：`{previous[:12]}` → `{upstream[:12]}`。\n"
         f"  [上游变更](https://github.com/{metadata['repository']}/compare/{previous}...{upstream})；\n"
         "  保留现有汉化，新增界面可能仍含英文；双平台验证以本次 Actions 结果为准，GUI 未人工验收。\n"
     )

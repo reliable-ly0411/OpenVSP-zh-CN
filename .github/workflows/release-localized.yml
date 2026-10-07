@@ -10,6 +10,7 @@ on:
   push:
     tags:
       - "*.*.*-Codex-AI-zh-CN*"
+      - "!*-auto.*"
   workflow_dispatch:
     inputs:
       tag:
@@ -80,6 +81,10 @@ jobs:
       - name: Upstream synchronization regression tests
         if: runner.os == 'Linux'
         run: python3 -m unittest discover -s scripts -p test_sync_upstream.py -v
+
+      - name: Automatic release regression tests
+        if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s scripts -p test_auto_release.py -v
 
       - name: Translation regression tests
         shell: bash
@@ -261,10 +266,14 @@ jobs:
             echo 'Release already exists; refusing to replace notes or assets. Inspect and resume manually.' >&2
             exit 1
           fi
-          title="OpenVSP ${RELEASE_TAG%%-Codex-AI-zh-CN} Codex AI 简体中文版"
+          release_flags=(--latest)
+          if [[ "$RELEASE_TAG" == *-auto.* ]]; then
+            release_flags=(--prerelease --latest=false)
+          fi
+          title="OpenVSP ${RELEASE_TAG%%-Codex-AI-zh-CN*} Codex AI 简体中文版"
           gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --title "$title" --notes-file release-notes.md --draft
+            --verify-tag --title "$title" --notes-file release-notes.md --draft "${release_flags[@]}"
           mkdir downloaded-release
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir downloaded-release
           (cd downloaded-release && sha256sum -c SHA256SUMS.txt)
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${release_flags[@]}"
