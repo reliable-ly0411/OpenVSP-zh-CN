@@ -6,6 +6,7 @@ int main()
 {
     const std::vector<std::pair<std::string, std::string>> cases = {
         {"Clone", "克隆"},
+        {"Joint", "关节"}, {"Rng", "范围"},
         {"Clones", "克隆体"},
         {"Name Suffix", "名称后缀"},
         {"Replace With Copy Of Original", "替换为原始几何体副本"},

@@ -30,6 +30,8 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Color and Material", "颜色与材质" },
         { "Subsurfaces", "子曲面" },
         { "Joint Deflection", "关节偏转" },
+        { "Joint", "关节" },
+        { "Rng", "范围" },
         { "Leave Empty", "保留空克隆体" },
         { "Replace", "替换" },
         { "Delete Too", "一并删除" },
