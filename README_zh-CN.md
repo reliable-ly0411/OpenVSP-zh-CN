@@ -103,6 +103,11 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- 发布维护：`Finalize Verified Release Draft` 可收尾因取消/重试遗留的未公开预发布草稿。
+  必须提供原标签提交、成功的双平台构建、实际桌面验收包 SHA-256 及验证说明；先备份草稿
+  和附件 30 天，仅快进未公开标签，重新下载核对全部附件后才允许公开。已公开 Release
+  始终拒绝修改，稳定版 Latest 不变。
+
 ## 3.54.0-Codex-AI-zh-CN-r1
 
 - 补译 3.54.0 几何体浏览器的 Clone（克隆）按钮、克隆名称后缀窗口和克隆参数页；
