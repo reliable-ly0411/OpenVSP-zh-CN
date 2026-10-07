@@ -128,9 +128,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/check_localization_release.py --expected-tag "$RELEASE_TAG"
-          for platform in Ubuntu-24.04-x86_64 Windows-x64; do
-            python3 scripts/check_localized_package.py "downloaded-packages/OpenVSP-${SOURCE_SHA}-${platform}.zip"
-          done
+          python3 scripts/check_localized_package.py "downloaded-packages/OpenVSP-${SOURCE_SHA}-Ubuntu-24.04-x86_64.zip"
+          python3 scripts/check_localized_package.py --windows-checkout "downloaded-packages/OpenVSP-${SOURCE_SHA}-Windows-x64.zip"
           python3 scripts/prepare_auto_release.py --source-sha "$SOURCE_SHA" \
             --packages downloaded-packages --output release-assets
 

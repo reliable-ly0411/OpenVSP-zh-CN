@@ -86,6 +86,10 @@ jobs:
         if: runner.os == 'Linux'
         run: python3 -m unittest discover -s scripts -p test_auto_release.py -v
 
+      - name: Cross-platform package verification regression tests
+        if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s scripts -p test_package_checkout.py -v
+
       - name: Translation regression tests
         shell: bash
         run: |

@@ -102,6 +102,9 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 3.54.0-Codex-AI-zh-CN-auto.db6c6fe8f4ec
 
+- 发布任务按 Git 的 Windows 检出规则复核 Windows 包，兼容文本文件 CRLF；`.vsp3`
+  和二进制仍按 Git 属性逐字节校验。已用实际 Windows 构建包复核，并通过 4 项回归测试。
+
 - 补齐自动同步后的 Releases 发布环节：双平台构建通过并同步主分支后，以预发布方式
   公开 Linux/Windows ZIP、SHA-256 和本节更新说明；没有新上游提交时也会补发缺失版本。
 - 本地同步/发布回归共 10 项、自动版本守卫与 actionlint 检查通过；远端编译、打包与
