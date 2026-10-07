@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing localized tag (<version>-Codex-AI-zh-CN or <version>-Codex-AI-zh-CN-rN)
+        description: Localized tag (<version>-Codex-AI-zh-CN or <version>-Codex-AI-zh-CN-rN)
         required: true
         type: string
       publish:
@@ -23,11 +23,27 @@ on:
         default: false
         type: boolean
 
+      source_commit:
+        description: Exact 40-character commit for a new tag; empty builds an existing tag
+        required: false
+        default: ''
+        type: string
+      prerelease:
+        description: Keep this revision a prerelease and preserve the stable Latest
+        required: true
+        default: false
+        type: boolean
+      draft:
+        description: Leave the verified release as a draft for desktop acceptance
+        required: true
+        default: false
+        type: boolean
+
 permissions:
   contents: read
 
 env:
-  SOURCE_REF: ${{ inputs.source_ref || (github.event_name == 'workflow_dispatch' && inputs.tag) || github.sha }}
+  SOURCE_REF: ${{ inputs.source_ref || inputs.source_commit || (github.event_name == 'workflow_dispatch' && inputs.tag) || github.sha }}
   VERIFY_RELEASE_TAG: ${{ !inputs.source_ref && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) }}
   RELEASE_TAG: ${{ inputs.source_ref || github.event_name == 'workflow_dispatch' && inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || github.sha }}
 
@@ -57,6 +73,16 @@ jobs:
         with:
           ref: ${{ env.SOURCE_REF }}
 
+      - name: Verify explicitly requested source commit
+        if: github.event_name == 'workflow_dispatch' && inputs.source_commit != ''
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$REQUESTED_COMMIT"
+
       - name: Verify tag and localization guard on Linux
         if: runner.os == 'Linux'
         shell: bash
@@ -81,6 +107,10 @@ jobs:
       - name: Upstream synchronization regression tests
         if: runner.os == 'Linux'
         run: python3 -m unittest discover -s scripts -p test_sync_upstream.py -v
+
+      - name: Release formatting regression tests
+        if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s scripts -p test_release_notes.py -v
 
       - name: Automatic release regression tests
         if: runner.os == 'Linux'
@@ -126,7 +156,7 @@ jobs:
           cmake --build build --target package --parallel 2
           build/vsp/vspscript -script scripts/localization_smoke.as | tee smoke.txt
           grep -q LOCALIZATION_SMOKE_PASS smoke.txt
-          ! grep -q LOCALIZATION_SMOKE_FAIL smoke.txt
+          if grep -q LOCALIZATION_SMOKE_FAIL smoke.txt; then exit 1; fi
           ldd build/vsp/vsp | tee vsp-ldd.txt
           if grep -q 'not found' vsp-ldd.txt; then
             echo 'Linux 发布包存在未解析的动态库依赖' >&2
@@ -227,42 +257,25 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Extract localized update notes
+      - name: Generate checksums and consistent release notes
+        env:
+          PRERELEASE: ${{ inputs.prerelease }}
         shell: bash
         run: |
           set -euo pipefail
-          awk -v heading="## ${RELEASE_TAG}" '
-            $0 == heading { found = 1; next }
-            found && /^## / { exit }
-            found { print }
-            END { if (!found) exit 2 }
-          ' README_zh-CN.md > release-update.md
-          test -s release-update.md
-
-      - name: Generate checksums and release notes
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd release-assets
-          sha256sum -- ./*.zip | tee SHA256SUMS.txt
-          cd ..
-          {
-            echo "OpenVSP ${RELEASE_TAG%%-Codex-AI-zh-CN} Codex AI 简体中文汉化版。"
-            echo
-            echo '## 本次更新'
-            cat release-update.md
-            echo
-            echo '本 Release 在 GitHub 托管的 Ubuntu 24.04 与 Windows 2022 x64 环境中完成构建、'
-            echo '中文命令行、翻译回归、模型兼容性冒烟测试和压缩包内容检查。Windows GUI 未人工验收；'
-            echo 'Linux GUI 的实际抽查范围以本次更新记录为准。附件包含两平台构建及 SHA-256 清单；'
-            echo '页面同时自动提供与标签对应的源码 ZIP 和 tar.gz。'
-            echo
-            echo '> 本地化由 OpenAI Codex AI 生成并维护，不改变 OpenVSP 原软件版权、作者归属及 NOSA 1.3 许可。'
-          } > release-notes.md
+          (cd release-assets && sha256sum -- ./*.zip | tee SHA256SUMS.txt)
+          note_flags=()
+          if [[ "$PRERELEASE" == true || "$RELEASE_TAG" == *-auto.* ]]; then
+            note_flags=(--prerelease)
+          fi
+          python3 scripts/release_notes.py --tag "$RELEASE_TAG" \
+            --source-sha "$(git rev-parse HEAD)" "${note_flags[@]}"
 
       - name: Create a new immutable release
         env:
           GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          KEEP_DRAFT: ${{ inputs.draft }}
         shell: bash
         run: |
           set -euo pipefail
@@ -270,14 +283,25 @@ jobs:
             echo 'Release already exists; refusing to replace notes or assets. Inspect and resume manually.' >&2
             exit 1
           fi
+          # A new tag is created only after both packages pass; never move an existing tag.
+          source_sha=$(git rev-parse HEAD)
+          remote_tag=$(git ls-remote origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}")
+          if [[ -z "$remote_tag" ]]; then
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$source_sha"
+          else
+            git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$source_sha"
+          fi
           release_flags=(--latest)
-          if [[ "$RELEASE_TAG" == *-auto.* ]]; then
+          if [[ "$PRERELEASE" == true || "$RELEASE_TAG" == *-auto.* ]]; then
             release_flags=(--prerelease --latest=false)
           fi
-          title="OpenVSP ${RELEASE_TAG%%-Codex-AI-zh-CN*} Codex AI 简体中文版"
+          title=$(cat release-title.txt)
           gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" \
             --verify-tag --title "$title" --notes-file release-notes.md --draft "${release_flags[@]}"
           mkdir downloaded-release
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir downloaded-release
           (cd downloaded-release && sha256sum -c SHA256SUMS.txt)
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${release_flags[@]}"
+          if [[ "$KEEP_DRAFT" != true ]]; then
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${release_flags[@]}"
+          fi

@@ -14,6 +14,36 @@ using Entry = std::pair<const char *, const char *>;
 const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
     static const std::unordered_map<std::string, std::string> table = {
+        // OpenVSP 3.54.0 clone display labels; model names and suffixes stay unchanged.
+        { "Clone", "克隆" },
+        { "Clones", "克隆体" },
+        { "Name Suffix", "名称后缀" },
+        { "Suffix", "后缀" },
+        { "Original", "原始几何体" },
+        { "Replace With Copy Of Original", "替换为原始几何体副本" },
+        { "Name After Original", "跟随原始名称" },
+        { "Copy From Original", "从原始几何体复制" },
+        { "Transformation", "变换" },
+        { "Attachment", "附着" },
+        { "Symmetry and Flip", "对称与翻转" },
+        { "Set Membership", "集合归属" },
+        { "Color and Material", "颜色与材质" },
+        { "Subsurfaces", "子曲面" },
+        { "Joint Deflection", "关节偏转" },
+        { "Leave Empty", "保留空克隆体" },
+        { "Replace", "替换" },
+        { "Delete Too", "一并删除" },
+        { "Cut Too", "一并剪切" },
+        { "Deleting this would leave %d Clones with nothing to copy:\n\n", "删除此几何体后，%d 个克隆体将失去复制来源：\n\n" },
+        { "Cutting this would leave %d Clones with nothing to copy:\n\n", "剪切此几何体后，%d 个克隆体将失去复制来源：\n\n" },
+        { "delete them along with it", "随原始几何体一并删除" },
+        { "cut them along with it, to be pasted with it", "随原始几何体一并剪切，之后可一起粘贴" },
+        { ", including their dependent Clones: ", "，包括它们的后续克隆体，数量：" },
+        { "    ... and %d more\n", "    ……另有 %d 个\n" },
+        { "\nLeave Empty -- keep them where they are, copying nothing\n", "\n保留空克隆体 — 保持当前位置，停止复制几何数据\n" },
+        { "Replace -- make each a full copy of what it was copying\n", "替换 — 将每个克隆体转为其原始几何体的完整副本\n" },
+        { "Error:  %d of the %d Geoms chosen are no longer there.", "错误：所选 %d 个几何体已不存在（原共选中 %d 个）。" },
+
         // OpenVSP 3.53.0 skinning, conversion and FitModel display text.
         { "Analysis Output", "分析输出" },
         { "Sort by Dist", "按距离排序" },

@@ -151,7 +151,7 @@ jobs:
             test "$(jq -r .draft existing-release.json)" = true
           elif grep -q 'HTTP 404' release-error.txt; then
             gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" \
-              --verify-tag --title "OpenVSP ${RELEASE_TAG%%-Codex-AI-zh-CN*} 简体中文自动构建（预发布）" \
+              --verify-tag --title "$(cat release-title.txt)" \
               --notes-file release-notes.md --draft --prerelease --latest=false
           else
             cat release-error.txt >&2

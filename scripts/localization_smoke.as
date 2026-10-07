@@ -30,6 +30,25 @@ int main()
     if (GetGeomName(sid) != "用户模型_7" || GetGeomName(wid) != "UserWing_7") failures++;
     if (GetGeomTypeName(sid) != "Stack") failures++;
     if (GetNumSkinSpines(sid) != 1 || GetSkinSpineName(sid, 0) != "用户脊线_9") failures++;
+    // Clone display translation must not change saved names, suffixes or original IDs.
+    array<string> originals = { wid };
+    array<string>@ clones = CloneGeomVec(originals);
+    if (clones.length() != 1) failures++;
+    else {
+        string cid = clones[0];
+        if (GetGeomCloneNameSuffix(cid) != "_Clone") failures++;
+        if (GetGeomName(cid) != "UserWing_7_Clone") failures++;
+        SetGeomCloneNameSuffix(cid, "_用户后缀_Clone");
+        Update();
+        WriteVSPFile("build/localization-clone-smoke.vsp3", SET_ALL);
+        ClearVSPModel();
+        ReadVSPFile("build/localization-clone-smoke.vsp3");
+        Update();
+        if (GetGeomCloneOriginal(cid) != wid) failures++;
+        if (GetGeomCloneNameSuffix(cid) != "_用户后缀_Clone") failures++;
+        if (GetGeomName(cid) != "UserWing_7_用户后缀_Clone") failures++;
+        if (GetGeomName(wid) != "UserWing_7") failures++;
+    }
     if (GetNumTotalErrors() > 0) failures++;
     if (failures != 0) {
         Print("LOCALIZATION_SMOKE_FAIL");

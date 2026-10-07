@@ -703,7 +703,7 @@ void MainVSPScreen::ActionCB( void * data )
         const string localization_about =
             string( "OpenVSP 简体中文汉化版\n" ) +
             "软件版本：" + VSPVERSION4 + "\n"
-            "汉化版本：3.54.0-Codex-AI-zh-CN-auto.db6c6fe8f4ec\n"
+            "汉化版本：3.54.0-Codex-AI-zh-CN-r1\n"
             "汉化仓库：https://github.com/reliable-ly0411/OpenVSP-zh-CN\n\n"
             "【声明】本中文本地化由 OpenAI Codex AI 生成并维护。\n"
             "汉化内容包括界面、动态标签、命令行帮助及离线帮助文档。\n\n"

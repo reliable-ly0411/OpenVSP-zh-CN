@@ -5,7 +5,7 @@
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
 - 当前软件版本：OpenVSP 3.54.0
-- 当前汉化版本：`3.54.0-Codex-AI-zh-CN-auto.db6c6fe8f4ec`
+- 当前汉化版本：`3.54.0-Codex-AI-zh-CN-r1`
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -97,8 +97,25 @@ cmake --build build --target package --config Release --parallel 2
    `<版本>-Codex-AI-zh-CN` 标签；现有发布流程生成双平台 ZIP、SHA-256 及更新说明。
 
 同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
+手动运行构建发布流程时可填写精确的 40 位 `source_commit`；两平台通过后才创建新标签。
+选中 `prerelease` 保留稳定版 Latest，选中 `draft` 则在下载校验后保留草稿供桌面验收。
+自动及手动发布的标题和六段式说明统一由 `scripts/release_notes.py` 生成。
 
 ## 未发布
+
+## 3.54.0-Codex-AI-zh-CN-r1
+
+- 补译 3.54.0 几何体浏览器的 Clone（克隆）按钮、克隆名称后缀窗口和克隆参数页；
+  删除/剪切原始几何体时的克隆处置对话框也使用中文，保留原有操作语义。
+- 仅修改显示文本，保留用户名称、默认 `_Clone` 后缀、模型参数 ID、API 及保存格式；
+  回归检查覆盖中文按钮、计数格式占位符和名称边界。
+- 自动与手动发布共用六段式说明和标题生成器，正确区分版本、rN 修订和自动预发布；
+  手动发布可从精确提交创建新标签，并在资产下载校验后保留草稿供双平台桌面验收。
+- 本地已通过 17 项 Python 回归及 C++ 翻译边界检查；新增克隆模型冒烟覆盖默认与中文
+  自定义后缀、原始几何体关联和保存重开。
+- 本修订继续作为预发布，不替换已有标签/附件或 3.53.0 的稳定版 Latest。双平台构建、
+  CLI、模型与打包检查以本标签对应的 Actions 为准，实际 GUI 抽查结果记录在 Release 页。
+
 
 ## 3.54.0-Codex-AI-zh-CN-auto.db6c6fe8f4ec
 

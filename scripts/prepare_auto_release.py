@@ -6,24 +6,14 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 
 from check_localization_release import ROOT, verify_release_notes
+from release_notes import release_body, release_title, update_notes
 
 
 def automatic_tag(metadata: dict) -> str:
     return f"{metadata['version']}-Codex-AI-zh-CN-auto.{metadata['base_commit'][:12]}"
-
-
-def update_notes(readme: str, tag: str) -> str:
-    section = re.search(
-        rf"^## {re.escape(tag)}\s*$\n(.*?)(?=^## |\Z)",
-        readme, re.MULTILINE | re.DOTALL,
-    )
-    if not section or not section.group(1).strip():
-        raise ValueError(f"缺少标签 {tag} 对应的更新说明")
-    return section.group(1).strip()
 
 
 def prepare_assets(packages: Path, output: Path, source_sha: str, tag: str) -> None:
@@ -63,17 +53,8 @@ def main() -> None:
     prepare_assets(args.packages, args.output, args.source_sha, tag)
     repository = os.environ["GITHUB_REPOSITORY"]
     run_id = os.environ["GITHUB_RUN_ID"]
-    notes = (
-        f"OpenVSP {metadata['version']} 简体中文自动构建（预发布）。\n\n"
-        "Linux/Windows 编译、中文命令行、翻译回归、模型冒烟和打包检查通过。\n"
-        "**新增界面可能仍含英文；Linux/Windows GUI 未人工验收。**\n\n"
-        f"## 本次更新\n\n{body}\n\n"
-        f"- 源码提交：`{args.source_sha}`\n"
-        f"- 官方基线：`{metadata['base_commit']}`\n"
-        f"- [完整构建与校验记录](https://github.com/{repository}/actions/runs/{run_id})\n\n"
-        "附件包含两平台 ZIP 和 SHA-256 清单，页面源码归档对应本标签。\n"
-        "本地化由 OpenAI Codex AI 生成并维护；原作者归属及 NOSA 1.3 许可不变。\n"
-    )
+    notes = release_body(tag, body, repository, args.source_sha, run_id, prerelease=True)
+    Path("release-title.txt").write_text(release_title(tag, prerelease=True), encoding="utf-8")
     Path("release-notes.md").write_text(notes, encoding="utf-8")
 
 

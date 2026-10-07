@@ -8,6 +8,8 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "CloneDeleteDialog.h"
+#include "VSPChinese.h"
+#include <cstdio>
 
 #include "APIDefines.h"
 #include "Vehicle.h"
@@ -77,34 +79,22 @@ void DeleteOrCutActiveGeomVec( Vehicle* veh, bool cut )
 
 int AskCloneDelete( Vehicle* veh, const vector< string > & clone_vec, bool cut )
 {
-    string verb = "Deleting";
-    string with_label = "Delete Too";
-    string with_text = "delete them along with it";
-    if ( cut )
-    {
-        verb = "Cutting";
-        with_label = "Cut Too";
-        with_text = "cut them along with it, to be pasted with it";
-    }
-
-    string count = "1 Clone";
-    if ( clone_vec.size() != 1 )
-    {
-        count = std::to_string( clone_vec.size() ) + " Clones";
-    }
-
-    string message = verb + " this would leave " + count + " with nothing to copy:\n\n";
+    string with_label = VSPTranslate( cut ? "Cut Too" : "Delete Too" );
+    string with_text = VSPTranslate( cut ? "cut them along with it, to be pasted with it" :
+                                         "delete them along with it" );
+    char heading[512];
+    snprintf( heading, sizeof( heading ), VSPTranslate( cut ?
+              "Cutting this would leave %d Clones with nothing to copy:\n\n" :
+              "Deleting this would leave %d Clones with nothing to copy:\n\n" ).c_str(),
+              ( int )clone_vec.size() );
+    string message = heading;
 
     // Taking them along also takes their own Clones, which the list does not show.
     vector< string > all_vec = veh->FindAllClonesOf( veh->GetActiveGeomVec() );
     int nmore = ( int )all_vec.size() - ( int )clone_vec.size();
-    if ( nmore == 1 )
+    if ( nmore > 0 )
     {
-        with_text += ", and the 1 Clone of them";
-    }
-    else if ( nmore > 1 )
-    {
-        with_text += ", and the " + std::to_string( nmore ) + " Clones of them";
+        with_text += VSPTranslate( ", including their dependent Clones: " ) + std::to_string( nmore );
     }
 
     // List the first few; summarize the rest.
@@ -125,11 +115,14 @@ int AskCloneDelete( Vehicle* veh, const vector< string > & clone_vec, bool cut )
     }
     if ( ( int )clone_vec.size() > max_listed )
     {
-        message += "    ... and " + std::to_string( clone_vec.size() - max_listed ) + " more\n";
+        char remainder[128];
+        snprintf( remainder, sizeof( remainder ), VSPTranslate( "    ... and %d more\n" ).c_str(),
+                  ( int )clone_vec.size() - max_listed );
+        message += remainder;
     }
 
-    message += "\nLeave Empty -- keep them where they are, copying nothing\n"
-               "Replace -- make each a full copy of what it was copying\n" +
+    message += VSPTranslate( "\nLeave Empty -- keep them where they are, copying nothing\n" ) +
+               VSPTranslate( "Replace -- make each a full copy of what it was copying\n" ) +
                with_label + " -- " + with_text;
 
     const int win_w = 460;
@@ -146,7 +139,8 @@ int AskCloneDelete( Vehicle* veh, const vector< string > & clone_vec, bool cut )
 
     int win_h = margin + text_h + margin + button_h + margin;
 
-    Fl_Double_Window* win = new Fl_Double_Window( win_w, win_h, "Clones" );
+    Fl_Double_Window* win = new Fl_Double_Window( win_w, win_h );
+    win->copy_label( VSPTranslate( "Clones" ).c_str() );
     win->callback( CloneDeleteCloseCB );
 
     Fl_Box* text = new Fl_Box( margin, margin, win_w - 2 * margin, text_h );
@@ -157,15 +151,18 @@ int AskCloneDelete( Vehicle* veh, const vector< string > & clone_vec, bool cut )
     int y = margin + text_h + margin;
     int x = margin;
 
-    Fl_Button* cancel = new Fl_Button( x, y, button_w, button_h, "Cancel" );
+    Fl_Button* cancel = new Fl_Button( x, y, button_w, button_h );
+    cancel->copy_label( VSPTranslate( "Cancel" ).c_str() );
     cancel->callback( CloneDeleteChoiceCB, -1 );
     x += button_w + gap;
 
-    Fl_Button* leave = new Fl_Button( x, y, button_w, button_h, "Leave Empty" );
+    Fl_Button* leave = new Fl_Button( x, y, button_w, button_h );
+    leave->copy_label( VSPTranslate( "Leave Empty" ).c_str() );
     leave->callback( CloneDeleteChoiceCB, vsp::CLONE_DELETE_LEAVE_EMPTY );
     x += button_w + gap;
 
-    Fl_Button* replace = new Fl_Button( x, y, button_w, button_h, "Replace" );
+    Fl_Button* replace = new Fl_Button( x, y, button_w, button_h );
+    replace->copy_label( VSPTranslate( "Replace" ).c_str() );
     replace->callback( CloneDeleteChoiceCB, vsp::CLONE_DELETE_REPLACE );
     x += button_w + gap;
 

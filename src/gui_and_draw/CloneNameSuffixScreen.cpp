@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "CloneNameSuffixScreen.h"
+#include "VSPChinese.h"
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -110,7 +111,7 @@ void CloneNameSuffixScreen::GuiDeviceCallBack( GuiDevice* device )
                 errMsgData.m_IntVec.push_back( vsp::VSP_INVALID_ID );
                 char str[256];
                 snprintf( str, sizeof( str ),
-                          "Error:  %d of the %d Geoms chosen are no longer there.",
+                          VSPTranslate( "Error:  %d of the %d Geoms chosen are no longer there." ).c_str(),
                           ( int )( m_GeomIDVec.size() - live.size() ), ( int )m_GeomIDVec.size() );
                 errMsgData.m_StringVec.push_back( string( str ) );
                 MessageMgr::getInstance().SendAll( errMsgData );
