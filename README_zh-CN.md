@@ -4,8 +4,8 @@
 > OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，仍属于 NASA/OpenVSP
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
-- 当前软件版本：OpenVSP 3.54.0
-- 当前汉化版本：`3.54.0-Codex-AI-zh-CN-r1`
+- 当前软件版本：OpenVSP 3.55.0
+- 当前汉化版本：`3.55.0-Codex-AI-zh-CN-auto.5240ef210f41`
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -102,6 +102,12 @@ cmake --build build --target package --config Release --parallel 2
 自动及手动发布的标题和六段式说明统一由 `scripts/release_notes.py` 生成。
 
 ## 未发布
+
+## 3.55.0-Codex-AI-zh-CN-auto.5240ef210f41
+
+- 自动同步官方 OpenVSP 3.55.0：`db6c6fe8f4ec` → `5240ef210f41`。
+  [上游变更](https://github.com/OpenVSP/OpenVSP/compare/db6c6fe8f4eca27d7517f4ae0b2078abdd3fd927...5240ef210f41c5d6aeed0ba7687f6fab0ca0cafb)；
+  保留现有汉化，新增界面可能仍含英文；双平台验证以本次 Actions 结果为准，GUI 未人工验收。
 
 - 发布维护：`Finalize Verified Release Draft` 可收尾因取消/重试遗留的未公开预发布草稿。
   必须提供原标签提交、成功的双平台构建、实际桌面验收包 SHA-256 及验证说明；先备份草稿

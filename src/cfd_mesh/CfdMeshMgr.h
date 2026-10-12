@@ -226,7 +226,6 @@ public:
     // The subset sitting against a border, to test whether the row of triangles next to an
     // intersection curve misses its target worse than the field does.
     vector < double > m_BorderFaceLengthRatios;
-    virtual Edge* FindAddEdge( unordered_map< int, vector<Edge*> > & edgeMap, vector< Node* > & nodeVec, int ind1, int ind2 );
 
     virtual void BuildDomain();
     void BuildGrid() override;
@@ -234,7 +233,7 @@ public:
     enum { QUIET_OUTPUT, VOCAL_OUTPUT, };
 
     void RunRayCastStage( const string &label, int n, const std::function< void( int ) > &body );
-    void RemoveInteriorTrisOneSurf( int s, double x_dist );
+    void RemoveInteriorTrisOneSurf( int s, double x_dist, int ncross, vector< bool > &inside, vector< int > &count );
 
     virtual void Remesh( int output_type );
     virtual void RemeshOneSurf( int isurf, int nsurf, int output_type, int &num_tris );
@@ -278,7 +277,6 @@ public:
     virtual void Subtag( Surf* surf, std::set< std::vector< int > > &combo );
 
     // The smallest angle and the realized-over-target edge length of one face.
-    virtual void SetFaceQuality( SimpFace &face, const vector< vec3d > &xyz, double tgt );
 
     virtual bool SetDeleteTriFlag( int aType, bool symPlane, const vector < bool > &aInB );
 

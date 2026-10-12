@@ -178,12 +178,26 @@ xmlNodePtr ConformalGeom::DecodeXml( xmlNodePtr & node )
     return child_node;
 }
 
+// A detached conformal is built on its conformal parent as well as placed by its parent.
+void ConformalGeom::GetDependencyIDs( vector< string > &ids )
+{
+    Geom::GetDependencyIDs( ids );
+    ids.push_back( m_ConformalParentID );
+}
+
 bool ConformalGeom::SetConformalParent( const string &parent )
 {
     Vehicle* veh = VehicleMgr.GetVehicle();
 
     bool parentchanged = false;
     if ( !veh )
+    {
+        return parentchanged;
+    }
+
+    // A conformal parent cannot be built from this Geom
+    Geom* new_parent = veh->FindGeom( parent );
+    if ( new_parent && new_parent->DependsOn( m_ID ) )
     {
         return parentchanged;
     }
@@ -212,6 +226,29 @@ bool ConformalGeom::SetConformalParent( const string &parent )
         SetLateUpdateFlag( true );
     }
     return parentchanged;
+}
+
+void ConformalGeom::Update( bool fullupdate )
+{
+    // A file can name a conformal parent built from this Geom, which the flip would follow
+    // around forever.  Drop it before anything uses it; UpdateSurf then takes the parent.
+    Geom* conformal_parent = m_Vehicle->FindGeom( m_ConformalParentID );
+    if ( conformal_parent && conformal_parent->DependsOn( m_ID ) )
+    {
+        string message = GetName() + " was built on " + conformal_parent->GetName() +
+            ", which is built from " + GetName() + " itself.  It has been put back on its parent.";
+
+        SetConformalParent( string() );
+
+        // Reaches both the GUI (ScreenMgr message box) and scripts (ErrorMgr error stack).
+        MessageData errMsgData;
+        errMsgData.m_String = "Error";
+        errMsgData.m_IntVec.push_back( vsp::VSP_CONFORMAL_PARENT_UNSUPPORTED );
+        errMsgData.m_StringVec.push_back( "Error:  " + message );
+        MessageMgr::getInstance().SendAll( errMsgData );
+    }
+
+    Geom::Update( fullupdate );
 }
 
 void ConformalGeom::UpdateSurf()

@@ -475,6 +475,12 @@ void Vehicle::Init()
 
     m_BEMPropID = string();
 
+    m_CompGeomModeID = string();
+    m_MassPropModeID = string();
+    m_DegenGeomModeID = string();
+    m_PlanarSlicesModeID = string();
+    m_ExportModeID = string();
+
     m_AFFileDir = string();
 
     m_UpdatingBBox = false;
@@ -658,6 +664,13 @@ void Vehicle::Wype()
 
     m_BEMPropID = string();
 
+    m_CompGeomModeID = string();
+    m_MassPropModeID = string();
+    m_DegenGeomModeID = string();
+    m_PlanarSlicesModeID = string();
+    m_ExportModeID = string();
+    m_SnapTo.m_ModeID = string();
+
     // Named a Geom that the loop below deletes.
     m_LastMassMeshID = string();
 
@@ -706,7 +719,6 @@ void Vehicle::Wype()
     AdvLinkMgr.Renew();
     DesignVarMgr.Renew();
     FitModelMgr.Renew();
-    AnalysisMgr.Renew();
     VarPresetMgr.Renew();
     OldVarPresetMgr.Renew();
     ModeMgr.Renew();
@@ -718,6 +730,9 @@ void Vehicle::Wype()
     Background3DMgr.Renew();
     StructureMgr.Renew();
     GeometryAnalysisMgr.Renew();
+
+    // The analyses take their defaults from the managers above
+    AnalysisMgr.Renew();
 
     ResultsMgr.DeleteAllResults();
 
@@ -1831,6 +1846,9 @@ void Vehicle::RemoveGeomVecFromHierarchy( const vector< string > & cut_vec )
         }
     }
 
+    // Set when a Geom left in the tree is moved or a top level entry goes.
+    bool hierarchy_changed = false;
+
     //=== All Geoms To Be Cut ====//
     for ( int c = 0 ; c < ( int )cut_vec.size() ; c++ )
     {
@@ -1847,6 +1865,7 @@ void Vehicle::RemoveGeomVecFromHierarchy( const vector< string > & cut_vec )
                 {
                     gPtr->SetParentID( "NONE" );            // Reassign Parent
                     parentPtr->RemoveChildID( id );         // Remove From Parents Child Vec
+                    hierarchy_changed = true;
                 }
             }
 
@@ -1863,6 +1882,7 @@ void Vehicle::RemoveGeomVecFromHierarchy( const vector< string > & cut_vec )
                     {
                         ancestPtr->AddChildID( child_id );
                         childPtr->SetParentID( ancestPtr->GetID() );
+                        hierarchy_changed = true;
                     }
                     else                                                // No ancestor
                     {
@@ -1870,6 +1890,7 @@ void Vehicle::RemoveGeomVecFromHierarchy( const vector< string > & cut_vec )
                         {
                             childPtr->SetParentID( "NONE" );
                             m_TopGeom.push_back( child_id );
+                            hierarchy_changed = true;
                         }
                     }
                     gPtr->RemoveChildID( child_id );
@@ -1878,10 +1899,19 @@ void Vehicle::RemoveGeomVecFromHierarchy( const vector< string > & cut_vec )
         }
 
         //==== Remove From Top Geom Deque ====//
-        vector_remove_val( m_TopGeom, id );
+        if ( vector_contains_val( m_TopGeom, id ) )
+        {
+            vector_remove_val( m_TopGeom, id );
+            hierarchy_changed = true;
+        }
     }
 
-    Update();
+    // Update only when the tree changed.  Removing a Geom that was never placed in it, such
+    // as a Conformal's working copy, changes nothing.
+    if ( hierarchy_changed )
+    {
+        Update();
+    }
 }
 
 //==== Reorder Active Geom  ====//
@@ -2209,6 +2239,11 @@ string Vehicle::ReplaceCloneGeom( const string & clone_id )
     CloneGeom::CopySetFlags( clone, replacement );
     CloneGeom::CopyMassPropParms( clone, replacement );
     CloneGeom::CopyNegativeVolumeParm( clone, replacement );
+
+    // The drag settings the Clone used, and its own grouping in the tree
+    CloneGeom::CopyParasiteDragParms( clone->GetParasiteDragGeom(), replacement );
+    replacement->m_GroupedAncestorGen.Set( clone->m_GroupedAncestorGen() );
+    replacement->m_ExpandedListFlag.Set( clone->m_ExpandedListFlag() );
     CloneGeom::CopyAppearance( clone, replacement );
 
     // Display settings are not Parms, so copy them explicitly.
@@ -3044,11 +3079,27 @@ vector< string > Vehicle::GetGeomSet( int index )
     return geom_id_vec;
 }
 
+// The Geoms that belong to both sets.
+vector< string > Vehicle::GetGeomsInBothSets( int set_a, int set_b )
+{
+    vector< string > geom_id_vec;
+
+    vector< Geom* > geom_vec = FindGeomVec( GetGeomVec() );
+    for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
+    {
+        if ( geom_vec[i]->GetSetFlag( set_a ) && geom_vec[i]->GetSetFlag( set_b ) )
+        {
+            geom_id_vec.push_back( geom_vec[i]->GetID() );
+        }
+    }
+    return geom_id_vec;
+}
+
 string Vehicle::GetGeomSetAttrColl( int index )
 {
     string ac_id = string();
 
-    if ( index > -1 && index <= m_SetAttrCollVec.size() )
+    if ( index > -1 && index < m_SetAttrCollVec.size() )
     {
         ac_id = m_SetAttrCollVec[ index ]->GetID();
     }
@@ -3215,6 +3266,17 @@ xmlNodePtr Vehicle::EncodeXml( xmlNodePtr & node, int set )
     ParasiteDragMgr.EncodeXml( node );
     AeroStructMgr.EncodeXml( node );
     Background3DMgr.EncodeXml( node );
+    ProjectionMgr.EncodeXml( node );
+
+    xmlNodePtr modenode = xmlNewChild( node, nullptr, BAD_CAST"VehicleModes", nullptr );
+    if ( modenode )
+    {
+        XmlUtil::AddStringNode( modenode, "CompGeomModeID", m_CompGeomModeID );
+        XmlUtil::AddStringNode( modenode, "MassPropModeID", m_MassPropModeID );
+        XmlUtil::AddStringNode( modenode, "DegenGeomModeID", m_DegenGeomModeID );
+        XmlUtil::AddStringNode( modenode, "PlanarSlicesModeID", m_PlanarSlicesModeID );
+        XmlUtil::AddStringNode( modenode, "ExportModeID", m_ExportModeID );
+    }
 
     xmlNodePtr setnamenode = xmlNewChild( node, nullptr, BAD_CAST"SetNames", nullptr );
     if ( setnamenode )
@@ -3283,6 +3345,17 @@ xmlNodePtr Vehicle::DecodeXml( xmlNodePtr & node )
     ParasiteDragMgr.DecodeXml( node );
     AeroStructMgr.DecodeXml( node );
     Background3DMgr.DecodeXml( node );
+    ProjectionMgr.DecodeXml( node );
+
+    xmlNodePtr modenode = XmlUtil::GetNode( node, "VehicleModes", 0 );
+    if ( modenode )
+    {
+        m_CompGeomModeID = IDMgr.RemapRefID( XmlUtil::FindString( modenode, "CompGeomModeID", m_CompGeomModeID ) );
+        m_MassPropModeID = IDMgr.RemapRefID( XmlUtil::FindString( modenode, "MassPropModeID", m_MassPropModeID ) );
+        m_DegenGeomModeID = IDMgr.RemapRefID( XmlUtil::FindString( modenode, "DegenGeomModeID", m_DegenGeomModeID ) );
+        m_PlanarSlicesModeID = IDMgr.RemapRefID( XmlUtil::FindString( modenode, "PlanarSlicesModeID", m_PlanarSlicesModeID ) );
+        m_ExportModeID = IDMgr.RemapRefID( XmlUtil::FindString( modenode, "ExportModeID", m_ExportModeID ) );
+    }
 
     ParasiteDragMgr.CorrectTurbEquation();
 
@@ -3352,6 +3425,7 @@ xmlNodePtr Vehicle::DecodeXmlGeomsOnly( xmlNodePtr & node )
         // Decode label information.
         MeasureMgr.DecodeXml( vehicle_node );
 
+        vector< Geom* > add_geom_vec;
         int num = XmlUtil::GetNumNames( vehicle_node, "Geom" );
         for ( int i = 0 ; i < num ; i++ )
         {
@@ -3374,10 +3448,16 @@ xmlNodePtr Vehicle::DecodeXmlGeomsOnly( xmlNodePtr & node )
 
                     if ( geom->GetParentID().compare( "NONE" ) == 0 )
                     {
-                        AddGeom( geom );
+                        add_geom_vec.push_back( geom );
                     }
                 }
             }
+        }
+
+        // AddGeom can update Geoms, so it waits until every child in the file exists
+        for ( int i = 0 ; i < ( int )add_geom_vec.size() ; i++ )
+        {
+            AddGeom( add_geom_vec[i] );
         }
     }
 
@@ -3743,7 +3823,7 @@ vector < string > Vehicle::GetPtCloudGeoms()
 }
 
 //==== Write STL File ====//
-string Vehicle::WriteSTLFile( const string & file_name, int write_set, bool useMode, const string &modeID )
+string Vehicle::WriteSTLFile( const string & file_name, int write_set, int subsFlag, bool useMode, const string &modeID )
 {
     if ( useMode )
     {
@@ -3772,6 +3852,8 @@ string Vehicle::WriteSTLFile( const string & file_name, int write_set, bool useM
             Geom* gPtr = FindGeom( mesh_id );
             if ( gPtr )
             {
+                MeshGeom* mg = dynamic_cast<MeshGeom*>( gPtr );
+                SubTagTris( subsFlag, mg->m_TMeshVec );
                 geom_vec.push_back( gPtr );
                 gPtr->Update();
             }
@@ -4374,6 +4456,52 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
             }
         }
 
+        // The tag tables describe the last mesh tagged, which may not be these.  Retag them for
+        // writing, and give them their own tags back after.
+        vector< TTri* > saved_tris;
+        vector< vector< int > > saved_tags;
+        bool covered = true;
+        for ( i = 0; i < ( int ) mg_vec.size(); i++ )
+        {
+            if ( !TagMapsCover( trivec_vec[i] ) )
+            {
+                covered = false;
+            }
+        }
+
+        if ( !covered )
+        {
+            vector< TMesh* > tag_tmv;
+            for ( i = 0; i < ( int ) mg_vec.size(); i++ )
+            {
+                if ( mg_vec[i]->GetTMeshViewMeshFlag() )
+                {
+                    const vector< TMesh* > &tmv = mg_vec[i]->GetTMeshVecInSelf();
+                    tag_tmv.insert( tag_tmv.end(), tmv.begin(), tmv.end() );
+                }
+                if ( mg_vec[i]->GetTMeshViewSliceFlag() )
+                {
+                    const vector< TMesh* > &svec = mg_vec[i]->GetTMeshSliceVec();
+                    tag_tmv.insert( tag_tmv.end(), svec.begin(), svec.end() );
+                }
+            }
+            for ( i = 0; i < ( int ) tag_tmv.size(); i++ )
+            {
+                for ( int t = 0; t < ( int ) tag_tmv[i]->m_TVec.size(); t++ )
+                {
+                    TTri* tri = tag_tmv[i]->m_TVec[t];
+                    saved_tris.push_back( tri );
+                    saved_tags.push_back( tri->m_Tags );
+                    for ( int st = 0; st < ( int ) tri->m_SplitVec.size(); st++ )
+                    {
+                        saved_tris.push_back( tri->m_SplitVec[st] );
+                        saved_tags.push_back( tri->m_SplitVec[st]->m_Tags );
+                    }
+                }
+            }
+            SubTagTris( subsFlag, tag_tmv );
+        }
+
         fprintf( file_id, "%d %d %d\n", num_pnts,
                                         num_tris,
                                         num_wakes );
@@ -4414,7 +4542,7 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         {
             // A Clone of a mesh has no wakes, but the offset must still step over its nodes.
             MeshGeom* wake_mesh = dynamic_cast< MeshGeom* >( mg_geom_vec[i] );
-            vector < deque < TEdge > > no_wakes;
+            vector < vector < TEdge > > no_wakes;
 
             if ( wake_mesh )
             {
@@ -4707,6 +4835,10 @@ string Vehicle::WriteVSPGeomFile( const string &file_name, int write_set, int de
         vector < string > all_files;
         WriteControlSurfaceFile( file_name, gidvec, partvec2, surfvec, all_files );
 
+        for ( i = 0; i < ( int ) saved_tris.size(); i++ )
+        {
+            saved_tris[i]->m_Tags = saved_tags[i];
+        }
     }
     return mesh_id;
 
@@ -5002,7 +5134,7 @@ void Vehicle::WriteX3DViewpoints( xmlNodePtr node )
         view_axis.normalize();
 
         vec3d rot_axis = cross( k, view_axis );
-        double angle = asin( rot_axis.mag() );
+        double angle = atan2( rot_axis.mag(), dot( k, view_axis ) );
         rot_axis.normalize();
 
         // if rotating view again combine rotations using quaternions //
@@ -6826,8 +6958,6 @@ void Vehicle::UpdateBBox()
 
     if( ngeom > 0 && ( scale_independent_box != m_ScaleIndependentBBox ) )
     {
-        m_ScaleIndependentBBox = scale_independent_box;
-
         double xlen = scale_independent_box.GetMax( 0 ) - scale_independent_box.GetMin( 0 );
         double ylen = scale_independent_box.GetMax( 1 ) - scale_independent_box.GetMin( 1 );
         double zlen = scale_independent_box.GetMax( 2 ) - scale_independent_box.GetMin( 2 );
@@ -6835,10 +6965,14 @@ void Vehicle::UpdateBBox()
         // Every scale-sensitive consumer (gear auto ground plane, auxiliary geom reference
         // lengths, engine auto extension) depends only on the box size, which is invariant
         // under pure translation.  Only re-update those Geoms when the size changes, so
-        // moving geometry around does not force a second full update pass.
-        bool size_changed = ( xlen != m_ScaleIndependentBbXLen() ) ||
-                            ( ylen != m_ScaleIndependentBbYLen() ) ||
-                            ( zlen != m_ScaleIndependentBbZLen() );
+        // moving geometry around does not force a second full update pass.  The size is
+        // compared with the box last computed, not with the length Parms, which a file
+        // read restores before any box exists.
+        bool size_changed = ( xlen != m_ScaleIndependentBBox.GetMax( 0 ) - m_ScaleIndependentBBox.GetMin( 0 ) ) ||
+                            ( ylen != m_ScaleIndependentBBox.GetMax( 1 ) - m_ScaleIndependentBBox.GetMin( 1 ) ) ||
+                            ( zlen != m_ScaleIndependentBBox.GetMax( 2 ) - m_ScaleIndependentBBox.GetMin( 2 ) );
+
+        m_ScaleIndependentBBox = scale_independent_box;
 
         m_ScaleIndependentBbXLen = xlen;
         m_ScaleIndependentBbYLen = ylen;
@@ -7172,6 +7306,8 @@ string Vehicle::MassProps( int set, int degen_set, int numSlices, int idir, bool
         return id;
     }
 
+    SubTagTris( false, mesh_ptr->m_TMeshVec );
+
     //==== Load Point Mass Properties From Blank Geom ====//
     // Add RoutingGeoms as point masses.
     vector< TetraMassProp* > mpv = CreateTetraMassPropVec( set );
@@ -7245,6 +7381,8 @@ string Vehicle::PSlice( int set, int numSlices, const vec3d &axis, bool autoBoun
     {
         return id;
     }
+
+    SubTagTris( false, mesh_ptr->m_TMeshVec );
 
     if ( mesh_ptr->m_TMeshVec.size() )
     {
@@ -7977,7 +8115,7 @@ string Vehicle::ExportFile( const string & file_name, int write_set, int degen_s
 
         if ( !m_STLMultiSolid() )
         {
-            mesh_id = WriteSTLFile( file_name, write_set, useMode, modeID );
+            mesh_id = WriteSTLFile( file_name, write_set, subsFlag, useMode, modeID );
         }
         else
         {

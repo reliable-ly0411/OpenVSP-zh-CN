@@ -272,6 +272,8 @@ public:
         return m_ParentID;
     }
     void ChangeParentID( const string &id, const string &sibling_id = string() );
+    bool DependsOn( const string &id );
+    virtual void GetDependencyIDs( vector< string > &ids );
     virtual string GetAncestorID( int gen );
     virtual void BuildAncestorList( vector< string > &ancestors );
     virtual void AddChildID( const string &id, const string &insert_after_id = string() );
@@ -344,6 +346,9 @@ public:
     }
 
     virtual bool IsModelScaleSensitive() { return false; }
+
+    // Mean aerodynamic chord of a wing-like Geom; 0 where the Geom has none of its own
+    virtual double ComputeMAC() { return 0.0; }
 
     // Whether this Geom's origin belongs in its placed bounding box.  True for a landing gear,
     // whose ground plane is sized from the model box, so the origin stands in for it.
@@ -765,6 +770,12 @@ public:
     virtual bool IsBndBoxScaleDependent() const
     {
         return m_BBox != m_ScaleIndependentBBox;
+    }
+
+    // The Geom whose Parasite Drag settings this one uses
+    virtual Geom* GetParasiteDragGeom()
+    {
+        return this;
     }
 
     virtual Geom* GetBehaviorGeom()
@@ -1250,7 +1261,7 @@ public:
 
     virtual void OffsetXSecs( double off );
 
-    virtual void ClearSkinning( const int & i_xs = -1 );
+    virtual int ClearSkinning( const int & i_xs = -1 );
 
     //==== User defined skinning spines ====//
     // A spine runs the length of the body, so its position and symmetry are the same on

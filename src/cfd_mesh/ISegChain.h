@@ -28,7 +28,6 @@
 #include <cassert>
 
 #include <vector>
-#include <deque>
 #include <list>
 using namespace std;
 
@@ -52,9 +51,12 @@ public:
 
     Puw();
     Puw( Surf* s, const vec2d &uw );
-    virtual ~Puw();
+    ~Puw();
     Surf* m_Surf;
     vec2d m_UW;
+
+    // A point a chain uses holds it
+    bool m_KeepFlag;
 };
 
 //==== Triangle edge an intersection point lies on ====//
@@ -97,7 +99,7 @@ class IPnt
 public:
     IPnt();
     IPnt( Puw* p0, Puw* p1 );
-    virtual ~IPnt();
+    ~IPnt();
 
     void CompPnt();
 
@@ -115,13 +117,16 @@ public:
 
     bool m_UsedFlag;
     bool m_GroupedFlag;
-    vec3d m_Pnt;
-    deque< Puw* >  m_Puws;
-    deque< ISeg* > m_Segs;
 
-    // The edge the point lies on, and the point of the segment across it, where there is one
-    IPntEdge m_Edge;
-    IPnt* m_Partner;
+    // A chain uses it
+    bool m_KeepFlag;
+
+    // Where the point is in SurfaceIntersectionSingleton::m_AllIPnts, or -1 if it is not there
+    int m_AllIndex;
+
+    vec3d m_Pnt;
+    vector< Puw* >  m_Puws;
+    vector< ISeg* > m_Segs;
 };
 
 //==== Intersection Segment ====//
@@ -130,7 +135,7 @@ class ISeg
 public:
     ISeg();
     ISeg( Surf* sA, Surf* sB, IPnt* ip0, IPnt* ip1 );
-    virtual ~ISeg();
+    ~ISeg();
 
     IPnt* m_IPnt[2];            // End Points of Seg
 
@@ -188,7 +193,7 @@ public:
         m_ChainPtr = nullptr;
         m_Surf = nullptr;
     }
-    virtual ~ISegBox();
+    ~ISegBox();
 
     int m_BeginInd;
     int m_EndInd;
@@ -220,11 +225,6 @@ public:
 
 
     void FlipDir();
-
-    void AddSeg( ISeg* seg, bool frontFlag );
-
-    // Add seg at the front or back, turned so its end joinIPnt is next to the chain
-    void AddSeg( ISeg* seg, bool frontFlag, IPnt* joinIPnt );
 
     double MatchDist( ISeg* s );
     double ChainDist( ISegChain* B );
@@ -272,6 +272,7 @@ public:
     }
 
     void BuildBoxes();
+    void ClearBoxes();
 
     // void Draw();
 
@@ -289,7 +290,7 @@ public:
 
     ISegChain* m_WakeAttachChain;
 
-    deque < ISeg* > m_ISegDeque;
+    vector< ISeg* > m_ISegVec;
 
     ISegBox m_ISegBoxA;
     ISegBox m_ISegBoxB;
@@ -302,7 +303,7 @@ public:
     SCurve m_ACurve;                // UW Curve for Surf A
     SCurve m_BCurve;
 
-    deque< IPnt* > m_TessVec;
+    vector< IPnt* > m_TessVec;
 
     vector< IPnt* > m_CreatedIPnts;
 

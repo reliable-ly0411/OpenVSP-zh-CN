@@ -29,14 +29,12 @@
 #include <string>
 #include <set>
 #include <unordered_map>
-#include <deque>
 #include <list>
 
 using std::vector;
 using std::string;
 using std::set;
 using std::unordered_map;
-using std::deque;
 using std::list;
 
 
@@ -57,9 +55,9 @@ class NBndBox;
 class TMesh;
 class PGMesh;
 
-// Below this a triangle encloses nothing worth keeping.  An area, in the model's own units.
-// See TMesh::AddTri for how the number was arrived at.
-const double TRI_AREA_TOL = 1.0e-7;
+// Below this a triangle encloses nothing worth keeping.  Its area over the square of its
+// longest edge, so the test does not depend on the model's size.  See TMesh::AddTri.
+const double TRI_AREA_TOL = 1.0e-6;
 
 struct dba_point
 {
@@ -220,8 +218,6 @@ public:
 
     vector< TTri* > m_TriVec;               // For WaterTight Check
     vector< TEdge* > m_EdgeVec;         // For WaterTight Check
-
-    vector< TNode* > m_MergeVec;
 
 //  TNode* mapNode;
 
@@ -433,6 +429,7 @@ public:
     void AddTri( TTri* t );
     virtual void Intersect( TBndBox* iBox, bool UWFlag = false, bool checkSharedEdges = false );
     virtual void RayCast( const vec3d & orig, const vec3d & dir, vector<double> & tParmVec, vector <TTri*> & triVec ) const;
+    virtual void FindTrisNear( const vec3d & pnt, double tol, vector < TTri* > & triVec ) const;
 
     virtual bool CheckIntersect( TBndBox* iBox );
     virtual double MinDistance( TBndBox* iBox, double curr_min_dist, vec3d &p1, vec3d &p2 );
@@ -570,8 +567,8 @@ public:
     virtual void WriteVSPGeomAlternateParts( FILE* file_id );
     virtual int WriteVSPGeomPartTagTris( FILE* file_id, int tri_offset, int part, int tag );
     virtual int CountVSPGeomPartTagTris( int part, int tag );
-    virtual void IdentifyWakes( vector < deque < TEdge > > &wakes );
-    virtual void WriteVSPGeomWakes( FILE* file_id, vector < deque < TEdge > > &wakes );
+    virtual void IdentifyWakes( vector < vector < TEdge > > &wakes );
+    virtual void WriteVSPGeomWakes( FILE* file_id, vector < vector < TEdge > > &wakes );
 
     virtual vec3d GetVertex( int index );
     virtual int   NumVerts();
@@ -734,6 +731,7 @@ vector< double > GetTMeshWscale( vector<TMesh*> &tmv );
 set< string > GetTMeshPtrIDs( const vector<TMesh*> &tmv );
 void SubTagTris( bool tag_subs, vector<TMesh*> &tmv, const vector < string > & sub_vec = vector < string > () );
 void RefreshTagMaps( vector<TMesh*> &tmv );
+bool TagMapsCover( const vector< TTri* > &trivec );
 
 double FindMinDistance(const vector< TMesh* > & tmesh_vec, const vector< TMesh* > & other_tmesh_vec, bool & intersect_flag );
 double FindMaxMinDistance( const vector< TMesh* > & mesh_1, const vector< TMesh* > & mesh_2 );
@@ -767,7 +765,18 @@ TMesh* OctantSplitMesh( TMesh* tm );
 
 TMesh* MakeConvexHull(const vector< TMesh* > & tmesh_vec );
 
+// Around each mesh, the box within which a point may lie on one of its faces, and the distance
+// that counts as on a face.
+struct TMeshFaceZone
+{
+    vec3d m_Lo;
+    vec3d m_Hi;
+    double m_Tol;
+};
+void BuildFaceZones( const vector< TMesh* >& meshVec, vector< TMeshFaceZone > & zones );
+
 void DeterIntExtTri( TTri* tri, const vector< TMesh* >& meshVec, const vec3d &dir );
+void DeterIntExtTri( TTri* tri, const vector< TMesh* >& meshVec, const vec3d &dir, int own, const vector< TMeshFaceZone > & zones );
 bool DeterIntExtTri( TTri* tri, TMesh* mesh, const vec3d &dir = vec3d( 1.0, 0.000001, 0.000001 )  );
 
 void WriteStl( const string &file_name, const vector< TMesh* >& meshVec );
@@ -843,8 +852,8 @@ int  CountVSPGeomParts( const vector < int > &parts, const vector< TTri* > &triv
 
 void WriteVSPGeomParents( FILE* file_id, int &tcount, const vector< TTri* > &trivec );
 
-void IdentifyWakes( const vector< TTri* > &trivec, vector< deque< TEdge > > &wakes, vector< vector< vec3d > > &polyvec );
-int  WriteVSPGeomWakes( FILE* file_id, int offset, const vector< deque< TEdge > > &wakes, const vector< TNode* > &nodvec );
+void IdentifyWakes( const vector< TTri* > &trivec, vector< vector< TEdge > > &wakes, vector< vector< vec3d > > &polyvec );
+int  WriteVSPGeomWakes( FILE* file_id, int offset, const vector< vector< TEdge > > &wakes, const vector< TNode* > &nodvec );
 
 //=============================================================================
 // Mesh Analysis

@@ -138,14 +138,17 @@ public:
         return m_ICurve;
     }
 
-    Bezier_curve GetUWCrv()
-    {
-        return m_UWCrv;
-    }
+    Bezier_curve GetUWCrv() const;
+
+    // The UW curve at parameter t, and the parameters its segments start and end at, as the
+    // Bezier_curve GetUWCrv returns has them
+    vec3d UWCompPnt( double t ) const;
+    void GetUWParms( vector< double > &parms ) const;
 
     void SetUWCrv( const Bezier_curve &crv )
     {
         m_UWCrv = crv;
+        vector< vec3d >().swap( m_UWPolyline );
         CleanupDistTable();
     }
 
@@ -173,6 +176,16 @@ protected:
 
 
     Bezier_curve m_UWCrv;       // UW Curve
+
+    // The UW curve when InterpolateLinear made it: the corners of the same piecewise linear
+    // curve, at a fraction of the memory.  m_UWCrv is left empty while this is in use.
+    vector< vec3d > m_UWPolyline;
+
+    vec3d UWPolylinePnt( double t ) const;
+    vec3d UWCompPnt01( double u ) const;
+    vec3d UWFirstPnt() const;
+    vec3d UWLastPnt() const;
+    int UWNumSections() const;
 
     // The parameter line of m_Surf the curve lies on, where it is one
     ParmLine m_ParmLine;

@@ -333,6 +333,95 @@ bool BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
     double umax = (*uw_pnts)[ lastj + 1 ][ nk - 1 ].x();
     double umid = 0.5 * ( umin + umax );
 
+    // Pick the diagonal of each quad.
+    vector< vector< bool > > evenvec( nj - 1, vector< bool >( nk - 1 ) );
+    for ( int j = 0; j < nj - 1; j++ )
+    {
+        for ( int k = 0; k < nk - 1; k++ )
+        {
+            uw0 = (*uw_pnts)[j][k];
+            uw1 = (*uw_pnts)[j + 1][k];
+            uw2 = (*uw_pnts)[j + 1][k + 1];
+            uw3 = (*uw_pnts)[j][k + 1];
+
+            double quadrant = ( uw0.y() + uw1.y() + uw2.y() + uw3.y() ) / wmax; // * 4 * 0.25 canceled.
+            double uave = ( uw0.x() + uw1.x() + uw2.x() + uw3.x() ) / 4.0;
+
+            // Set up evencorners based on quadrants 0 and 2.
+            bool evencorners = ( ( quadrant > 0 && quadrant < 1 ) || ( quadrant > 2 && quadrant < 3 ) );
+
+            // Flip evencorners for second half of u.
+            if ( uave > umid )
+            {
+                evencorners = !evencorners;
+            }
+
+            // Flip evencorners for every other degenerate plate (handles cruciform).
+            if ( platenum % 2 )
+            {
+                evencorners = !evencorners;
+            }
+
+            evenvec[ j ][ k ] = evencorners;
+        }
+    }
+
+    // Where a row collapses, two neighboring quads can split into the same triangle, wound
+    // opposite ways.  Split both on their other diagonal instead.
+    BndBox box;
+    box.Update( *pnts );
+    double ptol = 1.0e-9 * box.GetLargestDist();
+    double ptol2 = ptol * ptol;
+
+    vector< vector< bool > > swapvec( nj - 1, vector< bool >( nk - 1, false ) );
+    for ( int j = 0; j < nj - 1; j++ )
+    {
+        for ( int ka = 0; ka < nk - 1; ka++ )
+        {
+            int kb = ka + 1;
+            if ( kb == nk - 1 )
+            {
+                // Pair the last quad with the first across the seam of a closed surface.
+                if ( dist_squared( (*pnts)[j][0], (*pnts)[j][nk - 1] ) > ptol2 ||
+                     dist_squared( (*pnts)[j + 1][0], (*pnts)[j + 1][nk - 1] ) > ptol2 )
+                {
+                    continue;
+                }
+                kb = 0;
+            }
+
+            if ( kb == ka )
+            {
+                continue;
+            }
+
+            // A collapsed shared edge leaves each quad one triangle, apart from the other.
+            if ( dist_squared( (*pnts)[j][ka + 1], (*pnts)[j + 1][ka + 1] ) <= ptol2 )
+            {
+                continue;
+            }
+
+            // Third corner of each quad's triangle on the edge the two share.
+            vec3d pa = (*pnts)[j + 1][ka];
+            if ( evenvec[ j ][ ka ] )
+            {
+                pa = (*pnts)[j][ka];
+            }
+
+            vec3d pb = (*pnts)[j][kb + 1];
+            if ( evenvec[ j ][ kb ] )
+            {
+                pb = (*pnts)[j + 1][kb + 1];
+            }
+
+            if ( dist_squared( pa, pb ) <= ptol2 )
+            {
+                swapvec[ j ][ ka ] = true;
+                swapvec[ j ][ kb ] = true;
+            }
+        }
+    }
+
     int jref = ref_start;
     for ( int j = 0; j < nj - 1; j++ )
     {
@@ -354,20 +443,8 @@ bool BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
             d03 = v0 - v3;
             d23 = v2 - v3;
 
-            double quadrant = ( uw0.y() + uw1.y() + uw2.y() + uw3.y() ) / wmax; // * 4 * 0.25 canceled.
-            double uave = ( uw0.x() + uw1.x() + uw2.x() + uw3.x() ) / 4.0;
-
-            // Set up evencorners based on quadrants 0 and 2.
-            bool evencorners = ( ( quadrant > 0 && quadrant < 1 ) || ( quadrant > 2 && quadrant < 3 ) );
-
-            // Flip evencorners for second half of u.
-            if ( uave > umid )
-            {
-                evencorners = !evencorners;
-            }
-
-            // Flip evencorners for every other degenerate plate (handles cruciform).
-            if ( platenum % 2 )
+            bool evencorners = evenvec[ j ][ k ];
+            if ( swapvec[ j ][ k ] )
             {
                 evencorners = !evencorners;
             }
@@ -387,6 +464,12 @@ bool BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
                     {
                         tmesh->AddTri( v0, v1, v2, norm, uw0, uw1, uw2, iQuad, jref, kref );
                     }
+                }
+
+                // Keep a re-split quad's triangles from merging back into it.
+                if ( swapvec[ j ][ k ] )
+                {
+                    iQuad++;
                 }
 
                 if ( d03.mag() > edgetol && d23.mag() > edgetol && d20.mag() > edgetol )
@@ -418,6 +501,12 @@ bool BuildTMeshTris( TMesh *tmesh, bool flipnormal, double wmax, int platenum, i
                     {
                         tmesh->AddTri( v0, v1, v3, norm, uw0, uw1, uw3, iQuad, jref, kref );
                     }
+                }
+
+                // Keep a re-split quad's triangles from merging back into it.
+                if ( swapvec[ j ][ k ] )
+                {
+                    iQuad++;
                 }
 
                 if ( d21.mag() > edgetol && d23.mag() > edgetol && d31.mag() > edgetol )
@@ -896,6 +985,21 @@ void RefreshTagMaps( vector<TMesh*> &tmv )
     }
 
     SubSurfaceMgr.BuildSingleTagMap();
+}
+
+// True when the tag tables hold every tri's part and tag combination.
+bool TagMapsCover( const vector< TTri* > &trivec )
+{
+    int ncomp = ( int )SubSurfaceMgr.m_CompUscale.size();
+    for ( int i = 0 ; i < ( int )trivec.size() ; i++ )
+    {
+        int part = SubSurfaceMgr.GetPart( trivec[i]->m_Tags );
+        if ( part < 1 || part > ncomp || SubSurfaceMgr.GetTag( trivec[i]->m_Tags ) < 0 )
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 
@@ -2215,7 +2319,7 @@ double IntersectSplit( vector < TMesh * > &tmv, bool intSubsFlag, const vector <
                 tmv[i] = f_tmesh;
             }
 
-            sub_surf_meshes.clear();
+            DeleteTMeshVec( sub_surf_meshes );
         }
     }
     // Tag meshes before regular intersection
@@ -2280,6 +2384,12 @@ void NormalizeChain( vector < TEdge * > & chain )
             imin = iedge;
         }
     }
+
+    if ( imin < 0 ) // Empty chain or no minimum found.
+    {
+        return;
+    }
+
     std::rotate( chain.begin(), chain.begin() + imin, chain.end() );
 
     // Check to make sure that the first edge of the chain is oriented in increasing w order.
@@ -2604,7 +2714,148 @@ TMesh* MakeConvexHull(const vector< TMesh* > & tmesh_vec )
     return tMesh;
 }
 
+// Whether a tri lies on a face of meshVec[m], two normal surfaces touching or overlapping there.  A
+// ray from a point on the face decides by rounding, so the faces decide instead: opposed faces are
+// inside each other.  Of two that face the same way, the later mesh's copy is inside, so one copy is
+// kept -- except between copies of one Geom, such as mirror halves overlapping across their plane,
+// where the copy farther from its mesh's box center is inside, so the halves share the overlap alike.
+static bool CoincidentInside( TTri* tri, const vec3d &cen, const vector< TMesh* >& meshVec, int own, int m,
+                              const TMeshFaceZone &zone, bool &inside )
+{
+    // Most tris are nowhere near the mesh; its zone turns them away first.
+    if ( cen.x() < zone.m_Lo.x() || cen.x() > zone.m_Hi.x() ||
+         cen.y() < zone.m_Lo.y() || cen.y() > zone.m_Hi.y() ||
+         cen.z() < zone.m_Lo.z() || cen.z() > zone.m_Hi.z() )
+    {
+        return false;
+    }
+
+    if ( own < 0 || meshVec[own]->m_SurfCfdType != vsp::CFD_NORMAL || meshVec[m]->m_SurfCfdType != vsp::CFD_NORMAL )
+    {
+        return false;
+    }
+
+    double tol = zone.m_Tol;
+
+    // Kept from call to call, so it is not allocated for every tri.
+    thread_local vector < TTri* > triVec;
+    triVec.clear();
+    meshVec[m]->m_TBox.FindTrisNear( cen, tol, triVec );
+
+    // The nearest face the normal through cen crosses within tol of it.  The normal is found only
+    // once a face is near enough to be crossed.
+    vec3d norm;
+    vec3d orig;
+    bool have_norm = false;
+    TTri* face = nullptr;
+    double best = tol;
+    for ( int i = 0; i < ( int )triVec.size(); i++ )
+    {
+        TTri* t = triVec[i];
+
+        // The crossing lies within tol of cen and inside the face, so cen is within tol of its box.
+        const vec3d &p0 = t->m_N0->m_Pnt;
+        const vec3d &p1 = t->m_N1->m_Pnt;
+        const vec3d &p2 = t->m_N2->m_Pnt;
+        if ( cen.x() < std::min( p0.x(), std::min( p1.x(), p2.x() ) ) - tol || cen.x() > std::max( p0.x(), std::max( p1.x(), p2.x() ) ) + tol ||
+             cen.y() < std::min( p0.y(), std::min( p1.y(), p2.y() ) ) - tol || cen.y() > std::max( p0.y(), std::max( p1.y(), p2.y() ) ) + tol ||
+             cen.z() < std::min( p0.z(), std::min( p1.z(), p2.z() ) ) - tol || cen.z() > std::max( p0.z(), std::max( p1.z(), p2.z() ) ) + tol )
+        {
+            continue;
+        }
+
+        if ( !have_norm )
+        {
+            norm = cross( tri->m_N1->m_Pnt - tri->m_N0->m_Pnt, tri->m_N2->m_Pnt - tri->m_N0->m_Pnt );
+            if ( norm.mag() == 0.0 )
+            {
+                return false;
+            }
+            norm.normalize();
+            orig = cen - tol * norm;
+            have_norm = true;
+        }
+
+        double tparm, uparm, vparm;
+        if ( intersect_triangle( orig.v, norm.v, p0.v, p1.v, p2.v, &tparm, &uparm, &vparm ) )
+        {
+            double d = std::abs( tparm - tol );
+            if ( d <= best )
+            {
+                best = d;
+                face = t;
+            }
+        }
+    }
+
+    if ( !face )
+    {
+        return false;
+    }
+
+    vec3d fnorm = cross( face->m_N1->m_Pnt - face->m_N0->m_Pnt, face->m_N2->m_Pnt - face->m_N0->m_Pnt );
+    if ( dot( norm, fnorm ) < 0.0 )
+    {
+        inside = true;
+    }
+    else
+    {
+        inside = own > m;
+        if ( meshVec[own]->m_OriginGeomID == meshVec[m]->m_OriginGeomID )
+        {
+            double d_own = dist( cen, meshVec[own]->m_TBox.m_Box.GetCenter() );
+            double d_m = dist( cen, meshVec[m]->m_TBox.m_Box.GetCenter() );
+            if ( std::abs( d_own - d_m ) > tol )
+            {
+                inside = d_own > d_m;
+            }
+        }
+    }
+    return true;
+}
+
+void BuildFaceZones( const vector< TMesh* >& meshVec, vector< TMeshFaceZone > & zones )
+{
+    zones.resize( meshVec.size() );
+    for ( int m = 0 ; m < ( int )meshVec.size() ; m++ )
+    {
+        const BndBox &box = meshVec[m]->m_TBox.m_Box;
+        if ( box.IsEmpty() )
+        {
+            // A zone no point is in.
+            zones[m].m_Lo = vec3d( 1.0, 1.0, 1.0 );
+            zones[m].m_Hi = vec3d( -1.0, -1.0, -1.0 );
+            zones[m].m_Tol = 0.0;
+            continue;
+        }
+
+        // Faces closer than m_Tol, against the size of the mesh, are the same face.  The zone is the
+        // box grown by more than that.
+        zones[m].m_Tol = 1e-10 * box.DiagDist();
+        double margin = 2e-10 * box.GetLargestDist();
+        zones[m].m_Lo = box.GetMin() - vec3d( margin, margin, margin );
+        zones[m].m_Hi = box.GetMax() + vec3d( margin, margin, margin );
+    }
+}
+
 void DeterIntExtTri( TTri* tri, const vector< TMesh* >& meshVec, const vec3d &dir )
+{
+    vector< TMeshFaceZone > zones;
+    BuildFaceZones( meshVec, zones );
+
+    int own = -1;
+    for ( int m = 0 ; m < ( int )meshVec.size() ; m++ )
+    {
+        if ( meshVec[m] == tri->GetTMeshPtr() )
+        {
+            own = m;
+        }
+    }
+
+    DeterIntExtTri( tri, meshVec, dir, own, zones );
+}
+
+void DeterIntExtTri( TTri* tri, const vector< TMesh* >& meshVec, const vec3d &dir, int own, const vector< TMeshFaceZone > & zones )
 {
     vec3d orig = ( tri->m_N0->m_Pnt + tri->m_N1->m_Pnt + tri->m_N2->m_Pnt ) / 3.0;
     tri->m_IgnoreTriFlag = false;
@@ -2618,10 +2869,15 @@ void DeterIntExtTri( TTri* tri, const vector< TMesh* >& meshVec, const vec3d &di
     {
         if ( meshVec[m] != tri->GetTMeshPtr() && meshVec[m]->m_ThickSurf )
         {
-            vector<double > tParmVec;
-            vector <TTri*> triVec;
-            meshVec[m]->m_TBox.RayCast( orig, dir, tParmVec, triVec );
-            if ( tParmVec.size() % 2 )
+            bool inside = false;
+            if ( !CoincidentInside( tri, orig, meshVec, own, m, zones[m], inside ) )
+            {
+                vector<double > tParmVec;
+                vector <TTri*> triVec;
+                meshVec[m]->m_TBox.RayCast( orig, dir, tParmVec, triVec );
+                inside = ( tParmVec.size() % 2 ) == 1;
+            }
+            if ( inside )
             {
                 tri->m_insideSurf[m] = true;
 
@@ -3727,48 +3983,82 @@ void PostIntersectTrim( vector<TMesh*> &tmv, vector<DegenGeom> &degenGeom, bool 
     double guessTotalWetVol = 0;
     for ( int i = 0 ; i < ( int )tmv.size() ; i++ )
     {
-        tmv[i]->m_GuessVol = tmv[i]->m_TheoVol * tmv[i]->m_WetArea / tmv[i]->m_TheoArea;      // Guess
+        tmv[i]->m_GuessVol = 0.0;
+        if ( tmv[i]->m_TheoArea > 0.0 )
+        {
+            tmv[i]->m_GuessVol = tmv[i]->m_TheoVol * tmv[i]->m_WetArea / tmv[i]->m_TheoArea;      // Guess
+        }
         tmv[i]->m_WetVol = 0.0;
         guessTotalWetVol += tmv[i]->m_GuessVol;
     }
 
+    // Share the trimmed volume out in proportion to the guesses, each share kept between zero and
+    // the component's own theoretical volume (a negative component's lies below zero).  A component
+    // whose share would leave that range gets the end it would pass and drops out, and what is
+    // left, of either sign, is shared again among the rest; so this ends within one round per
+    // component.  With no volume to share out, every component keeps none.
+    vector < bool > full( tmv.size(), false );
     double leftOver = totalWetVol;
-    int leftOverCnt = 20;
-    while ( leftOverCnt > 0 )
+    bool sharing = ( guessTotalWetVol != 0.0 );
+    while ( sharing )
     {
-        leftOverCnt--;
-
-        double sumWetVol = 0.0;
+        double guessFree = 0.0;
         for ( int i = 0 ; i < ( int )tmv.size() ; i++ )
         {
-            double perWetVol = tmv[i]->m_GuessVol / guessTotalWetVol;
-            tmv[i]->m_WetVol += perWetVol * ( leftOver );
-
-            int neg_vol_mult = 1; // Negative volume multiplier
-            if ( tmv[i]->m_SurfCfdType == vsp::CFD_NEGATIVE )
+            if ( !full[i] )
             {
-                neg_vol_mult = -1;
+                guessFree += tmv[i]->m_GuessVol;
             }
+        }
 
-            if ( neg_vol_mult * tmv[i]->m_WetVol > neg_vol_mult * tmv[i]->m_TheoVol )
+        if ( guessFree == 0.0 )
+        {
+            break;
+        }
+
+        // Every share in a round comes from the same remainder; what the full ones take comes off after.
+        bool filled = false;
+        double taken = 0.0;
+        for ( int i = 0 ; i < ( int )tmv.size() ; i++ )
+        {
+            if ( !full[i] )
             {
-                tmv[i]->m_WetVol = tmv[i]->m_TheoVol;
+                double wet = tmv[i]->m_WetVol + tmv[i]->m_GuessVol / guessFree * leftOver;
+
+                double lo = 0.0;
+                double hi = tmv[i]->m_TheoVol;
+                if ( hi < lo )
+                {
+                    lo = tmv[i]->m_TheoVol;
+                    hi = 0.0;
+                }
+
+                if ( wet > hi || wet < lo )
+                {
+                    double end = lo;
+                    if ( wet > hi )
+                    {
+                        end = hi;
+                    }
+                    taken += end - tmv[i]->m_WetVol;
+                    tmv[i]->m_WetVol = end;
+                    full[i] = true;
+                    filled = true;
+                }
             }
-            sumWetVol += tmv[i]->m_WetVol;
         }
+        leftOver -= taken;
 
-        if ( sumWetVol < totalWetVol )
+        if ( !filled )
         {
-            leftOver = totalWetVol - sumWetVol;
-        }
-        else
-        {
-            leftOver = 0.0;
-        }
-
-        if ( leftOver < 0.00001 )
-        {
-            leftOverCnt = 0;
+            for ( int i = 0 ; i < ( int )tmv.size() ; i++ )
+            {
+                if ( !full[i] )
+                {
+                    tmv[i]->m_WetVol += tmv[i]->m_GuessVol / guessFree * leftOver;
+                }
+            }
+            sharing = false;
         }
     }
 

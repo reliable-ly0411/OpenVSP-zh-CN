@@ -1514,7 +1514,7 @@ void Surf::BuildDistMap()
     pnCloud.AddPntNodes( pvec );
 
     //==== Use NanoFlann to Find Close Points and Group ====//
-    IndexPntNodes( pnCloud, PT_MERGE_TOL );
+    IndexPntNodes( pnCloud, PT_MERGE_TOL, true );
 
     //==== Load Used Points ====//
     vector < int > kused;
@@ -1954,7 +1954,7 @@ void Surf::FindCrossingTessSegs( const vector< ISegChain* > &chains, vector< pai
     vector< TSeg > tsegs;
     for ( int i = 0 ; i < ( int )chains.size() ; i++ )
     {
-        const deque< IPnt* > &tv = chains[i]->m_TessVec;
+        const vector< IPnt* > &tv = chains[i]->m_TessVec;
         int n = tv.size();
         int nhalf = 0.5 * ( n - 1 ) + 1;
         for ( int j = 0 ; j < nhalf - 1; j++ )

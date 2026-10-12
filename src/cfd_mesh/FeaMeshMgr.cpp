@@ -595,7 +595,7 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
 
     if ( m_CADOnlyFlag )
     {
-        UpdateDrawObjs();
+        m_DrawObjsStale = true;
 
         addOutputText( "Finished\n" );
 
@@ -655,7 +655,8 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
 
     RecordResults();
 
-    UpdateDrawObjs();
+    GetMeshPtr()->m_MeshDOUpToDate = false;
+    m_DrawObjsStale = true;
 
     addOutputText( "Finished\n" );
 
@@ -1950,17 +1951,10 @@ void FeaMeshMgrSingleton::SetFixPointBorderNodes()
                                 addOutputText( message );
                                 split = true;
                             }
-                            else // Free memory
-                            {
-                                if ( p0 )
-                                {
-                                    delete p0;
-                                }
-                                if ( p1 )
-                                {
-                                    delete p1;
-                                }
-                            }
+
+                            // AddBorderSplit copies the u,w, so the Puws are freed either way.
+                            delete p0;
+                            delete p1;
                         }
 
                         if ( split )
@@ -2093,10 +2087,10 @@ void FeaMeshMgrSingleton::CheckFixPointIntersects()
                                     ss_tol = 1e-1;
                                 }
 
-                                for ( size_t m = 0; m < ( *c )->m_ISegDeque.size(); m++ )
+                                for ( size_t m = 0; m < ( *c )->m_ISegVec.size(); m++ )
                                 {
-                                    vec3d ipnt0 = ( *c )->m_ISegDeque[m]->m_IPnt[0]->m_Pnt;
-                                    vec3d ipnt1 = ( *c )->m_ISegDeque[m]->m_IPnt[1]->m_Pnt;
+                                    vec3d ipnt0 = ( *c )->m_ISegVec[m]->m_IPnt[0]->m_Pnt;
+                                    vec3d ipnt1 = ( *c )->m_ISegVec[m]->m_IPnt[1]->m_Pnt;
 
                                     // Find perpendicular distance from FeaFixPoint to ISeg
                                     double distance = ( cross(( fxpt.m_Pnt[j] - ipnt0 ), ( fxpt.m_Pnt[j] - ipnt1 ) ).mag() ) / ( ( ipnt1 - ipnt0 ).mag() );
@@ -2143,17 +2137,10 @@ void FeaMeshMgrSingleton::CheckFixPointIntersects()
                                 addOutputText( message );
                                 split = true;
                             }
-                            else // Free memory
-                            {
-                                if ( p0 )
-                                {
-                                    delete p0;
-                                }
-                                if ( p1 )
-                                {
-                                    delete p1;
-                                }
-                            }
+
+                            // AddBorderSplit copies the u,w, so the Puws are freed either way.
+                            delete p0;
+                            delete p1;
                         }
 
                         if ( split )
@@ -2193,8 +2180,8 @@ void FeaMeshMgrSingleton::CheckSubSurfBorderIntersect()
 
             for ( size_t i = 0; i < all_split_pnt_vec.size(); i++ )
             {
-                if ( ( dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt, all_split_pnt_vec[i] ) <= FLT_EPSILON ) ||
-                    ( dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, all_split_pnt_vec[i] ) <= FLT_EPSILON ) )
+                if ( ( dist( ( *c )->m_ISegVec[0]->m_IPnt[0]->m_Pnt, all_split_pnt_vec[i] ) <= FLT_EPSILON ) ||
+                    ( dist( ( *c )->m_ISegVec.back()->m_IPnt[1]->m_Pnt, all_split_pnt_vec[i] ) <= FLT_EPSILON ) )
                 {
                     split_pnt_vec.push_back( all_split_pnt_vec[i] );
                     split_uw_vec.push_back( all_split_uw_vec[i] );
@@ -2372,10 +2359,10 @@ void FeaMeshMgrSingleton::CheckSubSurfBorderIntersect()
                                      ( std::abs( uw_pnt0[1] - min_w ) < tol && std::abs( uw_pnt1[1] - min_w ) < tol ) )
                                         && ssurf.GetPolyFlag() )
                                 {
-                                    if ( ( dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Puws[0]->m_UW, uw_pnt0 ) <= FLT_EPSILON
-                                         && dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Puws.back()->m_UW, uw_pnt1 ) <= FLT_EPSILON )
-                                         || ( dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Puws[0]->m_UW, uw_pnt1 ) <= FLT_EPSILON
-                                         && dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Puws.back()->m_UW, uw_pnt0 ) <= FLT_EPSILON ) )
+                                    if ( ( dist( ( *c )->m_ISegVec[0]->m_IPnt[0]->m_Puws[0]->m_UW, uw_pnt0 ) <= FLT_EPSILON
+                                         && dist( ( *c )->m_ISegVec.back()->m_IPnt[1]->m_Puws.back()->m_UW, uw_pnt1 ) <= FLT_EPSILON )
+                                         || ( dist( ( *c )->m_ISegVec[0]->m_IPnt[0]->m_Puws[0]->m_UW, uw_pnt1 ) <= FLT_EPSILON
+                                         && dist( ( *c )->m_ISegVec.back()->m_IPnt[1]->m_Puws.back()->m_UW, uw_pnt0 ) <= FLT_EPSILON ) )
                                     {
                                         // The border curve is also a SubSurface intersection curve, and has not been split by other curves
                                         ( *c )->m_SSIntersectIndex = ss;
@@ -2468,10 +2455,10 @@ void FeaMeshMgrSingleton::CheckSubSurfBorderIntersect()
 
                                                 if ( split_on_ss_edge )
                                                 {
-                                                    if ( ( dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
+                                                    if ( ( dist( ( *c )->m_ISegVec[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
                                                             && dist( ( *c )->m_TessVec.back()->m_Pnt, corner1 ) <= FLT_EPSILON
                                                             && dist( ( *c )->m_TessVec[0]->m_Pnt, corner0 ) > FLT_EPSILON )
-                                                            || ( dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
+                                                            || ( dist( ( *c )->m_ISegVec.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
                                                             && dist( ( *c )->m_TessVec[0]->m_Pnt, corner1 ) <= FLT_EPSILON
                                                             && dist( ( *c )->m_TessVec.back()->m_Pnt, corner0 ) > FLT_EPSILON ) )
                                                     {
@@ -2480,10 +2467,10 @@ void FeaMeshMgrSingleton::CheckSubSurfBorderIntersect()
                                                         ( *c )->m_BorderFlag = false;
                                                         break;
                                                     }
-                                                    else if ( ( dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
+                                                    else if ( ( dist( ( *c )->m_ISegVec[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
                                                                 && dist( ( *c )->m_TessVec.back()->m_Pnt, corner0 ) <= FLT_EPSILON
                                                                 && dist( ( *c )->m_TessVec[0]->m_Pnt, corner1 ) > FLT_EPSILON )
-                                                            || ( dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
+                                                            || ( dist( ( *c )->m_ISegVec.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
                                                                 && dist( ( *c )->m_TessVec[0]->m_Pnt, corner0 ) <= FLT_EPSILON
                                                                 && dist( ( *c )->m_TessVec.back()->m_Pnt, corner1 ) > FLT_EPSILON ) )
                                                     {
@@ -2520,20 +2507,20 @@ void FeaMeshMgrSingleton::CheckSubSurfBorderIntersect()
 
                                                     if ( split_on_ss_edge && n != k )
                                                     {
-                                                        if ( ( dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
-                                                                && dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[n] ) <= FLT_EPSILON )
-                                                                || ( dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
-                                                                && dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[n] ) <= 2 * FLT_EPSILON ) )
+                                                        if ( ( dist( ( *c )->m_ISegVec[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
+                                                                && dist( ( *c )->m_ISegVec.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[n] ) <= FLT_EPSILON )
+                                                                || ( dist( ( *c )->m_ISegVec.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON
+                                                                && dist( ( *c )->m_ISegVec[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[n] ) <= 2 * FLT_EPSILON ) )
                                                         {
                                                             // The border curve is also a SubSurface intersection curve and has been split
                                                             ( *c )->m_SSIntersectIndex = ss;
                                                             ( *c )->m_BorderFlag = false;
                                                             break;
                                                         }
-                                                        else if ( ( dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[n] ) <= FLT_EPSILON
-                                                                    && dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON )
-                                                                || ( dist( ( *c )->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[n] ) <= FLT_EPSILON
-                                                                    && dist( ( *c )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON ) )
+                                                        else if ( ( dist( ( *c )->m_ISegVec[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[n] ) <= FLT_EPSILON
+                                                                    && dist( ( *c )->m_ISegVec.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON )
+                                                                || ( dist( ( *c )->m_ISegVec.back()->m_IPnt[1]->m_Pnt, split_pnt_vec[n] ) <= FLT_EPSILON
+                                                                    && dist( ( *c )->m_ISegVec[0]->m_IPnt[0]->m_Pnt, split_pnt_vec[k] ) <= FLT_EPSILON ) )
                                                         {
                                                             // The border curve is also a SubSurface intersection curve and has been split
                                                             ( *c )->m_SSIntersectIndex = ss;
@@ -2671,8 +2658,8 @@ void FeaMeshMgrSingleton::MergeFeaPartSSEdgeOverlap()
                                 {
                                     if ( ( *c1 )->m_SurfA == ( *c1 )->m_SurfB ) // Indicates SubSurface ISegChain
                                     {
-                                        if ( ( dist_squared( part_pnt0, ( *c1 )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt ) <= FLT_EPSILON && dist_squared( part_pnt1, ( *c1 )->m_ISegDeque.back()->m_IPnt[1]->m_Pnt ) <= FLT_EPSILON ) ||
-                                            ( dist_squared( part_pnt0, ( *c1 )->m_ISegDeque.back()->m_IPnt[1]->m_Pnt ) <= FLT_EPSILON && dist_squared( part_pnt1, ( *c1 )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt ) <= FLT_EPSILON ) )
+                                        if ( ( dist_squared( part_pnt0, ( *c1 )->m_ISegVec[0]->m_IPnt[0]->m_Pnt ) <= FLT_EPSILON && dist_squared( part_pnt1, ( *c1 )->m_ISegVec.back()->m_IPnt[1]->m_Pnt ) <= FLT_EPSILON ) ||
+                                            ( dist_squared( part_pnt0, ( *c1 )->m_ISegVec.back()->m_IPnt[1]->m_Pnt ) <= FLT_EPSILON && dist_squared( part_pnt1, ( *c1 )->m_ISegVec[0]->m_IPnt[0]->m_Pnt ) <= FLT_EPSILON ) )
                                         {
                                             // Check if this ISegChain has already been added to remove_chain_list
                                             if ( std::find( remove_chain_list.begin(), remove_chain_list.end(), ( *c1 ) ) == remove_chain_list.end() )
@@ -2718,29 +2705,11 @@ void FeaMeshMgrSingleton::MergeFeaPartSSEdgeOverlap()
                                                             success1 = ( *c2 )->AddBorderSplit( skin_p1 );
                                                         }
 
-                                                        // Free memory
-                                                        if ( !success0 )
-                                                        {
-                                                            if ( part_p0 )
-                                                            {
-                                                                delete part_p0;
-                                                            }
-                                                            if ( skin_p0 )
-                                                            {
-                                                                delete skin_p0;
-                                                            }
-                                                        }
-                                                        if ( !success1 )
-                                                        {
-                                                            if ( part_p1 )
-                                                            {
-                                                                delete part_p1;
-                                                            }
-                                                            if ( skin_p1 )
-                                                            {
-                                                                delete skin_p1;
-                                                            }
-                                                        }
+                                                        // AddBorderSplit copies the u,w, so the Puws are freed either way.
+                                                        delete part_p0;
+                                                        delete skin_p0;
+                                                        delete part_p1;
+                                                        delete skin_p1;
                                                     }
                                                 }
                                             }
@@ -2804,6 +2773,7 @@ void FeaMeshMgrSingleton::RemoveSubSurfFeaTris()
 
         if ( delj )
         {
+            GetMeshPtr()->m_FeaElementVec[ j ]->DeleteAllNodes();
             delete GetMeshPtr()->m_FeaElementVec[ j ];
         }
         else
@@ -2852,7 +2822,7 @@ void FeaMeshMgrSingleton::TagFeaNodes()
 
     double tol = PT_MERGE_TOL;
     //==== Use NanoFlann to Find Close Points and Group ====//
-    IndexPntNodes( pnCloud, tol );
+    IndexPntNodes( pnCloud, tol, true );
 
     GetMeshPtr()->m_FeaNodeVecUsed.resize( GetMeshPtr()->m_FeaNodeVec.size() );
     for ( int i = 0; i < (int)GetMeshPtr()->m_FeaNodeVec.size(); i++ )

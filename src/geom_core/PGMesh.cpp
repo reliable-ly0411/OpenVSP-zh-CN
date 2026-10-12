@@ -259,9 +259,14 @@ bool PGNode::ColinearNode() const
                 PGFace *f0 = e0->m_FaceVec[0];
                 PGFace *f1 = e0->m_FaceVec[1];
 
-                // Faces originate from same iQuad, but different tags.
-                if ( f0->m_iQuad == f1->m_iQuad &&
-                     f0->m_Tag != f1->m_Tag )
+                // Removing a corner of a triangle would leave it with two nodes.
+                if ( f0->m_EdgeVec.size() <= 3 || f1->m_EdgeVec.size() <= 3 )
+                {
+                    return false;
+                }
+
+                // On a boundary between tags, only a straight run may lose a node.
+                if ( f0->m_Tag != f1->m_Tag )
                 {
                     PGNode *n0 = e0->OtherNode( this );
                     PGNode *n1 = e1->OtherNode( this );
@@ -407,6 +412,14 @@ void PGNode::SealDoubleBackNode( PGMesh *pgm )
         vec3d pi, pj;
         pointLineDistSquared( ni->m_Pt->m_Pnt, m_Pt->m_Pnt, nj->m_Pt->m_Pnt, tj, pi );
         pointLineDistSquared( nj->m_Pt->m_Pnt, m_Pt->m_Pnt, ni->m_Pt->m_Pnt, ti, pj );
+
+        // A split at either end of the edge would put the new node on an existing one, and the
+        // two nodes would hand the double back to each other without end.
+        double t = std::min( ti, tj );
+        if ( t <= 1.0e-9 || t >= 1.0 - 1.0e-9 )
+        {
+            return;
+        }
 
         if ( ti < tj )
         {
@@ -2003,6 +2016,12 @@ void PGMesh::Clear()
     list< PGNode* >::iterator n;
     for ( n = m_NodeList.begin() ; n != m_NodeList.end(); ++n )
     {
+        // Points are owned by PGMulti and shared with other meshes -- they must
+        // not retain pointers to this mesh's deleted nodes.
+        if ( ( *n )->m_Pt )
+        {
+            ( *n )->m_Pt->RemoveConnectNode( *n );
+        }
         delete ( *n );
     }
 
@@ -2164,6 +2183,12 @@ void PGMesh::RemoveEdgeMergeFaces( PGEdge* e, void ( * facemergeproperties ) ( P
             ev0.erase( ev0.begin() );
             ev1.erase( ev1.begin() );
 
+            // A face whose loop was only the shared edge can not be merged.
+            if ( ev0.empty() || ev1.empty() )
+            {
+                return;
+            }
+
             // Check orientation of edge loops
             PGEdge * e0back = ev0.back();
             PGEdge * e1start = ev1[0];
@@ -2231,6 +2256,12 @@ void PGMesh::RemoveEdgesMergeFaces( vector < PGEdge* > edges, void ( * facemerge
             // Remove all shared edges.
             vector_remove_vector( ev0, edges );
             vector_remove_vector( ev1, edges );
+
+            // A face whose loop was entirely shared edges can not be merged.
+            if ( ev0.empty() || ev1.empty() )
+            {
+                return;
+            }
 
             // Check orientation of edge loops
             PGEdge * e0back = ev0.back();
@@ -2526,24 +2557,21 @@ int PGMesh::MergeCoincidentNodes()
     // Make vector copy of list so nodes can be removed from list without invalidating active list iterator.
     vector< PGNode* > nVec( m_NodeList.begin(), m_NodeList.end() );
 
+    BndBox box;
     for ( int i = 0; i < nVec.size(); i++ )
     {
         PGNode *n = nVec[ i ];
         allPntVec[ i ] = n->m_Pt->m_Pnt;
+        box.Update( allPntVec[ i ] );
     }
 
     PntNodeCloud pnCloud;
     pnCloud.AddPntNodes( allPntVec );
 
-    // m_BBox.GetLargestDist() *
-    double tol = 1.0e-10;
+    // Nodes closer than this fraction of the model size are one node.
+    double tol = 5.5e-7 * box.GetLargestDist();
 
-    if ( tol < 1.0e-10 )
-    {
-        tol = 1.0e-10;
-    }
-
-    IndexPntNodes( pnCloud, tol );
+    IndexPntNodes( pnCloud, tol * tol );
 
     int nmerge = 0;
 
@@ -2584,10 +2612,8 @@ int PGMesh::MergeCoincidentNodes()
 
     ClearTris();
 
-    // This mesh is garbage the moment its last face goes: PGMulti::CleanUnused hands it to
-    // the garbage vector and DumpGarbage deletes it.  Everything this mesh owns has to be
-    // finished with before that sweep runs, because nothing may touch this afterwards.
-    m_PGMulti->CleanUnused();
+    // Points only -- this mesh stays in the multi even if it is now empty.
+    m_PGMulti->CleanUnusedPoints();
     m_PGMulti->DumpGarbage();
 
     return nmerge;
@@ -2933,10 +2959,8 @@ void PGMesh::SealDoubleBackNodes()
 
     ClearTris();
 
-    // This mesh is garbage the moment its last face goes: PGMulti::CleanUnused hands it to
-    // the garbage vector and DumpGarbage deletes it.  Everything this mesh owns has to be
-    // finished with before that sweep runs, because nothing may touch this afterwards.
-    m_PGMulti->CleanUnused();
+    // Points only -- this mesh stays in the multi even if it is now empty.
+    m_PGMulti->CleanUnusedPoints();
     m_PGMulti->DumpGarbage();
 }
 
@@ -3599,6 +3623,14 @@ void PGMesh::Triangulate()
             int npt = nodVec.size();
             int ntri = npt / 3;
 
+            if ( ntri == 0 )
+            {
+                // Triangulation failed.  Keep the polygon face rather than
+                // removing it and leaving a hole in the mesh.
+                printf( "Triangulation failed for face %d.  Polygon retained.\n", fpoly->m_ID );
+                continue;
+            }
+
             for ( int i = 0; i < ntri; i++ )
             {
                 int inod = 3 * i;
@@ -3745,6 +3777,38 @@ void PGMesh::DumpGarbage()
     m_GarbageFaceVec.clear();
 }
 
+// Two faces may merge only where all they have in common is one unbroken run of edges.  Two
+// disks joined along one arc make a disk.  Joined along two runs they ring whatever lies between
+// them -- an intersection hole, say -- and joined at a further node they pinch there.
+static bool MergeMakesOneLoop( const PGFace *f0, const PGFace *f1, const vector < vector < PGEdge * > > &sharedvec )
+{
+    if ( sharedvec.size() != 1 )
+    {
+        return false;
+    }
+
+    vector < PGNode * > runnodes;
+    for ( int i = 0; i < sharedvec[0].size(); i++ )
+    {
+        runnodes.push_back( sharedvec[0][i]->m_N0 );
+        runnodes.push_back( sharedvec[0][i]->m_N1 );
+    }
+
+    for ( int i = 0; i < f0->m_EdgeVec.size(); i++ )
+    {
+        PGEdge *e = f0->m_EdgeVec[i];
+        PGNode *ends[2] = { e->m_N0, e->m_N1 };
+        for ( int j = 0; j < 2; j++ )
+        {
+            if ( f1->Contains( ends[j] ) && !vector_contains_val( runnodes, ends[j] ) )
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 void PGMesh::MergeFaces( bool ( * facemergetest ) ( PGFace *f0, PGFace *f1 ), void ( * facemergeproperties ) ( PGFace *f0, PGFace *f1 )  )
 {
     // Make vector copy of list so edges can be removed from list without invalidating active list iterator.
@@ -3763,6 +3827,12 @@ void PGMesh::MergeFaces( bool ( * facemergetest ) ( PGFace *f0, PGFace *f1 ), vo
             if ( facemergetest( f0, f1 ) )
             {
                 vector < vector < PGEdge * > > sharedvec = f0->SharedEdges( f1 );
+
+                if ( !MergeMakesOneLoop( f0, f1, sharedvec ) )
+                {
+                    continue;
+                }
+
                 for ( int j = 0; j < sharedvec.size(); j++ )
                 {
                     vector < PGEdge * > shared = sharedvec[j];
@@ -3800,10 +3870,8 @@ void PGMesh::MergeFaces( bool ( * facemergetest ) ( PGFace *f0, PGFace *f1 ), vo
 
     ClearTris();
 
-    // This mesh is garbage the moment its last face goes: PGMulti::CleanUnused hands it to
-    // the garbage vector and DumpGarbage deletes it.  Everything this mesh owns has to be
-    // finished with before that sweep runs, because nothing may touch this afterwards.
-    m_PGMulti->CleanUnused();
+    // Points only -- this mesh stays in the multi even if it is now empty.
+    m_PGMulti->CleanUnusedPoints();
     m_PGMulti->DumpGarbage();
 }
 
@@ -3879,10 +3947,8 @@ void PGMesh::CleanColinearVerts()
 
     ClearTris();
 
-    // This mesh is garbage the moment its last face goes: PGMulti::CleanUnused hands it to
-    // the garbage vector and DumpGarbage deletes it.  Everything this mesh owns has to be
-    // finished with before that sweep runs, because nothing may touch this afterwards.
-    m_PGMulti->CleanUnused();
+    // Points only -- this mesh stays in the multi even if it is now empty.
+    m_PGMulti->CleanUnusedPoints();
     m_PGMulti->DumpGarbage();
 }
 
@@ -4696,6 +4762,11 @@ void PGMulti::CleanUnused()
         }
     }
 
+    CleanUnusedPoints();
+}
+
+void PGMulti::CleanUnusedPoints()
+{
     // Copy list to vector because removal from list will corrupt list in-use.
     vector< PGPoint* > pVec( m_PointList.begin(), m_PointList.end() );
     for ( int i = 0; i < pVec.size(); i++ )
@@ -4765,7 +4836,10 @@ void PGMulti::DumpGarbage()
 
 PGMesh* PGMulti::GetActiveMesh() const
 {
-    return m_MeshVec[ m_ActiveMesh ];
+    // The index can outlast the meshes: a saved NGon mesh reloads its active level, but not
+    // the levels themselves.
+    int i = std::min( std::max( m_ActiveMesh, 0 ), ( int ) m_MeshVec.size() - 1 );
+    return m_MeshVec[ i ];
 }
 
 bool PGMulti::Check()

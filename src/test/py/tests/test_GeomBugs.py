@@ -337,6 +337,409 @@ def testAMeshSourceNeedsASurfaceToSitOn():
     assert os.path.getsize( os.path.join( out, "bad.tri" ) ) > 0
 
 
+def testAGeomInBothSetsIsReported():
+    """A Geom in both Prepare Geometry's thick and thin sets is meshed twice, and that is said.
+
+    Its thin surfaces lie inside it and cut its skin where they meet it, leaving the panel mesh
+    with doubled edges and broken wakes and nothing to say why.  The thin set defaults to Shown,
+    so setting only the thick set to All does this to every Geom.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    vsp.SetVSP3FileName( os.path.join( out, "both.vsp3" ) )
+    vsp.AddGeom( "FUSELAGE" )
+    vsp.AddGeom( "WING" )
+    vsp.Update()
+    em = vsp.ErrorMgrSingleton.getInstance()
+
+    def warnings( thin ):
+        vsp.SetAnalysisInputDefaults( "VSPAEROComputeGeometry" )
+        vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "GeomSet", [ vsp.SET_ALL ] )
+        vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "ThinGeomSet", [ thin ] )
+        drop_errors()
+        vsp.ExecAnalysis( "VSPAEROComputeGeometry" )
+        found = []
+        while em.GetNumTotalErrors() > 0:
+            e = em.PopLastError()
+            if e.GetErrorCode() == vsp.VSP_GEOM_IN_BOTH_SETS:
+                found.append( e.GetErrorString() )
+        return found
+
+    both = warnings( vsp.SET_SHOWN )
+    assert len( both ) == 1, "expected one warning, got %r" % both
+    assert "FuselageGeom" in both[0] and "WingGeom" in both[0], both[0]
+
+    assert warnings( vsp.SET_NONE ) == []
+
+
+def testPrepareGeometryWithNothingToMeshFinishes():
+    """Prepare Geometry on a model with no surfaces leaves an empty mesh, not a deleted one.
+
+    The polygon mesh's clean-up routines used to throw away a mesh with no faces from inside
+    the mesh's own routines, and the routine and its caller then carried on using it.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    vsp.SetVSP3FileName( os.path.join( out, "blank.vsp3" ) )
+    vsp.AddGeom( "BLANK" )
+    vsp.Update()
+    for nref in ( 0, 1 ):
+        vsp.SetAnalysisInputDefaults( "VSPAEROComputeGeometry" )
+        vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "GeomSet", [ vsp.SET_ALL ] )
+        vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "ThinGeomSet", [ vsp.SET_NONE ] )
+        vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "NRef", [ nref ] )
+        vsp.ExecAnalysis( "VSPAEROComputeGeometry" )
+    drop_errors()
+
+
+@pytest.mark.parametrize( "scale, cap_tess", [ ( 1.0, 15 ), ( 1000.0, 6 ), ( 0.001, 15 ) ] )
+def testAFinelyCappedBluntWingMakesAClosedPanelMesh( scale, cap_tess ):
+    """Every edge of a blunt wing's panel mesh is shared by two faces, whatever its size or cap.
+
+    A round tip cap on a blunt trailing edge is built from small but real triangles where it
+    wraps the trailing edge base.  Refining the cap shrinks them below the area AddTri used to
+    take for no area at all, so they were left out and the mesh opened there.  Made a thousand
+    times larger and turned, the same wing grows triangles with three corners in a line past
+    any fixed area, and kept they leave edges with more than two faces.  Made a thousand times
+    smaller, its distinct nodes came within the fixed distance that merges coincident ones.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    vsp.SetVSP3FileName( os.path.join( out, "blunt.vsp3" ) )
+    wing = vsp.AddGeom( "WING" )
+    xsurf = vsp.GetXSecSurf( wing, 0 )
+    for i in range( vsp.GetNumXSec( xsurf ) ):
+        xsec = vsp.GetXSec( xsurf, i )
+        vsp.SetParmVal( vsp.GetXSecParm( xsec, "TE_Trim_Type" ), 1 )
+        vsp.SetParmVal( vsp.GetXSecParm( xsec, "TE_Trim_X" ), 0.1 )
+    vsp.SetParmVal( vsp.FindParm( wing, "CapUMaxOption", "EndCap" ), vsp.ROUND_END_CAP )
+    vsp.SetParmVal( vsp.FindParm( wing, "CapUMinTess", "EndCap" ), cap_tess )
+    if scale != 1.0:
+        vsp.SetParmVal( vsp.FindParm( wing, "Scale", "XForm" ), scale )
+        for name, angle in ( ( "X_Rel_Rotation", 23.0 ), ( "Y_Rel_Rotation", 41.0 ), ( "Z_Rel_Rotation", 67.0 ) ):
+            vsp.SetParmVal( vsp.FindParm( wing, name, "XForm" ), angle )
+    vsp.Update()
+
+    vsp.SetAnalysisInputDefaults( "VSPAEROComputeGeometry" )
+    vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "GeomSet", [ vsp.SET_ALL ] )
+    vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "ThinGeomSet", [ vsp.SET_NONE ] )
+    vsp.ExecAnalysis( "VSPAEROComputeGeometry" )
+
+    # One mesh: a comment, the mesh count, 'nnode nface nwake', the nodes, the face count, and
+    # one line per face -- its node count followed by its 1-based node indices.
+    lines = [ l for l in open( os.path.join( out, "blunt.vspgeom" ) ).read().split( "\n" ) if not l.startswith( "#" ) ]
+    nnode, nface = [ int( x ) for x in lines[1].split()[:2] ]
+    first = 2 + nnode + 1
+    used = {}
+    for line in lines[first:first + nface]:
+        p = [ int( x ) for x in line.split() ]
+        loop = p[1:1 + p[0]]
+        for a, b in zip( loop, loop[1:] + loop[:1] ):
+            key = ( min( a, b ), max( a, b ) )
+            used[ key ] = used.get( key, 0 ) + 1
+    open_edges = [ e for e, n in used.items() if n != 2 ]
+    assert open_edges == [], "%d edges are not shared by two faces" % len( open_edges )
+    drop_errors()
+
+
+def testAHoleInsideOnePanelLeavesTwoFaces():
+    """A small hole cut inside one panel leaves the panel in two faces, not one ringing it.
+
+    The polygon mesh joins the pieces an intersection cuts a panel into back up.  Around a hole
+    the last join would make a face whose loop runs round the hole and back, naming nodes twice
+    and leaving the edges along the cut with one face each.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    vsp.SetVSP3FileName( os.path.join( out, "rod.vsp3" ) )
+    pod = vsp.AddGeom( "POD" )
+    vsp.SetParmVal( vsp.FindParm( pod, "Tess_W", "Shape" ), 5 )
+    vsp.SetParmVal( vsp.FindParm( pod, "Tess_U", "Shape" ), 5 )
+    rod = vsp.AddGeom( "POD" )
+    for name, group, value in ( ( "Length", "Design", 2.0 ), ( "FineRatio", "Design", 100.0 ),
+                                ( "Z_Rel_Rotation", "XForm", 90.0 ), ( "X_Rel_Location", "XForm", 2.0 ),
+                                ( "Y_Rel_Location", "XForm", -1.0 ), ( "Z_Rel_Location", "XForm", 0.066 ) ):
+        vsp.SetParmVal( vsp.FindParm( rod, name, group ), value )
+    vsp.Update()
+
+    vsp.SetAnalysisInputDefaults( "VSPAEROComputeGeometry" )
+    vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "GeomSet", [ vsp.SET_ALL ] )
+    vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "ThinGeomSet", [ vsp.SET_NONE ] )
+    vsp.ExecAnalysis( "VSPAEROComputeGeometry" )
+
+    # One mesh: a comment, the mesh count, 'nnode nface nwake', the nodes, the face count, and
+    # one line per face -- its node count followed by its 1-based node indices.
+    lines = [ l for l in open( os.path.join( out, "rod.vspgeom" ) ).read().split( "\n" ) if not l.startswith( "#" ) ]
+    nnode, nface = [ int( x ) for x in lines[1].split()[:2] ]
+    first = 2 + nnode + 1
+    used = {}
+    pinched = 0
+    unwritten = 0
+    for line in lines[first:first + nface]:
+        if "#" in line:
+            # A face the writer could not close is written as a comment.
+            unwritten += 1
+            continue
+        p = [ int( x ) for x in line.split() ]
+        loop = p[1:1 + p[0]]
+        if len( set( loop ) ) != len( loop ):
+            pinched += 1
+        for a, b in zip( loop, loop[1:] + loop[:1] ):
+            key = ( min( a, b ), max( a, b ) )
+            used[ key ] = used.get( key, 0 ) + 1
+    assert unwritten == 0, "the writer could not close %d faces" % unwritten
+    assert pinched == 0, "%d faces name a node twice" % pinched
+    wrong = [ e for e, n in used.items() if n != 2 ]
+    assert wrong == [], "%d edges are not shared by two faces" % len( wrong )
+    drop_errors()
+
+
+def _prepare_with_refinement( out, name, nref ):
+    """Prepare Geometry with nref coarse levels, thick set All and thin set none; the .vspgeom text.
+
+    The refinement count is set on the VSPAERO Parm, which is what reaches the mesher.
+    """
+    vsp.SetVSP3FileName( os.path.join( out, name + ".vsp3" ) )
+    settings = vsp.FindContainer( "VSPAEROSettings", 0 )
+    vsp.SetParmVal( vsp.FindParm( settings, "NRef", "VSPAERO" ), nref )
+    vsp.SetAnalysisInputDefaults( "VSPAEROComputeGeometry" )
+    vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "GeomSet", [ vsp.SET_ALL ] )
+    vsp.SetIntAnalysisInput( "VSPAEROComputeGeometry", "ThinGeomSet", [ vsp.SET_NONE ] )
+    vsp.ExecAnalysis( "VSPAEROComputeGeometry" )
+    return open( os.path.join( out, name + ".vspgeom" ) ).read()
+
+
+def _face_sets( text ):
+    """Each level's faces from .vspgeom text, as a set of loops each started at its least node.
+
+    Per level the file holds: the face count, one loop per face, per face its part, tag and a uw
+    per node, per face its index and parent, the wakes, and two blocks of triangulation data.
+    """
+    tokens = []
+    for line in text.split( "\n" )[1:]:
+        tokens.extend( line.split( "#" )[0].split() )
+    it = iter( tokens )
+    nxt = lambda: next( it )
+    nmesh = int( nxt() )
+    heads = [ ( int( nxt() ), int( nxt() ), int( nxt() ) ) for m in range( nmesh ) ]
+    for k in range( 3 * max( h[0] for h in heads ) ):
+        nxt()
+    levels = []
+    for m in range( nmesh ):
+        faces = []
+        for k in range( int( nxt() ) ):
+            n = int( nxt() )
+            faces.append( [ int( nxt() ) for q in range( n ) ] )
+        for f in faces:
+            for q in range( 2 + 2 * len( f ) ):
+                nxt()
+        for f in faces:
+            nxt(); nxt()
+        for k in range( int( nxt() ) ):
+            for q in range( abs( int( nxt() ) ) + 1 ):
+                nxt()
+        ntri = []
+        for f in faces:
+            nxt()
+            ntri.append( int( nxt() ) )
+            for q in range( 3 * ntri[-1] ):
+                nxt()
+        for n in ntri:
+            for q in range( 3 + 6 * n ):
+                nxt()
+        loops = set()
+        for f in faces:
+            i = f.index( min( f ) )
+            loops.add( tuple( f[i:] + f[:i] ) )
+        levels.append( loops )
+    return levels
+
+
+def testCoarseLevelsAreTheSameEveryRun():
+    """Preparing the same model twice gives the same coarse panel meshes.
+
+    Coarsening dropped a node between two faces of different tags whenever the faces came from
+    different tessellation quads, with no look at the shape.  Which quad a merged coarse face
+    remembers depends on the order faces were merged in, so control surface corners came and
+    went from one run to the next.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    wing = vsp.AddGeom( "WING" )
+    vsp.SetParmVal( vsp.FindParm( wing, "Sweep", "XSec_1" ), 50.0 )
+    vsp.SetParmVal( vsp.FindParm( wing, "Tess_W", "Shape" ), 21 )
+    vsp.Update()
+    for eta0, eta1 in ( ( 0.1, 0.35 ), ( 0.4, 0.62 ), ( 0.66, 0.93 ) ):
+        ss = vsp.AddSubSurf( wing, vsp.SS_CONTROL )
+        vsp.Update()
+        vsp.SetParmVal( vsp.FindParm( ss, "EtaFlag", "SS_Control" ), 1 )
+        vsp.SetParmVal( vsp.FindParm( ss, "EtaStart", "SS_Control" ), eta0 )
+        vsp.SetParmVal( vsp.FindParm( ss, "EtaEnd", "SS_Control" ), eta1 )
+        vsp.Update()
+    vsp.AutoGroupVSPAEROControlSurfaces()
+    vsp.Update()
+
+    first = _face_sets( _prepare_with_refinement( out, "cs", 1 ) )
+    for i in range( 3 ):
+        again = _face_sets( _prepare_with_refinement( out, "cs", 1 ) )
+        assert again == first, "run %d gave different faces" % ( i + 2 )
+    drop_errors()
+
+
+def testNoCoarsePanelLosesItsShape():
+    """Coarsening never leaves a face of two nodes, which the writer can only record as an error.
+
+    A rod along a pod's axis through its nose pole leaves slivers at the pole whose coarse faces
+    are triangles; taking a corner off one left two nodes.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    pod = vsp.AddGeom( "POD" )
+    vsp.SetParmVal( vsp.FindParm( pod, "Tess_W", "Shape" ), 5 )
+    vsp.SetParmVal( vsp.FindParm( pod, "Tess_U", "Shape" ), 5 )
+    rod = vsp.AddGeom( "POD" )
+    vsp.SetParmVal( vsp.FindParm( rod, "Length", "Design" ), 2.0 )
+    vsp.SetParmVal( vsp.FindParm( rod, "FineRatio", "Design" ), 10.0 )
+    vsp.SetParmVal( vsp.FindParm( rod, "X_Rel_Location", "XForm" ), -1.0 )
+    vsp.Update()
+
+    text = _prepare_with_refinement( out, "pole", 3 )
+    assert text.count( "FACE ERROR" ) == 0, "%d faces written as errors" % text.count( "FACE ERROR" )
+    drop_errors()
+
+
+def testARodIntoATipCapNearItsLeadingEdgeFinishes():
+    """Sealing a node where the panel mesh doubles back must not chase itself without end.
+
+    A rod entering a flat tip cap half a percent of chord behind the leading edge split an edge
+    at its very end, so the new node sat on the old one and the two handed the double back to
+    each other until the stack ran out.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    wing = vsp.AddGeom( "WING" )
+    vsp.SetParmVal( vsp.FindParm( wing, "Tess_W", "Shape" ), 17 )
+    vsp.SetParmVal( vsp.FindParm( wing, "CapUMaxOption", "EndCap" ), vsp.FLAT_END_CAP )
+    rod = vsp.AddGeom( "POD" )
+    for name, group, value in ( ( "Length", "Design", 0.6 ), ( "FineRatio", "Design", 20.0 ),
+                                ( "Z_Rel_Rotation", "XForm", 90.0 ), ( "X_Rel_Location", "XForm", 5.20115242270663 ),
+                                ( "Y_Rel_Location", "XForm", 8.7 ) ):
+        vsp.SetParmVal( vsp.FindParm( rod, name, group ), value )
+    vsp.Update()
+
+    text = _prepare_with_refinement( out, "tip", 3 )
+    assert text.count( "FACE ERROR" ) == 0
+    drop_errors()
+
+
+def testASlenderRodThroughAWingLeavesNoHole():
+    """Splitting a triangle puts each cut point on the nearest of its edges.
+
+    A rod triangle is a long sliver, and the wing cut it close to its tip, where both long edges
+    were within the on-edge tolerance of each cut point.  Each point went on the first edge
+    tried, the two cut segments crossed, and the triangulator dropped the part below the cut,
+    leaving a hole in the rod.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    wing = vsp.AddGeom( "WING" )
+    vsp.SetParmVal( vsp.FindParm( wing, "Tess_W", "Shape" ), 17 )
+    vsp.SetParmVal( vsp.FindParm( wing, "CapUMaxOption", "EndCap" ), vsp.FLAT_END_CAP )
+    rod = vsp.AddGeom( "POD" )
+    for name, group, value in ( ( "Length", "Design", 2.0 ), ( "FineRatio", "Design", 500.0 ),
+                                ( "Y_Rel_Rotation", "XForm", 90.0 ), ( "X_Rel_Location", "XForm", 2.764400457138084 ),
+                                ( "Y_Rel_Location", "XForm", 2.7 ), ( "Z_Rel_Location", "XForm", 1.0 ) ):
+        vsp.SetParmVal( vsp.FindParm( rod, name, group ), value )
+    vsp.Update()
+
+    for loops in _face_sets( _prepare_with_refinement( out, "rod", 3 ) ):
+        used = {}
+        for loop in loops:
+            for a, b in zip( loop, loop[1:] + loop[:1] ):
+                key = ( min( a, b ), max( a, b ) )
+                used[ key ] = used.get( key, 0 ) + 1
+        assert [ e for e, n in used.items() if n != 2 ] == []
+    drop_errors()
+
+
+@pytest.mark.parametrize( "cap", [ vsp.ROUND_EXT_END_CAP_LE, vsp.ROUND_EXT_END_CAP_TE, vsp.ROUND_EXT_END_CAP_BOTH ] )
+def testAnExtendedTipCapLeavesNoPillowInThePanelMesh( cap ):
+    """Every edge of an extended tip cap's panel mesh is shared by two faces of three or more nodes.
+
+    With two cap tessellation steps, an extended round tip cap tessellates one sliver at the
+    edge it extends twice, once from each side.  The two triangles share their three nodes and
+    wind opposite ways, so they enclose nothing and give one edge four faces.  Taking the third
+    corner off them instead leaves two faces of two nodes.  Splitting both quads on their other
+    diagonal closes the cap and keeps the point it extends to.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    wing = vsp.AddGeom( "WING" )
+    for name, group, value in ( ( "CapUMaxOption", "EndCap", cap ), ( "CapUMinTess", "EndCap", 2 ),
+                                ( "Sym_Planar_Flag", "Sym", 0 ), ( "Tess_W", "Shape", 5 ),
+                                ( "SectTess_U", "XSec_1", 2 ) ):
+        vsp.SetParmVal( vsp.FindParm( wing, name, group ), value )
+    vsp.Update()
+
+    text = _prepare_with_refinement( out, "cap", 0 )
+    loops = _face_sets( text )[0]
+    short = [ loop for loop in loops if len( set( loop ) ) < 3 ]
+    assert short == [], "%d faces have fewer than three nodes" % len( short )
+    used = {}
+    for loop in loops:
+        for a, b in zip( loop, loop[1:] + loop[:1] ):
+            key = ( min( a, b ), max( a, b ) )
+            used[ key ] = used.get( key, 0 ) + 1
+    wrong = [ e for e, n in used.items() if n != 2 ]
+    assert wrong == [], "%d edges are not shared by two faces" % len( wrong )
+
+    # The panel mesh reaches as far as the tessellation, so the cap keeps its extension.
+    lines = text.split( "\n" )
+    npnt = int( lines[2].split()[0] )
+    mesh = [ [ float( t ) for t in line.split()[:3] ] for line in lines[3:3 + npnt] ]
+    stl = os.path.join( out, "cap.stl" )
+    vsp.ExportFile( stl, vsp.SET_ALL, vsp.EXPORT_STL )
+    tess = [ [ float( t ) for t in line.split()[1:4] ] for line in open( stl ) if line.strip().startswith( "vertex" ) ]
+    for i in range( 3 ):
+        assert min( p[i] for p in mesh ) == pytest.approx( min( p[i] for p in tess ), abs = 1e-6 )
+        assert max( p[i] for p in mesh ) == pytest.approx( max( p[i] for p in tess ), abs = 1e-6 )
+    drop_errors()
+
+
+def testAPanelMeshSavedOnACoarseLevelReloads():
+    """Reading back a model whose polygon mesh was showing a coarse level does not crash.
+
+    The level shown is a Parm and is saved; the levels themselves are not, so the reloaded mesh
+    has one, and the saved index pointed past it.
+    """
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    vsp.AddGeom( "POD" )
+    vsp.Update()
+    _prepare_with_refinement( out, "levels", 1 )
+    ngon = [ g for g in vsp.FindGeoms() if vsp.GetGeomTypeName( g ) == "NGonMesh" ][0]
+    vsp.SetParmVal( vsp.FindParm( ngon, "ActiveMesh", "RefMesh" ), 1 )
+    vsp.Update()
+    path = os.path.join( out, "saved.vsp3" )
+    vsp.WriteVSPFile( path )
+
+    vsp.VSPRenew()
+    vsp.ReadVSPFile( path )
+    vsp.Update()
+    assert [ g for g in vsp.FindGeoms() if vsp.GetGeomTypeName( g ) == "NGonMesh" ]
+    drop_errors()
+
+
 def a_texture_file():
     """An image from the repo, by a path that does not depend on the working directory."""
     here = os.path.dirname( os.path.abspath( __file__ ) )
@@ -604,4 +1007,66 @@ def testAPovRayFileWindsAReflectedCopyTheWayItsNormalsPoint():
     one = written( 0 )
     assert one > 0.0
     assert written( vsp.SYM_XZ ) == pytest.approx( 2.0 * one, rel = 1e-9 )
+    drop_errors()
+
+
+def testAStackOrFuselageEndCapStopsAtSharp():
+    """The extended round caps are wing caps; on a Stack they crashed Update."""
+    vsp.VSPRenew()
+    drop_errors()
+    for gtype in ( "STACK", "FUSELAGE" ):
+        geom = vsp.AddGeom( gtype )
+        for name in ( "CapUMinOption", "CapUMaxOption" ):
+            parm = vsp.FindParm( geom, name, "EndCap" )
+            vsp.SetParmVal( parm, vsp.ROUND_EXT_END_CAP_BOTH )
+            assert vsp.GetParmVal( parm ) == vsp.SHARP_END_CAP
+    vsp.Update()
+    assert_no_errors()
+
+
+def _vspgeom_parts( path ):
+    """The part and tag numbers of every triangle in a one-mesh vspgeom file."""
+    lines = open( path ).read().split( "\n" )
+    npnt, ntri = ( int( t ) for t in lines[2].split()[:2] )
+    first = 3 + npnt + 1 + ntri
+    return [ tuple( int( t ) for t in lines[first + i].split()[:2] ) for i in range( ntri ) ]
+
+
+@pytest.mark.parametrize( "before", [ "stl", "massprops", "planeslice", "projection", "stale", "import" ] )
+def testAVSPGEOMExportWritesWhateverMeshIsThere( before ):
+    """A VSPGEOM export writes an existing mesh in its set, and looks its triangles up in the
+    tag tables.  Those describe the last mesh tagged, so a mesh made untagged, read from a file,
+    or tagged before another mesh crashed the export."""
+    vsp.VSPRenew()
+    drop_errors()
+    out = tempfile.mkdtemp()
+    vsp.SetVSP3FileName( os.path.join( out, "m.vsp3" ) )
+    pod = vsp.AddGeom( "POD" )
+    wing = vsp.AddGeom( "WING" )
+    vsp.Update()
+
+    if before == "stl":
+        vsp.ExportFile( os.path.join( out, "m.stl" ), vsp.SET_ALL, vsp.EXPORT_STL )
+    elif before == "massprops":
+        vsp.ComputeMassProps( vsp.SET_ALL, 10, vsp.X_DIR )
+    elif before == "planeslice":
+        vsp.ComputePlaneSlice( vsp.SET_ALL, 10, vsp.vec3d( 1, 0, 0 ), True )
+    elif before == "projection":
+        vsp.SetAnalysisInputDefaults( "Projection" )
+        vsp.ExecAnalysis( "Projection" )
+    elif before == "stale":
+        vsp.ExportFile( os.path.join( out, "m.stl" ), vsp.SET_ALL, vsp.EXPORT_STL )
+        vsp.SetSetFlag( pod, vsp.SET_FIRST_USER, True )
+        vsp.ComputeCompGeom( vsp.SET_FIRST_USER, False, 0 )
+    elif before == "import":
+        vsp.ExportFile( os.path.join( out, "m.tri" ), vsp.SET_ALL, vsp.EXPORT_CART3D )
+        vsp.DeleteGeomVec( [ g for g in vsp.FindGeoms() if vsp.GetGeomTypeName( g ) == "Mesh" ] )
+        vsp.ImportFile( os.path.join( out, "m.tri" ), vsp.IMPORT_CART3D_TRI, "" )
+
+    path = os.path.join( out, "m.vspgeom" )
+    vsp.ExportFile( path, vsp.SET_ALL, vsp.EXPORT_VSPGEOM )
+    parts = _vspgeom_parts( path )
+    assert parts
+    assert min( p for p, t in parts ) >= 1
+    assert min( t for p, t in parts ) >= 1
     drop_errors()

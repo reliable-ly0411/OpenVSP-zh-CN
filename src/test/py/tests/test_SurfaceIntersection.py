@@ -240,3 +240,88 @@ def testTheAnalysisReportsTheSameRun():
     assert rid, "SurfaceIntersection returned no results"
     assert rid == vsp.FindLatestResultsID( "SurfaceIntersection" ), \
            "the analysis returned something other than the run's own results"
+
+
+def _nested_pods( rotation ):
+    """A pod inside a copy of itself a thousandth larger, turned by rotation degrees about Z.
+
+    Turned, the two cross at a shallow angle along a long curve; not turned, they never meet.
+    Either way they run a hair apart over their whole area, where every pair of patches still
+    has overlapping bounding boxes long after the surfaces themselves are clearly apart.
+    """
+    vsp.VSPRenew()
+    vsp.AddGeom( "POD", "" )
+    outer = vsp.AddGeom( "POD", "" )
+    scale = 1.001
+    vsp.SetParmVal( vsp.FindParm( outer, "Scale", "XForm" ), scale )
+    vsp.SetParmVal( vsp.FindParm( outer, "X_Rel_Location", "XForm" ),
+                    -0.5 * ( scale - 1.0 ) * vsp.GetParmVal( vsp.FindParm( outer, "Length", "Design" ) ) )
+    vsp.SetParmVal( vsp.FindParm( outer, "Z_Rel_Rotation", "XForm" ), rotation )
+    vsp.Update()
+
+
+def _cpu_seconds():
+    """The processor time the last run took, summed over its threads."""
+    rid = vsp.FindLatestResultsID( "SurfaceIntersection" )
+    return vsp.GetDoubleResults( rid, "Analysis_Duration_Sec" )[0]
+
+
+def testPodsThatNeverMeetAreToldApartQuickly():
+    """Surfaces a hair apart are parted along their normal, not refined to the bottom.
+
+    Refined until their bounding boxes part, this took 22 processor seconds; parted along each
+    patch's normal it takes 0.05.
+    """
+    _nested_pods( 0.0 )
+
+    chains = _intersect()
+
+    assert len( chains ) == 24, "expected the 24 border chains alone, got %d" % len( chains )
+    assert _cpu_seconds() < 2.0, "two pods that never meet took %g s" % _cpu_seconds()
+
+
+def testPodsCrossingAtAShallowAngleKeepTheirIntersection():
+    """Parting patches along their normal loses none of the intersection.
+
+    The chains are the ones the intersector found before it parted patches that way, to the
+    point, in 0.5 processor seconds rather than 8.
+    """
+    _nested_pods( 0.5 )
+
+    chains = _intersect()
+
+    assert len( chains ) == 40, "expected 40 chains, got %d" % len( chains )
+    assert sum( len( c ) for c in chains ) == 31236, \
+           "expected 31236 chain points, got %d" % sum( len( c ) for c in chains )
+    assert _cpu_seconds() < 3.0, "two pods crossing at a shallow angle took %g s" % _cpu_seconds()
+
+
+def _wing_with_extended_tip_cap( split ):
+    """A wing whose tip cap runs past the trailing edge, intersected with its surfaces split and
+    joined or not.  Joined, the cap's two halves become one patch, and the line between them is
+    kept as a seam the patch must still carry."""
+    vsp.VSPRenew()
+    wing = vsp.AddGeom( "WING", "" )
+    vsp.SetParmVal( vsp.FindParm( wing, "CapUMaxOption", "EndCap" ), vsp.ROUND_EXT_END_CAP_TE )
+    vsp.Update()
+
+    settings = vsp.FindContainer( "SurfaceIntersectSettings", 0 )
+    vsp.SetParmVal( vsp.FindParm( settings, "SplitJoinSurfsFlag", "Global" ), float( split ) )
+    chains = _intersect()
+    vsp.SetParmVal( vsp.FindParm( settings, "SplitJoinSurfsFlag", "Global" ), 0.0 )
+    return chains
+
+
+def testAJoinedTipCapKeepsTheSeamBetweenItsHalves():
+    """The seam lies on the edge of each half, but inside the joined patch, so it is not a
+    border curve and must not be left out as one: joined, the cap has as many chains as split,
+    and every chain end still meets another."""
+    split = _wing_with_extended_tip_cap( False )
+    joined = _wing_with_extended_tip_cap( True )
+
+    assert len( joined ) == len( split ), \
+           "joined, the cap has %d chains rather than the %d it has split" % ( len( joined ), len( split ) )
+
+    counts = _end_clusters( joined )
+    lonely = [ n for n in counts if n < 2 ]
+    assert not lonely, "%d chain ends meet nothing: %s" % ( len( lonely ), counts )

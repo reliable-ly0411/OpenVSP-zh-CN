@@ -23,12 +23,13 @@
 #include "WireGeom.h"
 #include "NGonMeshGeom.h"
 #include "RoutingGeom.h"
+#include "WingGeom.h"
 
 #include <set>
 
 
 //==== Clone Geom ====//
-class CloneGeom : public Geom, public JointRole, public GearContactRole, public AuxiliaryRole, public RotorRole, public TMeshRole, public HumanVertRole, public PointCloudRole, public WirePtRole, public PGMeshRole, public RouteRole
+class CloneGeom : public Geom, public JointRole, public GearContactRole, public AuxiliaryRole, public RotorRole, public TMeshRole, public HumanVertRole, public PointCloudRole, public WirePtRole, public PGMeshRole, public RouteRole, public WingRole
 {
 public:
     CloneGeom( Vehicle* vehicle_ptr );
@@ -66,6 +67,7 @@ public:
     {
         return m_OriginalID;
     }
+    virtual void GetDependencyIDs( vector< string > &ids ) override;
 
     // Suffix that automatic naming appends to the original's name.
     virtual string GetNameSuffix() const
@@ -88,6 +90,9 @@ public:
     static void CopyXFormParms( Geom* from, Geom* to );
     static void CopyAttachParms( Geom* from, Geom* to );
     static void CopyMassPropParms( Geom* from, Geom* to );
+    static void CopyParasiteDragParms( Geom* from, Geom* to );
+    static void CopyEndCapParms( Geom* from, Geom* to );
+    static void CopyTessParms( Geom* from, Geom* to );
     static void CopyNegativeVolumeParm( Geom* from, Geom* to );
     static void CopySetFlags( Geom* from, Geom* to );
     static void CopyAppearance( Geom* from, Geom* to );
@@ -110,6 +115,8 @@ public:
     // Behaves as the original; GetType still returns Clone.
     virtual int GetBehaviorType() const override;
     virtual Geom* GetBehaviorGeom() override;
+    virtual double ComputeMAC() override;
+    virtual Geom* GetParasiteDragGeom() override;
 
     //==== Standing in for a landing gear ====//
     // Answered by the original in the gear's own frame; this Geom's matrix places the result.
@@ -234,6 +241,13 @@ public:
     virtual int GetNumRoutePts() const override;
     virtual RouteRole* GetOriginalRoute() const;
 
+    //==== Standing in for a wing ====//
+    virtual double GetWingTotalArea() const override;
+    virtual double GetWingCurvedArea() const override;
+    virtual double GetWingTotalSpan() const override;
+    virtual double GetWingMAC() const override;
+    virtual double GetWingTotalChord() const override;
+
     //==== Standing in for a rotor ====//
     virtual double GetRotorDiameter() const override;
     virtual double GetRotorR0() const override;
@@ -309,6 +323,7 @@ public:
     BoolParm m_CloneAppearance;
     BoolParm m_CloneNegativeVolume;
     BoolParm m_CloneMassProps;
+    BoolParm m_CloneParasiteDrag;
     BoolParm m_CloneSubSurfs;
     BoolParm m_CloneJoint;
     BoolParm m_AutoName;
@@ -342,6 +357,7 @@ protected:
 
     // Copies negative volume and mass properties alongside the surfaces.
     virtual void UpdateCopySurfParms() override;
+    virtual void UpdateCopyTessParms() override;
 
     // While negative volume is copied, the copied surfaces already carry their CFD types.
     virtual void UpdateFlags() override;

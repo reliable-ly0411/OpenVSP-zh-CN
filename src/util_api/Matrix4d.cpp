@@ -8,6 +8,49 @@
 
 #include "Matrix4d.h"
 
+// Sine and cosine of an angle in degrees.  The angle is first reduced, exactly, to within 45
+// degrees of a quarter turn, so whole and quarter turns give exact zeros and ones.
+static void sincos_deg( const double &deg, double &s, double &c )
+{
+    double r = deg;
+    if ( r > 180.0 || r < -180.0 )
+    {
+        r = std::remainder( deg, 360.0 );
+    }
+
+    double q = 0.0;
+    double a = r;
+    if ( r > 45.0 || r < -45.0 )
+    {
+        q = std::nearbyint( r / 90.0 );
+        a = r - q * 90.0;
+    }
+    double rang = a * M_PI / 180.0;
+    double sa = sin( rang );
+    double ca = cos( rang );
+
+    if ( q == 1.0 )
+    {
+        s = ca;
+        c = -sa;
+    }
+    else if ( q == -1.0 )
+    {
+        s = -ca;
+        c = sa;
+    }
+    else if ( q == 2.0 || q == -2.0 )
+    {
+        s = -sa;
+        c = -ca;
+    }
+    else
+    {
+        s = sa;
+        c = ca;
+    }
+}
+
 Matrix4d::Matrix4d()
 {
     loadIdentity();
@@ -73,9 +116,8 @@ void Matrix4d::translatev( const vec3d &v )
 void Matrix4d::rotateX( const double &ang )
 {
     double tmat[16];
-    double rang = ang * ( double )M_PI / 180.0f;
-    double ca = ( double )cos( rang );
-    double sa = ( double )sin( rang );
+    double ca, sa;
+    sincos_deg( ang, sa, ca );
 
     setIdentity( tmat );
     tmat[5] = ca;
@@ -89,9 +131,8 @@ void Matrix4d::rotateX( const double &ang )
 void Matrix4d::rotateY( const double &ang )
 {
     double tmat[16];
-    double rang = ang * ( double )M_PI / 180.0f;
-    double ca = ( double )cos( rang );
-    double sa = ( double )sin( rang );
+    double ca, sa;
+    sincos_deg( ang, sa, ca );
 
     setIdentity( tmat );
     tmat[0] = ca;
@@ -105,9 +146,8 @@ void Matrix4d::rotateY( const double &ang )
 void Matrix4d::rotateZ( const double &ang )
 {
     double tmat[16];
-    double rang = ang * ( double )M_PI / 180.0f;
-    double ca = ( double )cos( rang );
-    double sa = ( double )sin( rang );
+    double ca, sa;
+    sincos_deg( ang, sa, ca );
 
     setIdentity( tmat );
     tmat[0] = ca;
@@ -366,25 +406,26 @@ void Matrix4d::xformnormmat( std::vector < std::vector < vec3d > > & in ) const
 vec3d Matrix4d::getAngles() const
 {
     vec3d angles;
-    if ( std::abs( mat[8] ) != 1 )
+
+    // R = Rx Ry Rz.  Its first row is ( cos_y cos_z, -cos_y sin_z, sin_y ).
+    double cos_y = sqrt( mat[0] * mat[0] + mat[4] * mat[4] );
+    angles.set_y( atan2( mat[8], cos_y ) );
+
+    if ( cos_y > 0.0 )
     {
-        angles.set_y( asin( mat[8] ) );
-        double cos_y = cos( angles.y() );
-        angles.set_x( -atan2( mat[9] / cos_y, mat[10] / cos_y ) );
-        angles.set_z( -atan2( mat[4] / cos_y, mat[0] / cos_y ) );
+        angles.set_z( -atan2( mat[4], mat[0] ) );
     }
-    else if ( mat[8] == 1 )
+    else
     {
-        angles.set_y( M_PI / 2 );
-        angles.set_x( atan2( mat[1], mat[5] ) );
-        angles.set_z( 0 );
+        angles.set_z( 0.0 );
     }
-    else if ( mat[8] == -1 )
-    {
-        angles.set_y( -M_PI / 2 );
-        angles.set_x( atan2( mat[6], mat[2] ) );
-        angles.set_z( 0 );
-    }
+
+    // Take X from R Rz^T = Rx Ry, whose second column is ( 0, cos_x, sin_x ), so X absorbs
+    // whatever Z left over when Y is near +-90 degrees.
+    double sin_z = sin( angles.z() );
+    double cos_z = cos( angles.z() );
+    angles.set_x( atan2( sin_z * mat[2] + cos_z * mat[6], sin_z * mat[1] + cos_z * mat[5] ) );
+
     return angles * ( 180.0 / M_PI );
 }
 
@@ -395,25 +436,24 @@ vec3d Matrix4d::getArcballAngles() const
     vec3d angles;
 
     // Operates transpose to ArcballCam's getRotationEulerAngles
-    // ArcballCam assumes matrix is transposed before operating, elements here are swapped accordingly
-    if ( mat[9] >= 1 )
+    // R = Ry Rx Rz.  Its second row is ( cos_x sin_z, cos_x cos_z, -sin_x ).
+    double cos_x = sqrt( mat[1] * mat[1] + mat[5] * mat[5] );
+    angles.set_x( atan2( -mat[9], cos_x ) );
+
+    if ( cos_x > 0.0 )
     {
-        angles.set_y( atan2( -mat[2], mat[0] ) );
-        angles.set_x( - 0.5 * M_PI );
-        angles.set_z( 0 );
+        angles.set_z( atan2( mat[1], mat[5] ) );
     }
-    else if ( mat[9] <= -1 )
+    else
     {
-        angles.set_y( atan2( -mat[2], mat[0] ) );
-        angles.set_x( 0.5 * M_PI );
-        angles.set_z( 0 );
+        angles.set_z( 0.0 );
     }
-    else // Nominal case.
-    {
-        angles.set_y( atan2( mat[8], mat[10] ) );
-        angles.set_x( - asin( mat[9] ) );
-        angles.set_z( atan2( mat[1], mat[5]) );
-    }
+
+    // Take Y from R Rz^T = Ry Rx, whose first column is ( cos_y, 0, -sin_y ), so Y absorbs
+    // whatever Z left over when X is near +-90 degrees.
+    double sin_z = sin( angles.z() );
+    double cos_z = cos( angles.z() );
+    angles.set_y( atan2( sin_z * mat[6] - cos_z * mat[2], cos_z * mat[0] - sin_z * mat[4] ) );
 
     // Return angles in radians
     return angles;
@@ -513,24 +553,14 @@ void Matrix4d::setBasis( const vec3d &xdir, const vec3d &ydir, const vec3d &zdir
 void Matrix4d::getRotationAxis( vec3d &axis_dir, vec3d &axis_pnt, double &angle ) const
 {
     // 1. Extract rotation angle and direction from the 3x3 part
-    // cos( theta ) = ( tr( R ) - 1 ) / 2
-    double trace = mat[0] + mat[5] + mat[10];
-    double cos_theta = ( trace - 1.0 ) * 0.5;
+    // The skew part of R is 2 sin( theta ) axis, and tr( R ) = 1 + 2 cos( theta ).
+    vec3d skew( mat[6] - mat[9], mat[8] - mat[2], mat[1] - mat[4] );
+    double sin_theta = 0.5 * skew.mag();
+    double cos_theta = 0.5 * ( mat[0] + mat[5] + mat[10] - 1.0 );
 
-    // Clamp for safety
-    if ( cos_theta > 1.0 )
-    {
-        cos_theta = 1.0;
-    }
+    angle = atan2( sin_theta, cos_theta );
 
-    if ( cos_theta < -1.0 )
-    {
-        cos_theta = -1.0;
-    }
-
-    angle = acos( cos_theta );
-
-    if ( std::abs( angle ) < 1e-9 )
+    if ( angle < 1e-12 )
     {
         // No rotation
         axis_dir.set_xyz( 0, 0, 1 );
@@ -539,53 +569,46 @@ void Matrix4d::getRotationAxis( vec3d &axis_dir, vec3d &axis_pnt, double &angle 
         return;
     }
 
-    if ( std::abs( angle - M_PI ) < 1e-9 )
+    if ( cos_theta < 0.0 )
     {
-        // 180 degree rotation case
-        double xx = ( mat[0] + 1.0 ) * 0.5;
-        double yy = ( mat[5] + 1.0 ) * 0.5;
-        double zz = ( mat[10] + 1.0 ) * 0.5;
-        double xy = ( mat[4] + mat[1] ) * 0.25;
-        double xz = ( mat[8] + mat[2] ) * 0.25;
-        double yz = ( mat[9] + mat[6] ) * 0.25;
+        // Past 90 degrees the skew part shrinks to nothing.  The symmetric part less cos( theta ) I
+        // is ( 1 - cos( theta ) ) axis axis^T; take its column on the largest diagonal and sign it
+        // by the skew part.
+        int imax = 0;
+        if ( mat[5] > mat[0] )
+        {
+            imax = 1;
+        }
+        if ( mat[10] > mat[imax * 5] )
+        {
+            imax = 2;
+        }
 
-        if ( ( xx >= yy ) && ( xx >= zz ) )
+        for ( int i = 0; i < 3; i++ )
         {
-            axis_dir.set_x( sqrt( xx ) );
-            axis_dir.set_y( xy / axis_dir.x() );
-            axis_dir.set_z( xz / axis_dir.x() );
+            axis_dir[i] = 0.5 * ( mat[imax * 4 + i] + mat[i * 4 + imax] );
         }
-        else if ( yy >= zz )
+        axis_dir[imax] -= cos_theta;
+
+        if ( dot( axis_dir, skew ) < 0.0 )
         {
-            axis_dir.set_y( sqrt( yy ) );
-            axis_dir.set_x( xy / axis_dir.y() );
-            axis_dir.set_z( yz / axis_dir.y() );
-        }
-        else
-        {
-            axis_dir.set_z( sqrt( zz ) );
-            axis_dir.set_x( xz / axis_dir.z() );
-            axis_dir.set_y( yz / axis_dir.z() );
+            axis_dir = -1.0 * axis_dir;
         }
     }
     else
     {
         // Standard case
-        axis_dir.set_xyz( mat[6] - mat[9], mat[8] - mat[2], mat[1] - mat[4] );
+        axis_dir = skew;
     }
     axis_dir.normalize();
 
-    // 2. Find a point on the axis
-    // For a transformation M = T * R, the fixed point P satisfies ( R - I ) P = -T_perp
+    // 2. Find the point on the axis nearest the origin
+    // For a transformation M = T * R, the fixed point P satisfies ( I - R ) P = T_perp
     // where T_perp is the component of translation perpendicular to the axis.
     vec3d t = getTranslation();
     vec3d parallel_t = axis_dir * dot( t, axis_dir );
     vec3d perp_t = t - parallel_t;
 
-    // Using the formula for the center of rotation: P = ( axis x perp_t ) / ( 2 * tan( angle / 2 ) ) + axis_pnt_at_origin
-    // We can find the point closest to origin: axis_dir.cross( t ) / ( 2 * sin( angle ) ) ... for simple rotation
-    // A more robust way: axis_pnt = 0.5 * ( t + axis_dir.cross( t ) / tan( angle / 2 ) ) projected?
-    // Let's use the cross product method:
     double tan_half = tan( angle * 0.5 );
     axis_pnt = cross( axis_dir, perp_t ) * ( 0.5 / tan_half ) + perp_t * 0.5;
 }
@@ -597,11 +620,13 @@ void Matrix4d::toQuat( double &qw, double &qx, double &qy, double &qz, double &t
     ty = mat[13];
     tz = mat[14];
 
-    float trace = mat[0] + mat[5] + mat[10]; // I removed + 1.0f; see discussion with Ethan
-    if( trace > 0 )    // I changed M_EPSILON to 0
+    // Divide by a part of the quaternion that is at least 1/2: qw when the trace is positive, else
+    // the part on the largest diagonal entry.
+    double trace = mat[0] + mat[5] + mat[10];
+    if( trace > 0 )
     {
-        float s = 0.5f / sqrtf( trace + 1.0f );
-        qw = 0.25f / s;
+        double s = 0.5 / sqrt( trace + 1.0 );
+        qw = 0.25 / s;
         qx = ( mat[6] - mat[9] ) * s;
         qy = ( mat[8] - mat[2] ) * s;
         qz = ( mat[1] - mat[4] ) * s;
@@ -610,27 +635,27 @@ void Matrix4d::toQuat( double &qw, double &qx, double &qy, double &qz, double &t
     {
         if ( mat[0] > mat[5] && mat[0] > mat[10] )
         {
-            float s = 2.0f * sqrtf( 1.0f + mat[0] - mat[5] - mat[10] );
+            double s = 2.0 * sqrt( 1.0 + mat[0] - mat[5] - mat[10] );
             qw = ( mat[6] - mat[9] ) / s;
-            qx = 0.25f * s;
+            qx = 0.25 * s;
             qy = ( mat[4] + mat[1] ) / s;
             qz = ( mat[8] + mat[2] ) / s;
         }
         else if ( mat[5] > mat[10])
         {
-            float s = 2.0f * sqrtf( 1.0f + mat[5] - mat[0] - mat[10] );
+            double s = 2.0 * sqrt( 1.0 + mat[5] - mat[0] - mat[10] );
             qw = ( mat[8] - mat[2] ) / s;
             qx = ( mat[4] + mat[1] ) / s;
-            qy = 0.25f * s;
+            qy = 0.25 * s;
             qz = ( mat[9] + mat[6] ) / s;
         }
         else
         {
-            float s = 2.0f * sqrtf( 1.0f + mat[10] - mat[0] - mat[5] );
+            double s = 2.0 * sqrt( 1.0 + mat[10] - mat[0] - mat[5] );
             qw = ( mat[1] - mat[4] ) / s;
             qx = ( mat[8] + mat[2] ) / s;
             qy = ( mat[9] + mat[6] ) / s;
-            qz = 0.25f * s;
+            qz = 0.25 * s;
         }
     }
 }

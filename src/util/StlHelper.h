@@ -8,13 +8,11 @@
 
 #include <string>
 #include <vector>
-#include <deque>
 #include <map>
 #include <algorithm>
 #include <limits>
 #include <unordered_set>
 using std::vector;
-using std::deque;
 #include <APIDefines.h>
 
 
@@ -47,6 +45,59 @@ int AssignRangeAt( vector < T > &dest, int idest, const vector < T > &src )
     return idest + n;
 }
 
+//==== A Sequence Grown From One Element Out At Both Ends ====//
+// For building something like a chain of edges, which starts from one element and takes others
+// at either end, never removing any.  Those added after the first are kept behind it in order;
+// those added ahead of it are kept nearest the first first, so both ends grow by push_back.
+// GetVector() turns the second lot round once and puts it ahead of the first.
+template <class T>
+class TwoEndedVector
+{
+public:
+    explicit TwoEndedVector( const T & first )
+    {
+        m_Back.push_back( first );
+    }
+
+    void push_front( const T & val )
+    {
+        m_Front.push_back( val );
+    }
+
+    void push_back( const T & val )
+    {
+        m_Back.push_back( val );
+    }
+
+    const T & front() const
+    {
+        if ( m_Front.empty() )
+        {
+            return m_Back.front();
+        }
+        return m_Front.back();
+    }
+
+    const T & back() const
+    {
+        return m_Back.back();
+    }
+
+    vector< T > GetVector() const
+    {
+        vector< T > vec;
+        vec.reserve( m_Front.size() + m_Back.size() );
+        vec.insert( vec.end(), m_Front.rbegin(), m_Front.rend() );
+        vec.insert( vec.end(), m_Back.begin(), m_Back.end() );
+        return vec;
+    }
+
+private:
+
+    vector< T > m_Front;    // Added ahead of the first, nearest it first
+    vector< T > m_Back;     // The first, then those added after it
+};
+
 //==== Check If Vector Contains Val =====//
 template <class T>
 bool vector_contains_val( const vector< T > & vec, T const & val )
@@ -73,38 +124,6 @@ bool vector_contains_val_approx( const vector< T > & vec, T const & val, T const
         }
     }
     return false;
-}
-
-//==== Check If Deque Contains Val =====//
-template <class T>
-bool deque_contains_val( const deque< T > & deque, T const & val )
-{
-    for ( int i = 0 ; i < ( int )deque.size() ; i++ )
-    {
-        if ( val == deque[i] )
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-//==== Delete All Items From Deque Matching Val ====//
-template<class T>
-void deque_remove_val( deque< T > & val_deque, T const & val )
-{
-    deque< int > del_indices;
-    for ( int i = 0 ; i < ( int )val_deque.size() ; i++ )
-    {
-        if ( val == val_deque[i] )
-        {
-            del_indices.push_front( i );
-        }
-    }
-    for ( int i = 0 ; i < ( int )del_indices.size() ; i++ )
-    {
-        val_deque.erase( val_deque.begin() + del_indices[i] );
-    }
 }
 
 //==== Delete All Items From Vector Matching Val ====//

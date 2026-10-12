@@ -5,6 +5,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include <cfloat>
 #include <cmath>
 
 #include "GearGeom.h"
@@ -676,8 +677,15 @@ void Bogie::UpdateStowAttachParms()
         // Only EtatoU is used; it depends on shape alone, so a Clone of a wing works too.
         WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent->GetBehaviorGeom() );
 
+        // Not built yet; the parent updates this gear again once it is.
+        const VspSurf* surf = parent->GetSurfPtr( m_StowSurfIndx() );
+        if ( !surf )
+        {
+            return;
+        }
+
         double umax = parent->GetUMapMax( m_StowSurfIndx() );
-        double lmax = parent->GetSurfPtr( m_StowSurfIndx() )->GetLMax();
+        double lmax = surf->GetLMax();
 
         m_StowU0NLoc.SetUpperLimit( umax );
         m_StowR0NLoc.SetUpperLimit( umax );
@@ -952,8 +960,15 @@ void Bogie::UpdateMechAttachParms()
         // Only EtatoU is used; it depends on shape alone, so a Clone of a wing works too.
         WingGeom* behavior_wing = dynamic_cast < WingGeom * > ( parent->GetBehaviorGeom() );
 
+        // Not built yet; the parent updates this gear again once it is.
+        const VspSurf* surf = parent->GetSurfPtr( m_MechSurfIndx() );
+        if ( !surf )
+        {
+            return;
+        }
+
         double umax = parent->GetUMapMax( m_MechSurfIndx() );
-        double lmax = parent->GetSurfPtr( m_MechSurfIndx() )->GetLMax();
+        double lmax = surf->GetLMax();
 
         m_MechU0NLoc.SetUpperLimit( umax );
         m_MechR0NLoc.SetUpperLimit( umax );
@@ -1676,10 +1691,18 @@ void Bogie::BuildRetractMatrix( Matrix4d &ret_mat, vec3d &knee_pt, vec3d &knee_a
     orientKnee.rotate( -m_MechKneeElevationAngle() * M_PI / 180.0, n );
     vec3d w = orientKnee.xformnorm( v );
 
-    // SSA calculation for knee position
+    // SSA calculation for knee position.  The angle at the pivot is asin( beta ), taken with atan2,
+    // with 1 - beta and 1 + beta formed without cancellation from 1 -+ sin( alpha ) = 2 sin^2( t )
+    // and 2 cos^2( t ), t = pi/4 - alpha/2, so it keeps its digits as beta nears -+1.
     double alpha = m_MechKneeDownAngle() * M_PI / 180.0;
-    double beta = ( 1.0 - m_MechKneePos() ) * std::sin( alpha );
-    double gamma = M_PI - alpha - std::asin( beta );
+    double kpos = m_MechKneePos();
+    double beta = ( 1.0 - kpos ) * std::sin( alpha );
+    double t = 0.25 * M_PI - 0.5 * alpha;
+    double st = std::sin( t );
+    double ct = std::cos( t );
+    double one_minus_beta = kpos + ( 1.0 - kpos ) * 2.0 * st * st;
+    double one_plus_beta = kpos + ( 1.0 - kpos ) * 2.0 * ct * ct;
+    double gamma = M_PI - alpha - std::atan2( beta, std::sqrt( one_minus_beta * one_plus_beta ) );
 
     Matrix4d knee_bend;
     knee_bend.translatev( trunnion );
@@ -1911,61 +1934,104 @@ void Bogie::BackCalculateRetract()
 
 
 
-        SimpleFeatureTess sample_pts;
-        sample_pts.m_ptline.push_back( { vec3d(0, 0, 0), vec3d( 0, 1, 0) } );
-        vector <SimpleFeatureTess> out;
-        TireToBogie( sample_pts, out, 0, vsp::GEAR_CONFIGURATION_UP_AND_DOWN );
+        // Carry the bogie's axle -- the line through its pivot point along its Y axis -- from
+        // deployed to stowed with one hinge.  A turn about the axle does not show on a tire, so
+        // the hinge leaves it out.
+        vec3d pivot = GetNominalPivotPoint( 0 );
 
-        vec3d a = out[0].m_ptline[0][0];
-        vec3d b = out[0].m_ptline[0][1];
-        vec3d aprm = out[1].m_ptline[0][0];
-        vec3d bprm = out[1].m_ptline[0][1];
+        Matrix4d deployInv;
+        deployInv.translatev( -pivot );
 
-        vec3d u = b - a;
-        vec3d uprm = bprm - aprm;
+        Matrix4d motion = m_StowTransform;
+        motion.matMult( deployInv.data() );
 
-        vec3d k_general = cross( a - aprm, u - uprm );
+        vec3d a = pivot;
+        vec3d aprm = motion.xform( pivot );
+        vec3d u = vec3d( 0, 1, 0 );
+        vec3d uprm = motion.xformnorm( u );
+        uprm.normalize();
+
+        vec3d d = aprm - a;
+        vec3d du = uprm - u;
+
+        double tol = sqrt( DBL_EPSILON );
+
+        // A hinge parallel to the axle cannot follow a move along it or a tilt of it.  A hinge
+        // found from the turn of the axle takes rounding of order DBL_EPSILON / |du| in its axis.
+        // Take whichever loses less over the bogie.
+        double len = d.mag() + m_StaticRadiusModel();
+        vec3d axle = u + uprm;
+        axle.normalize();
+        double loss_parallel = std::abs( dot( d, axle ) ) + du.mag() * len;
+        double loss_turn = DBL_EPSILON * len;
+
         vec3d k;
-        if ( k_general.mag() > 1e-10 )
+        vec3d p = pivot;
+        double theta = 0.0;
+
+        if ( loss_turn < loss_parallel * du.mag() )
         {
-            k = k_general;
+            // A turn about k moves points and directions square to k.
+            k = cross( d, du );
+            if ( k.mag() <= tol * d.mag() * du.mag() )
+            {
+                // The pivot stays put or moves along du.
+                k = cross( u, uprm );
+            }
+            k.normalize();
+
+            vec3d u_perp = u - dot( u, k ) * k;
+            vec3d uprm_perp = uprm - dot( uprm, k ) * k;
+            theta = atan2( dot( cross( u_perp, uprm_perp ), k ), dot( u_perp, uprm_perp ) );
+
+            // The hinge that turns a to a' through theta.
+            p = 0.5 * ( a + aprm ) + ( 0.5 / tan( 0.5 * theta ) ) * cross( k, d );
         }
         else
         {
-            k = cross( u, uprm );
+            // The axle keeps its direction, so the hinge is parallel to it and can sit anywhere on
+            // the bisector of a and a'.  Put it on the strut line.
+            k = axle;
+
+            vec3d d_perp = d - dot( d, k ) * k;
+            if ( d_perp.mag() > tol * d.mag() )
+            {
+                vec3d c = 0.5 * ( a + aprm );
+
+                vec3d e = cross( k, d_perp );
+                e.normalize();
+
+                vec3d strut = GetCompressionUnitDirection( 0 );
+                strut = strut - dot( strut, k ) * k;
+
+                double s;
+                double den = dot( cross( e, strut ), k );
+                if ( std::abs( den ) > tol * strut.mag() )
+                {
+                    s = dot( cross( pivot - c, strut ), k ) / den;
+                }
+                else
+                {
+                    // The strut runs along the bisector; take the point nearest the pivot.
+                    s = dot( pivot - c, e );
+                }
+                p = c + s * e;
+
+                vec3d r = a - p;
+                r = r - dot( r, k ) * k;
+                vec3d rprm = aprm - p;
+                rprm = rprm - dot( rprm, k ) * k;
+                theta = atan2( dot( cross( r, rprm ), k ), dot( r, rprm ) );
+            }
         }
-        k.normalize();
 
-        m_MechXAxis = k.x();
-        m_MechYAxis = k.y();
-        m_MechZAxis = k.z();
-
-        vec3d u_perp = u - dot( u, k ) * k;
-        vec3d uprm_perp = uprm - dot( uprm, k ) * k;
-        double L2 = u_perp.magsq();
-
-        double theta;
-        if ( L2 > 1e-20 )
+        if ( theta != 0.0 )
         {
-            double cos_theta = dot( u_perp, uprm_perp ) / L2;
-            double sin_theta = dot( cross( u_perp, uprm_perp ), k ) / L2;
-            theta = atan2( sin_theta, cos_theta );
-        }
-        else
-        {
-            theta = angle( u, uprm );
-        }
+            m_MechXAxis = k.x();
+            m_MechYAxis = k.y();
+            m_MechZAxis = k.z();
 
-
-        if ( theta != 0.0 && theta != M_PI )
-        {
             m_MechRetAngle = theta * 180.0 / M_PI;
-
-            vec3d c = 0.5 * ( aprm + a );
-
-            vec3d n = aprm - a;
-
-            vec3d p = c + ( 1.0 / ( 2.0 * tan( theta * 0.5 ) ) ) * cross( k, n );
 
             m_MechXLoc = p.x();
             m_MechYLoc = p.y();
@@ -1991,9 +2057,11 @@ void Bogie::BackCalculateRetract()
         }
         else
         {
+            m_MechXAxis = 0.0;
             m_MechYAxis = 1.0;
+            m_MechZAxis = 0.0;
 
-            m_MechRetAngle = theta * 180.0 / M_PI;
+            m_MechRetAngle = 0.0;
 
             m_MechXRelLoc = 0.0;
             m_MechYRelLoc = 0.0;
@@ -2015,6 +2083,25 @@ void Bogie::BackCalculateRetract()
             m_MechYLoc = tempMat[13];
             m_MechZLoc = tempMat[14];
         }
+
+        // The hinge carries the axle but not a turn about it, which moves tires in tandem.  The
+        // bogie angle takes that turn.
+        Matrix4d hinge;
+        if ( theta != 0.0 )
+        {
+            hinge.translatev( p );
+            hinge.rotate( -theta, k );
+            hinge.translatev( -p );
+            hinge.affineInverse();
+        }
+
+        Matrix4d rest;
+        rest.translatev( -pivot );
+        rest.matMult( hinge.data() );
+        rest.matMult( m_StowTransform.data() );
+
+        vec3d x = rest.xformnorm( vec3d( 1, 0, 0 ) );
+        m_MechBogieAngle = atan2( x.z(), x.x() ) * 180.0 / M_PI;
     }
     else // vsp::GEAR_MECHANISM
     {
@@ -2080,6 +2167,16 @@ void Bogie::BackCalculateRetract()
         m_StowYRelRot = angles.y();
         m_StowZRelRot = angles.z();
     }
+}
+
+// The retract mode picks which attach Geom places the retracted bogie.
+string Bogie::GetActiveParentID()
+{
+    if ( m_RetMode() == vsp::GEAR_STOWED_POSITION )
+    {
+        return m_StowParentID;
+    }
+    return m_MechParentID;
 }
 
 void Bogie::Update()
@@ -2417,6 +2514,14 @@ xmlNodePtr Bogie::DecodeXml( xmlNodePtr & node )
 
 void Bogie::SetStowParentID( const string &id )
 {
+    // The bogie cannot attach to a Geom built from its gear
+    GearGeom * gear = dynamic_cast< GearGeom* >( GetParentContainerPtr() );
+    Geom* parent = VehicleMgr.GetVehicle()->FindGeom( id );
+    if ( gear && parent && parent->DependsOn( gear->GetID() ) )
+    {
+        return;
+    }
+
     m_StowParentID = id ;
 
     ParmContainer* pc = GetParentContainerPtr();
@@ -2433,6 +2538,14 @@ void Bogie::SetStowParentID( const string &id )
 
 void Bogie::SetMechParentID( const string &id )
 {
+    // The bogie cannot attach to a Geom built from its gear
+    GearGeom * gear = dynamic_cast< GearGeom* >( GetParentContainerPtr() );
+    Geom* parent = VehicleMgr.GetVehicle()->FindGeom( id );
+    if ( gear && parent && parent->DependsOn( gear->GetID() ) )
+    {
+        return;
+    }
+
     m_MechParentID = id ;
 
     ParmContainer* pc = GetParentContainerPtr();
@@ -2896,7 +3009,9 @@ void GearGeom::UpdateSurf()
     {
         if ( m_Bogies[i] )
         {
-            if ( !m_GlobalScaleDirty )
+            // A scale-only update leaves the bogies alone, but a bogie whose tire was never
+            // built still needs its update.
+            if ( !m_GlobalScaleDirty || m_Bogies[i]->m_TireDirty )
             {
                 m_Bogies[i]->Update();
             }
@@ -3346,6 +3461,16 @@ void GearGeom::ChangeID( const string &id )
     for ( int i = 0; i < m_Bogies.size(); i++ )
     {
         m_Bogies[i]->SetParentContainer( id );
+    }
+}
+
+// A bogie's retracted position is built from the surface it attaches to, stow or mechanism.
+void GearGeom::GetDependencyIDs( vector< string > &ids )
+{
+    Geom::GetDependencyIDs( ids );
+    for ( int i = 0; i < m_Bogies.size(); i++ )
+    {
+        ids.push_back( m_Bogies[i]->GetActiveParentID() );
     }
 }
 

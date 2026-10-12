@@ -594,34 +594,28 @@ void VSPAEROMgrSingleton::UpdateSref()
 
         if( refgeom )
         {
-            if( refgeom->GetBehaviorType() == MS_WING_GEOM_TYPE )
+            // A Clone of a wing has its original's shape at its own symmetry
+            WingRole* wing = Geom::CastTo< WingRole >( refgeom );
+            if( wing )
             {
-                // The reference area comes from the shape, so from the Geom copied.
-                WingGeom* behavior_wing = dynamic_cast< WingGeom* >( refgeom->GetBehaviorGeom() );
-
-                if ( !behavior_wing )
-                {
-                    return;
-                }
-
                 if ( m_SCurveFlag() )
                 {
-                    m_Sref.Set( behavior_wing->m_CurvedArea() );
+                    m_Sref.Set( wing->GetWingCurvedArea() );
                 }
                 else
                 {
-                    m_Sref.Set( behavior_wing->m_TotalArea() );
+                    m_Sref.Set( wing->GetWingTotalArea() );
                 }
 
-                m_bref.Set( behavior_wing->m_TotalSpan() );
+                m_bref.Set( wing->GetWingTotalSpan() );
 
                 if ( m_MACFlag() )
                 {
-                    m_cref.Set( behavior_wing->m_MAC() );
+                    m_cref.Set( wing->GetWingMAC() );
                 }
                 else
                 {
-                    m_cref.Set( behavior_wing->m_TotalChord() );
+                    m_cref.Set( wing->GetWingTotalChord() );
                 }
 
                 m_Sref.Deactivate();
@@ -1211,6 +1205,35 @@ string VSPAEROMgrSingleton::ComputeGeometry()
             m->ApplySettings();
             set = m->m_NormalSet();
             degenset = m->m_DegenSet();
+        }
+    }
+
+    // A Geom in both sets is meshed twice, whole and as its own thin surfaces, and those cut its
+    // skin where they meet it.  Reaches both the GUI and scripts.
+    if ( m_SingleGeomID.empty() )
+    {
+        vector< string > both = veh->GetGeomsInBothSets( set, degenset );
+        string names;
+        for ( int i = 0; i < ( int )both.size(); i++ )
+        {
+            Geom* g = veh->FindGeom( both[i] );
+            if ( g && g->GetNumMainSurfs() > 0 )
+            {
+                if ( !names.empty() )
+                {
+                    names += ", ";
+                }
+                names += g->GetName();
+            }
+        }
+
+        if ( !names.empty() )
+        {
+            MessageData errMsgData;
+            errMsgData.m_String = "Error";
+            errMsgData.m_IntVec.push_back( vsp::VSP_GEOM_IN_BOTH_SETS );
+            errMsgData.m_StringVec.push_back( "Warning: In both the thick and the thin geometry set, so meshed twice: " + names + "\n" );
+            MessageMgr::getInstance().SendAll( errMsgData );
         }
     }
 

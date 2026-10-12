@@ -16,7 +16,29 @@
 #include "ModeMgr.h"
 #include "StlHelper.h"
 #include "SubSurfaceMgr.h"
-#include "HingeGeom.h"
+
+// Swept volume extent names for the Extent choice.
+static string ExtentName( int extent_type )
+{
+    switch ( extent_type )
+    {
+        case vsp::EXTENT_FORWARD_INF:
+            return "Forward Direction";
+        case vsp::EXTENT_REVERSE_INF:
+            return "Reverse Direction";
+        case vsp::EXTENT_SLIDER_FULL:
+            return "Full Range";
+        case vsp::EXTENT_SLIDER_BEFORE:
+            return "Before";
+        case vsp::EXTENT_SLIDER_AFTER:
+            return "After";
+        case vsp::EXTENT_FORWARD_FINITE:
+            return "Forward Displacement";
+        case vsp::EXTENT_REVERSE_FINITE:
+            return "Reverse Displacement";
+    }
+    return string();
+}
 
 //==== Constructor ====//
 GeometryAnalysisScreen::GeometryAnalysisScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 700, 800, "Geometry Analyses", "GeometryAnalysis.html" )
@@ -378,7 +400,7 @@ GeometryAnalysisScreen::GeometryAnalysisScreen( ScreenMgr* mgr ) : BasicScreen( 
 
 
     m_PlanarSliceLayout.SetButtonWidth( m_PlanarSliceLayout.GetChoiceButtonWidth() );
-    m_PlanarSliceLayout.AddSlider( m_PlanarNumSlicesSlider, "Num Slice", 100, "%6.0f" );
+    m_PlanarSliceLayout.AddSlider( m_PlanarNumSlicesSlider, "Num Slice", 200, "%6.0f" );
     m_PlanarSliceLayout.AddYGap();
 
     m_PlanarDirChoice.AddItem( "X-Axis", vsp::X_DIR );
@@ -593,53 +615,12 @@ bool GeometryAnalysisScreen::Update()
 
         m_ExtentChoice.ClearItems();
 
-        m_ExtentChoice.AddItem( "Forward Direction", vsp::EXTENT_FORWARD_INF );
-        m_ExtentChoice.AddItem( "Reverse Direction", vsp::EXTENT_REVERSE_INF );
-
-        bool transhinge = false;
-        if ( gcase->m_GeometryAnalysisType() == vsp::LINEAR_SWEPT_VOLUME_ANALYSIS )
+        vector < int > extent_types;
+        gcase->GetExtentTypes( extent_types );
+        for ( int i = 0; i < ( int )extent_types.size(); i++ )
         {
-            if ( gcase->m_SecondaryType() == vsp::GEOM_TARGET )
-            {
-                Geom* geom = veh->FindGeom( gcase->m_SecondaryGeomID );
-
-                if ( geom )
-                {
-                    HingeGeom* behavior_hinge = dynamic_cast< HingeGeom* >( geom->GetBehaviorGeom() );
-
-                    if ( behavior_hinge )
-                    {
-                        transhinge = true;
-                        if ( behavior_hinge->m_JointTranslateFlag() )
-                        {
-
-                            if ( behavior_hinge->m_JointTransMinFlag() &&
-                                 behavior_hinge->m_JointTransMaxFlag() )
-                            {
-                                m_ExtentChoice.AddItem( "Full Range", vsp::EXTENT_SLIDER_FULL );
-                            }
-
-                            if ( behavior_hinge->m_JointTransMinFlag() )
-                            {
-                                m_ExtentChoice.AddItem( "Before", vsp::EXTENT_SLIDER_BEFORE );
-                            }
-
-                            if ( behavior_hinge->m_JointTransMaxFlag() )
-                            {
-                                m_ExtentChoice.AddItem( "After", vsp::EXTENT_SLIDER_AFTER );
-                            }
-                        }
-                    }
-                }
-            }
+            m_ExtentChoice.AddItem( ExtentName( extent_types[ i ] ), extent_types[ i ] );
         }
-
-        if ( !transhinge )
-        {
-            m_ExtentChoice.AddItem( "Forward Displacement", vsp::EXTENT_FORWARD_FINITE );
-            m_ExtentChoice.AddItem( "Reverse Displacement", vsp::EXTENT_REVERSE_FINITE );
-        }
-
 
         m_ExtentChoice.UpdateItems();
 
@@ -808,8 +789,6 @@ bool GeometryAnalysisScreen::Update()
              gcase->m_GeometryAnalysisType() == vsp::GEAR_TIPOVER_ANALYSIS ||
              gcase->m_GeometryAnalysisType() == vsp::AERO_CENTER )
         {
-            gcase->m_PrimaryType = vsp::GEOM_TARGET;
-
             m_PrimaryModeToggle.Deactivate();
             m_PrimarySetToggle.Deactivate();
 
@@ -824,11 +803,6 @@ bool GeometryAnalysisScreen::Update()
 
             if ( ModeMgr.GetNumModes() == 0 )
             {
-                if ( gcase->m_PrimaryType() == vsp::MODE_TARGET )
-                {
-                    gcase->m_PrimaryType = vsp::SET_TARGET;
-                    m_ScreenMgr->SetUpdateFlag( true );
-                }
                 m_PrimaryModeToggle.Deactivate();
             }
             else
@@ -841,6 +815,12 @@ bool GeometryAnalysisScreen::Update()
                 m_PrimaryModeChoice.Activate();
                 m_PrimarySetChoice.Deactivate();
                 m_PrimaryGeomPicker.Deactivate();
+
+                // An unset or deleted mode falls back to the first, as the choice shows
+                if ( !ModeMgr.GetMode( gcase->m_PrimaryModeID ) && !m_ModeIDs.empty() )
+                {
+                    gcase->m_PrimaryModeID = m_ModeIDs[0];
+                }
 
                 Mode *m = ModeMgr.GetMode( gcase->m_PrimaryModeID );
                 if ( m )
@@ -931,17 +911,7 @@ bool GeometryAnalysisScreen::Update()
         }
 
         // Single-geometry cases.
-        if ( gcase->m_GeometryAnalysisType() == vsp::EXTERNAL_SELF_INTERFERENCE ||
-             gcase->m_GeometryAnalysisType() == vsp::GEAR_CG_TIPBACK_ANALYSIS ||
-             gcase->m_GeometryAnalysisType() == vsp::GEAR_WEIGHT_DISTRIBUTION_ANALYSIS ||
-             gcase->m_GeometryAnalysisType() == vsp::GEAR_TIPOVER_ANALYSIS ||
-             gcase->m_GeometryAnalysisType() == vsp::VISIBLE_AT_SURF_ANALYSIS ||
-             gcase->m_GeometryAnalysisType() == vsp::COMP_GEOM ||
-             gcase->m_GeometryAnalysisType() == vsp::PLANAR_SLICE ||
-             gcase->m_GeometryAnalysisType() == vsp::MASS_PROP ||
-             gcase->m_GeometryAnalysisType() == vsp::AERO_CENTER ||
-           ( gcase->m_GeometryAnalysisType() == vsp::PROJ_AREA &&
-            !gcase->m_BoundaryEnableFlag() ) )
+        if ( !gcase->UsesSecondary() )
         {
             m_SecondaryLayout.GetGroup()->deactivate();
         }
@@ -954,7 +924,8 @@ bool GeometryAnalysisScreen::Update()
              gcase->m_GeometryAnalysisType() == vsp::PLANE_2PT_ANGLE_INTERFERENCE ||
              gcase->m_GeometryAnalysisType() == vsp::PLANE_1PT_ANGLE_INTERFERENCE ||
              gcase->m_GeometryAnalysisType() == vsp::GEAR_TURN_ANALYSIS ||
-             gcase->m_GeometryAnalysisType() == vsp::CCE_INTERFERENCE )
+             gcase->m_GeometryAnalysisType() == vsp::CCE_INTERFERENCE ||
+             gcase->m_GeometryAnalysisType() == vsp::RISK_ANGLE )
         {
             m_SecondarySetToggle.Deactivate();
             m_SecondarySetChoice.Deactivate();
@@ -970,24 +941,16 @@ bool GeometryAnalysisScreen::Update()
             m_RotYnSlider.Activate();
             m_RotZnSlider.Activate();
 
-            if ( gcase->m_SecondaryType() == vsp::GEOM_TARGET )
+            // A translating joint sets the direction and distance itself.
+            bool min_set;
+            bool max_set;
+            double start;
+            double end;
+            if ( gcase->GetSecondaryTranslatingJoint( min_set, start, max_set, end ) )
             {
-                Geom* geom = veh->FindGeom( gcase->m_SecondaryGeomID );
-
-                if ( geom )
-                {
-                    HingeGeom* behavior_hinge = dynamic_cast< HingeGeom* >( geom->GetBehaviorGeom() );
-
-                    if ( behavior_hinge )
-                    {
-                        if ( behavior_hinge->m_JointTranslateFlag() )
-                        {
-                            m_DispXSlider.Deactivate();
-                            m_DispYSlider.Deactivate();
-                            m_DispZSlider.Deactivate();
-                        }
-                    }
-                }
+                m_DispXSlider.Deactivate();
+                m_DispYSlider.Deactivate();
+                m_DispZSlider.Deactivate();
             }
 
             if ( gcase->m_SymmRotX() )
@@ -1117,15 +1080,7 @@ void GeometryAnalysisScreen::UpdateGeometryAnalysisBrowser()
     for ( int i = 0 ; i < (int)gcases.size() ; i++ )
     {
         string secondary;
-        if ( gcases[i]->m_GeometryAnalysisType() != vsp::EXTERNAL_SELF_INTERFERENCE &&
-             gcases[i]->m_GeometryAnalysisType() != vsp::GEAR_CG_TIPBACK_ANALYSIS &&
-             gcases[i]->m_GeometryAnalysisType() != vsp::GEAR_WEIGHT_DISTRIBUTION_ANALYSIS &&
-             gcases[i]->m_GeometryAnalysisType() != vsp::GEAR_TIPOVER_ANALYSIS &&
-             gcases[i]->m_GeometryAnalysisType() != vsp::VISIBLE_AT_SURF_ANALYSIS &&
-             gcases[i]->m_GeometryAnalysisType() != vsp::COMP_GEOM &&
-             gcases[i]->m_GeometryAnalysisType() != vsp::PLANAR_SLICE &&
-             gcases[i]->m_GeometryAnalysisType() != vsp::MASS_PROP &&
-             gcases[i]->m_GeometryAnalysisType() != vsp::AERO_CENTER )
+        if ( gcases[i]->UsesSecondary() )
         {
             secondary = gcases[i]->GetSecondaryName();
         }
