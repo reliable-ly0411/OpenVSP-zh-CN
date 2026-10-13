@@ -18,6 +18,7 @@ on:
       - '.github/workflows/prepare-upstream-update.yml'
       - '.github/workflows/release-localized.yml'
       - 'scripts/sync_upstream.py'
+      - 'scripts/test_sync_upstream.py'
       - 'scripts/check_localization_release.py'
       - 'scripts/prepare_auto_release.py'
 

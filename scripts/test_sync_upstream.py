@@ -18,6 +18,9 @@ class SyncTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.git('init', '-b', 'official')
+        # Temporary repositories must finish maintenance before cleanup removes them.
+        self.git('config', 'gc.autoDetach', 'false')
+        self.git('config', 'maintenance.autoDetach', 'false')
         self.git('config', 'user.name', 'Sync test')
         self.git('config', 'user.email', 'sync@example.invalid')
         self.write('src/cmake/VSP_Version.cmake', 'SET( VSPVER_MAJOR 3 )\nSET( VSPVER_MINOR 53 )\nSET( VSPVER_PATCH 0 )\n')
@@ -120,6 +123,9 @@ class SyncTests(unittest.TestCase):
         # 使用裸仓库复现构建期间 main 被他人推进，不允许发布候选覆盖该提交。
         remote = self.root / 'remote.git'
         self.git('init', '--bare', str(remote))
+        # receive-pack also starts maintenance; keep it synchronous in this fixture.
+        self.git('--git-dir', str(remote), 'config', 'gc.autoDetach', 'false')
+        self.git('--git-dir', str(remote), 'config', 'maintenance.autoDetach', 'false')
         self.git('push', str(remote), f'{self.localized}:refs/heads/main')
         self.git('checkout', '-b', 'concurrent', self.localized)
         self.write('concurrent.txt', 'keep this update\n')
