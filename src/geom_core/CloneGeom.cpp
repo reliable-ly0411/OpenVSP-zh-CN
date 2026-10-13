@@ -47,6 +47,9 @@ CloneGeom::CloneGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
     m_CloneMassProps.Init( "CloneMassProps", "Behavior", this, true, false, true );
     m_CloneMassProps.SetDescript( "Flag to copy the original's mass properties" );
 
+    m_CloneParasiteDrag.Init( "CloneParasiteDrag", "Behavior", this, true, false, true );
+    m_CloneParasiteDrag.SetDescript( "Flag to use the original's Parasite Drag settings" );
+
     m_CloneSubSurfs.Init( "CloneSubSurfs", "Behavior", this, true, false, true );
     m_CloneSubSurfs.SetDescript( "Flag to copy the original's subsurfaces" );
 
@@ -64,9 +67,16 @@ CloneGeom::CloneGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
     m_JointRotate.Init( "JointRotate", "Hinge", this, 0.0, -360.0, 360.0 );
     m_JointRotate.SetDescript( "Joint rotation, when the original is a hinge" );
 
-    // Tessellation comes from the original.
+    // Tessellation and end caps come from the original, as the surface does.
     m_TessU.Deactivate();
     m_TessW.Deactivate();
+    vector < Parm* > cap_parms = { &m_CapUMinOption, &m_CapUMinLength, &m_CapUMinOffset, &m_CapUMinStrength,
+                                   &m_CapUMinSweepFlag, &m_CapUMinTess, &m_CapUMaxOption, &m_CapUMaxLength,
+                                   &m_CapUMaxOffset, &m_CapUMaxStrength, &m_CapUMaxSweepFlag };
+    for ( size_t i = 0; i < cap_parms.size(); i++ )
+    {
+        cap_parms[i]->Deactivate();
+    }
 
     // Keep the base class's empty surface: AddSubSurf needs one, and a file is read before the
     // first update.
@@ -116,6 +126,36 @@ int CloneGeom::GetBehaviorType() const
     }
 
     return Geom::GetBehaviorType();
+}
+
+// A Clone cannot be scaled apart from its original, so it has the original's MAC
+double CloneGeom::ComputeMAC()
+{
+    Geom* behavior = GetBehaviorGeom();
+    if ( behavior && behavior != this )
+    {
+        return behavior->ComputeMAC();
+    }
+    return 0.0;
+}
+
+// Through each Clone that uses its original's settings; a ring from a file stops at its start
+Geom* CloneGeom::GetParasiteDragGeom()
+{
+    Geom* source = this;
+    set < Geom* > visited;
+    CloneGeom* clone = this;
+    while ( clone && clone->m_CloneParasiteDrag() && visited.insert( clone ).second )
+    {
+        Geom* original_geom = clone->GetOriginalGeom();
+        if ( !original_geom )
+        {
+            break;
+        }
+        source = original_geom;
+        clone = dynamic_cast < CloneGeom* > ( original_geom );
+    }
+    return source;
 }
 
 Geom* CloneGeom::GetBehaviorGeom()
@@ -276,6 +316,13 @@ void CloneGeom::CollectDescendantIDs( set < string > &ids ) const
     }
 }
 
+// A Clone is built from its original as well as its parent.
+void CloneGeom::GetDependencyIDs( vector< string > &ids )
+{
+    Geom::GetDependencyIDs( ids );
+    ids.push_back( m_OriginalID );
+}
+
 bool CloneGeom::IsDescendant( const string &id ) const
 {
     // A descendant updates inside this Geom's update, so copying it would lag one pass behind.
@@ -337,6 +384,7 @@ void CloneGeom::ReleaseOriginal()
     m_AppearanceDirty = true;
     m_NameDirty = true;
     m_SubSurfDirty = true;
+    m_TessDirty = true;
 }
 
 string CloneGeom::GetOriginalLostMessage() const
@@ -416,6 +464,7 @@ void CloneGeom::ResolveOriginal()
         m_AppearanceDirty = true;
         m_NameDirty = true;
         m_SubSurfDirty = true;
+        m_TessDirty = true;
     }
 }
 
@@ -668,6 +717,39 @@ void CloneGeom::CopyMassPropParms( Geom* from, Geom* to )
     to->m_Iyz.Set( from->m_Iyz() );
 }
 
+void CloneGeom::CopyParasiteDragParms( Geom* from, Geom* to )
+{
+    to->m_PercLam.Set( from->m_PercLam() );
+    to->m_FFBodyEqnType.Set( from->m_FFBodyEqnType() );
+    to->m_FFWingEqnType.Set( from->m_FFWingEqnType() );
+    to->m_FFUser.Set( from->m_FFUser() );
+    to->m_Q.Set( from->m_Q() );
+    to->m_Roughness.Set( from->m_Roughness() );
+    to->m_TeTwRatio.Set( from->m_TeTwRatio() );
+    to->m_TawTwRatio.Set( from->m_TawTwRatio() );
+}
+
+void CloneGeom::CopyEndCapParms( Geom* from, Geom* to )
+{
+    to->m_CapUMinOption.Set( from->m_CapUMinOption() );
+    to->m_CapUMinLength.Set( from->m_CapUMinLength() );
+    to->m_CapUMinOffset.Set( from->m_CapUMinOffset() );
+    to->m_CapUMinStrength.Set( from->m_CapUMinStrength() );
+    to->m_CapUMinSweepFlag.Set( from->m_CapUMinSweepFlag() );
+    to->m_CapUMinTess.Set( from->m_CapUMinTess() );
+    to->m_CapUMaxOption.Set( from->m_CapUMaxOption() );
+    to->m_CapUMaxLength.Set( from->m_CapUMaxLength() );
+    to->m_CapUMaxOffset.Set( from->m_CapUMaxOffset() );
+    to->m_CapUMaxStrength.Set( from->m_CapUMaxStrength() );
+    to->m_CapUMaxSweepFlag.Set( from->m_CapUMaxSweepFlag() );
+}
+
+void CloneGeom::CopyTessParms( Geom* from, Geom* to )
+{
+    to->m_TessU.Set( from->m_TessU() );
+    to->m_TessW.Set( from->m_TessW() );
+}
+
 void CloneGeom::CopyNegativeVolumeParm( Geom* from, Geom* to )
 {
     to->m_NegativeVolumeFlag.Set( from->m_NegativeVolumeFlag() );
@@ -888,6 +970,9 @@ void CloneGeom::UpdateCopySurfParms()
         return;
     }
 
+    // The end caps are part of the copied surface, so the options never differ from it
+    CopyEndCapParms( original_geom, this );
+
     if ( m_CloneNegativeVolume() )
     {
         CopyNegativeVolumeParm( original_geom, this );
@@ -935,6 +1020,31 @@ void CloneGeom::UpdateCopySurfParms()
         m_Ixy.Activate();
         m_Ixz.Activate();
         m_Iyz.Activate();
+    }
+
+    // Parasite Drag reads the original's settings, so this Geom's own are not used
+    vector < Parm* > drag_parms = { &m_PercLam, &m_FFBodyEqnType, &m_FFWingEqnType, &m_FFUser, &m_Q,
+                                    &m_Roughness, &m_TeTwRatio, &m_TawTwRatio };
+    for ( size_t i = 0; i < drag_parms.size(); i++ )
+    {
+        if ( m_CloneParasiteDrag() )
+        {
+            drag_parms[i]->Deactivate();
+        }
+        else
+        {
+            drag_parms[i]->Activate();
+        }
+    }
+}
+
+// The tessellation shown is the original's, so its settings are too
+void CloneGeom::UpdateCopyTessParms()
+{
+    Geom* original_geom = GetOriginalGeom();
+    if ( original_geom )
+    {
+        CopyTessParms( original_geom, this );
     }
 }
 
@@ -1301,6 +1411,7 @@ bool CloneGeom::SetOriginalID( const string &id )
     m_AppearanceDirty = true;
     m_NameDirty = true;
     m_SubSurfDirty = true;
+    m_TessDirty = true;
 
     Update();
 
@@ -1680,6 +1791,72 @@ bool CloneGeom::CalculateTurnInGear( vec3d &cor, vec3d &normal, vector<double> &
 }
 
 //==== Standing in for a rotor ====//
+
+// The original's area and span are for its own symmetry: halve them for one side, and double
+// them again when this Clone is symmetric.  The MAC and the chord are per side.
+static double WingSymmetryScale( const Geom* clone, const Geom* original )
+{
+    double scale = 1.0;
+    if ( original->GetSymFlag() != 0 )
+    {
+        scale *= 0.5;
+    }
+    if ( clone->GetSymFlag() != 0 )
+    {
+        scale *= 2.0;
+    }
+    return scale;
+}
+
+double CloneGeom::GetWingTotalArea() const
+{
+    WingRole* wing = Geom::CastTo< WingRole >( GetOriginalGeom() );
+    if ( !wing )
+    {
+        return 0.0;
+    }
+    return wing->GetWingTotalArea() * WingSymmetryScale( this, GetOriginalGeom() );
+}
+
+double CloneGeom::GetWingCurvedArea() const
+{
+    WingRole* wing = Geom::CastTo< WingRole >( GetOriginalGeom() );
+    if ( !wing )
+    {
+        return 0.0;
+    }
+    return wing->GetWingCurvedArea() * WingSymmetryScale( this, GetOriginalGeom() );
+}
+
+double CloneGeom::GetWingTotalSpan() const
+{
+    WingRole* wing = Geom::CastTo< WingRole >( GetOriginalGeom() );
+    if ( !wing )
+    {
+        return 0.0;
+    }
+    return wing->GetWingTotalSpan() * WingSymmetryScale( this, GetOriginalGeom() );
+}
+
+double CloneGeom::GetWingMAC() const
+{
+    WingRole* wing = Geom::CastTo< WingRole >( GetOriginalGeom() );
+    if ( !wing )
+    {
+        return 0.0;
+    }
+    return wing->GetWingMAC();
+}
+
+double CloneGeom::GetWingTotalChord() const
+{
+    WingRole* wing = Geom::CastTo< WingRole >( GetOriginalGeom() );
+    if ( !wing )
+    {
+        return 0.0;
+    }
+    return wing->GetWingTotalChord();
+}
 
 double CloneGeom::GetRotorDiameter() const
 {

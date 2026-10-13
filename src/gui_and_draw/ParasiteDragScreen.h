@@ -13,6 +13,7 @@
 #include "ScreenMgr.h"
 #include "ScreenBase.h"
 #include "Vehicle.h"
+#include "ParasiteDragMgr.h"
 
 class ParasiteDragScreen;
 
@@ -56,7 +57,10 @@ protected:
     // Table Functions
     void RebuildBuildUpTableLabels();
     void InitSortToggleGroup();
+    void GetGroupedItems( const ParasiteDragTableRow &row, vector < string > &items, vector < int > &flags );
     void UpdateIncorporateDropDowns();
+    string BuildUpTableKey();
+    void UpdateBuildUpTable();
     void AddRoughnessLabel();
     void UpdateReynoldsLabel();
     void RebuildBuildUpTable();
@@ -85,7 +89,6 @@ protected:
     void SetupFFValue( int index, double formfactor, int eqnchoice );
     void SetupReyNum( int index, double reynum );
     void SetupRoughness( int index, double roughness );
-    void SetupHeatTransfer( int index, double tetwratio, double tawtwratio );
     void SetupPercLaminar( int index, double perclam );
     void SetupCf( int index, double cf );
     void SetupQ( int index, double Q, int shapetype, int eqnchoice );
@@ -96,6 +99,13 @@ protected:
 
     void SetupExcresType( int index, const string &type );
     void SetupExcresInput( int index, double input );
+
+    static void UpdateTableValue( StringOutput &output, double val, int precision );
+    static void UpdateTableValue( StringInput &input, double val, int precision );
+
+    // The table's widgets are built only when this key changes
+    string m_TableKey;
+    bool m_AddTableDevices;
 
     // Screen Variables
     vector < string > m_WingGeomVec;
@@ -118,7 +128,6 @@ protected:
     ToggleRadioGroup m_ModeSetToggleGroup;
     ToggleButton m_ModeToggle;
     Choice m_ModeChoice;
-    int m_SelectedModeChoice;
     vector < string > m_ModeIDs;
 
     //---- Table Options ----//
@@ -208,8 +217,6 @@ protected:
     TriggerButton m_FFLabel;
     TriggerButton m_ReLabel;
     TriggerButton m_RoughnessLabel;
-    TriggerButton m_TeTwLabel;
-    TriggerButton m_TawTwLabel;
     TriggerButton m_PercLamLabel;
     TriggerButton m_CfLabel;
     TriggerButton m_QLabel;
@@ -225,8 +232,6 @@ protected:
     vector <StringOutput> m_lref;
     vector <StringOutput> m_Re;
     vector <StringInput> m_Roughness;
-    vector <StringInput> m_TeTwRatio;
-    vector <StringInput> m_TawTwRatio;
     vector <StringInput> m_percLam;
     vector <StringOutput> m_Cf;
     vector <StringOutput> m_fineRatorToC;

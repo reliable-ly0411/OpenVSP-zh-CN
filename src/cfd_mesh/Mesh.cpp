@@ -56,8 +56,8 @@ void Mesh::Clear()
 {
     // These hold raw pointers into what is about to be deleted, and unlike DumpGarbage this
     // deletes the live lists rather than the flagged ones, so there is nothing to filter on.
-    m_ScanEdges.clear();
-    m_ActiveEdges.clear();
+    vector< Edge* >().swap( m_ScanEdges );
+    vector< Edge* >().swap( m_ActiveEdges );
 
     list< Face* >::iterator f;
     for ( f = faceList.begin() ; f != faceList.end(); ++f )
@@ -406,8 +406,10 @@ void Mesh::CondenseSimpFaces()
         }
     }
 
-    simpPntVec = rePntVec;
-    simpUWPntVec = reUWVec;
+    // Swapped rather than copied, so the corner lists, sized for every corner of every face,
+    // go with rePntVec and reUWVec instead of staying behind as spare capacity.
+    simpPntVec.swap( rePntVec );
+    simpUWPntVec.swap( reUWVec );
 }
 
 void Mesh::StretchSimpPnts( double start_x, double end_x, double scale, double angle )
@@ -3741,24 +3743,25 @@ void Mesh::ConvertToQuads()
             continue;
         }
 
-        // Construct triangle center point and add node.  Center point could possibly be weighted based on target
-        // edge lengths.
-        vec3d pcen;
-        vec2d uwcen;
-        ( *f )->ComputeCenterPnt( m_Surf, pcen, uwcen );
-        Node* ncen  = AddNode( pcen, uwcen );
-
         // Get existing triangle nodes.  These are in cw order.
         Node* n0 = ( *f )->n0;
         Node* n1 = ( *f )->n1;
         Node* n2 = ( *f )->n2;
 
         // Get existing triangle edges.  Lookup edges by nodes because they aren't stored in any particular order.
+        // Found before the center node is added, so a face that is skipped adds none.
         Edge* e0 = ( *f )->FindEdge( n0, n1 );
         Edge* e1 = ( *f )->FindEdge( n1, n2 );
         Edge* e2 = ( *f )->FindEdge( n2, n0 );
 
         if ( !e0 || !e1 || !e2 ) continue;
+
+        // Construct triangle center point and add node.  Center point could possibly be weighted based on target
+        // edge lengths.
+        vec3d pcen;
+        vec2d uwcen;
+        ( *f )->ComputeCenterPnt( m_Surf, pcen, uwcen );
+        Node* ncen  = AddNode( pcen, uwcen );
 
         // Get split data for existing edges.
         splitData sd0 = splitEdgeMap[ e0 ];

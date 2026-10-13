@@ -46,7 +46,6 @@
 
 #include <string>
 #include <vector>
-#include <deque>
 #include <stack>
 #include <memory>
 
@@ -189,6 +188,7 @@ public:
     void NoShowSet( int index );
     void ShowSet( int index );
     vector< string > GetGeomSet( int index );
+    vector< string > GetGeomsInBothSets( int set_a, int set_b );
     string GetGeomSetAttrColl( int index );
 
     void SetNormalDisplayType( int index );
@@ -264,7 +264,7 @@ public:
     bool WriteXMLFile( const string & file_name, int set );
     void WriteXSecFile( const string & file_name, int write_set, bool useMode, const string& modeID );
     void WritePLOT3DFile( const string & file_name, int write_set, bool useMode, const string &modeID );
-    string WriteSTLFile( const string & file_name, int write_set, bool useMode, const string &modeID );
+    string WriteSTLFile( const string & file_name, int write_set, int subsFlag, bool useMode, const string &modeID );
     string WriteTaggedMSSTLFile( const string & file_name, int write_set, int subsFlag, bool useMode, const string &modeID );
     string WriteFacetFile( const string & file_name, int write_set, int subsFlag, bool useMode, const string &modeID );
     string WriteTRIFile( const string & file_name, int write_set, int subsFlag, bool useMode, const string &modeID );
@@ -621,6 +621,13 @@ public:
     BoolParm m_UseModeCompGeomFlag;
     BoolParm m_UseModeExportFlag;
     BoolParm m_UseModeDegenGeomFlag;
+
+    // The Mode each of the UseMode flags selects
+    string m_CompGeomModeID;
+    string m_MassPropModeID;
+    string m_DegenGeomModeID;
+    string m_PlanarSlicesModeID;
+    string m_ExportModeID;
 
     BoolParm m_exportCompGeomTxtFile;
     BoolParm m_exportCompGeomCsvFile;

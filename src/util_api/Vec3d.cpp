@@ -518,20 +518,17 @@ vec3d cross( const vec3d& a, const vec3d& b )
 //******* Angle Between Vectors ******//
 double angle( const vec3d& a, const vec3d& b )
 {
-    double angle = dot( a, b ) / ( a.mag() * b.mag() );
+    // atan2 keeps its digits near 0 and pi, where acos of the cosine loses half of them.
+    double s = cross( a, b ).mag();
+    double c = dot( a, b );
 
-    if ( angle >= -1.0 && angle <= 1.0 )
+    // A zero vector is at no angle, even when its dot product is -0, which atan2 reads as pi.
+    if ( s == 0.0 && c == 0.0 )
     {
-        return( acos( angle ) );
+        return 0.0;
     }
-    else if ( angle < 0.0 )
-    {
-        return M_PI;
-    }
-    else
-    {
-        return( 0.0 );
-    }
+
+    return atan2( s, c );
 }
 
 double signed_angle( const vec3d& a, const vec3d& b, const vec3d& ref )
@@ -812,26 +809,33 @@ double triangle_plane_maximum_dist( const vec3d& org, const vec3d& norm, const v
     return dmax;
 }
 
+// a b - c d to within an ulp or two, even where the two products nearly cancel (Kahan).
+static double diff_of_products( double a, double b, double c, double d )
+{
+    double cd = c * d;
+    double err = std::fma( -c, d, cd );
+    return std::fma( a, b, -cd ) + err;
+}
+
 bool plane_plane_intersection( const vec3d &p0, const vec3d &n0, const vec3d &p1, const vec3d &n1, vec3d &p, vec3d &v )
 {
-    const double d = dot( n0, n1 );
+    // The line runs along u = n0 x n1, which keeps its digits for nearly parallel planes.
+    vec3d u( diff_of_products( n0.v[1], n1.v[2], n0.v[2], n1.v[1] ),
+             diff_of_products( n0.v[2], n1.v[0], n0.v[0], n1.v[2] ),
+             diff_of_products( n0.v[0], n1.v[1], n0.v[1], n1.v[0] ) );
+    const double uu = u.magsq();
 
     // Planes are parallel or coincident.
-    if ( std::fabs( d ) >= 1.0 )
+    if ( uu <= 0.0 )
     {
         return false;
     }
 
-    const double invDet = 1.0 / ( 1.0 - d * d );
-
-    const double p0c = dot( n0, p0 );
-    const double p1c = dot( n1, p1 );
-
-    const double c0 = ( p0c - d * p1c ) * invDet;
-    const double c1 = ( p1c - d * p0c ) * invDet;
-    p = c0 * n0 + c1 * n1;
-    v = cross( n0, n1 );
-    v.normalize();
+    // The point on the line nearest the origin, ( h0 ( n1 x u ) + h1 ( u x n0 ) ) / |u|^2.
+    const double h0 = dot( n0, p0 );
+    const double h1 = dot( n1, p1 );
+    p = ( cross( n1, u ) * h0 + cross( u, n0 ) * h1 ) * ( 1.0 / uu );
+    v = u * ( 1.0 / sqrt( uu ) );
     return true;
 }
 
@@ -1072,16 +1076,14 @@ vec3d proj_pnt_to_plane( const vec3d& org, const vec3d& plane_ln1, const vec3d& 
 
 vec3d proj_vec_to_plane( const vec3d& vec, const vec3d& norm )
 {
-    double ca = cos_angle( vec, norm );
-
-    if ( std::abs( ca ) == 1.0 )
+    // A vector along the normal has no direction in the plane.
+    if ( std::abs( cos_angle( vec, norm ) ) == 1.0 )
     {
         return vec3d();
     }
 
-    vec3d along = ca * norm;
-
-    return vec - along;
+    // Remove the part of vec along norm; neither needs to be a unit vector.
+    return vec - norm * ( dot( vec, norm ) / norm.magsq() );
 }
 
 //******* Find The Point On Line AB nearest to Line CD******//
@@ -2034,13 +2036,7 @@ vec3d slerp( const vec3d& a, const vec3d& b, const double &t )
     vec3d an = a / a.mag();
     vec3d bn = b / b.mag();
 
-    double dp = dot( an, bn );
-
-    double theta = 0.0;
-    if ( dp >= -1.0 && dp <= 1.0 )
-    {
-        theta = acos( dp );
-    }
+    double theta = angle( an, bn );
 
     // Initialize retvec as a-direction.
     vec3d retvec = an;

@@ -18,6 +18,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 // Structure containing all main table data
 struct ParasiteDragTableRow
@@ -43,6 +44,7 @@ struct ParasiteDragTableRow
     double CD;
     double PercTotalCD;
     int GroupedAncestorGen;
+    bool Grouped; // Its drag is in the Geom it is grouped into
     int SurfNum;
     bool ExpandedList;
 };
@@ -87,11 +89,12 @@ public:
     // Calculation Methods
     void SetupFullCalculation();
     int CalcRowSize();
+    static int CalcGeomRowSize( Geom* geom );
     void Calculate_Swet();
     void Calculate_Lref();
-    double CalcReferenceLength( int index );
+    double CalcReferenceLength( int index, const string & geom_id );
     double CalcReferenceBodyLength( int index );
-    double CalcReferenceChord( int index );
+    double CalcReferenceChord( int index, const string & geom_id );
     void Calculate_Re();
     void CalcRePowerDivisor();
     void ReynoldsNumCalc( int index );
@@ -102,6 +105,7 @@ public:
     double CalculateFinessRatioAndTOC( int isurf, int irow );
     void Calculate_FF();
     double CalculateFormFactor( int isurf, int irow );
+    int FindDegenIndex( const string & geom_id );
     void Calculate_AvgSweep( const vector <DegenStick> &degenSticks );
     void Calculate_f();
     void Calculate_CD();
@@ -110,6 +114,8 @@ public:
 
     // Grouped Geom Overwrite methods
     void OverwritePropertiesFromAncestorGeom();
+    void ReportNoDragRows();
+    void ReportRefWing();
 
     // Switch Case Methods For Friction Coefficient Selections
     double CalcTurbCf( double ReyIn, double ref_leng, int cf_case, double roughness_h,
@@ -123,7 +129,7 @@ public:
     void CorrectTurbEquation();
 
     // Switch Case Methods for Form Factor Selections
-    double CalcFFWing( double toc, int ff_case, double perc_lam,
+    double CalcFFWing( double toc, int ff_case, double toc_loc,
                        double sweep25, double sweep50 );
     double CalcFFBody(double FR, int ff_case );
     static string AssignFFWingEqnName( int ff_case );
@@ -219,6 +225,8 @@ public:
     void UpdateWettedAreaTotals();
     bool ShouldAddSubSurfToMasterGeom( const size_t &i, const size_t &j );
     bool ShouldAddGeomToMasterGeom( const size_t &i, const size_t &j );
+    int GroupMasterRow( int irow );
+    int GeomMasterRow( const string &geom_id );
     void UpdateRefWing();
     void UpdateAtmos();
     void UpdateVinf( int newunit );
@@ -227,11 +235,11 @@ public:
     void UpdateTempLimits();
     void UpdatePres( int newunit );
     void UpdatePercentageCD();
-    void UpdateMasterPercCD();
     void UpdateParmActivity();
     void UpdateExportLabels();
     void UpdateExcres();
     void UpdateCurrentExcresVal();
+    void SetExcresValueLimits( int type );
 
     // Export Methods
     string ExportToCSV();
@@ -256,6 +264,9 @@ public:
     bool IsNotZeroLineItem( int index );
     void RefreshBaseDataVectors();
     void RenewDegenGeomVec();
+    void SetDegenGeomVec( const vector < DegenGeom > & degen_vec );
+    void ComputeWetAreas( int set );
+    double FindWetArea( const string & tag );
     bool HasSameNames();
     bool IsCaclualted();
 
@@ -327,7 +338,8 @@ private:
     // Main Table Geom Related Vectors
     vector <string> m_PDGeomIDVec;
     vector <DegenGeom> m_DegenGeomVec;
-    Results* m_CompGeomResults;
+    map < string, int > m_DegenIndexMap; // Geom ID to its first non-disk DegenGeom
+    map < string, double > m_TagWetAreaMap; // CompGeom wetted area by tag, copied when computed
 
     // Miscellaneous Variables
     int m_ReynoldsPowerDivisor; // Used to create a fluid reynolds number display
@@ -340,6 +352,9 @@ private:
 
     // Main Build Up Table Variables
     vector <bool> m_geo_masterRow;
+    vector <int> m_geo_sourceRow; // The master row whose properties a row uses
+    vector <bool> m_geo_noArea; // A disk or CFD transparent surface
+    vector <int> m_geo_groupRow; // The master row a grouped Geom's drag goes to, or -1
     vector <string> m_geo_geomID;
     vector <string> m_geo_subsurfID;
     vector <string> m_geo_name;

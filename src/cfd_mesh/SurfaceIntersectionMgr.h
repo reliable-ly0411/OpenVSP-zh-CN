@@ -206,6 +206,7 @@ public:
     vector< IPnt* > m_IPnts;
     vector< vector< vec3d > > m_PatchADraw;
     vector< vector< vec3d > > m_PatchBDraw;
+    vector< IPntEdge > m_Edges;     // The edge each of m_IPnts lies on
 };
 
 class SurfaceIntersectionSingleton;
@@ -403,6 +404,8 @@ public:
     virtual void BuildChainCADCurves();
 
     virtual void MergeInteriorChainIPnts();
+    void DeleteUnusedIPnts();
+    void KeepIPnt( IPnt* ip );
 
     virtual void LoadBorderCurves();
     virtual void SplitBorderCurves();
@@ -551,6 +554,10 @@ protected:
 
     bool m_MeshInProgress;
 
+    // The draw objects are out of date with the last run.  They are built when they are first
+    // drawn rather than at the end of every run, so a run nothing will draw does not pay for them.
+    bool m_DrawObjsStale;
+
     vector< Surf* > m_SurfVec;
     vector < SimpleSubSurface > m_SimpleSubSurfaceVec;
 
@@ -559,6 +566,11 @@ protected:
     list< ISegChain* > m_ISegChainList;
 
     vector < IPnt* > m_AllIPnts;
+
+    // For each of m_AllIPnts, the edge it lies on and the index of its partner across that edge,
+    // or -1.  Only BuildChains needs them, and frees them when it is done.
+    vector < IPntEdge > m_AllIPntEdges;
+    vector < int > m_AllIPntPartner;
 
     unsigned int m_NumComps;
     int m_HighlightChainIndex;

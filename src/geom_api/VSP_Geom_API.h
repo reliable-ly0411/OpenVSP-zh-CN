@@ -400,6 +400,8 @@ extern void VSPRenew();
 
     \endcode
     \endPythonOnly
+    \note A child Geom in absolute mode loses an absolute location or rotation set with SetParmVal
+    when Update() runs, unless that Geom is updated first; see UpdateGeom().
     \param update_managers bool Flag to indicate if managers should be updated
 */
 
@@ -2303,12 +2305,133 @@ extern std::string GetDesignVar( int index );
 
     \endcode
     \endPythonOnly
-    \sa XDDM_QUANTITY_TYPE
+    \sa XDDM_QUANTITY_TYPE, GetDesignVarTypeByID
     \param [in] index int Index of design variable
     \return int XDDM type enum (XDDM_VAR or XDDM_CONST)
 */
 
 extern int GetDesignVarType( int index );
+
+/*!
+    \ingroup DesignFile
+*/
+/*!
+    Get the XDDM type of a design variable, by its Parm ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string length_id = FindParm( pod_id, "Length", "Design" );
+
+    AddDesignVar( length_id, XDDM_CONST );
+
+    if ( GetDesignVarTypeByID( length_id ) != XDDM_CONST )
+    {
+        Print( "ERROR: GetDesignVarTypeByID did not return the type" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    length_id = FindParm( pod_id, "Length", "Design" )
+
+    AddDesignVar( length_id, XDDM_CONST )
+
+    assert GetDesignVarTypeByID( length_id ) == XDDM_CONST, "GetDesignVarTypeByID did not return the type"
+
+    \endcode
+    \endPythonOnly
+    \sa XDDM_QUANTITY_TYPE, GetDesignVarType
+    \param [in] parm_id string Parm ID of the design variable
+    \return int XDDM type enum (i.e. XDDM_VAR)
+*/
+
+extern int GetDesignVarTypeByID( const std::string & parm_id );
+
+/*!
+    \ingroup DesignFile
+*/
+/*!
+    Delete a design variable, by its Parm ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string length_id = FindParm( pod_id, "Length", "Design" );
+
+    AddDesignVar( length_id, XDDM_CONST );
+
+    DeleteDesignVar( length_id );
+
+    if ( GetNumDesignVars() != 0 )
+    {
+        Print( "ERROR: DeleteDesignVar did not delete the variable" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    length_id = FindParm( pod_id, "Length", "Design" )
+
+    AddDesignVar( length_id, XDDM_CONST )
+
+    DeleteDesignVar( length_id )
+
+    assert GetNumDesignVars() == 0, "DeleteDesignVar did not delete the variable"
+
+    \endcode
+    \endPythonOnly
+    \sa AddDesignVar, DeleteAllDesignVars
+    \param [in] parm_id string Parm ID of the design variable
+*/
+
+extern void DeleteDesignVar( const std::string & parm_id );
+
+/*!
+    \ingroup DesignFile
+*/
+/*!
+    Get the Parm IDs of the design variables, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string length_id = FindParm( pod_id, "Length", "Design" );
+
+    AddDesignVar( length_id, XDDM_CONST );
+
+    array< string > @ids = GetDesignVarVec();
+
+    if ( ids.size() != 1 || ids[0] != length_id )
+    {
+        Print( "ERROR: GetDesignVarVec did not return the variable" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    length_id = FindParm( pod_id, "Length", "Design" )
+
+    AddDesignVar( length_id, XDDM_CONST )
+
+    assert list( GetDesignVarVec() ) == [ length_id ], "GetDesignVarVec did not return the variable"
+
+    \endcode
+    \endPythonOnly
+    \sa GetDesignVar, GetNumDesignVars
+    \return array<string> Array of Parm IDs
+*/
+
+extern std::vector < std::string > GetDesignVarVec();
 
 
 //======================== Computations ================================//
@@ -2653,7 +2776,7 @@ extern void ComputeDegenGeom( int set, int file_export_types );
     \ingroup CFDMesh
 */
 /*!
-    Create a CFD Mesh for the components in the set. This analysis cannot be run through the Analysis Manager.
+    Create a CFD Mesh for the components in the set. This analysis cannot be run through the Analysis Manager. When the CFD Mesh UseMode flag is on, the sets of its mode replace set and degenset.
     \forcpponly
     \code{.cpp}
     //==== Add Pod Geometry ====//
@@ -2724,6 +2847,398 @@ extern void ComputeDegenGeom( int set, int file_export_types );
 */
 
 extern void ComputeCFDMesh( int set, int degenset, int file_export_types );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Set the mode CFD Mesh uses when its UseMode flag is on, or an empty string for none. The flag is the "UseMode" Parm, group "Global", of the "CFDMeshSettings" container.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetCFDMeshModeID( mid );
+
+    if ( GetCFDMeshModeID() != mid )
+    {
+        Print( "ERROR: SetCFDMeshModeID did not set the mode" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetCFDMeshModeID( mid )
+
+    assert GetCFDMeshModeID() == mid, "SetCFDMeshModeID did not set the mode"
+
+    \endcode
+    \endPythonOnly
+    \sa GetCFDMeshModeID
+    \param [in] mode_id string Mode ID, or an empty string
+*/
+
+extern void SetCFDMeshModeID( const std::string & mode_id );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Get the mode CFD Mesh uses when its UseMode flag is on.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetCFDMeshModeID( mid );
+
+    if ( GetCFDMeshModeID() != mid )
+    {
+        Print( "ERROR: GetCFDMeshModeID did not return the mode set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetCFDMeshModeID( mid )
+
+    assert GetCFDMeshModeID() == mid, "GetCFDMeshModeID did not return the mode set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetCFDMeshModeID
+    \return string Mode ID, or an empty string for none
+*/
+
+extern std::string GetCFDMeshModeID();
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Set the mode Surface Intersection uses when its UseMode flag is on, or an empty string for none. The flag is the "UseMode" Parm, group "Global", of the "SurfaceIntersectSettings" container.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetIntersectModeID( mid );
+
+    if ( GetIntersectModeID() != mid )
+    {
+        Print( "ERROR: SetIntersectModeID did not set the mode" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetIntersectModeID( mid )
+
+    assert GetIntersectModeID() == mid, "SetIntersectModeID did not set the mode"
+
+    \endcode
+    \endPythonOnly
+    \sa GetIntersectModeID
+    \param [in] mode_id string Mode ID, or an empty string
+*/
+
+extern void SetIntersectModeID( const std::string & mode_id );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Get the mode Surface Intersection uses when its UseMode flag is on.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetIntersectModeID( mid );
+
+    if ( GetIntersectModeID() != mid )
+    {
+        Print( "ERROR: GetIntersectModeID did not return the mode set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetIntersectModeID( mid )
+
+    assert GetIntersectModeID() == mid, "GetIntersectModeID did not return the mode set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetIntersectModeID
+    \return string Mode ID, or an empty string for none
+*/
+
+extern std::string GetIntersectModeID();
+
+/*!
+    \ingroup FileIO
+*/
+/*!
+    Set the FEA Structure that STEP structure export writes. The model keeps it as a position in the list of Structures, so deleting an earlier one moves it to the next.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    AddFeaStruct( pod_id );
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetSTEPStructureExportID( struct_id );
+
+    if ( GetSTEPStructureExportID() != struct_id )
+    {
+        Print( "ERROR: SetSTEPStructureExportID did not set the Structure" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    AddFeaStruct( pod_id )
+    struct_id = AddFeaStructure( pod_id )
+
+    SetSTEPStructureExportID( struct_id )
+
+    assert GetSTEPStructureExportID() == struct_id, "SetSTEPStructureExportID did not set the Structure"
+
+    \endcode
+    \endPythonOnly
+    \sa GetSTEPStructureExportID, EXPORT_STEP_STRUCTURE
+    \param [in] struct_id string FEA Structure ID
+*/
+
+extern void SetSTEPStructureExportID( const std::string & struct_id );
+
+/*!
+    \ingroup FileIO
+*/
+/*!
+    Get the FEA Structure that STEP structure export writes.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    AddFeaStruct( pod_id );
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetSTEPStructureExportID( struct_id );
+
+    if ( GetSTEPStructureExportID() != struct_id )
+    {
+        Print( "ERROR: GetSTEPStructureExportID did not return the Structure set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    AddFeaStruct( pod_id )
+    struct_id = AddFeaStructure( pod_id )
+
+    SetSTEPStructureExportID( struct_id )
+
+    assert GetSTEPStructureExportID() == struct_id, "GetSTEPStructureExportID did not return the Structure set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetSTEPStructureExportID
+    \return string FEA Structure ID, or an empty string when there is none
+*/
+
+extern std::string GetSTEPStructureExportID();
+
+/*!
+    \ingroup FileIO
+*/
+/*!
+    Set the FEA Structure that IGES structure export writes. The model keeps it as a position in the list of Structures, so deleting an earlier one moves it to the next.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    AddFeaStruct( pod_id );
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetIGESStructureExportID( struct_id );
+
+    if ( GetIGESStructureExportID() != struct_id )
+    {
+        Print( "ERROR: SetIGESStructureExportID did not set the Structure" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    AddFeaStruct( pod_id )
+    struct_id = AddFeaStructure( pod_id )
+
+    SetIGESStructureExportID( struct_id )
+
+    assert GetIGESStructureExportID() == struct_id, "SetIGESStructureExportID did not set the Structure"
+
+    \endcode
+    \endPythonOnly
+    \sa GetIGESStructureExportID, EXPORT_IGES_STRUCTURE
+    \param [in] struct_id string FEA Structure ID
+*/
+
+extern void SetIGESStructureExportID( const std::string & struct_id );
+
+/*!
+    \ingroup FileIO
+*/
+/*!
+    Get the FEA Structure that IGES structure export writes.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    AddFeaStruct( pod_id );
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetIGESStructureExportID( struct_id );
+
+    if ( GetIGESStructureExportID() != struct_id )
+    {
+        Print( "ERROR: GetIGESStructureExportID did not return the Structure set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    AddFeaStruct( pod_id )
+    struct_id = AddFeaStructure( pod_id )
+
+    SetIGESStructureExportID( struct_id )
+
+    assert GetIGESStructureExportID() == struct_id, "GetIGESStructureExportID did not return the Structure set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetIGESStructureExportID
+    \return string FEA Structure ID, or an empty string when there is none
+*/
+
+extern std::string GetIGESStructureExportID();
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Set the FEA Structure or FEA Assembly the aero-structural analysis loads. The model keeps it as a position in the list of Structures and Assemblies, so deleting an earlier one moves it to the next.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    AddFeaStruct( pod_id );
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetAeroStructTargetID( struct_id );
+
+    if ( GetAeroStructTargetID() != struct_id )
+    {
+        Print( "ERROR: SetAeroStructTargetID did not set the target" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    AddFeaStruct( pod_id )
+    struct_id = AddFeaStructure( pod_id )
+
+    SetAeroStructTargetID( struct_id )
+
+    assert GetAeroStructTargetID() == struct_id, "SetAeroStructTargetID did not set the target"
+
+    \endcode
+    \endPythonOnly
+    \sa GetAeroStructTargetID
+    \param [in] id string FEA Structure or FEA Assembly ID
+*/
+
+extern void SetAeroStructTargetID( const std::string & id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the FEA Structure or FEA Assembly the aero-structural analysis loads.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    AddFeaStruct( pod_id );
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetAeroStructTargetID( struct_id );
+
+    if ( GetAeroStructTargetID() != struct_id )
+    {
+        Print( "ERROR: GetAeroStructTargetID did not return the target set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    AddFeaStruct( pod_id )
+    struct_id = AddFeaStructure( pod_id )
+
+    SetAeroStructTargetID( struct_id )
+
+    assert GetAeroStructTargetID() == struct_id, "GetAeroStructTargetID did not return the target set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetAeroStructTargetID
+    \return string FEA Structure or FEA Assembly ID, or an empty string for none
+*/
+
+extern std::string GetAeroStructTargetID();
 
 /*!
     \ingroup CFDMesh
@@ -3354,13 +3869,52 @@ extern int GetNumCFDSources( const std::string & geom_id );
 
     \endcode
     \endPythonOnly
-    \sa GetNumCFDSources, GetCFDSourceType
+    \sa GetNumCFDSources, GetCFDSourceType, GetCFDSourceNameByID
     \param [in] geom_id string Geom ID
     \param [in] source_index int Source index
     \return string Source name
 */
 
 extern std::string GetCFDSourceName( const std::string & geom_id, int source_index );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Get the name of a CFD Mesh source, by source ID.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    string src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 );
+
+    SetCFDSourceName( pid, 0, "Nose" );
+
+    if ( GetCFDSourceNameByID( src_id ) != "Nose" )
+    {
+        Print( "ERROR: GetCFDSourceNameByID did not return the name set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 )
+
+    SetCFDSourceName( pid, 0, "Nose" )
+
+    assert GetCFDSourceNameByID( src_id ) == "Nose", "GetCFDSourceNameByID did not return the name set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetCFDSourceName, GetCFDSourceName
+    \param [in] source_id string CFD Mesh source ID
+    \return string Source name
+*/
+
+extern std::string GetCFDSourceNameByID( const std::string & source_id );
 
 /*!
     \ingroup CFDMesh
@@ -3500,13 +4054,52 @@ extern std::string GetCFDSourceName( const std::string & geom_id, int source_ind
 
     \endcode
     \endPythonOnly
-    \sa GetCFDSourceName, GetNumCFDSources
+    \sa GetCFDSourceName, GetNumCFDSources, SetCFDSourceNameByID
     \param [in] geom_id string Geom ID
     \param [in] source_index int Source index
     \param [in] name string Source name
 */
 
 extern void SetCFDSourceName( const std::string & geom_id, int source_index, const std::string & name );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Set the name of a CFD Mesh source, by source ID.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    string src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 );
+
+    SetCFDSourceNameByID( src_id, "Nose" );
+
+    if ( GetCFDSourceName( pid, 0 ) != "Nose" )
+    {
+        Print( "ERROR: SetCFDSourceNameByID did not name the source" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 )
+
+    SetCFDSourceNameByID( src_id, "Nose" )
+
+    assert GetCFDSourceName( pid, 0 ) == "Nose", "SetCFDSourceNameByID did not name the source"
+
+    \endcode
+    \endPythonOnly
+    \sa GetCFDSourceName, SetCFDSourceName
+    \param [in] source_id string CFD Mesh source ID
+    \param [in] name string New name for the source
+*/
+
+extern void SetCFDSourceNameByID( const std::string & source_id, const std::string & name );
 
 /*!
     \ingroup CFDMesh
@@ -3536,13 +4129,48 @@ extern void SetCFDSourceName( const std::string & geom_id, int source_index, con
 
     \endcode
     \endPythonOnly
-    \sa CFD_MESH_SOURCE_TYPE, AddCFDSource
+    \sa CFD_MESH_SOURCE_TYPE, AddCFDSource, GetCFDSourceTypeByID
     \param [in] geom_id string Geom ID
     \param [in] source_index int Index of the source on that Geom
     \return int CFD mesh source type enum (i.e. POINT_SOURCE)
 */
 
 extern int GetCFDSourceType( const std::string & geom_id, int source_index );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Get the type of a CFD Mesh source, by source ID.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    string src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 );
+
+    if ( GetCFDSourceTypeByID( src_id ) != POINT_SOURCE )
+    {
+        Print( "ERROR: GetCFDSourceTypeByID did not return the source's type" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 )
+
+    assert GetCFDSourceTypeByID( src_id ) == POINT_SOURCE, "GetCFDSourceTypeByID did not return the source's type"
+
+    \endcode
+    \endPythonOnly
+    \sa CFD_MESH_SOURCE_TYPE, GetCFDSourceType
+    \param [in] source_id string CFD Mesh source ID
+    \return int Source type enum (i.e. POINT_SOURCE)
+*/
+
+extern int GetCFDSourceTypeByID( const std::string & source_id );
 
 /*!
     \ingroup CFDMesh
@@ -3618,12 +4246,50 @@ extern int GetCFDSourceType( const std::string & geom_id, int source_index );
 
     \endcode
     \endPythonOnly
-    \sa AddCFDSource, AddDefaultSources, DeleteAllCFDSources, GetNumCFDSources
+    \sa AddCFDSource, AddDefaultSources, DeleteAllCFDSources, GetNumCFDSources, DeleteCFDSourceByID
     \param [in] geom_id string Geom ID
     \param [in] source_index int Source index
 */
 
 extern void DeleteCFDSource( const std::string & geom_id, int source_index );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Delete a CFD Mesh source, by source ID.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    string src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 );
+
+    DeleteCFDSourceByID( src_id );
+
+    if ( GetNumCFDSources( pid ) != 0 )
+    {
+        Print( "ERROR: DeleteCFDSourceByID did not delete the source" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 )
+
+    DeleteCFDSourceByID( src_id )
+
+    assert GetNumCFDSources( pid ) == 0, "DeleteCFDSourceByID did not delete the source"
+
+    \endcode
+    \endPythonOnly
+    \sa AddCFDSource, DeleteAllCFDSources, DeleteCFDSource
+    \param [in] source_id string CFD Mesh source ID
+*/
+
+extern void DeleteCFDSourceByID( const std::string & source_id );
 
 /*!
     \ingroup CFDMesh
@@ -3719,6 +4385,43 @@ extern void DeleteAllCFDSources();
 */
 
 extern std::string GetCFDSourceID( const std::string & geom_id, int source_index );
+
+/*!
+    \ingroup CFDMesh
+*/
+/*!
+    Get the IDs of the CFD Mesh sources of a Geom, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+
+    string src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 );
+
+    array< string > @ids = GetCFDSourceIDVec( pid );
+
+    if ( ids.size() != 1 || ids[0] != src_id )
+    {
+        Print( "ERROR: GetCFDSourceIDVec did not return the source" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+
+    src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 )
+
+    assert list( GetCFDSourceIDVec( pid ) ) == [ src_id ], "GetCFDSourceIDVec did not return the source"
+
+    \endcode
+    \endPythonOnly
+    \sa GetCFDSourceID, GetNumCFDSources
+    \param [in] geom_id string Geom ID
+    \return array<string> Array of CFD Mesh source IDs
+*/
+
+extern std::vector < std::string > GetCFDSourceIDVec( const std::string & geom_id );
 
 /*!
     \ingroup CFDMesh
@@ -3884,10 +4587,10 @@ extern void AddDefaultSources();
     //==== Add Pod Geom ====//
     string pid = AddGeom( "POD", "" );
 
-    AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 );      // Add A Point Source
+    string src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 );      // Add A Point Source
 
     // The source lands on the Geom it was given, as the type it was given.
-    if ( GetNumCFDSources( pid ) != 1 || GetCFDSourceType( pid, 0 ) != POINT_SOURCE )
+    if ( GetNumCFDSources( pid ) != 1 || GetCFDSourceTypeByID( src_id ) != POINT_SOURCE )
     {
         Print( "ERROR: AddCFDSource did not add a point source" );
         __failure++;
@@ -3914,11 +4617,11 @@ extern void AddDefaultSources();
     #==== Add Pod Geom ====//
     pid = AddGeom( "POD", "" )
 
-    AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 )      # Add A Point Source
+    src_id = AddCFDSource( POINT_SOURCE, pid, 0, 0.25, 2.0, 0.5, 0.5 )      # Add A Point Source
 
     # The source lands on the Geom it was given, as the type it was given.
     assert GetNumCFDSources( pid ) == 1, "AddCFDSource did not add a point source"
-    assert GetCFDSourceType( pid, 0 ) == POINT_SOURCE, "AddCFDSource did not add a point source"
+    assert GetCFDSourceTypeByID( src_id ) == POINT_SOURCE, "AddCFDSource did not add a point source"
 
     # A source attached to a Geom that does not exist has to be rejected.  The
     # error queue is reached through the error manager singleton in Python.
@@ -3946,12 +4649,12 @@ extern void AddDefaultSources();
     \param [in] r2 double Source second radius
     \param [in] u2 double Source second U location
     \param [in] w2 double Source second W location
+    \return string ID of the new source
 */
 
-extern void AddCFDSource( int type, const std::string & geom_id, int surf_index,
-
-                          double l1, double r1, double u1, double w1,
-                          double l2 = 0, double r2 = 0, double u2 = 0, double w2 = 0 );
+extern std::string AddCFDSource( int type, const std::string & geom_id, int surf_index,
+                                 double l1, double r1, double u1, double w1,
+                                 double l2 = 0, double r2 = 0, double u2 = 0, double w2 = 0 );
 
 /*!
     \ingroup VSPAERO
@@ -5127,7 +5830,13 @@ extern std::string AddGeometryAnalysis();
         __failure++;
     }
 
-    AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 );
+    string az_id = AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 );
+
+    if ( az_id != GetGeometryAnalysisAzimuthParm( ga_id, 0 ) )
+    {
+        Print( "ERROR: AddGeometryAnalysisAzEl did not return the new pair's azimuth Parm" );
+        __failure++;
+    }
 
     if ( GetNumGeometryAnalysisAzEl( ga_id ) != 1 )
     {
@@ -5166,7 +5875,9 @@ extern std::string AddGeometryAnalysis();
 
     assert GetNumGeometryAnalysisAzEl( ga_id ) == 0, "a new Geometry Analysis already carries az/el pairs"
 
-    AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 )
+    az_id = AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 )
+
+    assert az_id == GetGeometryAnalysisAzimuthParm( ga_id, 0 ), "AddGeometryAnalysisAzEl did not return the new pair's azimuth Parm"
 
     assert GetNumGeometryAnalysisAzEl( ga_id ) == 1, "AddGeometryAnalysisAzEl did not add a pair"
 
@@ -5193,9 +5904,10 @@ extern std::string AddGeometryAnalysis();
     \param [in] geom_analysis_id string Geometry Analysis case ID
     \param [in] azimuth double Azimuth angle (degrees, -180 to 180)
     \param [in] elevation double Elevation angle (degrees, -90 to 90)
+    \return string ID of the azimuth Parm of the new pair
 */
 
-extern void AddGeometryAnalysisAzEl( const std::string & geom_analysis_id, double azimuth, double elevation );
+extern std::string AddGeometryAnalysisAzEl( const std::string & geom_analysis_id, double azimuth, double elevation );
 
 /*!
     \ingroup Analysis
@@ -5266,12 +5978,55 @@ extern void AddGeometryAnalysisAzEl( const std::string & geom_analysis_id, doubl
 
     \endcode
     \endPythonOnly
-    \sa AddGeometryAnalysisAzEl, DeleteAllGeometryAnalysisAzEl
+    \sa AddGeometryAnalysisAzEl, DeleteAllGeometryAnalysisAzEl, DeleteGeometryAnalysisAzElByID
     \param [in] geom_analysis_id string Geometry Analysis case ID
     \param [in] index int Az/El pair index
 */
 
 extern void DeleteGeometryAnalysisAzEl( const std::string & geom_analysis_id, int index );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Delete an azimuth/elevation pair from a Geometry Analysis, by the ID of its azimuth Parm.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string az_id = AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 );
+
+    AddGeometryAnalysisAzEl( ga_id, 60.0, 5.0 );
+
+    DeleteGeometryAnalysisAzElByID( ga_id, az_id );
+
+    if ( GetNumGeometryAnalysisAzEl( ga_id ) != 1 || abs( GetParmVal( GetGeometryAnalysisAzimuthParm( ga_id, 0 ) ) - 60.0 ) > 1e-6 )
+    {
+        Print( "ERROR: DeleteGeometryAnalysisAzElByID deleted the wrong pair" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    az_id = AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 )
+
+    AddGeometryAnalysisAzEl( ga_id, 60.0, 5.0 )
+
+    DeleteGeometryAnalysisAzElByID( ga_id, az_id )
+
+    assert GetNumGeometryAnalysisAzEl( ga_id ) == 1 and abs( GetParmVal( GetGeometryAnalysisAzimuthParm( ga_id, 0 ) ) - 60.0 ) < 1e-6, "DeleteGeometryAnalysisAzElByID deleted the wrong pair"
+
+    \endcode
+    \endPythonOnly
+    \sa AddGeometryAnalysisAzEl, GetGeometryAnalysisAzimuthParmVec, DeleteGeometryAnalysisAzEl
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \param [in] azimuth_parm_id string ID of the azimuth Parm of the pair
+*/
+
+extern void DeleteGeometryAnalysisAzElByID( const std::string & geom_analysis_id, const std::string & azimuth_parm_id );
 
 /*!
     \ingroup Analysis
@@ -5431,6 +6186,525 @@ extern std::string GetGeometryAnalysisAzimuthParm( const std::string & geom_anal
 */
 
 extern std::string GetGeometryAnalysisElevationParm( const std::string & geom_analysis_id, int index );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the IDs of the azimuth Parms of a Geometry Analysis, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string az_id = AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 );
+
+    array< string > @ids = GetGeometryAnalysisAzimuthParmVec( ga_id );
+
+    if ( ids.size() != 1 || ids[0] != az_id )
+    {
+        Print( "ERROR: GetGeometryAnalysisAzimuthParmVec did not return the Parm" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    az_id = AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 )
+
+    assert list( GetGeometryAnalysisAzimuthParmVec( ga_id ) ) == [ az_id ], "GetGeometryAnalysisAzimuthParmVec did not return the Parm"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeometryAnalysisElevationParmVec
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \return array<string> Array of azimuth Parm IDs
+*/
+
+extern std::vector < std::string > GetGeometryAnalysisAzimuthParmVec( const std::string & geom_analysis_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the IDs of the elevation Parms of a Geometry Analysis, in the order of GetGeometryAnalysisAzimuthParmVec.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 );
+
+    array< string > @ids = GetGeometryAnalysisElevationParmVec( ga_id );
+
+    if ( ids.size() != 1 || ids[0] != GetGeometryAnalysisElevationParm( ga_id, 0 ) )
+    {
+        Print( "ERROR: GetGeometryAnalysisElevationParmVec did not return the Parm" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    AddGeometryAnalysisAzEl( ga_id, 30.0, 15.0 )
+
+    assert list( GetGeometryAnalysisElevationParmVec( ga_id ) ) == [ GetGeometryAnalysisElevationParm( ga_id, 0 ) ], "GetGeometryAnalysisElevationParmVec did not return the Parm"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeometryAnalysisAzimuthParmVec
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \return array<string> Array of elevation Parm IDs
+*/
+
+extern std::vector < std::string > GetGeometryAnalysisElevationParmVec( const std::string & geom_analysis_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Set the mode a Geometry Analysis uses for its primary target when that target is a mode, or an empty string for none.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetGeometryAnalysisPrimaryModeID( ga_id, mid );
+
+    if ( GetGeometryAnalysisPrimaryModeID( ga_id ) != mid )
+    {
+        Print( "ERROR: SetGeometryAnalysisPrimaryModeID did not set the mode" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetGeometryAnalysisPrimaryModeID( ga_id, mid )
+
+    assert GetGeometryAnalysisPrimaryModeID( ga_id ) == mid, "SetGeometryAnalysisPrimaryModeID did not set the mode"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeometryAnalysisPrimaryModeID
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \param [in] mode_id string Mode ID, or an empty string
+*/
+
+extern void SetGeometryAnalysisPrimaryModeID( const std::string & geom_analysis_id, const std::string & mode_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the mode a Geometry Analysis uses for its primary target when that target is a mode.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    if ( GetGeometryAnalysisPrimaryModeID( ga_id ) != "" )
+    {
+        Print( "ERROR: a new Geometry Analysis names a mode" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    assert GetGeometryAnalysisPrimaryModeID( ga_id ) == "", "a new Geometry Analysis names a mode"
+
+    \endcode
+    \endPythonOnly
+    \sa SetGeometryAnalysisPrimaryModeID
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \return string Mode ID, or an empty string for none
+*/
+
+extern std::string GetGeometryAnalysisPrimaryModeID( const std::string & geom_analysis_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Set the Geom a Geometry Analysis uses for its primary target when that is a Geom, or an empty string for none.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string pod_id = AddGeom( "POD" );
+
+    SetGeometryAnalysisPrimaryGeomID( ga_id, pod_id );
+
+    if ( GetGeometryAnalysisPrimaryGeomID( ga_id ) != pod_id )
+    {
+        Print( "ERROR: SetGeometryAnalysisPrimaryGeomID did not set the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    pod_id = AddGeom( "POD" )
+
+    SetGeometryAnalysisPrimaryGeomID( ga_id, pod_id )
+
+    assert GetGeometryAnalysisPrimaryGeomID( ga_id ) == pod_id, "SetGeometryAnalysisPrimaryGeomID did not set the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeometryAnalysisPrimaryGeomID
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \param [in] geom_id string Geom ID, or an empty string
+*/
+
+extern void SetGeometryAnalysisPrimaryGeomID( const std::string & geom_analysis_id, const std::string & geom_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the Geom a Geometry Analysis uses for its primary target when that is a Geom.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string pod_id = AddGeom( "POD" );
+
+    SetGeometryAnalysisPrimaryGeomID( ga_id, pod_id );
+
+    if ( GetGeometryAnalysisPrimaryGeomID( ga_id ) != pod_id )
+    {
+        Print( "ERROR: GetGeometryAnalysisPrimaryGeomID did not return the Geom set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    pod_id = AddGeom( "POD" )
+
+    SetGeometryAnalysisPrimaryGeomID( ga_id, pod_id )
+
+    assert GetGeometryAnalysisPrimaryGeomID( ga_id ) == pod_id, "GetGeometryAnalysisPrimaryGeomID did not return the Geom set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetGeometryAnalysisPrimaryGeomID
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \return string Geom ID, or an empty string for none
+*/
+
+extern std::string GetGeometryAnalysisPrimaryGeomID( const std::string & geom_analysis_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Set the Geom a Geometry Analysis uses for its secondary target when that is a Geom, or an empty string for none.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string pod_id = AddGeom( "POD" );
+
+    SetGeometryAnalysisSecondaryGeomID( ga_id, pod_id );
+
+    if ( GetGeometryAnalysisSecondaryGeomID( ga_id ) != pod_id )
+    {
+        Print( "ERROR: SetGeometryAnalysisSecondaryGeomID did not set the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    pod_id = AddGeom( "POD" )
+
+    SetGeometryAnalysisSecondaryGeomID( ga_id, pod_id )
+
+    assert GetGeometryAnalysisSecondaryGeomID( ga_id ) == pod_id, "SetGeometryAnalysisSecondaryGeomID did not set the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeometryAnalysisSecondaryGeomID
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \param [in] geom_id string Geom ID, or an empty string
+*/
+
+extern void SetGeometryAnalysisSecondaryGeomID( const std::string & geom_analysis_id, const std::string & geom_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the Geom a Geometry Analysis uses for its secondary target when that is a Geom.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string pod_id = AddGeom( "POD" );
+
+    SetGeometryAnalysisSecondaryGeomID( ga_id, pod_id );
+
+    if ( GetGeometryAnalysisSecondaryGeomID( ga_id ) != pod_id )
+    {
+        Print( "ERROR: GetGeometryAnalysisSecondaryGeomID did not return the Geom set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    pod_id = AddGeom( "POD" )
+
+    SetGeometryAnalysisSecondaryGeomID( ga_id, pod_id )
+
+    assert GetGeometryAnalysisSecondaryGeomID( ga_id ) == pod_id, "GetGeometryAnalysisSecondaryGeomID did not return the Geom set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetGeometryAnalysisSecondaryGeomID
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \return string Geom ID, or an empty string for none
+*/
+
+extern std::string GetGeometryAnalysisSecondaryGeomID( const std::string & geom_analysis_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Set the Geom a Geometry Analysis uses for its direction when that is a Geom, or an empty string for none.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string pod_id = AddGeom( "POD" );
+
+    SetGeometryAnalysisDirectionGeomID( ga_id, pod_id );
+
+    if ( GetGeometryAnalysisDirectionGeomID( ga_id ) != pod_id )
+    {
+        Print( "ERROR: SetGeometryAnalysisDirectionGeomID did not set the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    pod_id = AddGeom( "POD" )
+
+    SetGeometryAnalysisDirectionGeomID( ga_id, pod_id )
+
+    assert GetGeometryAnalysisDirectionGeomID( ga_id ) == pod_id, "SetGeometryAnalysisDirectionGeomID did not set the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeometryAnalysisDirectionGeomID
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \param [in] geom_id string Geom ID, or an empty string
+*/
+
+extern void SetGeometryAnalysisDirectionGeomID( const std::string & geom_analysis_id, const std::string & geom_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the Geom a Geometry Analysis uses for its direction when that is a Geom.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string pod_id = AddGeom( "POD" );
+
+    SetGeometryAnalysisDirectionGeomID( ga_id, pod_id );
+
+    if ( GetGeometryAnalysisDirectionGeomID( ga_id ) != pod_id )
+    {
+        Print( "ERROR: GetGeometryAnalysisDirectionGeomID did not return the Geom set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    pod_id = AddGeom( "POD" )
+
+    SetGeometryAnalysisDirectionGeomID( ga_id, pod_id )
+
+    assert GetGeometryAnalysisDirectionGeomID( ga_id ) == pod_id, "GetGeometryAnalysisDirectionGeomID did not return the Geom set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetGeometryAnalysisDirectionGeomID
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \return string Geom ID, or an empty string for none
+*/
+
+extern std::string GetGeometryAnalysisDirectionGeomID( const std::string & geom_analysis_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Add a subsurface to the cutouts of a Geometry Analysis.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_RECTANGLE );
+
+    AddGeometryAnalysisCutout( ga_id, ss_id );
+
+    array< string > @ids = GetGeometryAnalysisCutoutVec( ga_id );
+
+    if ( ids.size() != 1 || ids[0] != ss_id )
+    {
+        Print( "ERROR: AddGeometryAnalysisCutout did not add the cutout" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_RECTANGLE )
+
+    AddGeometryAnalysisCutout( ga_id, ss_id )
+
+    assert list( GetGeometryAnalysisCutoutVec( ga_id ) ) == [ ss_id ], "AddGeometryAnalysisCutout did not add the cutout"
+
+    \endcode
+    \endPythonOnly
+    \sa DeleteGeometryAnalysisCutout, GetGeometryAnalysisCutoutVec
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \param [in] ss_id string SubSurface ID
+*/
+
+extern void AddGeometryAnalysisCutout( const std::string & geom_analysis_id, const std::string & ss_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Remove a subsurface from the cutouts of a Geometry Analysis.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_RECTANGLE );
+
+    AddGeometryAnalysisCutout( ga_id, ss_id );
+
+    DeleteGeometryAnalysisCutout( ga_id, ss_id );
+
+    if ( GetGeometryAnalysisCutoutVec( ga_id ).size() != 0 )
+    {
+        Print( "ERROR: DeleteGeometryAnalysisCutout did not remove the cutout" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_RECTANGLE )
+
+    AddGeometryAnalysisCutout( ga_id, ss_id )
+
+    DeleteGeometryAnalysisCutout( ga_id, ss_id )
+
+    assert len( GetGeometryAnalysisCutoutVec( ga_id ) ) == 0, "DeleteGeometryAnalysisCutout did not remove the cutout"
+
+    \endcode
+    \endPythonOnly
+    \sa AddGeometryAnalysisCutout
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \param [in] ss_id string SubSurface ID
+*/
+
+extern void DeleteGeometryAnalysisCutout( const std::string & geom_analysis_id, const std::string & ss_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the subsurface IDs of the cutouts of a Geometry Analysis.
+    \forcpponly
+    \code{.cpp}
+    string ga_id = AddGeometryAnalysis();
+
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_RECTANGLE );
+
+    AddGeometryAnalysisCutout( ga_id, ss_id );
+
+    array< string > @ids = GetGeometryAnalysisCutoutVec( ga_id );
+
+    if ( ids.size() != 1 || ids[0] != ss_id )
+    {
+        Print( "ERROR: GetGeometryAnalysisCutoutVec did not return the cutout" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ga_id = AddGeometryAnalysis()
+
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_RECTANGLE )
+
+    AddGeometryAnalysisCutout( ga_id, ss_id )
+
+    assert list( GetGeometryAnalysisCutoutVec( ga_id ) ) == [ ss_id ], "GetGeometryAnalysisCutoutVec did not return the cutout"
+
+    \endcode
+    \endPythonOnly
+    \sa AddGeometryAnalysisCutout
+    \param [in] geom_analysis_id string Geometry Analysis case ID
+    \return array<string> Array of SubSurface IDs
+*/
+
+extern std::vector < std::string > GetGeometryAnalysisCutoutVec( const std::string & geom_analysis_id );
 
 /*!
     \ingroup Analysis
@@ -5820,7 +7094,7 @@ extern std::vector < std::string > FindAllAttributes();
     \ingroup Attributes
 */
 /*!
-    Returns all attributes that contain the string search_str within their name, case insensitive
+    Returns all attributes that contain the string search_str within their name, case insensitive, sorted by name and then by ID
     \forcpponly
     \code{.cpp}
     //==== Attributes: FindAttributesByName ====//
@@ -5857,7 +7131,7 @@ extern std::vector < std::string > FindAttributesByName( const std::string & sea
     \ingroup Attributes
 */
 /*!
-    Searches all attributes that contain the search string, case insensitive, and returns the user-specified index
+    Searches all attributes that contain the search string, case insensitive, and returns the user-specified index into them, sorted by name and then by ID as FindAttributesByName returns them
     \forcpponly
     \code{.cpp}
     //==== Attributes: FindAttributeByName ====//
@@ -5999,11 +7273,58 @@ extern std::vector< std::string > FindAttributeNamesInCollection(const std::stri
 
     \endcode
     \endPythonOnly
+    \sa FindAttributesInCollectionByName
     \return vector\<string\> Vector of attribute IDs in an attribute collection.
     \param [in] collID string ID of an attribute collection
 */
 
 extern std::vector< std::string > FindAttributesInCollection(const std::string & collID );
+
+/*!
+    \ingroup Attributes
+*/
+/*!
+    Get the IDs of the attributes of an object or collection whose names contain a search string, ignoring case.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string coll_id = GetChildCollection( pod_id );
+
+    string attr_id = AddAttributeString( coll_id, "Supplier", "Acme" );
+
+    AddAttributeString( coll_id, "Finish", "Matte" );
+
+    array< string > @ids = FindAttributesInCollectionByName( pod_id, "supp" );
+
+    if ( ids.size() != 1 || ids[0] != attr_id )
+    {
+        Print( "ERROR: FindAttributesInCollectionByName did not find the attribute" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    coll_id = GetChildCollection( pod_id )
+
+    attr_id = AddAttributeString( coll_id, "Supplier", "Acme" )
+
+    AddAttributeString( coll_id, "Finish", "Matte" )
+
+    assert list( FindAttributesInCollectionByName( pod_id, "supp" ) ) == [ attr_id ], "FindAttributesInCollectionByName did not find the attribute"
+
+    \endcode
+    \endPythonOnly
+    \sa FindAttributeInCollection, FindAttributesInCollection
+    \param [in] obj_id string ID of an object or of its attribute collection
+    \param [in] search_str string Text the attribute names must contain
+    \return array<string> Array of attribute IDs
+*/
+
+extern std::vector< std::string > FindAttributesInCollectionByName( const std::string & obj_id, const std::string & search_str );
 
 /*!
     \ingroup Attributes
@@ -6403,6 +7724,48 @@ extern std::string GetAttributeName( const std::string & attrID );
 */
 
 extern std::string GetAttributeID(const std::string & collID, const std::string & attributeName, int index);
+
+/*!
+    \ingroup Attributes
+*/
+/*!
+    Get the IDs of every attribute in a collection with a given name, in the order of the index GetAttributeID takes.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string coll_id = GetChildCollection( pod_id );
+
+    string attr_id = AddAttributeString( coll_id, "Supplier", "Acme" );
+
+    array< string > @ids = GetAttributeIDVec( coll_id, "Supplier" );
+
+    if ( ids.size() != 1 || ids[0] != attr_id || ids[0] != GetAttributeID( coll_id, "Supplier", 0 ) )
+    {
+        Print( "ERROR: GetAttributeIDVec did not return the attribute" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    coll_id = GetChildCollection( pod_id )
+
+    attr_id = AddAttributeString( coll_id, "Supplier", "Acme" )
+
+    assert list( GetAttributeIDVec( coll_id, "Supplier" ) ) == [ attr_id ], "GetAttributeIDVec did not return the attribute"
+
+    \endcode
+    \endPythonOnly
+    \sa GetAttributeID
+    \param [in] collID string Attribute collection ID
+    \param [in] attributeName string Attribute name
+    \return array<string> Array of attribute IDs
+*/
+
+extern std::vector< std::string > GetAttributeIDVec( const std::string & collID, const std::string & attributeName );
 
 /*!
     \ingroup Attributes
@@ -8811,6 +10174,117 @@ extern std::string FindResultsID( const std::string & name, int index = 0 );
     \ingroup Results
 */
 /*!
+    Get the IDs of every result with a given name, oldest first.
+    \forcpponly
+    \code{.cpp}
+    DeleteAllResults();
+
+    WriteTestResults();
+
+    array< string > @ids = FindResultsIDs( "Test_Results" );
+
+    if ( ids.size() != uint( GetNumResults( "Test_Results" ) ) || ids[0] != FindResultsID( "Test_Results", 0 ) )
+    {
+        Print( "ERROR: FindResultsIDs did not return the results in order" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    DeleteAllResults()
+
+    WriteTestResults()
+
+    ids = FindResultsIDs( "Test_Results" )
+
+    assert len( ids ) == GetNumResults( "Test_Results" ) and ids[0] == FindResultsID( "Test_Results", 0 ), "FindResultsIDs did not return the results in order"
+
+    \endcode
+    \endPythonOnly
+    \sa FindResultsID, GetAllResultsIDs
+    \param [in] name string Results name
+    \return array<string> Array of results IDs
+*/
+
+extern std::vector < std::string > FindResultsIDs( const std::string & name );
+
+/*!
+    \ingroup Results
+*/
+/*!
+    Get the IDs of every result, grouped by name with the names in sorted order, oldest first within a name.
+    \forcpponly
+    \code{.cpp}
+    DeleteAllResults();
+
+    WriteTestResults();
+
+    AddGeom( "POD" );
+
+    ComputeCompGeom( SET_ALL, false, 0 );
+
+    array< string > @names = GetAllResultsNames();
+    names.sortAsc();
+
+    array< string > expected;
+    for ( uint i = 0; i < names.size(); i++ )
+    {
+        array< string > @ids = FindResultsIDs( names[i] );
+        for ( uint j = 0; j < ids.size(); j++ )
+        {
+            expected.insertLast( ids[j] );
+        }
+    }
+
+    array< string > @all_ids = GetAllResultsIDs();
+
+    if ( all_ids.size() != expected.size() )
+    {
+        Print( "ERROR: GetAllResultsIDs did not return every result" );
+        __failure++;
+    }
+    else
+    {
+        for ( uint i = 0; i < expected.size(); i++ )
+        {
+            if ( all_ids[i] != expected[i] )
+            {
+                Print( "ERROR: GetAllResultsIDs did not sort the results by name" );
+                __failure++;
+            }
+        }
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    DeleteAllResults()
+
+    WriteTestResults()
+
+    AddGeom( "POD" )
+
+    ComputeCompGeom( SET_ALL, False, 0 )
+
+    expected = []
+    for name in sorted( GetAllResultsNames() ):
+        expected += list( FindResultsIDs( name ) )
+
+    assert list( GetAllResultsIDs() ) == expected, "GetAllResultsIDs did not return every result, sorted by name"
+
+    \endcode
+    \endPythonOnly
+    \sa GetAllResultsNames, FindResultsIDs
+    \return array<string> Array of results IDs
+*/
+
+extern std::vector < std::string > GetAllResultsIDs();
+
+/*!
+    \ingroup Results
+*/
+/*!
     Find the latest results ID for particular result name
     \forcpponly
     \code{.cpp}
@@ -10902,6 +12376,36 @@ extern std::string FindLight( int index );
     \ingroup Visualization
 */
 /*!
+    Get the IDs of the lights, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    array< string > @ids = GetLightIDVec();
+
+    if ( ids.size() != uint( GetNumLights() ) || ids[0] != FindLight( 0 ) )
+    {
+        Print( "ERROR: GetLightIDVec did not return the lights in order" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    ids = GetLightIDVec()
+
+    assert len( ids ) == GetNumLights() and ids[0] == FindLight( 0 ), "GetLightIDVec did not return the lights in order"
+
+    \endcode
+    \endPythonOnly
+    \sa FindLight, GetNumLights
+    \return array<string> Array of light IDs
+*/
+
+extern std::vector < std::string > GetLightIDVec();
+
+/*!
+    \ingroup Visualization
+*/
+/*!
     Set the background color
     \forcpponly
     \code{.cpp}
@@ -11200,7 +12704,14 @@ extern std::string AddGeom( const std::string & type, const std::string & parent
     \ingroup Geom
 */
 /*!
-    Perform an update for the specified Geom
+    Perform an update for the specified Geom.
+
+    Update() rebuilds the model from the top of the tree down and places each child Geom from
+    its relative location, so a child stays attached when its parent moves.  A child Geom in
+    absolute mode ( Abs_Or_Relitive_flag set to ABS ) therefore loses an X_Location, Y_Location,
+    Z_Location or X/Y/Z_Rotation set with SetParmVal when Update() runs.  Call UpdateGeom on
+    that Geom before Update(): it updates the Geom by itself and works out the relative location
+    from the new absolute one.  SetParmValUpdate does both in one call.
     \forcpponly
     \code{.cpp}
     //==== Add Wing Geometry ====//
@@ -13180,6 +14691,162 @@ extern std::string GetGeomParent( const std::string& geom_id );
     \ingroup Geom
 */
 /*!
+    Get the ID of the Geom whose frame a Geom's symmetry is about, which its Sym_Ancestor Parm names by generation. An empty string means the global origin.
+    \forcpponly
+    \code{.cpp}
+    string parent_id = AddGeom( "POD" );
+
+    string child_id = AddGeom( "POD", parent_id );
+
+    SetParmVal( child_id, "Sym_Ancestor", "Sym", 2 );
+
+    if ( GetGeomSymAncestorID( child_id ) != parent_id )
+    {
+        Print( "ERROR: GetGeomSymAncestorID did not return the parent" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    parent_id = AddGeom( "POD" )
+
+    child_id = AddGeom( "POD", parent_id )
+
+    SetParmVal( child_id, "Sym_Ancestor", "Sym", 2 )
+
+    assert GetGeomSymAncestorID( child_id ) == parent_id, "GetGeomSymAncestorID did not return the parent"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeomParent
+    \param [in] geom_id string Geom ID
+    \return string Geom ID, or an empty string for the global origin
+*/
+
+extern std::string GetGeomSymAncestorID( const std::string & geom_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Get the ID of the Geom whose Parasite Drag row a Geom is incorporated into, which its IncorporatedGen Parm names by generation.
+    \forcpponly
+    \code{.cpp}
+    string parent_id = AddGeom( "POD" );
+
+    string child_id = AddGeom( "POD", parent_id );
+
+    SetParmVal( child_id, "IncorporatedGen", "ParasiteDragProps", 1 );
+
+    if ( GetGeomIncorporatedAncestorID( child_id ) != parent_id )
+    {
+        Print( "ERROR: GetGeomIncorporatedAncestorID did not return the parent" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    parent_id = AddGeom( "POD" )
+
+    child_id = AddGeom( "POD", parent_id )
+
+    SetParmVal( child_id, "IncorporatedGen", "ParasiteDragProps", 1 )
+
+    assert GetGeomIncorporatedAncestorID( child_id ) == parent_id, "GetGeomIncorporatedAncestorID did not return the parent"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeomParent
+    \param [in] geom_id string Geom ID
+    \return string Geom ID
+*/
+
+extern std::string GetGeomIncorporatedAncestorID( const std::string & geom_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Set the Geom whose frame a Geom's symmetry is about, by ID, which sets its Sym_Ancestor Parm. The Geom must be the Geom itself or one of its ancestors; an empty string means the global origin.
+    \forcpponly
+    \code{.cpp}
+    string parent_id = AddGeom( "POD" );
+
+    string child_id = AddGeom( "POD", parent_id );
+
+    SetGeomSymAncestorID( child_id, parent_id );
+
+    if ( GetGeomSymAncestorID( child_id ) != parent_id )
+    {
+        Print( "ERROR: SetGeomSymAncestorID did not set the parent" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    parent_id = AddGeom( "POD" )
+
+    child_id = AddGeom( "POD", parent_id )
+
+    SetGeomSymAncestorID( child_id, parent_id )
+
+    assert GetGeomSymAncestorID( child_id ) == parent_id, "SetGeomSymAncestorID did not set the parent"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeomSymAncestorID
+    \param [in] geom_id string Geom ID
+    \param [in] ancestor_id string ID of the Geom or one of its ancestors, or an empty string
+*/
+
+extern void SetGeomSymAncestorID( const std::string & geom_id, const std::string & ancestor_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Set the Geom whose Parasite Drag row a Geom is incorporated into, by ID, which sets its IncorporatedGen Parm. The Geom must be the Geom itself or one of its ancestors.
+    \forcpponly
+    \code{.cpp}
+    string parent_id = AddGeom( "POD" );
+
+    string child_id = AddGeom( "POD", parent_id );
+
+    SetGeomIncorporatedAncestorID( child_id, parent_id );
+
+    if ( GetGeomIncorporatedAncestorID( child_id ) != parent_id )
+    {
+        Print( "ERROR: SetGeomIncorporatedAncestorID did not set the parent" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    parent_id = AddGeom( "POD" )
+
+    child_id = AddGeom( "POD", parent_id )
+
+    SetGeomIncorporatedAncestorID( child_id, parent_id )
+
+    assert GetGeomIncorporatedAncestorID( child_id ) == parent_id, "SetGeomIncorporatedAncestorID did not set the parent"
+
+    \endcode
+    \endPythonOnly
+    \sa GetGeomIncorporatedAncestorID
+    \param [in] geom_id string Geom ID
+    \param [in] ancestor_id string ID of the Geom or one of its ancestors
+*/
+
+extern void SetGeomIncorporatedAncestorID( const std::string & geom_id, const std::string & ancestor_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
     Get the IDs for each child of the input parent Geom.
     \forcpponly
     \code{.cpp}
@@ -13396,7 +15063,7 @@ extern int GetTotalNumSurfs( const std::string& geom_id );
     \sa VSP_SURF_TYPE
     \param [in] geom_id string Geom ID
     \param [in] main_surf_ind int Main surface index
-    \return int VSP surface type enum (i.e. DISK_SURF)
+    \return int VSP surface type enum (i.e. DISK_SURF), or -1 if the Geom or index is invalid
 */
 
 extern int GetGeomVSPSurfType( const std::string& geom_id, int main_surf_ind = 0 );
@@ -13432,7 +15099,7 @@ extern int GetGeomVSPSurfType( const std::string& geom_id, int main_surf_ind = 0
     \sa VSP_SURF_CFD_TYPE
     \param [in] geom_id string Geom ID
     \param [in] main_surf_ind int Main surface index
-    \return int VSP surface CFD type enum (i.e. CFD_TRANSPARENT)
+    \return int VSP surface CFD type enum (i.e. CFD_TRANSPARENT), or -1 if the Geom or index is invalid
 */
 
 extern int GetGeomVSPSurfCfdType( const std::string& geom_id, int main_surf_ind = 0 );
@@ -13441,7 +15108,7 @@ extern int GetGeomVSPSurfCfdType( const std::string& geom_id, int main_surf_ind 
     \ingroup Geom
 */
 /*!
-    Get the the maximum coordinate of the bounding box of a Geom with given main surface index. The Geom bounding
+    Get the maximum coordinate of the bounding box of a Geom with given surface index. The Geom bounding
     box may be specified in absolute or body reference frame.
 
     A Geom with no surfaces -- a mesh, a point cloud, a wireframe -- answers out of its own bounding box, and
@@ -13489,7 +15156,7 @@ extern int GetGeomVSPSurfCfdType( const std::string& geom_id, int main_surf_ind 
     \endPythonOnly
     \sa GetGeomBBoxMin
     \param [in] geom_id string Geom ID
-    \param [in] main_surf_ind int Main surface index
+    \param [in] main_surf_ind int Index of the surface of that Geom, counting symmetric copies, from 0 to GetTotalNumSurfs() - 1 (the name is kept for scripts that pass it by keyword)
     \param [in] ref_frame_is_absolute bool Flag to specify absolute or body reference frame
     \return vec3d Maximum coordinate of the bounding box
 */
@@ -13500,7 +15167,7 @@ extern vec3d GetGeomBBoxMax( const std::string& geom_id, int main_surf_ind = 0, 
     \ingroup Geom
 */
 /*!
-    Get the the minimum coordinate of the bounding box of a Geom with given main surface index. The Geom bounding
+    Get the minimum coordinate of the bounding box of a Geom with given surface index. The Geom bounding
     box may be specified in absolute or body reference frame.
 
     A Geom with no surfaces -- a mesh, a point cloud, a wireframe -- answers out of its own bounding box, and
@@ -13548,7 +15215,7 @@ extern vec3d GetGeomBBoxMax( const std::string& geom_id, int main_surf_ind = 0, 
     \endPythonOnly
     \sa GetGeomBBoxMax
     \param [in] geom_id string Geom ID
-    \param [in] main_surf_ind int Main surface index
+    \param [in] main_surf_ind int Index of the surface of that Geom, counting symmetric copies, from 0 to GetTotalNumSurfs() - 1 (the name is kept for scripts that pass it by keyword)
     \param [in] ref_frame_is_absolute bool Flag to specify absolute or body reference frame
     \return vec3d Minimum coordinate of the bounding box
 */
@@ -14870,6 +16537,7 @@ extern void SetIntersectSubSurfGeomID( const std::string & sub_id, const std::st
 
     \endcode
     \endPythonOnly
+    \sa AddFeaStructure
     \param [in] geom_id string Parent Geom ID
     \param [in] init_skin bool Flag to initialize the FEA Structure by creating an FEA Skin from the parent Geom's OML at surfindex
     \param [in] surfindex int Main surface index for the FEA Structure
@@ -14877,6 +16545,43 @@ extern void SetIntersectSubSurfGeomID( const std::string & sub_id, const std::st
 */
 
 extern int AddFeaStruct( const std::string & geom_id, bool init_skin = true, int surfindex = 0 );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Add an FEA Structure to a Geom and return its ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    if ( GetFeaStructID( pod_id, 0 ) != struct_id )
+    {
+        Print( "ERROR: AddFeaStructure did not return the new Structure" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    assert GetFeaStructID( pod_id, 0 ) == struct_id, "AddFeaStructure did not return the new Structure"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaStruct, DeleteFeaStruct
+    \param [in] geom_id string Parent Geom ID
+    \param [in] init_skin bool Flag to initialize the FEA Skin
+    \param [in] surfindex int Main surface index for the FEA Structure
+    \return string FEA Structure ID
+*/
+
+extern std::string AddFeaStructure( const std::string & geom_id, bool init_skin = true, int surfindex = 0 );
 
 /*!
     \ingroup FEAMesh
@@ -15014,6 +16719,84 @@ extern void SetFeaMeshStructIndex( int struct_index );
     \ingroup FEAMesh
 */
 /*!
+    Get the ID of the FEA Structure that FEA Mesh works on.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetFeaMeshStructID( struct_id );
+
+    if ( GetFeaMeshStructID() != struct_id )
+    {
+        Print( "ERROR: GetFeaMeshStructID did not return the Structure set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    SetFeaMeshStructID( struct_id )
+
+    assert GetFeaMeshStructID() == struct_id, "GetFeaMeshStructID did not return the Structure set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaMeshStructID, GetFeaMeshStructIndex
+    \return string FEA Structure ID, or an empty string when no Structure is current
+*/
+
+extern std::string GetFeaMeshStructID();
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the FEA Structure that FEA Mesh works on, by ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    AddFeaStruct( pod_id );
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetFeaMeshStructID( struct_id );
+
+    if ( GetFeaMeshStructIndex() != GetFeaStructIndex( struct_id ) )
+    {
+        Print( "ERROR: SetFeaMeshStructID did not make the Structure current" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    AddFeaStruct( pod_id )
+    struct_id = AddFeaStructure( pod_id )
+
+    SetFeaMeshStructID( struct_id )
+
+    assert GetFeaMeshStructIndex() == GetFeaStructIndex( struct_id ), "SetFeaMeshStructID did not make the Structure current"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaMeshStructID, SetFeaMeshStructIndex
+    \param [in] struct_id string FEA Structure ID
+*/
+
+extern void SetFeaMeshStructID( const std::string & struct_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
     Delete an FEA Structure and all FEA Parts and FEA SubSurfaces associated with it
     \forcpponly
     \code{.cpp}
@@ -15073,11 +16856,54 @@ extern void SetFeaMeshStructIndex( int struct_index );
 
     \endcode
     \endPythonOnly
+    \sa DeleteFeaStructByID
     \param [in] geom_id string Parent Geom ID
     \param [in] fea_struct_ind int FEA Structure index
 */
 
 extern void DeleteFeaStruct( const std::string & geom_id, int fea_struct_ind );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Delete an FEA Structure, by ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id_1 = AddFeaStructure( pod_id );
+    string struct_id_2 = AddFeaStructure( pod_id );
+
+    DeleteFeaStructByID( struct_id_1 );
+
+    array< string > @ids = GetFeaStructIDVecByGeom( pod_id );
+
+    if ( ids.size() != 1 || ids[0] != struct_id_2 )
+    {
+        Print( "ERROR: DeleteFeaStructByID removed the wrong structure" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id_1 = AddFeaStructure( pod_id )
+    struct_id_2 = AddFeaStructure( pod_id )
+
+    DeleteFeaStructByID( struct_id_1 )
+
+    assert list( GetFeaStructIDVecByGeom( pod_id ) ) == [ struct_id_2 ], "DeleteFeaStructByID removed the wrong structure"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaStructure, GetFeaStructIDVec, DeleteFeaStruct
+    \param [in] struct_id string FEA Structure ID
+*/
+
+extern void DeleteFeaStructByID( const std::string & struct_id );
 
 /*!
     \ingroup FEAMesh
@@ -15299,13 +17125,52 @@ extern std::string GetFeaStructParentGeomID( const std::string & struct_id );
 
     \endcode
     \endPythonOnly
-    \sa FindContainer, SetFeaStructName
+    \sa FindContainer, SetFeaStructName, GetFeaStructNameByID
     \param [in] geom_id string Parent Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \return string Name for the FEA Structure
 */
 
 extern std::string GetFeaStructName( const std::string & geom_id, int fea_struct_ind );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the name of an FEA Structure, by ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetFeaStructNameByID( struct_id, "Spine" );
+
+    if ( GetFeaStructNameByID( struct_id ) != "Spine" )
+    {
+        Print( "ERROR: GetFeaStructNameByID did not return the name set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    SetFeaStructNameByID( struct_id, "Spine" )
+
+    assert GetFeaStructNameByID( struct_id ) == "Spine", "GetFeaStructNameByID did not return the name set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaStructName, GetFeaStructName
+    \param [in] struct_id string FEA Structure ID
+    \return string FEA Structure name
+*/
+
+extern std::string GetFeaStructNameByID( const std::string & struct_id );
 
 /*!
     \ingroup FEAMesh
@@ -15357,13 +17222,54 @@ extern std::string GetFeaStructName( const std::string & geom_id, int fea_struct
 
     \endcode
     \endPythonOnly
-    \sa GetFeaStructName
+    \sa GetFeaStructName, SetFeaStructNameByID
     \param [in] geom_id string Parent Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \param [in] name string New name for the FEA Structure
 */
 
 extern void SetFeaStructName( const std::string & geom_id, int fea_struct_ind, const std::string & name );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the name of an FEA Structure, by ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pod_id );
+    string struct_id = GetFeaStructID( pod_id, struct_ind );
+
+    SetFeaStructNameByID( struct_id, "Spine" );
+
+    if ( GetFeaStructName( pod_id, struct_ind ) != "Spine" )
+    {
+        Print( "ERROR: SetFeaStructNameByID did not rename the Structure" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pod_id )
+    struct_id = GetFeaStructID( pod_id, struct_ind )
+
+    SetFeaStructNameByID( struct_id, "Spine" )
+
+    assert GetFeaStructName( pod_id, struct_ind ) == "Spine", "SetFeaStructNameByID did not rename the Structure"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaStructName, SetFeaStructName
+    \param [in] struct_id string FEA Structure ID
+    \param [in] name string New name for the FEA Structure
+*/
+
+extern void SetFeaStructNameByID( const std::string & struct_id, const std::string & name );
 
 /*!
     \ingroup FEAMesh
@@ -15403,11 +17309,52 @@ extern void SetFeaStructName( const std::string & geom_id, int fea_struct_ind, c
 
     \endcode
     \endPythonOnly
-    \sa NumFeaStructures
+    \sa NumFeaStructures, GetFeaStructIDVecByGeom
     \return vector\<string\> Array of FEA Structure IDs
 */
 
 extern std::vector< std::string > GetFeaStructIDVec();
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the IDs of the FEA Structures of one Geom, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+    string other_id = AddGeom( "POD" );
+
+    AddFeaStruct( other_id );
+    string struct_id = AddFeaStructure( pod_id );
+
+    array< string > @ids = GetFeaStructIDVecByGeom( pod_id );
+
+    if ( ids.size() != 1 || ids[0] != struct_id )
+    {
+        Print( "ERROR: GetFeaStructIDVecByGeom did not return the Geom's Structures" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+    other_id = AddGeom( "POD" )
+
+    AddFeaStruct( other_id )
+    struct_id = AddFeaStructure( pod_id )
+
+    assert list( GetFeaStructIDVecByGeom( pod_id ) ) == [ struct_id ], "GetFeaStructIDVecByGeom did not return the Geom's Structures"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaStructID, AddFeaStructure, GetFeaStructIDVec
+    \param [in] geom_id string Parent Geom ID
+    \return array<string> Array of FEA Structure IDs
+*/
+
+extern std::vector< std::string > GetFeaStructIDVecByGeom( const std::string & geom_id );
 
 /*!
     \ingroup FEAMesh
@@ -15502,7 +17449,7 @@ extern void SetFeaPartName( const std::string & part_id, const std::string & nam
 
     \endcode
     \endPythonOnly
-    \sa FEA_PART_TYPE
+    \sa FEA_PART_TYPE, AddFeaPartByID
     \param [in] geom_id string Parent Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \param [in] type int FEA Part type enum (i.e. FEA_RIB)
@@ -15510,6 +17457,46 @@ extern void SetFeaPartName( const std::string & part_id, const std::string & nam
 */
 
 extern std::string AddFeaPart( const std::string & geom_id, int fea_struct_ind, int type );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Add an FEA Part to a Structure, by Structure ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string slice_id = AddFeaPartByID( struct_id, FEA_SLICE );
+
+    if ( GetFeaPartType( slice_id ) != FEA_SLICE )
+    {
+        Print( "ERROR: AddFeaPartByID did not add a slice" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    slice_id = AddFeaPartByID( struct_id, FEA_SLICE )
+
+    assert GetFeaPartType( slice_id ) == FEA_SLICE, "AddFeaPartByID did not add a slice"
+
+    \endcode
+    \endPythonOnly
+    \sa FEA_PART_TYPE, AddFeaPart
+    \param [in] struct_id string FEA Structure ID
+    \param [in] type int FEA Part type enum (i.e. FEA_RIB)
+    \return string FEA Part ID
+*/
+
+extern std::string AddFeaPartByID( const std::string & struct_id, int type );
 
 /*!
     \ingroup FEAMesh
@@ -15588,12 +17575,59 @@ extern std::string AddFeaPart( const std::string & geom_id, int fea_struct_ind, 
 
     \endcode
     \endPythonOnly
+    \sa DeleteFeaPartByID
     \param [in] geom_id string Parent Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \param [in] part_id string FEA Part ID
 */
 
 extern void DeleteFeaPart( const std::string & geom_id, int fea_struct_ind, const std::string & part_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Delete an FEA Part, by ID alone.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string slice_id = AddFeaPartByID( struct_id, FEA_SLICE );
+
+    int n = NumFeaParts( struct_id );
+
+    DeleteFeaPartByID( slice_id );
+
+    if ( NumFeaParts( struct_id ) != n - 1 )
+    {
+        Print( "ERROR: DeleteFeaPartByID did not remove the part" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    slice_id = AddFeaPartByID( struct_id, FEA_SLICE )
+
+    n = NumFeaParts( struct_id )
+
+    DeleteFeaPartByID( slice_id )
+
+    assert NumFeaParts( struct_id ) == n - 1, "DeleteFeaPartByID did not remove the part"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaPart, GetFeaPartIDVec, DeleteFeaPart
+    \param [in] part_id string FEA Part ID
+*/
+
+extern void DeleteFeaPartByID( const std::string & part_id );
 
 /*!
     \ingroup FEAMesh
@@ -15650,7 +17684,7 @@ extern void DeleteFeaPart( const std::string & geom_id, int fea_struct_ind, cons
 
     \endcode
     \endPythonOnly
-    \sa AddFeaPart, DeleteFeaPart, GetFeaPartIDVec
+    \sa AddFeaPart, DeleteFeaPart, GetFeaPartIDVec, ReorderFeaPartByID
     \param [in] geom_id string Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \param [in] part_id string FEA Part ID
@@ -15658,6 +17692,49 @@ extern void DeleteFeaPart( const std::string & geom_id, int fea_struct_ind, cons
 */
 
 extern void ReorderFeaPart( const std::string & geom_id, int fea_struct_ind, const std::string & part_id, int reorder_type );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Move an FEA Part within its Structure's list, by ID alone.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string slice_id = AddFeaPartByID( struct_id, FEA_SLICE );
+
+    ReorderFeaPartByID( slice_id, REORDER_MOVE_TOP );
+
+    if ( GetFeaPartID( struct_id, 0 ) != slice_id )
+    {
+        Print( "ERROR: ReorderFeaPartByID did not move the part to the top" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    slice_id = AddFeaPartByID( struct_id, FEA_SLICE )
+
+    ReorderFeaPartByID( slice_id, REORDER_MOVE_TOP )
+
+    assert GetFeaPartID( struct_id, 0 ) == slice_id, "ReorderFeaPartByID did not move the part to the top"
+
+    \endcode
+    \endPythonOnly
+    \sa REORDER_TYPE, ReorderFeaPart
+    \param [in] part_id string FEA Part ID
+    \param [in] reorder_type int Reorder type enum (i.e. REORDER_MOVE_UP)
+*/
+
+extern void ReorderFeaPartByID( const std::string & part_id, int reorder_type );
 
 /*!
     \ingroup FEAMesh
@@ -15715,13 +17792,59 @@ extern void ReorderFeaPart( const std::string & geom_id, int fea_struct_ind, con
 
     \endcode
     \endPythonOnly
-    \sa AddFeaPart, AddFeaSubSurf, NumFeaParts
+    \sa AddFeaPart, AddFeaSubSurf, NumFeaParts, IndividualizeFeaPartByID
     \param [in] geom_id string Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \param [in] part_id string FEA Part or FEA Sub-Surface ID of an array part
 */
 
 extern void IndividualizeFeaPart( const std::string & geom_id, int fea_struct_ind, const std::string & part_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Break a rib array, slice array or line array into its individual members, by ID alone.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string array_id = AddFeaPartByID( struct_id, FEA_SLICE_ARRAY );
+
+    int n = NumFeaParts( struct_id );
+
+    IndividualizeFeaPartByID( array_id );
+
+    if ( NumFeaParts( struct_id ) <= n )
+    {
+        Print( "ERROR: IndividualizeFeaPartByID did not break up the array" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    array_id = AddFeaPartByID( struct_id, FEA_SLICE_ARRAY )
+
+    n = NumFeaParts( struct_id )
+
+    IndividualizeFeaPartByID( array_id )
+
+    assert NumFeaParts( struct_id ) > n, "IndividualizeFeaPartByID did not break up the array"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaPart, IndividualizeFeaPart
+    \param [in] part_id string FEA Part ID of a rib array, slice array or line array
+*/
+
+extern void IndividualizeFeaPartByID( const std::string & part_id );
 
 /*!
     \ingroup FEAMesh
@@ -16136,6 +18259,564 @@ extern std::string GetFeaPartPerpendicularSparID( const std::string& part_id );
     \ingroup FEAMesh
 */
 /*!
+    Set the wing section a spar, rib or rib array starts at, by the section's XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    InsertXSec( wing_id, 1, XS_FOUR_SERIES );
+
+    string xsec_surf = GetXSecSurf( wing_id, 0 );
+
+    string struct_id = AddFeaStructure( wing_id );
+
+    string spar_id = AddFeaPartByID( struct_id, FEA_SPAR );
+
+    SetFeaPartStartWingSectionID( spar_id, GetXSec( xsec_surf, 1 ) );
+
+    if ( GetFeaPartStartWingSectionID( spar_id ) != GetXSec( xsec_surf, 1 ) )
+    {
+        Print( "ERROR: SetFeaPartStartWingSectionID did not set the section" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    InsertXSec( wing_id, 1, XS_FOUR_SERIES )
+
+    xsec_surf = GetXSecSurf( wing_id, 0 )
+
+    struct_id = AddFeaStructure( wing_id )
+
+    spar_id = AddFeaPartByID( struct_id, FEA_SPAR )
+
+    SetFeaPartStartWingSectionID( spar_id, GetXSec( xsec_surf, 1 ) )
+
+    assert GetFeaPartStartWingSectionID( spar_id ) == GetXSec( xsec_surf, 1 ), "SetFeaPartStartWingSectionID did not set the section"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaPartStartWingSectionID
+    \param [in] part_id string FEA spar, rib or rib array ID
+    \param [in] xsec_id string XSec ID of a section of the part's wing
+*/
+
+extern void SetFeaPartStartWingSectionID( const std::string & part_id, const std::string & xsec_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the XSec ID of the wing section a spar, rib or rib array starts at.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    InsertXSec( wing_id, 1, XS_FOUR_SERIES );
+
+    string xsec_surf = GetXSecSurf( wing_id, 0 );
+
+    string struct_id = AddFeaStructure( wing_id );
+
+    string spar_id = AddFeaPartByID( struct_id, FEA_SPAR );
+
+    if ( GetFeaPartStartWingSectionID( spar_id ) != GetXSec( xsec_surf, 1 ) )
+    {
+        Print( "ERROR: GetFeaPartStartWingSectionID did not return the first section" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    InsertXSec( wing_id, 1, XS_FOUR_SERIES )
+
+    xsec_surf = GetXSecSurf( wing_id, 0 )
+
+    struct_id = AddFeaStructure( wing_id )
+
+    spar_id = AddFeaPartByID( struct_id, FEA_SPAR )
+
+    assert GetFeaPartStartWingSectionID( spar_id ) == GetXSec( xsec_surf, 1 ), "GetFeaPartStartWingSectionID did not return the first section"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaPartStartWingSectionID
+    \param [in] part_id string FEA spar, rib or rib array ID
+    \return string XSec ID
+*/
+
+extern std::string GetFeaPartStartWingSectionID( const std::string & part_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the wing section a spar, rib or rib array ends at, by the section's XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    InsertXSec( wing_id, 1, XS_FOUR_SERIES );
+
+    string xsec_surf = GetXSecSurf( wing_id, 0 );
+
+    string struct_id = AddFeaStructure( wing_id );
+
+    string spar_id = AddFeaPartByID( struct_id, FEA_SPAR );
+
+    SetFeaPartEndWingSectionID( spar_id, GetXSec( xsec_surf, 2 ) );
+
+    if ( GetFeaPartEndWingSectionID( spar_id ) != GetXSec( xsec_surf, 2 ) )
+    {
+        Print( "ERROR: SetFeaPartEndWingSectionID did not set the section" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    InsertXSec( wing_id, 1, XS_FOUR_SERIES )
+
+    xsec_surf = GetXSecSurf( wing_id, 0 )
+
+    struct_id = AddFeaStructure( wing_id )
+
+    spar_id = AddFeaPartByID( struct_id, FEA_SPAR )
+
+    SetFeaPartEndWingSectionID( spar_id, GetXSec( xsec_surf, 2 ) )
+
+    assert GetFeaPartEndWingSectionID( spar_id ) == GetXSec( xsec_surf, 2 ), "SetFeaPartEndWingSectionID did not set the section"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaPartEndWingSectionID
+    \param [in] part_id string FEA spar, rib or rib array ID
+    \param [in] xsec_id string XSec ID of a section of the part's wing
+*/
+
+extern void SetFeaPartEndWingSectionID( const std::string & part_id, const std::string & xsec_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the XSec ID of the wing section a spar, rib or rib array ends at.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    InsertXSec( wing_id, 1, XS_FOUR_SERIES );
+
+    string xsec_surf = GetXSecSurf( wing_id, 0 );
+
+    string struct_id = AddFeaStructure( wing_id );
+
+    string spar_id = AddFeaPartByID( struct_id, FEA_SPAR );
+
+    if ( GetFeaPartEndWingSectionID( spar_id ) != GetXSec( xsec_surf, 1 ) )
+    {
+        Print( "ERROR: GetFeaPartEndWingSectionID did not return the first section" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    InsertXSec( wing_id, 1, XS_FOUR_SERIES )
+
+    xsec_surf = GetXSecSurf( wing_id, 0 )
+
+    struct_id = AddFeaStructure( wing_id )
+
+    spar_id = AddFeaPartByID( struct_id, FEA_SPAR )
+
+    assert GetFeaPartEndWingSectionID( spar_id ) == GetXSec( xsec_surf, 1 ), "GetFeaPartEndWingSectionID did not return the first section"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaPartEndWingSectionID
+    \param [in] part_id string FEA spar, rib or rib array ID
+    \return string XSec ID
+*/
+
+extern std::string GetFeaPartEndWingSectionID( const std::string & part_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the shell property of an FEA Part or FEA SubSurface, by property ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string slice_id = AddFeaPartByID( struct_id, FEA_SLICE );
+
+    string prop_id = AddFeaProperty( FEA_SHELL );
+
+    SetFeaPartPropertyID( slice_id, prop_id );
+
+    if ( GetFeaPartPropertyID( slice_id ) != prop_id )
+    {
+        Print( "ERROR: SetFeaPartPropertyID did not set the property" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    slice_id = AddFeaPartByID( struct_id, FEA_SLICE )
+
+    prop_id = AddFeaProperty( FEA_SHELL )
+
+    SetFeaPartPropertyID( slice_id, prop_id )
+
+    assert GetFeaPartPropertyID( slice_id ) == prop_id, "SetFeaPartPropertyID did not set the property"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaPartPropertyID, SetFeaPartCapPropertyID
+    \param [in] part_id string FEA Part or FEA SubSurface ID
+    \param [in] property_id string FEA Property ID
+*/
+
+extern void SetFeaPartPropertyID( const std::string & part_id, const std::string & property_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the shell property of an FEA Part or FEA SubSurface.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string line_id = AddFeaSubSurfByID( struct_id, SS_LINE );
+
+    string prop_id = AddFeaProperty( FEA_SHELL );
+
+    SetFeaPartPropertyID( line_id, prop_id );
+
+    if ( GetFeaPartPropertyID( line_id ) != prop_id )
+    {
+        Print( "ERROR: GetFeaPartPropertyID did not return the property set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    line_id = AddFeaSubSurfByID( struct_id, SS_LINE )
+
+    prop_id = AddFeaProperty( FEA_SHELL )
+
+    SetFeaPartPropertyID( line_id, prop_id )
+
+    assert GetFeaPartPropertyID( line_id ) == prop_id, "GetFeaPartPropertyID did not return the property set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaPartPropertyID
+    \param [in] part_id string FEA Part or FEA SubSurface ID
+    \return string FEA Property ID
+*/
+
+extern std::string GetFeaPartPropertyID( const std::string & part_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the cap (beam) property of an FEA Part or FEA SubSurface, by property ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string slice_id = AddFeaPartByID( struct_id, FEA_SLICE );
+
+    string prop_id = AddFeaProperty( FEA_BEAM );
+
+    SetFeaPartCapPropertyID( slice_id, prop_id );
+
+    if ( GetFeaPartCapPropertyID( slice_id ) != prop_id )
+    {
+        Print( "ERROR: SetFeaPartCapPropertyID did not set the property" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    slice_id = AddFeaPartByID( struct_id, FEA_SLICE )
+
+    prop_id = AddFeaProperty( FEA_BEAM )
+
+    SetFeaPartCapPropertyID( slice_id, prop_id )
+
+    assert GetFeaPartCapPropertyID( slice_id ) == prop_id, "SetFeaPartCapPropertyID did not set the property"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaPartCapPropertyID, SetFeaPartPropertyID
+    \param [in] part_id string FEA Part or FEA SubSurface ID
+    \param [in] property_id string FEA Property ID
+*/
+
+extern void SetFeaPartCapPropertyID( const std::string & part_id, const std::string & property_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the cap (beam) property of an FEA Part or FEA SubSurface.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string line_id = AddFeaSubSurfByID( struct_id, SS_LINE );
+
+    string prop_id = AddFeaProperty( FEA_BEAM );
+
+    SetFeaPartCapPropertyID( line_id, prop_id );
+
+    if ( GetFeaPartCapPropertyID( line_id ) != prop_id )
+    {
+        Print( "ERROR: GetFeaPartCapPropertyID did not return the property set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    line_id = AddFeaSubSurfByID( struct_id, SS_LINE )
+
+    prop_id = AddFeaProperty( FEA_BEAM )
+
+    SetFeaPartCapPropertyID( line_id, prop_id )
+
+    assert GetFeaPartCapPropertyID( line_id ) == prop_id, "GetFeaPartCapPropertyID did not return the property set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaPartCapPropertyID
+    \param [in] part_id string FEA Part or FEA SubSurface ID
+    \return string FEA Property ID
+*/
+
+extern std::string GetFeaPartCapPropertyID( const std::string & part_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the FEA Part a fixed point lies on. The part must be a surface in the fixed point's Structure.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string slice_id = AddFeaPartByID( struct_id, FEA_SLICE );
+
+    string fixpt_id = AddFeaPartByID( struct_id, FEA_FIX_POINT );
+
+    SetFeaFixPointParentID( fixpt_id, slice_id );
+
+    if ( GetFeaFixPointParentID( fixpt_id ) != slice_id )
+    {
+        Print( "ERROR: SetFeaFixPointParentID did not set the parent" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    slice_id = AddFeaPartByID( struct_id, FEA_SLICE )
+
+    fixpt_id = AddFeaPartByID( struct_id, FEA_FIX_POINT )
+
+    SetFeaFixPointParentID( fixpt_id, slice_id )
+
+    assert GetFeaFixPointParentID( fixpt_id ) == slice_id, "SetFeaFixPointParentID did not set the parent"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaFixPointParentID
+    \param [in] fixpt_id string FEA Fixed Point ID
+    \param [in] part_id string FEA Part ID of the surface the point lies on
+*/
+
+extern void SetFeaFixPointParentID( const std::string & fixpt_id, const std::string & part_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the FEA Part a fixed point lies on.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string fixpt_id = AddFeaPartByID( struct_id, FEA_FIX_POINT );
+
+    // A new fixed point lies on the skin, the Structure's first part.
+    if ( GetFeaFixPointParentID( fixpt_id ) != GetFeaPartID( struct_id, 0 ) )
+    {
+        Print( "ERROR: GetFeaFixPointParentID did not return the skin" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    fixpt_id = AddFeaPartByID( struct_id, FEA_FIX_POINT )
+
+    # A new fixed point lies on the skin, the Structure's first part.
+    assert GetFeaFixPointParentID( fixpt_id ) == GetFeaPartID( struct_id, 0 ), "GetFeaFixPointParentID did not return the skin"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaFixPointParentID
+    \param [in] fixpt_id string FEA Fixed Point ID
+    \return string FEA Part ID
+*/
+
+extern std::string GetFeaFixPointParentID( const std::string & fixpt_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the other Geom a fixed point refers to, or an empty string for none.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string other_id = AddGeom( "POD" );
+
+    string fixpt_id = AddFeaPartByID( struct_id, FEA_FIX_POINT );
+
+    SetFeaFixPointOtherGeomID( fixpt_id, other_id );
+
+    if ( GetFeaFixPointOtherGeomID( fixpt_id ) != other_id )
+    {
+        Print( "ERROR: SetFeaFixPointOtherGeomID did not set the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    other_id = AddGeom( "POD" )
+
+    fixpt_id = AddFeaPartByID( struct_id, FEA_FIX_POINT )
+
+    SetFeaFixPointOtherGeomID( fixpt_id, other_id )
+
+    assert GetFeaFixPointOtherGeomID( fixpt_id ) == other_id, "SetFeaFixPointOtherGeomID did not set the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaFixPointOtherGeomID
+    \param [in] fixpt_id string FEA Fixed Point ID
+    \param [in] geom_id string Geom ID, or an empty string
+*/
+
+extern void SetFeaFixPointOtherGeomID( const std::string & fixpt_id, const std::string & geom_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the other Geom a fixed point refers to.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string fixpt_id = AddFeaPartByID( struct_id, FEA_FIX_POINT );
+
+    if ( GetFeaFixPointOtherGeomID( fixpt_id ) != "" )
+    {
+        Print( "ERROR: a new fixed point refers to another Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    fixpt_id = AddFeaPartByID( struct_id, FEA_FIX_POINT )
+
+    assert GetFeaFixPointOtherGeomID( fixpt_id ) == "", "a new fixed point refers to another Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaFixPointOtherGeomID
+    \param [in] fixpt_id string FEA Fixed Point ID
+    \return string Geom ID, or an empty string for none
+*/
+
+extern std::string GetFeaFixPointOtherGeomID( const std::string & fixpt_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
     Set the name of an FEA SubSurface
     \forcpponly
     \code{.cpp}
@@ -16277,7 +18958,7 @@ extern std::string GetFeaSubSurfName( const std::string & subsurf_id );
 
     \endcode
     \endPythonOnly
-    \sa SUBSURF_TYPE
+    \sa SUBSURF_TYPE, AddFeaSubSurfByID
     \param [in] geom_id string Parent Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \param [in] type int FEA SubSurface type enum (i.e. SS_ELLIPSE)
@@ -16285,6 +18966,48 @@ extern std::string GetFeaSubSurfName( const std::string & subsurf_id );
 */
 
 extern std::string AddFeaSubSurf( const std::string & geom_id, int fea_struct_ind, int type );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Add an FEA SubSurface to a Structure, by Structure ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string line_id = AddFeaSubSurfByID( struct_id, SS_LINE );
+
+    array< string > @ids = GetFeaSubSurfIDVec( struct_id );
+
+    if ( ids.size() != 1 || ids[0] != line_id )
+    {
+        Print( "ERROR: AddFeaSubSurfByID did not add the line" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    line_id = AddFeaSubSurfByID( struct_id, SS_LINE )
+
+    assert list( GetFeaSubSurfIDVec( struct_id ) ) == [ line_id ], "AddFeaSubSurfByID did not add the line"
+
+    \endcode
+    \endPythonOnly
+    \sa SUBSURF_TYPE, AddFeaSubSurf
+    \param [in] struct_id string FEA Structure ID
+    \param [in] type int FEA SubSurface type enum (i.e. SS_ELLIPSE)
+    \return string FEA SubSurface ID
+*/
+
+extern std::string AddFeaSubSurfByID( const std::string & struct_id, int type );
 
 /*!
     \ingroup FEAMesh
@@ -16344,12 +19067,55 @@ extern std::string AddFeaSubSurf( const std::string & geom_id, int fea_struct_in
 
     \endcode
     \endPythonOnly
+    \sa DeleteFeaSubSurfByID
     \param [in] geom_id string Parent Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \param [in] ss_id string FEA SubSurface ID
 */
 
 extern void DeleteFeaSubSurf( const std::string & geom_id, int fea_struct_ind, const std::string & ss_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Delete an FEA SubSurface, by ID alone.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string line_id = AddFeaSubSurfByID( struct_id, SS_LINE );
+
+    DeleteFeaSubSurfByID( line_id );
+
+    if ( NumFeaSubSurfs( struct_id ) != 0 )
+    {
+        Print( "ERROR: DeleteFeaSubSurfByID did not remove the line" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    line_id = AddFeaSubSurfByID( struct_id, SS_LINE )
+
+    DeleteFeaSubSurfByID( line_id )
+
+    assert NumFeaSubSurfs( struct_id ) == 0, "DeleteFeaSubSurfByID did not remove the line"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaSubSurf, GetFeaSubSurfIDVec, DeleteFeaSubSurf
+    \param [in] ss_id string FEA SubSurface ID
+*/
+
+extern void DeleteFeaSubSurfByID( const std::string & ss_id );
 
 /*!
     \ingroup FEAMesh
@@ -16540,13 +19306,63 @@ extern std::string AddFeaPolySparPt( const std::string & pspar_id );
 
     \endcode
     \endPythonOnly
-    \sa AddFeaPolySparPt, DelFeaPolySparPt, GetFeaPolySparNumPt
+    \sa AddFeaPolySparPt, DelFeaPolySparPt, GetFeaPolySparNumPt, InsertFeaPolySparPtByID
     \param [in] pspar_id string FEA Poly Spar part ID
     \param [in] index int Index before which the new point is inserted
     \return string ID of the newly inserted Poly Spar point
 */
 
 extern std::string InsertFeaPolySparPt( const std::string & pspar_id, int index );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Insert a point into an FEA Poly Spar before the point with the given ID and return the new point's ID.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    string struct_id = AddFeaStructure( wing_id );
+
+    string pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR );
+
+    // A new Poly Spar has two points, root and tip
+    array< string > @pts = GetAllFeaPolySparPtIDVec( pspar_id );
+
+    string pt_id = InsertFeaPolySparPtByID( pspar_id, pts[1] );
+
+    if ( GetFeaPolySparPtID( pspar_id, 1 ) != pt_id )
+    {
+        Print( "ERROR: InsertFeaPolySparPtByID did not put the point before the tip" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    struct_id = AddFeaStructure( wing_id )
+
+    pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR )
+
+    # A new Poly Spar has two points, root and tip
+    pts = GetAllFeaPolySparPtIDVec( pspar_id )
+
+    pt_id = InsertFeaPolySparPtByID( pspar_id, pts[1] )
+
+    assert GetFeaPolySparPtID( pspar_id, 1 ) == pt_id, "InsertFeaPolySparPtByID did not put the point before the tip"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaPolySparPt, DelFeaPolySparPt, InsertFeaPolySparPt
+    \param [in] pspar_id string FEA Poly Spar part ID
+    \param [in] before_pt_id string ID of the point the new point goes before
+    \return string ID of the newly inserted Poly Spar point
+*/
+
+extern std::string InsertFeaPolySparPtByID( const std::string & pspar_id, const std::string & before_pt_id );
 
 /*!
     \ingroup FEAMesh
@@ -16594,12 +19410,65 @@ extern std::string InsertFeaPolySparPt( const std::string & pspar_id, int index 
 
     \endcode
     \endPythonOnly
-    \sa DelAllFeaPolySparPt, AddFeaPolySparPt, GetFeaPolySparNumPt
+    \sa DelAllFeaPolySparPt, AddFeaPolySparPt, GetFeaPolySparNumPt, DelFeaPolySparPtByID
     \param [in] pspar_id string FEA Poly Spar part ID
     \param [in] index int Index of the point to delete
 */
 
 extern void DelFeaPolySparPt( const std::string & pspar_id, int index );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Delete a point of an FEA Poly Spar, by point ID.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    string struct_id = AddFeaStructure( wing_id );
+
+    string pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR );
+
+    // A new Poly Spar has two points, root and tip
+    array< string > @pts = GetAllFeaPolySparPtIDVec( pspar_id );
+
+    string pt_id = InsertFeaPolySparPtByID( pspar_id, pts[1] );
+
+    DelFeaPolySparPtByID( pspar_id, pt_id );
+
+    if ( GetFeaPolySparNumPt( pspar_id ) != 2 )
+    {
+        Print( "ERROR: DelFeaPolySparPtByID did not remove the point" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    struct_id = AddFeaStructure( wing_id )
+
+    pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR )
+
+    # A new Poly Spar has two points, root and tip
+    pts = GetAllFeaPolySparPtIDVec( pspar_id )
+
+    pt_id = InsertFeaPolySparPtByID( pspar_id, pts[1] )
+
+    DelFeaPolySparPtByID( pspar_id, pt_id )
+
+    assert GetFeaPolySparNumPt( pspar_id ) == 2, "DelFeaPolySparPtByID did not remove the point"
+
+    \endcode
+    \endPythonOnly
+    \sa InsertFeaPolySparPt, DelFeaPolySparPt
+    \param [in] pspar_id string FEA Poly Spar part ID
+    \param [in] pt_id string ID of the point to delete
+*/
+
+extern void DelFeaPolySparPtByID( const std::string & pspar_id, const std::string & pt_id );
 
 /*!
     \ingroup FEAMesh
@@ -16695,7 +19564,7 @@ extern void DelAllFeaPolySparPt( const std::string & pspar_id );
 
     \endcode
     \endPythonOnly
-    \sa REORDER_TYPE, AddFeaPolySparPt, GetFeaPolySparNumPt
+    \sa REORDER_TYPE, AddFeaPolySparPt, GetFeaPolySparNumPt, MoveFeaPolySparPtByID
     \param [in] pspar_id string FEA Poly Spar part ID
     \param [in] index int Index of the point to move
     \param [in] reorder_type int Reorder type enum (i.e. REORDER_MOVE_UP, REORDER_MOVE_DOWN, REORDER_MOVE_TOP, REORDER_MOVE_BOTTOM)
@@ -16703,6 +19572,57 @@ extern void DelAllFeaPolySparPt( const std::string & pspar_id );
 */
 
 extern int MoveFeaPolySparPt( const std::string & pspar_id, int index, int reorder_type );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Move a point of an FEA Poly Spar within its list, by point ID, and return its new index.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    string struct_id = AddFeaStructure( wing_id );
+
+    string pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR );
+
+    // A new Poly Spar has two points, root and tip
+    array< string > @pts = GetAllFeaPolySparPtIDVec( pspar_id );
+
+    int index = MoveFeaPolySparPtByID( pspar_id, pts[1], REORDER_MOVE_TOP );
+
+    if ( index != 0 || GetFeaPolySparPtID( pspar_id, 0 ) != pts[1] )
+    {
+        Print( "ERROR: MoveFeaPolySparPtByID did not move the point to the top" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    struct_id = AddFeaStructure( wing_id )
+
+    pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR )
+
+    # A new Poly Spar has two points, root and tip
+    pts = GetAllFeaPolySparPtIDVec( pspar_id )
+
+    index = MoveFeaPolySparPtByID( pspar_id, pts[1], REORDER_MOVE_TOP )
+
+    assert index == 0 and GetFeaPolySparPtID( pspar_id, 0 ) == pts[1], "MoveFeaPolySparPtByID did not move the point to the top"
+
+    \endcode
+    \endPythonOnly
+    \sa REORDER_TYPE, MoveFeaPolySparPt
+    \param [in] pspar_id string FEA Poly Spar part ID
+    \param [in] pt_id string ID of the point to move
+    \param [in] reorder_type int Reorder type enum (i.e. REORDER_MOVE_UP)
+    \return int New index of the point
+*/
+
+extern int MoveFeaPolySparPtByID( const std::string & pspar_id, const std::string & pt_id, int reorder_type );
 
 /*!
     \ingroup FEAMesh
@@ -16744,13 +19664,63 @@ extern int MoveFeaPolySparPt( const std::string & pspar_id, int index, int reord
 
     \endcode
     \endPythonOnly
-    \sa GetFeaPolySparPtName
+    \sa GetFeaPolySparPtName, SetFeaPolySparPtNameByID
     \param [in] pspar_id string FEA Poly Spar part ID
     \param [in] index int Index of the point
     \param [in] name string New name for the point
 */
 
 extern void SetFeaPolySparPtName( const std::string & pspar_id, int index, const std::string & name );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the name of a point of an FEA Poly Spar, by point ID.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    string struct_id = AddFeaStructure( wing_id );
+
+    string pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR );
+
+    // A new Poly Spar has two points, root and tip
+    array< string > @pts = GetAllFeaPolySparPtIDVec( pspar_id );
+
+    SetFeaPolySparPtNameByID( pspar_id, pts[1], "Tip" );
+
+    if ( GetFeaPolySparPtName( pspar_id, 1 ) != "Tip" )
+    {
+        Print( "ERROR: SetFeaPolySparPtNameByID did not name the point" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    struct_id = AddFeaStructure( wing_id )
+
+    pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR )
+
+    # A new Poly Spar has two points, root and tip
+    pts = GetAllFeaPolySparPtIDVec( pspar_id )
+
+    SetFeaPolySparPtNameByID( pspar_id, pts[1], "Tip" )
+
+    assert GetFeaPolySparPtName( pspar_id, 1 ) == "Tip", "SetFeaPolySparPtNameByID did not name the point"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaPolySparPtName, SetFeaPolySparPtName
+    \param [in] pspar_id string FEA Poly Spar part ID
+    \param [in] pt_id string Point ID
+    \param [in] name string New name for the point
+*/
+
+extern void SetFeaPolySparPtNameByID( const std::string & pspar_id, const std::string & pt_id, const std::string & name );
 
 /*!
     \ingroup FEAMesh
@@ -16794,13 +19764,63 @@ extern void SetFeaPolySparPtName( const std::string & pspar_id, int index, const
 
     \endcode
     \endPythonOnly
-    \sa SetFeaPolySparPtName
+    \sa SetFeaPolySparPtName, GetFeaPolySparPtNameByID
     \param [in] pspar_id string FEA Poly Spar part ID
     \param [in] index int Index of the point
     \return string Name of the point
 */
 
 extern std::string GetFeaPolySparPtName( const std::string & pspar_id, int index );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the name of a point of an FEA Poly Spar, by point ID.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    string struct_id = AddFeaStructure( wing_id );
+
+    string pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR );
+
+    // A new Poly Spar has two points, root and tip
+    array< string > @pts = GetAllFeaPolySparPtIDVec( pspar_id );
+
+    SetFeaPolySparPtName( pspar_id, 0, "Root" );
+
+    if ( GetFeaPolySparPtNameByID( pspar_id, pts[0] ) != "Root" )
+    {
+        Print( "ERROR: GetFeaPolySparPtNameByID did not return the name set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    struct_id = AddFeaStructure( wing_id )
+
+    pspar_id = AddFeaPartByID( struct_id, FEA_POLY_SPAR )
+
+    # A new Poly Spar has two points, root and tip
+    pts = GetAllFeaPolySparPtIDVec( pspar_id )
+
+    SetFeaPolySparPtName( pspar_id, 0, "Root" )
+
+    assert GetFeaPolySparPtNameByID( pspar_id, pts[0] ) == "Root", "GetFeaPolySparPtNameByID did not return the name set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaPolySparPtName, GetFeaPolySparPtName
+    \param [in] pspar_id string FEA Poly Spar part ID
+    \param [in] pt_id string Point ID
+    \return string Name of the point
+*/
+
+extern std::string GetFeaPolySparPtNameByID( const std::string & pspar_id, const std::string & pt_id );
 
 /*!
     \ingroup FEAMesh
@@ -17156,12 +20176,63 @@ extern void AddFeaTrimPart( const std::string & trim_id, const std::string & par
 
     \endcode
     \endPythonOnly
-    \sa AddFeaTrimPart, GetFeaTrimPartIDVec
+    \sa AddFeaTrimPart, GetFeaTrimPartIDVec, DeleteFeaTrimPartByID
     \param [in] trim_id string FEA Trim part ID
     \param [in] index int Trim entry index
 */
 
 extern void DeleteFeaTrimPart( const std::string & trim_id, int index );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Stop an FEA Part from trimming a Trim part, by the trimming part's ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string slice_id = AddFeaPartByID( struct_id, FEA_SLICE );
+
+    string trim_id = AddFeaPartByID( struct_id, FEA_TRIM );
+
+    AddFeaTrimPart( trim_id, slice_id );
+
+    DeleteFeaTrimPartByID( trim_id, slice_id );
+
+    if ( GetFeaTrimPartIDVec( trim_id ).size() != 0 )
+    {
+        Print( "ERROR: DeleteFeaTrimPartByID did not remove the part" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    slice_id = AddFeaPartByID( struct_id, FEA_SLICE )
+
+    trim_id = AddFeaPartByID( struct_id, FEA_TRIM )
+
+    AddFeaTrimPart( trim_id, slice_id )
+
+    DeleteFeaTrimPartByID( trim_id, slice_id )
+
+    assert len( GetFeaTrimPartIDVec( trim_id ) ) == 0, "DeleteFeaTrimPartByID did not remove the part"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaTrimPart, GetFeaTrimPartIDVec, DeleteFeaTrimPart
+    \param [in] trim_id string FEA Trim part ID
+    \param [in] part_id string FEA Part ID of the trimming part
+*/
+
+extern void DeleteFeaTrimPartByID( const std::string & trim_id, const std::string & part_id );
 
 /*!
     \ingroup FEAMesh
@@ -17859,7 +20930,13 @@ extern std::vector < std::string > GetFeaAssemblyStructureIDVec( const std::stri
         __failure++;
     }
 
-    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 );
+    string conn_id = AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 );
+
+    if ( GetFeaAssemblyConnectionID( assembly_id, 0 ) != conn_id )
+    {
+        Print( "ERROR: AddFeaAssemblyConnection did not return the new connection" );
+        __failure++;
+    }
 
     if ( NumFeaAssemblyConnections( assembly_id ) != 1 )
     {
@@ -17911,7 +20988,9 @@ extern std::vector < std::string > GetFeaAssemblyStructureIDVec( const std::stri
 
     assert NumFeaAssemblyConnections( assembly_id ) == 0, "a new assembly already holds connections"
 
-    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 )
+    conn_id = AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 )
+
+    assert GetFeaAssemblyConnectionID( assembly_id, 0 ) == conn_id, "AddFeaAssemblyConnection did not return the new connection"
 
     assert NumFeaAssemblyConnections( assembly_id ) == 1, "AddFeaAssemblyConnection did not add a connection"
 
@@ -17939,11 +21018,12 @@ extern std::vector < std::string > GetFeaAssemblyStructureIDVec( const std::stri
     \param [in] end_fix_pt_id string FEA Fixed Point ID at the end of the connection
     \param [in] end_struct_id string FEA Structure ID the end Fixed Point belongs to
     \param [in] end_index int Surface index of the end Fixed Point
+    \return string FEA Connection ID
 */
 
-extern void AddFeaAssemblyConnection( const std::string & assembly_id,
-                                      const std::string & start_fix_pt_id, const std::string & start_struct_id, int start_index,
-                                      const std::string & end_fix_pt_id, const std::string & end_struct_id, int end_index );
+extern std::string AddFeaAssemblyConnection( const std::string & assembly_id,
+                                             const std::string & start_fix_pt_id, const std::string & start_struct_id, int start_index,
+                                             const std::string & end_fix_pt_id, const std::string & end_struct_id, int end_index );
 
 /*!
     \ingroup FEAMesh
@@ -17983,12 +21063,73 @@ extern void AddFeaAssemblyConnection( const std::string & assembly_id,
 
     \endcode
     \endPythonOnly
-    \sa AddFeaAssemblyConnection, NumFeaAssemblyConnections
+    \sa AddFeaAssemblyConnection, NumFeaAssemblyConnections, DeleteFeaAssemblyConnectionByID
     \param [in] assembly_id string FEA Assembly ID
     \param [in] connection_index int Connection index
 */
 
 extern void DeleteFeaAssemblyConnection( const std::string & assembly_id, int connection_index );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Delete a connection from an FEA Assembly, by connection ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id_1 = AddFeaStructure( pod_id );
+    string struct_id_2 = AddFeaStructure( pod_id );
+
+    string fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT );
+    string fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT );
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 );
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 );
+
+    string conn_id = AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 );
+
+    DeleteFeaAssemblyConnectionByID( assembly_id, conn_id );
+
+    if ( NumFeaAssemblyConnections( assembly_id ) != 0 )
+    {
+        Print( "ERROR: DeleteFeaAssemblyConnectionByID did not remove the connection" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id_1 = AddFeaStructure( pod_id )
+    struct_id_2 = AddFeaStructure( pod_id )
+
+    fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT )
+    fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT )
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 )
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 )
+
+    conn_id = AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 )
+
+    DeleteFeaAssemblyConnectionByID( assembly_id, conn_id )
+
+    assert NumFeaAssemblyConnections( assembly_id ) == 0, "DeleteFeaAssemblyConnectionByID did not remove the connection"
+
+    \endcode
+    \endPythonOnly
+    \sa AddFeaAssemblyConnection, GetFeaAssemblyConnectionIDVec, DeleteFeaAssemblyConnection
+    \param [in] assembly_id string FEA Assembly ID
+    \param [in] connection_id string FEA Connection ID
+*/
+
+extern void DeleteFeaAssemblyConnectionByID( const std::string & assembly_id, const std::string & connection_id );
 
 /*!
     \ingroup FEAMesh
@@ -18135,6 +21276,309 @@ extern int NumFeaAssemblyConnections( const std::string & assembly_id );
 */
 
 extern std::string GetFeaAssemblyConnectionID( const std::string & assembly_id, int connection_index );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the IDs of the connections of an FEA Assembly, in order.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id_1 = AddFeaStructure( pod_id );
+    string struct_id_2 = AddFeaStructure( pod_id );
+
+    string fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT );
+    string fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT );
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 );
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 );
+
+    string conn_id = AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 );
+
+    array< string > @ids = GetFeaAssemblyConnectionIDVec( assembly_id );
+
+    if ( ids.size() != 1 || ids[0] != conn_id )
+    {
+        Print( "ERROR: GetFeaAssemblyConnectionIDVec did not return the connection" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id_1 = AddFeaStructure( pod_id )
+    struct_id_2 = AddFeaStructure( pod_id )
+
+    fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT )
+    fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT )
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 )
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 )
+
+    conn_id = AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 )
+
+    assert list( GetFeaAssemblyConnectionIDVec( assembly_id ) ) == [ conn_id ], "GetFeaAssemblyConnectionIDVec did not return the connection"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaAssemblyConnectionID, AddFeaAssemblyConnection
+    \param [in] assembly_id string FEA Assembly ID
+    \return array<string> Array of FEA Connection IDs
+*/
+
+extern std::vector < std::string > GetFeaAssemblyConnectionIDVec( const std::string & assembly_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the fixed point at the start of an FEA Assembly connection.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id_1 = AddFeaStructure( pod_id );
+    string struct_id_2 = AddFeaStructure( pod_id );
+
+    string fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT );
+    string fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT );
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 );
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 );
+
+    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 );
+
+    string conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 );
+
+    if ( GetFeaConnectionStartFixPtID( conn_id ) != fix_pt_1 )
+    {
+        Print( "ERROR: GetFeaConnectionStartFixPtID did not return the fixed point" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id_1 = AddFeaStructure( pod_id )
+    struct_id_2 = AddFeaStructure( pod_id )
+
+    fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT )
+    fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT )
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 )
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 )
+
+    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 )
+
+    conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 )
+
+    assert GetFeaConnectionStartFixPtID( conn_id ) == fix_pt_1, "GetFeaConnectionStartFixPtID did not return the fixed point"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaConnectionStartStructID, AddFeaAssemblyConnection
+    \param [in] connection_id string FEA Connection ID
+    \return string FEA Fixed Point ID
+*/
+
+extern std::string GetFeaConnectionStartFixPtID( const std::string & connection_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the Structure of the fixed point at the start of an FEA Assembly connection.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id_1 = AddFeaStructure( pod_id );
+    string struct_id_2 = AddFeaStructure( pod_id );
+
+    string fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT );
+    string fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT );
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 );
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 );
+
+    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 );
+
+    string conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 );
+
+    if ( GetFeaConnectionStartStructID( conn_id ) != struct_id_1 )
+    {
+        Print( "ERROR: GetFeaConnectionStartStructID did not return the Structure" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id_1 = AddFeaStructure( pod_id )
+    struct_id_2 = AddFeaStructure( pod_id )
+
+    fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT )
+    fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT )
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 )
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 )
+
+    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 )
+
+    conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 )
+
+    assert GetFeaConnectionStartStructID( conn_id ) == struct_id_1, "GetFeaConnectionStartStructID did not return the Structure"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaConnectionStartFixPtID, AddFeaAssemblyConnection
+    \param [in] connection_id string FEA Connection ID
+    \return string FEA Structure ID
+*/
+
+extern std::string GetFeaConnectionStartStructID( const std::string & connection_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the fixed point at the end of an FEA Assembly connection.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id_1 = AddFeaStructure( pod_id );
+    string struct_id_2 = AddFeaStructure( pod_id );
+
+    string fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT );
+    string fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT );
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 );
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 );
+
+    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 );
+
+    string conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 );
+
+    if ( GetFeaConnectionEndFixPtID( conn_id ) != fix_pt_2 )
+    {
+        Print( "ERROR: GetFeaConnectionEndFixPtID did not return the fixed point" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id_1 = AddFeaStructure( pod_id )
+    struct_id_2 = AddFeaStructure( pod_id )
+
+    fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT )
+    fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT )
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 )
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 )
+
+    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 )
+
+    conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 )
+
+    assert GetFeaConnectionEndFixPtID( conn_id ) == fix_pt_2, "GetFeaConnectionEndFixPtID did not return the fixed point"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaConnectionEndStructID, AddFeaAssemblyConnection
+    \param [in] connection_id string FEA Connection ID
+    \return string FEA Fixed Point ID
+*/
+
+extern std::string GetFeaConnectionEndFixPtID( const std::string & connection_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the Structure of the fixed point at the end of an FEA Assembly connection.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id_1 = AddFeaStructure( pod_id );
+    string struct_id_2 = AddFeaStructure( pod_id );
+
+    string fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT );
+    string fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT );
+
+    string assembly_id = AddFeaAssembly();
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 );
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 );
+
+    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 );
+
+    string conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 );
+
+    if ( GetFeaConnectionEndStructID( conn_id ) != struct_id_2 )
+    {
+        Print( "ERROR: GetFeaConnectionEndStructID did not return the Structure" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id_1 = AddFeaStructure( pod_id )
+    struct_id_2 = AddFeaStructure( pod_id )
+
+    fix_pt_1 = AddFeaPartByID( struct_id_1, FEA_FIX_POINT )
+    fix_pt_2 = AddFeaPartByID( struct_id_2, FEA_FIX_POINT )
+
+    assembly_id = AddFeaAssembly()
+
+    AddFeaStructureToAssembly( assembly_id, struct_id_1 )
+    AddFeaStructureToAssembly( assembly_id, struct_id_2 )
+
+    AddFeaAssemblyConnection( assembly_id, fix_pt_1, struct_id_1, 0, fix_pt_2, struct_id_2, 0 )
+
+    conn_id = GetFeaAssemblyConnectionID( assembly_id, 0 )
+
+    assert GetFeaConnectionEndStructID( conn_id ) == struct_id_2, "GetFeaConnectionEndStructID did not return the Structure"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaConnectionEndFixPtID, AddFeaAssemblyConnection
+    \param [in] connection_id string FEA Connection ID
+    \return string FEA Structure ID
+*/
+
+extern std::string GetFeaConnectionEndStructID( const std::string & connection_id );
 
 /*!
     \ingroup FEAMesh
@@ -18739,6 +22183,194 @@ extern int NumFeaBCs( const std::string & fea_struct_id );
     \ingroup FEAMesh
 */
 /*!
+    Set the FEA Part a part boundary condition applies to. The part must be in the boundary condition's Structure.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string slice_id = AddFeaPartByID( struct_id, FEA_SLICE );
+
+    string bc_id = AddFeaBC( struct_id, FEA_BC_PART );
+
+    SetFeaBCPartID( bc_id, slice_id );
+
+    if ( GetFeaBCPartID( bc_id ) != slice_id )
+    {
+        Print( "ERROR: SetFeaBCPartID did not set the part" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    slice_id = AddFeaPartByID( struct_id, FEA_SLICE )
+
+    bc_id = AddFeaBC( struct_id, FEA_BC_PART )
+
+    SetFeaBCPartID( bc_id, slice_id )
+
+    assert GetFeaBCPartID( bc_id ) == slice_id, "SetFeaBCPartID did not set the part"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaBCPartID, FEA_BC_TYPE
+    \param [in] bc_id string FEA BC ID
+    \param [in] part_id string FEA Part ID
+*/
+
+extern void SetFeaBCPartID( const std::string & bc_id, const std::string & part_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the FEA Part a part boundary condition applies to.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string slice_id = AddFeaPartByID( struct_id, FEA_SLICE );
+
+    string bc_id = AddFeaBC( struct_id, FEA_BC_PART );
+
+    SetFeaBCPartID( bc_id, slice_id );
+
+    if ( GetFeaBCPartID( bc_id ) != slice_id )
+    {
+        Print( "ERROR: GetFeaBCPartID did not return the part set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    slice_id = AddFeaPartByID( struct_id, FEA_SLICE )
+
+    bc_id = AddFeaBC( struct_id, FEA_BC_PART )
+
+    SetFeaBCPartID( bc_id, slice_id )
+
+    assert GetFeaBCPartID( bc_id ) == slice_id, "GetFeaBCPartID did not return the part set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaBCPartID
+    \param [in] bc_id string FEA BC ID
+    \return string FEA Part ID
+*/
+
+extern std::string GetFeaBCPartID( const std::string & bc_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the FEA SubSurface a subsurface boundary condition applies to. The subsurface must be in the boundary condition's Structure.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string line_id = AddFeaSubSurfByID( struct_id, SS_LINE );
+
+    string bc_id = AddFeaBC( struct_id, FEA_BC_SUBSURF );
+
+    SetFeaBCSubSurfID( bc_id, line_id );
+
+    if ( GetFeaBCSubSurfID( bc_id ) != line_id )
+    {
+        Print( "ERROR: SetFeaBCSubSurfID did not set the subsurface" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    line_id = AddFeaSubSurfByID( struct_id, SS_LINE )
+
+    bc_id = AddFeaBC( struct_id, FEA_BC_SUBSURF )
+
+    SetFeaBCSubSurfID( bc_id, line_id )
+
+    assert GetFeaBCSubSurfID( bc_id ) == line_id, "SetFeaBCSubSurfID did not set the subsurface"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaBCSubSurfID, FEA_BC_TYPE
+    \param [in] bc_id string FEA BC ID
+    \param [in] ss_id string FEA SubSurface ID
+*/
+
+extern void SetFeaBCSubSurfID( const std::string & bc_id, const std::string & ss_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the FEA SubSurface a subsurface boundary condition applies to.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    string line_id = AddFeaSubSurfByID( struct_id, SS_LINE );
+
+    string bc_id = AddFeaBC( struct_id, FEA_BC_SUBSURF );
+
+    SetFeaBCSubSurfID( bc_id, line_id );
+
+    if ( GetFeaBCSubSurfID( bc_id ) != line_id )
+    {
+        Print( "ERROR: GetFeaBCSubSurfID did not return the subsurface set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    line_id = AddFeaSubSurfByID( struct_id, SS_LINE )
+
+    bc_id = AddFeaBC( struct_id, FEA_BC_SUBSURF )
+
+    SetFeaBCSubSurfID( bc_id, line_id )
+
+    assert GetFeaBCSubSurfID( bc_id ) == line_id, "GetFeaBCSubSurfID did not return the subsurface set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaBCSubSurfID
+    \param [in] bc_id string FEA BC ID
+    \return string FEA SubSurface ID
+*/
+
+extern std::string GetFeaBCSubSurfID( const std::string & bc_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
     Add an FEA Material the FEA Mesh material library. Materials are available across all Geoms and Structures.
     \forcpponly
     \code{.cpp}
@@ -19157,6 +22789,102 @@ extern std::vector < std::string > GetFeaLayerIDVec( const std::string & materia
     \ingroup FEAMesh
 */
 /*!
+    Set the material of an FEA Layer, by material ID.
+    \forcpponly
+    \code{.cpp}
+    string lam_id = AddFeaMaterial();
+
+    SetParmVal( FindParm( lam_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE );
+
+    Update();
+
+    string layer_id = AddFeaLayer( lam_id );
+
+    string mat_id = AddFeaMaterial();
+
+    SetFeaLayerMaterialID( layer_id, mat_id );
+
+    if ( GetFeaLayerMaterialID( layer_id ) != mat_id )
+    {
+        Print( "ERROR: SetFeaLayerMaterialID did not set the material" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    lam_id = AddFeaMaterial()
+
+    SetParmVal( FindParm( lam_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE )
+
+    Update()
+
+    layer_id = AddFeaLayer( lam_id )
+
+    mat_id = AddFeaMaterial()
+
+    SetFeaLayerMaterialID( layer_id, mat_id )
+
+    assert GetFeaLayerMaterialID( layer_id ) == mat_id, "SetFeaLayerMaterialID did not set the material"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaLayerMaterialID
+    \param [in] layer_id string FEA Layer ID
+    \param [in] material_id string FEA Material ID
+*/
+
+extern void SetFeaLayerMaterialID( const std::string & layer_id, const std::string & material_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the material of an FEA Layer.
+    \forcpponly
+    \code{.cpp}
+    string lam_id = AddFeaMaterial();
+
+    SetParmVal( FindParm( lam_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE );
+
+    Update();
+
+    string layer_id = AddFeaLayer( lam_id );
+
+    array< string > @mat_ids = GetFeaMaterialIDVec();
+
+    if ( mat_ids.find( GetFeaLayerMaterialID( layer_id ) ) < 0 )
+    {
+        Print( "ERROR: GetFeaLayerMaterialID did not return a material" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    lam_id = AddFeaMaterial()
+
+    SetParmVal( FindParm( lam_id, "FeaMaterialType", "FeaMaterial" ), FEA_LAMINATE )
+
+    Update()
+
+    layer_id = AddFeaLayer( lam_id )
+
+    assert GetFeaLayerMaterialID( layer_id ) in GetFeaMaterialIDVec(), "GetFeaLayerMaterialID did not return a material"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaLayerMaterialID
+    \param [in] layer_id string FEA Layer ID
+    \return string FEA Material ID
+*/
+
+extern std::string GetFeaLayerMaterialID( const std::string & layer_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
     Get the IDs of every FEA material, the built in ones as well as any added.
     \forcpponly
     \code{.cpp}
@@ -19478,6 +23206,78 @@ extern std::string AddFeaProperty( int property_type = 0 );
     \ingroup FEAMesh
 */
 /*!
+    Set the material of an FEA Property, by material ID. A beam property needs an isotropic material.
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddFeaProperty( FEA_SHELL );
+
+    string mat_id = AddFeaMaterial();
+
+    SetFeaPropertyMaterialID( prop_id, mat_id );
+
+    if ( GetFeaPropertyMaterialID( prop_id ) != mat_id )
+    {
+        Print( "ERROR: SetFeaPropertyMaterialID did not set the material" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddFeaProperty( FEA_SHELL )
+
+    mat_id = AddFeaMaterial()
+
+    SetFeaPropertyMaterialID( prop_id, mat_id )
+
+    assert GetFeaPropertyMaterialID( prop_id ) == mat_id, "SetFeaPropertyMaterialID did not set the material"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaPropertyMaterialID
+    \param [in] property_id string FEA Property ID
+    \param [in] material_id string FEA Material ID
+*/
+
+extern void SetFeaPropertyMaterialID( const std::string & property_id, const std::string & material_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the material of an FEA Property.
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddFeaProperty( FEA_BEAM );
+
+    array< string > @mat_ids = GetFeaMaterialIDVec();
+
+    if ( mat_ids.find( GetFeaPropertyMaterialID( prop_id ) ) < 0 )
+    {
+        Print( "ERROR: GetFeaPropertyMaterialID did not return a material" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddFeaProperty( FEA_BEAM )
+
+    assert GetFeaPropertyMaterialID( prop_id ) in GetFeaMaterialIDVec(), "GetFeaPropertyMaterialID did not return a material"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaPropertyMaterialID
+    \param [in] property_id string FEA Property ID
+    \return string FEA Material ID
+*/
+
+extern std::string GetFeaPropertyMaterialID( const std::string & property_id );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
     Set the value of a particular FEA Mesh option for the specified Structure. Note, FEA Mesh makes use of enums initially created for CFD Mesh
     but not all CFD Mesh options are available for FEA Mesh.
     \forcpponly
@@ -19620,7 +23420,7 @@ extern std::string AddFeaProperty( int property_type = 0 );
 
     \endcode
     \endPythonOnly
-    \sa CFD_CONTROL_TYPE, SetFeaMeshVal
+    \sa CFD_CONTROL_TYPE, SetFeaMeshVal, GetFeaMeshValByID
     \param [in] geom_id string Parent Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \param [in] type int FEA Mesh option type enum (i.e. CFD_MAX_EDGE_LEN)
@@ -19628,6 +23428,46 @@ extern std::string AddFeaProperty( int property_type = 0 );
 */
 
 extern double GetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, int type );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get an FEA Mesh setting of a Structure, by Structure ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetFeaMeshValByID( struct_id, CFD_MAX_EDGE_LEN, 0.75 );
+
+    if ( abs( GetFeaMeshValByID( struct_id, CFD_MAX_EDGE_LEN ) - 0.75 ) > 1e-12 )
+    {
+        Print( "ERROR: GetFeaMeshValByID did not return the value set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    SetFeaMeshValByID( struct_id, CFD_MAX_EDGE_LEN, 0.75 )
+
+    assert abs( GetFeaMeshValByID( struct_id, CFD_MAX_EDGE_LEN ) - 0.75 ) < 1e-12, "GetFeaMeshValByID did not return the value set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaMeshVal, CFD_CONTROL_TYPE, GetFeaMeshVal
+    \param [in] struct_id string FEA Structure ID
+    \param [in] type int FEA Mesh setting type enum (i.e. CFD_MAX_EDGE_LEN)
+    \return double Value of the setting
+*/
+
+extern double GetFeaMeshValByID( const std::string & struct_id, int type );
 
 /*!
     \ingroup FEAMesh
@@ -19657,7 +23497,7 @@ extern double GetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, in
 
     \endcode
     \endPythonOnly
-    \sa CFD_CONTROL_TYPE, ComputeFeaMesh
+    \sa CFD_CONTROL_TYPE, ComputeFeaMesh, SetFeaMeshValByID
     \param [in] geom_id string Geom ID the structure is on
     \param [in] fea_struct_ind int Index of the structure on that Geom
     \param [in] type int CFD mesh setting enum (i.e. CFD_MAX_EDGE_LEN)
@@ -19665,6 +23505,48 @@ extern double GetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, in
 */
 
 extern void SetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, int type, double val );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set an FEA Mesh setting of a Structure, by Structure ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pod_id );
+    string struct_id = GetFeaStructID( pod_id, struct_ind );
+
+    SetFeaMeshValByID( struct_id, CFD_MAX_EDGE_LEN, 0.75 );
+
+    if ( abs( GetFeaMeshVal( pod_id, struct_ind, CFD_MAX_EDGE_LEN ) - 0.75 ) > 1e-12 )
+    {
+        Print( "ERROR: SetFeaMeshValByID did not set the value" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pod_id )
+    struct_id = GetFeaStructID( pod_id, struct_ind )
+
+    SetFeaMeshValByID( struct_id, CFD_MAX_EDGE_LEN, 0.75 )
+
+    assert abs( GetFeaMeshVal( pod_id, struct_ind, CFD_MAX_EDGE_LEN ) - 0.75 ) < 1e-12, "SetFeaMeshValByID did not set the value"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaMeshVal, CFD_CONTROL_TYPE, SetFeaMeshVal
+    \param [in] struct_id string FEA Structure ID
+    \param [in] type int FEA Mesh setting type enum (i.e. CFD_MAX_EDGE_LEN)
+    \param [in] val double Value to set
+*/
+
+extern void SetFeaMeshValByID( const std::string & struct_id, int type, double val );
 
 /*!
     \ingroup FEAMesh
@@ -19810,7 +23692,7 @@ extern void SetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, int 
 
     \endcode
     \endPythonOnly
-    \sa FEA_EXPORT_TYPE, SetFeaMeshFileName
+    \sa FEA_EXPORT_TYPE, SetFeaMeshFileName, GetFeaMeshFileNameByID
     \param [in] geom_id string Parent Geom ID
     \param [in] fea_struct_ind int FEA Structure index
     \param [in] file_type int FEA output file type enum (i.e. FEA_EXPORT_TYPE)
@@ -19818,6 +23700,46 @@ extern void SetFeaMeshVal( const std::string & geom_id, int fea_struct_ind, int 
 */
 
 extern std::string GetFeaMeshFileName( const std::string & geom_id, int fea_struct_ind, int file_type );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Get the name of an FEA Mesh output file of a Structure, by Structure ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string struct_id = AddFeaStructure( pod_id );
+
+    SetFeaMeshFileNameByID( struct_id, FEA_CALCULIX_FILE_NAME, "spine_calculix.dat" );
+
+    if ( GetFeaMeshFileNameByID( struct_id, FEA_CALCULIX_FILE_NAME ).findFirst( "spine_calculix.dat" ) < 0 )
+    {
+        Print( "ERROR: GetFeaMeshFileNameByID did not return the name set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_id = AddFeaStructure( pod_id )
+
+    SetFeaMeshFileNameByID( struct_id, FEA_CALCULIX_FILE_NAME, "spine_calculix.dat" )
+
+    assert "spine_calculix.dat" in GetFeaMeshFileNameByID( struct_id, FEA_CALCULIX_FILE_NAME ), "GetFeaMeshFileNameByID did not return the name set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetFeaMeshFileName, FEA_EXPORT_TYPE, GetFeaMeshFileName
+    \param [in] struct_id string FEA Structure ID
+    \param [in] file_type int FEA output file type enum (i.e. FEA_EXPORT_TYPE)
+    \return string File name
+*/
+
+extern std::string GetFeaMeshFileNameByID( const std::string & struct_id, int file_type );
 
 /*!
     \ingroup FEAMesh
@@ -19847,7 +23769,7 @@ extern std::string GetFeaMeshFileName( const std::string & geom_id, int fea_stru
 
     \endcode
     \endPythonOnly
-    \sa FEA_EXPORT_TYPE, ComputeFeaMesh
+    \sa FEA_EXPORT_TYPE, ComputeFeaMesh, SetFeaMeshFileNameByID
     \param [in] geom_id string Geom ID the structure is on
     \param [in] fea_struct_ind int Index of the structure on that Geom
     \param [in] file_type int FEA export type enum (i.e. FEA_MASS_FILE_NAME)
@@ -19855,6 +23777,48 @@ extern std::string GetFeaMeshFileName( const std::string & geom_id, int fea_stru
 */
 
 extern void SetFeaMeshFileName( const std::string & geom_id, int fea_struct_ind, int file_type, const std::string & file_name );
+
+/*!
+    \ingroup FEAMesh
+*/
+/*!
+    Set the name of an FEA Mesh output file of a Structure, by Structure ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    int struct_ind = AddFeaStruct( pod_id );
+    string struct_id = GetFeaStructID( pod_id, struct_ind );
+
+    SetFeaMeshFileNameByID( struct_id, FEA_CALCULIX_FILE_NAME, "spine_calculix.dat" );
+
+    if ( GetFeaMeshFileName( pod_id, struct_ind, FEA_CALCULIX_FILE_NAME ).findFirst( "spine_calculix.dat" ) < 0 )
+    {
+        Print( "ERROR: SetFeaMeshFileNameByID did not set the name" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    struct_ind = AddFeaStruct( pod_id )
+    struct_id = GetFeaStructID( pod_id, struct_ind )
+
+    SetFeaMeshFileNameByID( struct_id, FEA_CALCULIX_FILE_NAME, "spine_calculix.dat" )
+
+    assert "spine_calculix.dat" in GetFeaMeshFileName( pod_id, struct_ind, FEA_CALCULIX_FILE_NAME ), "SetFeaMeshFileNameByID did not set the name"
+
+    \endcode
+    \endPythonOnly
+    \sa GetFeaMeshFileName, FEA_EXPORT_TYPE, SetFeaMeshFileName
+    \param [in] struct_id string FEA Structure ID
+    \param [in] file_type int FEA output file type enum (i.e. FEA_EXPORT_TYPE)
+    \param [in] file_name string Name for the output file
+*/
+
+extern void SetFeaMeshFileNameByID( const std::string & struct_id, int file_type, const std::string & file_name );
 
 /*!
     \ingroup FEAMesh
@@ -20357,12 +24321,60 @@ extern std::string GetXSecCurveAlias( const std::string & id );
 
     \endcode
     \endPythonOnly
-    \sa PasteXSec
+    \sa PasteXSec, CutXSecByID
     \param [in] geom_id string Geom ID
     \param [in] index int XSec index
 */
 
 extern void CutXSec( const std::string & geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Cut a cross-section from its Geom, by XSec ID, and put it on the clipboard.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    int n = GetNumXSec( xsec_surf );
+
+    CutXSecByID( xsec_1 );
+
+    array< string > @ids = GetXSecIDVec( xsec_surf );
+
+    if ( GetNumXSec( xsec_surf ) != n - 1 || ids.find( xsec_1 ) >= 0 )
+    {
+        Print( "ERROR: CutXSecByID did not remove the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    n = GetNumXSec( xsec_surf )
+
+    CutXSecByID( xsec_1 )
+
+    assert GetNumXSec( xsec_surf ) == n - 1 and xsec_1 not in GetXSecIDVec( xsec_surf ), "CutXSecByID did not remove the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa CopyXSec, PasteXSec, CutXSec
+    \param [in] xsec_id string XSec ID
+*/
+
+extern void CutXSecByID( const std::string & xsec_id );
 
 /*!
     \ingroup XSec
@@ -20445,12 +24457,64 @@ extern void CutXSec( const std::string & geom_id, int index );
 
     \endcode
     \endPythonOnly
-    \sa PasteXSec
+    \sa PasteXSec, CopyXSecByID
     \param [in] geom_id string Geom ID
     \param [in] index int XSec index
 */
 
 extern void CopyXSec( const std::string & geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Copy a cross-section to the clipboard, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+    string xsec_2 = GetXSec( xsec_surf, 2 );
+
+    ChangeXSecShapeByID( xsec_1, XS_ELLIPSE );
+
+    CopyXSecByID( xsec_1 );
+
+    PasteXSecByID( xsec_2 );
+
+    if ( GetXSecShape( xsec_2 ) != XS_ELLIPSE )
+    {
+        Print( "ERROR: CopyXSecByID did not copy the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+    xsec_2 = GetXSec( xsec_surf, 2 )
+
+    ChangeXSecShapeByID( xsec_1, XS_ELLIPSE )
+
+    CopyXSecByID( xsec_1 )
+
+    PasteXSecByID( xsec_2 )
+
+    assert GetXSecShape( xsec_2 ) == XS_ELLIPSE, "CopyXSecByID did not copy the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa PasteXSec, CutXSec, CopyXSec
+    \param [in] xsec_id string XSec ID
+*/
+
+extern void CopyXSecByID( const std::string & xsec_id );
 
 /*!
     \ingroup XSec
@@ -20533,12 +24597,64 @@ extern void CopyXSec( const std::string & geom_id, int index );
 
     \endcode
     \endPythonOnly
-    \sa CutXSec, CopyXSec
+    \sa CutXSec, CopyXSec, PasteXSecByID
     \param [in] geom_id string Geom ID
     \param [in] index int XSec index
 */
 
 extern void PasteXSec( const std::string & geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Paste the cross-section on the clipboard over a cross-section, by XSec ID. The cross-section keeps its ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+    string xsec_2 = GetXSec( xsec_surf, 2 );
+
+    ChangeXSecShapeByID( xsec_1, XS_ELLIPSE );
+
+    CopyXSecByID( xsec_1 );
+
+    PasteXSecByID( xsec_2 );
+
+    if ( GetXSec( xsec_surf, 2 ) != xsec_2 || GetXSecShape( xsec_2 ) != XS_ELLIPSE )
+    {
+        Print( "ERROR: PasteXSecByID did not paste over the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+    xsec_2 = GetXSec( xsec_surf, 2 )
+
+    ChangeXSecShapeByID( xsec_1, XS_ELLIPSE )
+
+    CopyXSecByID( xsec_1 )
+
+    PasteXSecByID( xsec_2 )
+
+    assert GetXSec( xsec_surf, 2 ) == xsec_2 and GetXSecShape( xsec_2 ) == XS_ELLIPSE, "PasteXSecByID did not paste over the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa CopyXSec, CutXSec, PasteXSec
+    \param [in] xsec_id string XSec ID
+*/
+
+extern void PasteXSecByID( const std::string & xsec_id );
 
 /*!
     \ingroup XSec
@@ -20591,13 +24707,57 @@ extern void PasteXSec( const std::string & geom_id, int index );
 
     \endcode
     \endPythonOnly
-    \sa XSEC_CRV_TYPE
+    \sa XSEC_CRV_TYPE, InsertXSecByID
     \param [in] geom_id string Geom ID
     \param [in] index int XSec index
     \param [in] type int XSec type enum (i.e. XS_GENERAL_FUSE)
 */
 
 extern void InsertXSec( const std::string & geom_id, int index, int type );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Insert a cross-section after the one with the given ID, and return the new cross-section's ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    string new_id = InsertXSecByID( xsec_1, XS_ELLIPSE );
+
+    if ( GetXSec( xsec_surf, 2 ) != new_id )
+    {
+        Print( "ERROR: InsertXSecByID did not put the XSec after xsec_1" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    new_id = InsertXSecByID( xsec_1, XS_ELLIPSE )
+
+    assert GetXSec( xsec_surf, 2 ) == new_id, "InsertXSecByID did not put the XSec after xsec_1"
+
+    \endcode
+    \endPythonOnly
+    \sa XSEC_CRV_TYPE, InsertXSec
+    \param [in] xsec_id string ID of the XSec the new one follows
+    \param [in] type int XSec type enum (i.e. XS_ELLIPSE)
+    \return string ID of the new XSec
+*/
+
+extern std::string InsertXSecByID( const std::string & xsec_id, int type );
 
 
 //======================== Wing Section Functions ===================//
@@ -20667,12 +24827,59 @@ extern void InsertXSec( const std::string & geom_id, int index, int type );
     assert abs( ( span_1 + span_2 ) - span_start ) < 1e-6, "SplitWingXSec changed the span of the wing"
     \endcode
     \endPythonOnly
-    \sa WING_DRIVERS, XSEC_DRIVERS
+    \sa WING_DRIVERS, XSEC_DRIVERS, SplitWingXSecByID
     \param [in] wing_id string Geom ID
     \param [in] section_index int Wing section index
 */
 
 extern void SplitWingXSec( const std::string & wing_id, int section_index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Split a wing section in two, by XSec ID, and return the ID of the new outboard section.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    int n = GetNumXSec( xsec_surf );
+
+    string new_id = SplitWingXSecByID( xsec_1 );
+
+    if ( GetNumXSec( xsec_surf ) != n + 1 || GetXSec( xsec_surf, 2 ) != new_id )
+    {
+        Print( "ERROR: SplitWingXSecByID did not split the section" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    n = GetNumXSec( xsec_surf )
+
+    new_id = SplitWingXSecByID( xsec_1 )
+
+    assert GetNumXSec( xsec_surf ) == n + 1 and GetXSec( xsec_surf, 2 ) == new_id, "SplitWingXSecByID did not split the section"
+
+    \endcode
+    \endPythonOnly
+    \sa InsertXSec, GetXSecIDVec, SplitWingXSec
+    \param [in] xsec_id string Wing section XSec ID
+    \return string ID of the new outboard section
+*/
+
+extern std::string SplitWingXSecByID( const std::string & xsec_id );
 
 /*!
     \ingroup Geom
@@ -20837,13 +25044,58 @@ extern void SplitWingXSec( const std::string & wing_id, int section_index );
 
     \endcode
     \endPythonOnly
-    \sa WING_DRIVERS, XSEC_DRIVERS, SetDriverGroup
+    \sa WING_DRIVERS, XSEC_DRIVERS, SetDriverGroup, GetDriverGroupByID
     \param [in] geom_id string Geom ID
     \param [in] section_index int Wing section or XSec index
     \return vector\<int\> Array of driver enums
 */
 
 extern std::vector < int > GetDriverGroup( const std::string & geom_id, int section_index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the driver group of a wing section or XSecCurve, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    SetDriverGroupByID( xsec_1, AR_WSECT_DRIVER, ROOTC_WSECT_DRIVER, TIPC_WSECT_DRIVER );
+
+    array< int > @drivers = GetDriverGroupByID( xsec_1 );
+
+    if ( drivers.size() != 3 || drivers[0] != AR_WSECT_DRIVER || drivers[1] != ROOTC_WSECT_DRIVER || drivers[2] != TIPC_WSECT_DRIVER )
+    {
+        Print( "ERROR: GetDriverGroupByID did not return the drivers set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    SetDriverGroupByID( xsec_1, AR_WSECT_DRIVER, ROOTC_WSECT_DRIVER, TIPC_WSECT_DRIVER )
+
+    assert list( GetDriverGroupByID( xsec_1 ) ) == [ AR_WSECT_DRIVER, ROOTC_WSECT_DRIVER, TIPC_WSECT_DRIVER ], "GetDriverGroupByID did not return the drivers set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetDriverGroupByID, WING_DRIVERS, XSEC_DRIVERS, GetDriverGroup
+    \param [in] xsec_id string XSec ID
+    \return array<int> Array of driver enums
+*/
+
+extern std::vector < int > GetDriverGroupByID( const std::string & xsec_id );
 
 /*!
     \ingroup XSec
@@ -20870,7 +25122,7 @@ extern std::vector < int > GetDriverGroup( const std::string & geom_id, int sect
 
     \endcode
     \endPythonOnly
-    \sa WING_DRIVERS
+    \sa WING_DRIVERS, SetDriverGroupByID
     \param [in] geom_id string Geom ID
     \param [in] section_index int Wing section index
     \param [in] driver_0 int Wing driver enum (i.e. SPAN_WSECT_DRIVER)
@@ -20879,6 +25131,53 @@ extern std::vector < int > GetDriverGroup( const std::string & geom_id, int sect
 */
 
 extern void SetDriverGroup( const std::string & geom_id, int section_index, int driver_0, int driver_1 = -1, int driver_2 = -1 );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the driver group of a wing section or XSecCurve, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    SetDriverGroupByID( xsec_1, AR_WSECT_DRIVER, ROOTC_WSECT_DRIVER, TIPC_WSECT_DRIVER );
+
+    array< int > @drivers = GetDriverGroup( gid, 1 );
+
+    if ( drivers[0] != AR_WSECT_DRIVER || drivers[1] != ROOTC_WSECT_DRIVER || drivers[2] != TIPC_WSECT_DRIVER )
+    {
+        Print( "ERROR: SetDriverGroupByID did not set the drivers" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    SetDriverGroupByID( xsec_1, AR_WSECT_DRIVER, ROOTC_WSECT_DRIVER, TIPC_WSECT_DRIVER )
+
+    assert list( GetDriverGroup( gid, 1 ) ) == [ AR_WSECT_DRIVER, ROOTC_WSECT_DRIVER, TIPC_WSECT_DRIVER ], "SetDriverGroupByID did not set the drivers"
+
+    \endcode
+    \endPythonOnly
+    \sa GetDriverGroupByID, WING_DRIVERS, XSEC_DRIVERS, SetDriverGroup
+    \param [in] xsec_id string XSec ID
+    \param [in] driver_0 int First driver enum (i.e. SPAN_WSECT_DRIVER)
+    \param [in] driver_1 int Second driver enum (i.e. ROOTC_WSECT_DRIVER)
+    \param [in] driver_2 int Third driver enum (i.e. TIPC_WSECT_DRIVER)
+*/
+
+extern void SetDriverGroupByID( const std::string & xsec_id, int driver_0, int driver_1 = -1, int driver_2 = -1 );
 
 
 //======================== XSecSurf ================================//
@@ -20918,6 +25217,43 @@ extern void SetDriverGroup( const std::string & geom_id, int section_index, int 
 */
 
 extern std::string GetXSecSurf( const std::string & geom_id, int index );
+
+/*!
+    \ingroup XSecSurf
+*/
+/*!
+    Get the IDs of the XSecSurfs of a Geom, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    array< string > @ids = GetXSecSurfIDVec( gid );
+
+    if ( ids.size() != 1 || ids[0] != xsec_surf )
+    {
+        Print( "ERROR: GetXSecSurfIDVec did not return the XSecSurf" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    assert list( GetXSecSurfIDVec( gid ) ) == [ xsec_surf ], "GetXSecSurfIDVec did not return the XSecSurf"
+
+    \endcode
+    \endPythonOnly
+    \sa GetXSecSurf, GetNumXSecSurfs
+    \param [in] geom_id string Geom ID
+    \return array<string> Array of XSecSurf IDs
+*/
+
+extern std::vector < std::string > GetXSecSurfIDVec( const std::string & geom_id );
 
 /*!
     \ingroup XSecSurf
@@ -21053,6 +25389,361 @@ extern std::string GetXSec( const std::string & xsec_surf_id, int xsec_index );
     \ingroup XSecSurf
 */
 /*!
+    Get the IDs of the XSecs of an XSecSurf, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    array< string > @ids = GetXSecIDVec( xsec_surf );
+
+    if ( ids.size() != uint( GetNumXSec( xsec_surf ) ) || ids[1] != xsec_1 )
+    {
+        Print( "ERROR: GetXSecIDVec did not return the XSecs in order" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    ids = GetXSecIDVec( xsec_surf )
+
+    assert len( ids ) == GetNumXSec( xsec_surf ) and ids[1] == xsec_1, "GetXSecIDVec did not return the XSecs in order"
+
+    \endcode
+    \endPythonOnly
+    \sa GetXSec, GetNumXSec
+    \param [in] xsec_surf_id string XSecSurf ID
+    \return array<string> Array of XSec IDs
+*/
+
+extern std::vector < std::string > GetXSecIDVec( const std::string & xsec_surf_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the cross-section an engine Geom models its inlet face at, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK" );
+
+    string xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 );
+
+    SetEngineInletFaceXSecID( sid, xsec_2 );
+
+    if ( GetEngineInletFaceXSecID( sid ) != xsec_2 )
+    {
+        Print( "ERROR: SetEngineInletFaceXSecID did not set the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK" )
+
+    xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 )
+
+    SetEngineInletFaceXSecID( sid, xsec_2 )
+
+    assert GetEngineInletFaceXSecID( sid ) == xsec_2, "SetEngineInletFaceXSecID did not set the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa GetEngineInletFaceXSecID
+    \param [in] geom_id string Engine Geom ID (a stack, fuselage or other engine Geom)
+    \param [in] xsec_id string XSec ID on that Geom
+*/
+
+extern void SetEngineInletFaceXSecID( const std::string & geom_id, const std::string & xsec_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the cross-section an engine Geom models its inlet face at.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK" );
+
+    string xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 );
+
+    SetEngineInletFaceXSecID( sid, xsec_2 );
+
+    if ( GetEngineInletFaceXSecID( sid ) != xsec_2 )
+    {
+        Print( "ERROR: GetEngineInletFaceXSecID did not return the XSec set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK" )
+
+    xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 )
+
+    SetEngineInletFaceXSecID( sid, xsec_2 )
+
+    assert GetEngineInletFaceXSecID( sid ) == xsec_2, "GetEngineInletFaceXSecID did not return the XSec set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetEngineInletFaceXSecID
+    \param [in] geom_id string Engine Geom ID
+    \return string XSec ID
+*/
+
+extern std::string GetEngineInletFaceXSecID( const std::string & geom_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the cross-section an engine Geom models its inlet lip at, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK" );
+
+    string xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 );
+
+    SetEngineInletLipXSecID( sid, xsec_2 );
+
+    if ( GetEngineInletLipXSecID( sid ) != xsec_2 )
+    {
+        Print( "ERROR: SetEngineInletLipXSecID did not set the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK" )
+
+    xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 )
+
+    SetEngineInletLipXSecID( sid, xsec_2 )
+
+    assert GetEngineInletLipXSecID( sid ) == xsec_2, "SetEngineInletLipXSecID did not set the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa GetEngineInletLipXSecID
+    \param [in] geom_id string Engine Geom ID (a stack, fuselage or other engine Geom)
+    \param [in] xsec_id string XSec ID on that Geom
+*/
+
+extern void SetEngineInletLipXSecID( const std::string & geom_id, const std::string & xsec_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the cross-section an engine Geom models its inlet lip at.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK" );
+
+    string xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 );
+
+    SetEngineInletLipXSecID( sid, xsec_2 );
+
+    if ( GetEngineInletLipXSecID( sid ) != xsec_2 )
+    {
+        Print( "ERROR: GetEngineInletLipXSecID did not return the XSec set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK" )
+
+    xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 )
+
+    SetEngineInletLipXSecID( sid, xsec_2 )
+
+    assert GetEngineInletLipXSecID( sid ) == xsec_2, "GetEngineInletLipXSecID did not return the XSec set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetEngineInletLipXSecID
+    \param [in] geom_id string Engine Geom ID
+    \return string XSec ID
+*/
+
+extern std::string GetEngineInletLipXSecID( const std::string & geom_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the cross-section an engine Geom models its outlet face at, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK" );
+
+    string xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 );
+
+    SetEngineOutletFaceXSecID( sid, xsec_2 );
+
+    if ( GetEngineOutletFaceXSecID( sid ) != xsec_2 )
+    {
+        Print( "ERROR: SetEngineOutletFaceXSecID did not set the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK" )
+
+    xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 )
+
+    SetEngineOutletFaceXSecID( sid, xsec_2 )
+
+    assert GetEngineOutletFaceXSecID( sid ) == xsec_2, "SetEngineOutletFaceXSecID did not set the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa GetEngineOutletFaceXSecID
+    \param [in] geom_id string Engine Geom ID (a stack, fuselage or other engine Geom)
+    \param [in] xsec_id string XSec ID on that Geom
+*/
+
+extern void SetEngineOutletFaceXSecID( const std::string & geom_id, const std::string & xsec_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the cross-section an engine Geom models its outlet face at.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK" );
+
+    string xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 );
+
+    SetEngineOutletFaceXSecID( sid, xsec_2 );
+
+    if ( GetEngineOutletFaceXSecID( sid ) != xsec_2 )
+    {
+        Print( "ERROR: GetEngineOutletFaceXSecID did not return the XSec set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK" )
+
+    xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 )
+
+    SetEngineOutletFaceXSecID( sid, xsec_2 )
+
+    assert GetEngineOutletFaceXSecID( sid ) == xsec_2, "GetEngineOutletFaceXSecID did not return the XSec set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetEngineOutletFaceXSecID
+    \param [in] geom_id string Engine Geom ID
+    \return string XSec ID
+*/
+
+extern std::string GetEngineOutletFaceXSecID( const std::string & geom_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the cross-section an engine Geom models its outlet lip at, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK" );
+
+    string xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 );
+
+    SetEngineOutletLipXSecID( sid, xsec_2 );
+
+    if ( GetEngineOutletLipXSecID( sid ) != xsec_2 )
+    {
+        Print( "ERROR: SetEngineOutletLipXSecID did not set the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK" )
+
+    xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 )
+
+    SetEngineOutletLipXSecID( sid, xsec_2 )
+
+    assert GetEngineOutletLipXSecID( sid ) == xsec_2, "SetEngineOutletLipXSecID did not set the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa GetEngineOutletLipXSecID
+    \param [in] geom_id string Engine Geom ID (a stack, fuselage or other engine Geom)
+    \param [in] xsec_id string XSec ID on that Geom
+*/
+
+extern void SetEngineOutletLipXSecID( const std::string & geom_id, const std::string & xsec_id );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the cross-section an engine Geom models its outlet lip at.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK" );
+
+    string xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 );
+
+    SetEngineOutletLipXSecID( sid, xsec_2 );
+
+    if ( GetEngineOutletLipXSecID( sid ) != xsec_2 )
+    {
+        Print( "ERROR: GetEngineOutletLipXSecID did not return the XSec set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK" )
+
+    xsec_2 = GetXSec( GetXSecSurf( sid, 0 ), 2 )
+
+    SetEngineOutletLipXSecID( sid, xsec_2 )
+
+    assert GetEngineOutletLipXSecID( sid ) == xsec_2, "GetEngineOutletLipXSecID did not return the XSec set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetEngineOutletLipXSecID
+    \param [in] geom_id string Engine Geom ID
+    \return string XSec ID
+*/
+
+extern std::string GetEngineOutletLipXSecID( const std::string & geom_id );
+
+/*!
+    \ingroup XSecSurf
+*/
+/*!
     Change the shape of a particular XSec, identified by an XSecSurf ID and XSec index
     \forcpponly
     \code{.cpp}
@@ -21095,13 +25786,56 @@ extern std::string GetXSec( const std::string & xsec_surf_id, int xsec_index );
 
     \endcode
     \endPythonOnly
-    \sa XSEC_CRV_TYPE
+    \sa XSEC_CRV_TYPE, ChangeXSecShapeByID
     \param [in] xsec_surf_id string XSecSurf ID
     \param [in] xsec_index int Xsec index
     \param [in] type int Xsec type enum (i.e. XS_ELLIPSE)
 */
 
 extern void ChangeXSecShape( const std::string & xsec_surf_id, int xsec_index, int type );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Change the shape of a cross-section, by XSec ID. The cross-section keeps its ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    ChangeXSecShapeByID( xsec_1, XS_ELLIPSE );
+
+    if ( GetXSecShape( xsec_1 ) != XS_ELLIPSE )
+    {
+        Print( "ERROR: ChangeXSecShapeByID did not change the shape" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    ChangeXSecShapeByID( xsec_1, XS_ELLIPSE )
+
+    assert GetXSecShape( xsec_1 ) == XS_ELLIPSE, "ChangeXSecShapeByID did not change the shape"
+
+    \endcode
+    \endPythonOnly
+    \sa XSEC_CRV_TYPE, ChangeXSecShape
+    \param [in] xsec_id string XSec ID
+    \param [in] type int XSec type enum (i.e. XS_ELLIPSE)
+*/
+
+extern void ChangeXSecShapeByID( const std::string & xsec_id, int type );
 
 /*!
     \ingroup XSec
@@ -21166,13 +25900,56 @@ extern void ChangeXSecShape( const std::string & xsec_surf_id, int xsec_index, i
 
     \endcode
     \endPythonOnly
-    \sa ChangeXSecShape, GetUpperCSTCoefs, PromoteCSTUpper
+    \sa ChangeXSecShape, GetUpperCSTCoefs, PromoteCSTUpper, FitCSTAirfoilByID
     \param [in] xsec_surf_id string XSecSurf ID
     \param [in] xsec_index int XSec index
     \param [in] deg int Degree to fit the CST airfoil at
 */
 
 extern void FitCSTAirfoil( const std::string & xsec_surf_id, int xsec_index, int deg );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Convert an airfoil cross-section to a CST airfoil fit to its shape, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    FitCSTAirfoilByID( xsec_1, 8 );
+
+    if ( GetXSecShape( xsec_1 ) != XS_CST_AIRFOIL )
+    {
+        Print( "ERROR: FitCSTAirfoilByID did not convert the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    FitCSTAirfoilByID( xsec_1, 8 )
+
+    assert GetXSecShape( xsec_1 ) == XS_CST_AIRFOIL, "FitCSTAirfoilByID did not convert the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa FitAfCST, FitCSTAirfoil
+    \param [in] xsec_id string XSec ID
+    \param [in] deg int CST degree
+*/
+
+extern void FitCSTAirfoilByID( const std::string & xsec_id, int deg );
 
 /*!
     \ingroup XSecSurf
@@ -22009,12 +26786,64 @@ extern std::vector< vec3d > GetXSecPnts( const std::string& xsec_id );
 
     \endcode
     \endPythonOnly
-    \sa PasteXSecCurve, CopyXSec, CopyAirfoil
+    \sa PasteXSecCurve, CopyXSec, CopyAirfoil, CopyXSecCurveByID
     \param [in] geom_id string Geom ID
     \param [in] index int XSec index, ignored for a body of revolution
 */
 
 extern void CopyXSecCurve( const std::string & geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Copy the XSecCurve of a cross-section to the clipboard, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+    string xsec_2 = GetXSec( xsec_surf, 2 );
+
+    ChangeXSecShapeByID( xsec_1, XS_ELLIPSE );
+
+    CopyXSecCurveByID( xsec_1 );
+
+    PasteXSecCurveByID( xsec_2 );
+
+    if ( GetXSecShape( xsec_2 ) != XS_ELLIPSE )
+    {
+        Print( "ERROR: CopyXSecCurveByID did not copy the curve" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+    xsec_2 = GetXSec( xsec_surf, 2 )
+
+    ChangeXSecShapeByID( xsec_1, XS_ELLIPSE )
+
+    CopyXSecCurveByID( xsec_1 )
+
+    PasteXSecCurveByID( xsec_2 )
+
+    assert GetXSecShape( xsec_2 ) == XS_ELLIPSE, "CopyXSecCurveByID did not copy the curve"
+
+    \endcode
+    \endPythonOnly
+    \sa PasteXSecCurve, CopyXSecCurve
+    \param [in] xsec_id string XSec ID
+*/
+
+extern void CopyXSecCurveByID( const std::string & xsec_id );
 
 /*!
     \ingroup XSec
@@ -22094,12 +26923,64 @@ extern void CopyXSecCurve( const std::string & geom_id, int index );
 
     \endcode
     \endPythonOnly
-    \sa CopyXSecCurve, PasteXSec, PasteAirfoil
+    \sa CopyXSecCurve, PasteXSec, PasteAirfoil, PasteXSecCurveByID
     \param [in] geom_id string Geom ID
     \param [in] index int XSec index, ignored for a body of revolution
 */
 
 extern void PasteXSecCurve( const std::string & geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Paste the XSecCurve on the clipboard into a cross-section, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+    string xsec_2 = GetXSec( xsec_surf, 2 );
+
+    ChangeXSecShapeByID( xsec_2, XS_ELLIPSE );
+
+    CopyXSecCurveByID( xsec_2 );
+
+    PasteXSecCurveByID( xsec_1 );
+
+    if ( GetXSecShape( xsec_1 ) != XS_ELLIPSE )
+    {
+        Print( "ERROR: PasteXSecCurveByID did not paste the curve" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+    xsec_2 = GetXSec( xsec_surf, 2 )
+
+    ChangeXSecShapeByID( xsec_2, XS_ELLIPSE )
+
+    CopyXSecCurveByID( xsec_2 )
+
+    PasteXSecCurveByID( xsec_1 )
+
+    assert GetXSecShape( xsec_1 ) == XS_ELLIPSE, "PasteXSecCurveByID did not paste the curve"
+
+    \endcode
+    \endPythonOnly
+    \sa CopyXSecCurve, PasteXSecCurve
+    \param [in] xsec_id string XSec ID
+*/
+
+extern void PasteXSecCurveByID( const std::string & xsec_id );
 
 /*!
     \ingroup XSec
@@ -22630,6 +27511,7 @@ extern int AddSkinSpine( const std::string& geom_id, double w01 );
 */
 /*!
     Delete a user defined skinning spine from every cross section of a Geom.
+    \sa DelSkinSpineByID
     \param [in] geom_id string Geom ID
     \forcpponly
     \code{.cpp}
@@ -22659,6 +27541,52 @@ extern int AddSkinSpine( const std::string& geom_id, double w01 );
     \param [in] index int Spine index
 */
 extern void DelSkinSpine( const std::string& geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Delete a skin spine from every cross-section of its Geom, by the ID of the spine on any one of them.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "STACK" );
+
+    int spine_index = AddSkinSpine( gid, 0.15 );
+
+    string xsec = GetXSec( GetXSecSurf( gid, 0 ), 1 );
+
+    array< string > @spines = GetSkinSpineIDVec( xsec );
+
+    DelSkinSpineByID( spines[ spine_index ] );
+
+    if ( GetNumSkinSpines( gid ) != 0 )
+    {
+        Print( "ERROR: DelSkinSpineByID did not delete the spine" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "STACK" )
+
+    spine_index = AddSkinSpine( gid, 0.15 )
+
+    xsec = GetXSec( GetXSecSurf( gid, 0 ), 1 )
+
+    spines = GetSkinSpineIDVec( xsec )
+
+    DelSkinSpineByID( spines[ spine_index ] )
+
+    assert GetNumSkinSpines( gid ) == 0, "DelSkinSpineByID did not delete the spine"
+
+    \endcode
+    \endPythonOnly
+    \sa AddSkinSpine, GetSkinSpineIDVec, DelSkinSpine
+    \param [in] spine_id string Skin spine ID
+*/
+
+extern void DelSkinSpineByID( const std::string & spine_id );
 
 /*!
     \ingroup XSec
@@ -22763,13 +27691,60 @@ extern int GetNumSkinSpines( const std::string& geom_id );
 
     \endcode
     \endPythonOnly
-    \sa SetSkinSpineName, AddSkinSpine
+    \sa SetSkinSpineName, AddSkinSpine, GetSkinSpineNameByID
     \param [in] geom_id string Geom ID
     \param [in] index int Spine index
     \return string Spine name
 */
 
 extern std::string GetSkinSpineName( const std::string& geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the name of a skin spine, by the ID of the spine on any one cross-section.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "STACK" );
+
+    int spine_index = AddSkinSpine( gid, 0.15 );
+
+    string xsec = GetXSec( GetXSecSurf( gid, 0 ), 1 );
+
+    array< string > @spines = GetSkinSpineIDVec( xsec );
+
+    SetSkinSpineName( gid, spine_index, "Chine" );
+
+    if ( GetSkinSpineNameByID( spines[ spine_index ] ) != "Chine" )
+    {
+        Print( "ERROR: GetSkinSpineNameByID did not return the name set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "STACK" )
+
+    spine_index = AddSkinSpine( gid, 0.15 )
+
+    xsec = GetXSec( GetXSecSurf( gid, 0 ), 1 )
+
+    spines = GetSkinSpineIDVec( xsec )
+
+    SetSkinSpineName( gid, spine_index, "Chine" )
+
+    assert GetSkinSpineNameByID( spines[ spine_index ] ) == "Chine", "GetSkinSpineNameByID did not return the name set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetSkinSpineName, GetSkinSpineName
+    \param [in] spine_id string Skin spine ID
+    \return string Spine name
+*/
+
+extern std::string GetSkinSpineNameByID( const std::string & spine_id );
 
 /*!
     \ingroup XSec
@@ -22804,13 +27779,60 @@ extern std::string GetSkinSpineName( const std::string& geom_id, int index );
 
     \endcode
     \endPythonOnly
-    \sa GetSkinSpineName
+    \sa GetSkinSpineName, SetSkinSpineNameByID
     \param [in] geom_id string Geom ID
     \param [in] index int Spine index
     \param [in] name string Spine name
 */
 
 extern void SetSkinSpineName( const std::string& geom_id, int index, const std::string& name );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Set the name of a skin spine, by the ID of the spine on any one cross-section.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "STACK" );
+
+    int spine_index = AddSkinSpine( gid, 0.15 );
+
+    string xsec = GetXSec( GetXSecSurf( gid, 0 ), 1 );
+
+    array< string > @spines = GetSkinSpineIDVec( xsec );
+
+    SetSkinSpineNameByID( spines[ spine_index ], "Chine" );
+
+    if ( GetSkinSpineName( gid, spine_index ) != "Chine" )
+    {
+        Print( "ERROR: SetSkinSpineNameByID did not name the spine" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "STACK" )
+
+    spine_index = AddSkinSpine( gid, 0.15 )
+
+    xsec = GetXSec( GetXSecSurf( gid, 0 ), 1 )
+
+    spines = GetSkinSpineIDVec( xsec )
+
+    SetSkinSpineNameByID( spines[ spine_index ], "Chine" )
+
+    assert GetSkinSpineName( gid, spine_index ) == "Chine", "SetSkinSpineNameByID did not name the spine"
+
+    \endcode
+    \endPythonOnly
+    \sa GetSkinSpineName, SetSkinSpineName
+    \param [in] spine_id string Skin spine ID
+    \param [in] name string New name for the spine
+*/
+
+extern void SetSkinSpineNameByID( const std::string & spine_id, const std::string & name );
 
 /*!
     \ingroup XSec
@@ -22869,6 +27891,49 @@ extern void SetSkinSpineName( const std::string& geom_id, int index, const std::
     \return string Spine Parm container ID
 */
 extern std::string GetSkinSpineID( const std::string& xsec_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Get the IDs of the skin spines of one cross-section, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "STACK" );
+
+    AddSkinSpine( gid, 0.15 );
+
+    string xsec = GetXSec( GetXSecSurf( gid, 0 ), 1 );
+
+    array< string > @spines = GetSkinSpineIDVec( xsec );
+
+    if ( spines.size() != 1 || spines[0] != GetSkinSpineID( xsec, 0 ) )
+    {
+        Print( "ERROR: GetSkinSpineIDVec did not return the spine" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "STACK" )
+
+    AddSkinSpine( gid, 0.15 )
+
+    xsec = GetXSec( GetXSecSurf( gid, 0 ), 1 )
+
+    spines = GetSkinSpineIDVec( xsec )
+
+    assert list( spines ) == [ GetSkinSpineID( xsec, 0 ) ], "GetSkinSpineIDVec did not return the spine"
+
+    \endcode
+    \endPythonOnly
+    \sa GetSkinSpineID, AddSkinSpine
+    \param [in] xsec_id string XSec ID
+    \return array<string> Array of skin spine IDs
+*/
+
+extern std::vector < std::string > GetSkinSpineIDVec( const std::string & xsec_id );
 
 /*!
     \ingroup XSec
@@ -25366,12 +30431,56 @@ extern void DemoteCSTLower( const std::string& xsec_id );
 
     \endcode
     \endPythonOnly
+    \sa FitAfCSTByID
     \param [in] xsec_surf_id string XsecSurf ID
     \param [in] xsec_index int XSec index
     \param [in] deg int CST degree
 */
 
 extern void FitAfCST( const std::string & xsec_surf_id, int xsec_index, int deg );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Convert an analytic or file airfoil cross-section to a CST airfoil fit to its shape, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    FitAfCSTByID( xsec_1, 8 );
+
+    if ( GetXSecShape( xsec_1 ) != XS_CST_AIRFOIL )
+    {
+        Print( "ERROR: FitAfCSTByID did not convert the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    FitAfCSTByID( xsec_1, 8 )
+
+    assert GetXSecShape( xsec_1 ) == XS_CST_AIRFOIL, "FitAfCSTByID did not convert the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa FitCSTAirfoil, FitAfCST
+    \param [in] xsec_id string XSec ID
+    \param [in] deg int CST degree
+*/
+
+extern void FitAfCSTByID( const std::string & xsec_id, int deg );
 
 //======================== Background3D Functions ======================//
 
@@ -26184,6 +31293,190 @@ extern void DelBogie( const std::string &gear_id, const std::string &bogie_id );
 
 extern void DelAllBogies( const std::string &gear_id );
 
+/*!
+    \ingroup GearGeom
+*/
+/*!
+    Set the Geom a bogie stows into, or an empty string for none.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string gear_id = AddGeom( "GEAR" );
+
+    string bogie_id = CreateAndAddBogie( gear_id );
+
+    SetBogieStowParentID( bogie_id, pod_id );
+
+    if ( GetBogieStowParentID( bogie_id ) != pod_id )
+    {
+        Print( "ERROR: SetBogieStowParentID did not set the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    gear_id = AddGeom( "GEAR" )
+
+    bogie_id = CreateAndAddBogie( gear_id )
+
+    SetBogieStowParentID( bogie_id, pod_id )
+
+    assert GetBogieStowParentID( bogie_id ) == pod_id, "SetBogieStowParentID did not set the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa GetBogieStowParentID
+    \param [in] bogie_id string Bogie ID
+    \param [in] geom_id string Geom ID, or an empty string
+*/
+
+extern void SetBogieStowParentID( const std::string & bogie_id, const std::string & geom_id );
+
+/*!
+    \ingroup GearGeom
+*/
+/*!
+    Get the Geom a bogie stows into.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string gear_id = AddGeom( "GEAR" );
+
+    string bogie_id = CreateAndAddBogie( gear_id );
+
+    SetBogieStowParentID( bogie_id, pod_id );
+
+    if ( GetBogieStowParentID( bogie_id ) != pod_id )
+    {
+        Print( "ERROR: GetBogieStowParentID did not return the Geom set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    gear_id = AddGeom( "GEAR" )
+
+    bogie_id = CreateAndAddBogie( gear_id )
+
+    SetBogieStowParentID( bogie_id, pod_id )
+
+    assert GetBogieStowParentID( bogie_id ) == pod_id, "GetBogieStowParentID did not return the Geom set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetBogieStowParentID
+    \param [in] bogie_id string Bogie ID
+    \return string Geom ID, or an empty string for none
+*/
+
+extern std::string GetBogieStowParentID( const std::string & bogie_id );
+
+/*!
+    \ingroup GearGeom
+*/
+/*!
+    Set the Geom a bogie retracts on, or an empty string for none.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string gear_id = AddGeom( "GEAR" );
+
+    string bogie_id = CreateAndAddBogie( gear_id );
+
+    // A bogie only keeps a mechanism parent while it retracts by mechanism
+    SetParmVal( bogie_id, "RetMode", "Retract", GEAR_MECHANISM );
+
+    SetBogieMechParentID( bogie_id, pod_id );
+
+    if ( GetBogieMechParentID( bogie_id ) != pod_id )
+    {
+        Print( "ERROR: SetBogieMechParentID did not set the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    gear_id = AddGeom( "GEAR" )
+
+    bogie_id = CreateAndAddBogie( gear_id )
+
+    # A bogie only keeps a mechanism parent while it retracts by mechanism
+    SetParmVal( bogie_id, "RetMode", "Retract", GEAR_MECHANISM )
+
+    SetBogieMechParentID( bogie_id, pod_id )
+
+    assert GetBogieMechParentID( bogie_id ) == pod_id, "SetBogieMechParentID did not set the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa GetBogieMechParentID
+    \param [in] bogie_id string Bogie ID
+    \param [in] geom_id string Geom ID, or an empty string
+*/
+
+extern void SetBogieMechParentID( const std::string & bogie_id, const std::string & geom_id );
+
+/*!
+    \ingroup GearGeom
+*/
+/*!
+    Get the Geom a bogie retracts on.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string gear_id = AddGeom( "GEAR" );
+
+    string bogie_id = CreateAndAddBogie( gear_id );
+
+    // A bogie only keeps a mechanism parent while it retracts by mechanism
+    SetParmVal( bogie_id, "RetMode", "Retract", GEAR_MECHANISM );
+
+    SetBogieMechParentID( bogie_id, pod_id );
+
+    if ( GetBogieMechParentID( bogie_id ) != pod_id )
+    {
+        Print( "ERROR: GetBogieMechParentID did not return the Geom set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    gear_id = AddGeom( "GEAR" )
+
+    bogie_id = CreateAndAddBogie( gear_id )
+
+    # A bogie only keeps a mechanism parent while it retracts by mechanism
+    SetParmVal( bogie_id, "RetMode", "Retract", GEAR_MECHANISM )
+
+    SetBogieMechParentID( bogie_id, pod_id )
+
+    assert GetBogieMechParentID( bogie_id ) == pod_id, "GetBogieMechParentID did not return the Geom set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetBogieMechParentID
+    \param [in] bogie_id string Bogie ID
+    \return string Geom ID, or an empty string for none
+*/
+
+extern std::string GetBogieMechParentID( const std::string & bogie_id );
+
 
 //====================== AuxiliaryGeom Functions ======================//
 /*!
@@ -26621,7 +31914,7 @@ extern std::string AddRoutingPt( const std::string &routing_id, const std::strin
     vsp.SetParmVal(uPre2, 0.)
     \endcode
     \endPythonOnly
-    \sa AddRoutingPt, DelRoutingPt
+    \sa AddRoutingPt, DelRoutingPt, InsertRoutingPtByID
     \param [in] routing_id string RoutingGeom Geom ID
     \param [in] index int Index of routing point to insert new point before
     \param [in] geom_id string Geom ID of geom to anchor new routing point to
@@ -26630,6 +31923,64 @@ extern std::string AddRoutingPt( const std::string &routing_id, const std::strin
 */
 
 extern std::string InsertRoutingPt( const std::string &routing_id, int index, const std::string &geom_id, int surf_index );
+
+/*!
+    \ingroup RoutingGeom
+*/
+/*!
+    Insert a routing point before the point with the given ID, and return the new point's ID.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+    string pod2 = AddGeom( "POD" );
+
+    SetParmVal( pod2, "Y_Rel_Location", "XForm", 2.0 );
+
+    string routing_id = AddGeom( "ROUTING" );
+
+    string rpt0 = AddRoutingPt( routing_id, pod1, 0 );
+    string rpt1 = AddRoutingPt( routing_id, pod2, 0 );
+
+    Update();
+
+    string mid = InsertRoutingPtByID( routing_id, rpt1, pod1, 0 );
+
+    if ( GetRoutingPtID( routing_id, 1 ) != mid )
+    {
+        Print( "ERROR: InsertRoutingPtByID did not put the point before rpt1" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+    pod2 = AddGeom( "POD" )
+
+    SetParmVal( pod2, "Y_Rel_Location", "XForm", 2.0 )
+
+    routing_id = AddGeom( "ROUTING" )
+
+    rpt0 = AddRoutingPt( routing_id, pod1, 0 )
+    rpt1 = AddRoutingPt( routing_id, pod2, 0 )
+
+    Update()
+
+    mid = InsertRoutingPtByID( routing_id, rpt1, pod1, 0 )
+
+    assert GetRoutingPtID( routing_id, 1 ) == mid, "InsertRoutingPtByID did not put the point before rpt1"
+
+    \endcode
+    \endPythonOnly
+    \sa AddRoutingPt, DelRoutingPt, InsertRoutingPt
+    \param [in] routing_id string RoutingGeom Geom ID
+    \param [in] before_pt_id string ID of the routing point the new one goes before
+    \param [in] geom_id string ID of the Geom the new point is attached to
+    \param [in] surf_index int Main surface index of that Geom
+    \return string ID of the new routing point
+*/
+
+extern std::string InsertRoutingPtByID( const std::string &routing_id, const std::string &before_pt_id, const std::string &geom_id, int surf_index );
 
 /*!
     \ingroup RoutingGeom
@@ -26692,12 +32043,67 @@ extern std::string InsertRoutingPt( const std::string &routing_id, int index, co
 
     \endcode
     \endPythonOnly
-    \sa AddRoutingPt, DelAllRoutingPt
+    \sa AddRoutingPt, DelAllRoutingPt, DelRoutingPtByID
     \param [in] routing_id string RoutingGeom Geom ID
     \param [in] index int Index of routing point to delete
 */
 
 extern void DelRoutingPt( const std::string &routing_id, int index );
+
+/*!
+    \ingroup RoutingGeom
+*/
+/*!
+    Delete a routing point, by point ID.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+    string pod2 = AddGeom( "POD" );
+
+    SetParmVal( pod2, "Y_Rel_Location", "XForm", 2.0 );
+
+    string routing_id = AddGeom( "ROUTING" );
+
+    string rpt0 = AddRoutingPt( routing_id, pod1, 0 );
+    string rpt1 = AddRoutingPt( routing_id, pod2, 0 );
+
+    Update();
+
+    DelRoutingPtByID( routing_id, rpt0 );
+
+    if ( GetNumRoutingPts( routing_id ) != 1 || GetRoutingPtID( routing_id, 0 ) != rpt1 )
+    {
+        Print( "ERROR: DelRoutingPtByID did not delete the point" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+    pod2 = AddGeom( "POD" )
+
+    SetParmVal( pod2, "Y_Rel_Location", "XForm", 2.0 )
+
+    routing_id = AddGeom( "ROUTING" )
+
+    rpt0 = AddRoutingPt( routing_id, pod1, 0 )
+    rpt1 = AddRoutingPt( routing_id, pod2, 0 )
+
+    Update()
+
+    DelRoutingPtByID( routing_id, rpt0 )
+
+    assert GetNumRoutingPts( routing_id ) == 1 and GetRoutingPtID( routing_id, 0 ) == rpt1, "DelRoutingPtByID did not delete the point"
+
+    \endcode
+    \endPythonOnly
+    \sa AddRoutingPt, DelAllRoutingPt, DelRoutingPt
+    \param [in] routing_id string RoutingGeom Geom ID
+    \param [in] pt_id string ID of the routing point to delete
+*/
+
+extern void DelRoutingPtByID( const std::string &routing_id, const std::string &pt_id );
 
 /*!
     \ingroup RoutingGeom
@@ -26847,13 +32253,70 @@ extern void DelAllRoutingPt( const std::string &routing_id );
     assert after_ids[1] == before_ids[2], "MoveRoutingPt did not swap the two points"
     \endcode
     \endPythonOnly
-    \sa AddRoutingPt, DelRoutingPt, REORDER_TYPE
+    \sa AddRoutingPt, DelRoutingPt, REORDER_TYPE, MoveRoutingPtByID
     \param [in] routing_id string RoutingGeom Geom ID
     \param [in] index int Index of routing point to move
     \param [in] reorder_type int Enum specifying reordering type (i.e. REORDER_MOVE_UP, REORDER_MOVE_DOWN, REORDER_MOVE_TOP, REORDER_MOVE_BOTTOM)
 */
 
 extern int MoveRoutingPt( const std::string &routing_id, int index, int reorder_type );
+
+/*!
+    \ingroup RoutingGeom
+*/
+/*!
+    Move a routing point within its route, by point ID, and return its new index.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+    string pod2 = AddGeom( "POD" );
+
+    SetParmVal( pod2, "Y_Rel_Location", "XForm", 2.0 );
+
+    string routing_id = AddGeom( "ROUTING" );
+
+    string rpt0 = AddRoutingPt( routing_id, pod1, 0 );
+    string rpt1 = AddRoutingPt( routing_id, pod2, 0 );
+
+    Update();
+
+    int newindx = MoveRoutingPtByID( routing_id, rpt1, REORDER_MOVE_TOP );
+
+    if ( newindx != 0 || GetRoutingPtID( routing_id, 0 ) != rpt1 )
+    {
+        Print( "ERROR: MoveRoutingPtByID did not move the point to the top" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+    pod2 = AddGeom( "POD" )
+
+    SetParmVal( pod2, "Y_Rel_Location", "XForm", 2.0 )
+
+    routing_id = AddGeom( "ROUTING" )
+
+    rpt0 = AddRoutingPt( routing_id, pod1, 0 )
+    rpt1 = AddRoutingPt( routing_id, pod2, 0 )
+
+    Update()
+
+    newindx = MoveRoutingPtByID( routing_id, rpt1, REORDER_MOVE_TOP )
+
+    assert newindx == 0 and GetRoutingPtID( routing_id, 0 ) == rpt1, "MoveRoutingPtByID did not move the point to the top"
+
+    \endcode
+    \endPythonOnly
+    \sa REORDER_TYPE, MoveRoutingPt
+    \param [in] routing_id string RoutingGeom Geom ID
+    \param [in] pt_id string ID of the routing point to move
+    \param [in] reorder_type int Enum specifying reordering type (i.e. REORDER_MOVE_UP, REORDER_MOVE_DOWN, REORDER_MOVE_TOP, REORDER_MOVE_BOTTOM)
+    \return int New index of the point
+*/
+
+extern int MoveRoutingPtByID( const std::string &routing_id, const std::string &pt_id, int reorder_type );
 
 /*!
     \ingroup RoutingGeom
@@ -27270,7 +32733,7 @@ extern vec3d GetMainRoutingPtCoord( const std::string &pt_id );
 
     \endcode
     \endPythonOnly
-    \sa AddRoutingPt, DelRoutingPt, GetMainRoutingPtCoord, GetAllRoutingPtCoords, GetRoutingCurve
+    \sa AddRoutingPt, DelRoutingPt, GetMainRoutingPtCoord, GetAllRoutingPtCoords, GetRoutingCurve, GetRoutingPtCoordByID
     \param [in] routing_id string RoutingGeom Geom ID
     \param [in] index int Index of routing point to get cordinate of
     \param [in] symm_index int Symmetry index to get coordinate of
@@ -27278,6 +32741,63 @@ extern vec3d GetMainRoutingPtCoord( const std::string &pt_id );
 */
 
 extern vec3d GetRoutingPtCoord( const std::string &routing_id, int index, int symm_index );
+
+/*!
+    \ingroup RoutingGeom
+*/
+/*!
+    Get the coordinates of a routing point as a route places it, by point ID.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+    string pod2 = AddGeom( "POD" );
+
+    SetParmVal( pod2, "Y_Rel_Location", "XForm", 2.0 );
+
+    string routing_id = AddGeom( "ROUTING" );
+
+    string rpt0 = AddRoutingPt( routing_id, pod1, 0 );
+    string rpt1 = AddRoutingPt( routing_id, pod2, 0 );
+
+    Update();
+
+    vec3d p = GetRoutingPtCoordByID( routing_id, rpt1, 0 );
+
+    if ( dist( p, GetRoutingPtCoord( routing_id, 1, 0 ) ) > 1e-12 )
+    {
+        Print( "ERROR: GetRoutingPtCoordByID did not find the point" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+    pod2 = AddGeom( "POD" )
+
+    SetParmVal( pod2, "Y_Rel_Location", "XForm", 2.0 )
+
+    routing_id = AddGeom( "ROUTING" )
+
+    rpt0 = AddRoutingPt( routing_id, pod1, 0 )
+    rpt1 = AddRoutingPt( routing_id, pod2, 0 )
+
+    Update()
+
+    p = GetRoutingPtCoordByID( routing_id, rpt1, 0 )
+
+    assert dist( p, GetRoutingPtCoord( routing_id, 1, 0 ) ) < 1e-12, "GetRoutingPtCoordByID did not find the point"
+
+    \endcode
+    \endPythonOnly
+    \sa GetMainRoutingPtCoord, GetRoutingPtCoord
+    \param [in] routing_id string RoutingGeom Geom ID
+    \param [in] pt_id string Routing point ID
+    \param [in] symm_index int Symmetric copy index
+    \return vec3d Coordinates of the point
+*/
+
+extern vec3d GetRoutingPtCoordByID( const std::string &routing_id, const std::string &pt_id, int symm_index );
 
 /*!
     \ingroup RoutingGeom
@@ -29778,11 +35298,54 @@ extern void MoveEditXSecPnt( const std::string & xsec_id, const int & indx, cons
 
     \endcode
     \endPythonOnly
+    \sa ConvertXSecToEditByID
     \param [in] geom_id string Geom ID
     \param [in] indx int XSec index
 */
 
 extern void ConvertXSecToEdit( const std::string & geom_id, const int & indx = 0 );
+
+/*!
+    \ingroup EditCurveXSec
+*/
+/*!
+    Convert a cross-section to an edit curve that holds its shape, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "FUSELAGE" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    ConvertXSecToEditByID( xsec_1 );
+
+    if ( GetXSecShape( xsec_1 ) != XS_EDIT_CURVE )
+    {
+        Print( "ERROR: ConvertXSecToEditByID did not convert the XSec" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "FUSELAGE" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    ConvertXSecToEditByID( xsec_1 )
+
+    assert GetXSecShape( xsec_1 ) == XS_EDIT_CURVE, "ConvertXSecToEditByID did not convert the XSec"
+
+    \endcode
+    \endPythonOnly
+    \sa ConvertXSecToEdit
+    \param [in] xsec_id string XSec ID
+*/
+
+extern void ConvertXSecToEditByID( const std::string & xsec_id );
 
 /*!
     \ingroup EditCurveXSec
@@ -30874,6 +36437,8 @@ extern bool ValidParm( const std::string & id );
 
     \endcode
     \endPythonOnly
+    \note Setting the absolute location or rotation of a child Geom in absolute mode needs UpdateGeom()
+    or SetParmValUpdate() before Update(); see UpdateGeom().
     \sa SetParmValUpdate
     \param [in] parm_id string Parm ID
     \param [in] val double Parm value to set
@@ -30958,6 +36523,8 @@ extern double SetParmVal( const std::string & parm_id, double val );
 
     \endcode
     \endPythonOnly
+    \note Setting the absolute location or rotation of a child Geom in absolute mode needs UpdateGeom()
+    or SetParmValUpdate() before Update(); see UpdateGeom().
     \sa SetParmValUpdate, SYM_FLAG
     \param [in] geom_id string Geom ID
     \param [in] name string Parm name
@@ -38757,6 +44324,58 @@ extern std::string ModeGetSetting( const std::string &mid, int indx );
     \ingroup Mode
 */
 /*!
+    Get the setting a mode applies for a variable preset group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string gid = AddVarPresetGroup( "Tess" );
+
+    AddVarPresetParm( gid, FindParm( pod_id, "Tess_U", "Shape" ) );
+
+    string sid = AddVarPresetSetting( gid, "Coarse" );
+
+    string mid = CreateAndAddMode( "Quick", SET_ALL, SET_NONE );
+
+    ModeAddGroupSetting( mid, gid, sid );
+
+    if ( ModeGetGroupSetting( mid, gid ) != sid )
+    {
+        Print( "ERROR: ModeGetGroupSetting did not return the group's setting" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    gid = AddVarPresetGroup( "Tess" )
+
+    AddVarPresetParm( gid, FindParm( pod_id, "Tess_U", "Shape" ) )
+
+    sid = AddVarPresetSetting( gid, "Coarse" )
+
+    mid = CreateAndAddMode( "Quick", SET_ALL, SET_NONE )
+
+    ModeAddGroupSetting( mid, gid, sid )
+
+    assert ModeGetGroupSetting( mid, gid ) == sid, "ModeGetGroupSetting did not return the group's setting"
+
+    \endcode
+    \endPythonOnly
+    \sa ModeAddGroupSetting, ModeGetSetting
+    \param [in] mid string Mode ID
+    \param [in] gid string Variable preset group ID
+    \return string Variable preset setting ID
+*/
+
+extern std::string ModeGetGroupSetting( const std::string &mid, const std::string &gid );
+
+/*!
+    \ingroup Mode
+*/
+/*!
     Get all var preset group IDs in model.
     \forcpponly
     \code{.cpp}
@@ -39275,11 +44894,67 @@ extern std::vector < std::string >  ModeGetAllSettings( const std::string &mid )
 
     \endcode
     \endPythonOnly
+    \sa RemoveGroupSettingByID
     \param [in] mid string Mode ID to remove varible preset group and setting from
     \param [in] indx int Index of Variable preset to remove
 */
 
 extern void RemoveGroupSetting( const std::string &mid, int indx );
+
+/*!
+    \ingroup Mode
+*/
+/*!
+    Remove a variable preset group and its setting from a mode, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    string gid = AddVarPresetGroup( "Tess" );
+
+    AddVarPresetParm( gid, FindParm( pod_id, "Tess_U", "Shape" ) );
+
+    string sid = AddVarPresetSetting( gid, "Coarse" );
+
+    string mid = CreateAndAddMode( "Quick", SET_ALL, SET_NONE );
+
+    ModeAddGroupSetting( mid, gid, sid );
+
+    RemoveGroupSettingByID( mid, gid );
+
+    if ( ModeGetAllGroups( mid ).size() != 0 )
+    {
+        Print( "ERROR: RemoveGroupSettingByID did not remove the group" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    gid = AddVarPresetGroup( "Tess" )
+
+    AddVarPresetParm( gid, FindParm( pod_id, "Tess_U", "Shape" ) )
+
+    sid = AddVarPresetSetting( gid, "Coarse" )
+
+    mid = CreateAndAddMode( "Quick", SET_ALL, SET_NONE )
+
+    ModeAddGroupSetting( mid, gid, sid )
+
+    RemoveGroupSettingByID( mid, gid )
+
+    assert len( ModeGetAllGroups( mid ) ) == 0, "RemoveGroupSettingByID did not remove the group"
+
+    \endcode
+    \endPythonOnly
+    \sa ModeAddGroupSetting, RemoveAllGroupSettings, RemoveGroupSetting
+    \param [in] mid string Mode ID
+    \param [in] gid string Variable preset group ID
+*/
+
+extern void RemoveGroupSettingByID( const std::string &mid, const std::string &gid );
 
 /*!
     \ingroup Mode
@@ -39661,7 +45336,8 @@ extern std::vector < double > PCurveGetValVec( const std::string & geom_id, cons
     \ingroup PCurve
 */
 /*!
-    Delete a propeller blade curve (P Curve) point
+    Delete a propeller blade curve (P Curve) point. An end point cannot be deleted, nor, on a CEDIT curve, a control point
+    between two end points of a segment.
     \forcpponly
     \code{.cpp}
     string prop_id = AddGeom( "PROP" );
@@ -40464,6 +46140,42 @@ extern std::string GetCpSliceID( int slice_index );
     \ingroup CSGroup
 */
 /*!
+    Get the IDs of the Cp slices, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    DeleteAllCpSlices();
+
+    string slice_id = AddCpSlice( X_DIR, 0.5 );
+
+    array< string > @ids = GetCpSliceIDVec();
+
+    if ( ids.size() != 1 || ids[0] != slice_id )
+    {
+        Print( "ERROR: GetCpSliceIDVec did not return the slice" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    DeleteAllCpSlices()
+
+    slice_id = AddCpSlice( X_DIR, 0.5 )
+
+    assert list( GetCpSliceIDVec() ) == [ slice_id ], "GetCpSliceIDVec did not return the slice"
+
+    \endcode
+    \endPythonOnly
+    \sa GetCpSliceID
+    \return array<string> Array of Cp slice IDs
+*/
+
+extern std::vector < std::string > GetCpSliceIDVec();
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
     Delete a single Cp slice from the VSPAERO Cp Slicer
     \forcpponly
     \code{.cpp}
@@ -40524,11 +46236,47 @@ extern std::string GetCpSliceID( int slice_index );
 
     \endcode
     \endPythonOnly
-    \sa AddCpSlice, DeleteAllCpSlices
+    \sa AddCpSlice, DeleteAllCpSlices, DelCpSliceByID
     \param [in] slice_index int Cp slice index
 */
 
 extern void DelCpSlice( int slice_index );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Delete a Cp slice, by slice ID.
+    \forcpponly
+    \code{.cpp}
+    string slice_id = AddCpSlice( X_DIR, 0.5 );
+
+    DelCpSliceByID( slice_id );
+
+    array< string > @ids = GetCpSliceIDVec();
+
+    if ( ids.find( slice_id ) >= 0 )
+    {
+        Print( "ERROR: DelCpSliceByID did not delete the slice" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    slice_id = AddCpSlice( X_DIR, 0.5 )
+
+    DelCpSliceByID( slice_id )
+
+    assert slice_id not in GetCpSliceIDVec(), "DelCpSliceByID did not delete the slice"
+
+    \endcode
+    \endPythonOnly
+    \sa AddCpSlice, DeleteAllCpSlices, DelCpSlice
+    \param [in] slice_id string Cp slice ID
+*/
+
+extern void DelCpSliceByID( const std::string & slice_id );
 
 /*!
     \ingroup CSGroup
@@ -40613,11 +46361,59 @@ extern void DeleteAllCpSlices();
 
     \endcode
     \endPythonOnly
-    \sa CreateVSPAEROControlSurfaceGroup
+    \sa CreateVSPAEROControlSurfaceGroup, DeleteVSPAEROControlSurfaceGroupByID
     \param [in] CSGroupIndex int Index of the control surface group to delete
 */
 
 extern void DeleteVSPAEROControlSurfaceGroup( int CSGroupIndex );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Delete a VSPAERO control surface group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    DeleteVSPAEROControlSurfaceGroupByID( group_id );
+
+    array< string > @ids = GetControlSurfaceGroupIDVec();
+
+    if ( ids.find( group_id ) >= 0 )
+    {
+        Print( "ERROR: DeleteVSPAEROControlSurfaceGroupByID did not delete the group" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    DeleteVSPAEROControlSurfaceGroupByID( group_id )
+
+    assert group_id not in GetControlSurfaceGroupIDVec(), "DeleteVSPAEROControlSurfaceGroupByID did not delete the group"
+
+    \endcode
+    \endPythonOnly
+    \sa CreateVSPAEROControlSurfaceGroup, DeleteVSPAEROControlSurfaceGroup
+    \param [in] group_id string Control surface group ID
+*/
+
+extern void DeleteVSPAEROControlSurfaceGroupByID( const std::string & group_id );
 
 /*!
     \ingroup CSGroup
@@ -40647,11 +46443,43 @@ extern void DeleteVSPAEROControlSurfaceGroup( int CSGroupIndex );
 
     \endcode
     \endPythonOnly
-    \sa DeleteVSPAEROControlSurfaceGroup, GetNumControlSurfaceGroups
+    \sa DeleteVSPAEROControlSurfaceGroup, GetNumControlSurfaceGroups, AddVSPAEROControlSurfaceGroup
     \return int Index of the new control surface group
 */
 
 extern int CreateVSPAEROControlSurfaceGroup();
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Add an empty VSPAERO control surface group and return its ID.
+    \forcpponly
+    \code{.cpp}
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    array< string > @ids = GetControlSurfaceGroupIDVec();
+
+    if ( ids.find( group_id ) < 0 )
+    {
+        Print( "ERROR: AddVSPAEROControlSurfaceGroup did not add the group" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    assert group_id in GetControlSurfaceGroupIDVec(), "AddVSPAEROControlSurfaceGroup did not add the group"
+
+    \endcode
+    \endPythonOnly
+    \sa CreateVSPAEROControlSurfaceGroup, DeleteVSPAEROControlSurfaceGroup
+    \return string Control surface group ID
+*/
+
+extern std::string AddVSPAEROControlSurfaceGroup();
 
 /*!
     \ingroup CSGroup
@@ -40729,10 +46557,57 @@ extern int CreateVSPAEROControlSurfaceGroup();
 
     \endcode
     \endPythonOnly
+    \sa AddAllToVSPAEROControlSurfaceGroupByID
     \param [in] CSGroupIndex int Index of the control surface group
 */
 
 extern void AddAllToVSPAEROControlSurfaceGroup( int CSGroupIndex );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Add every available control surface to a group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddAllToVSPAEROControlSurfaceGroupByID( group_id );
+
+    if ( GetAvailableCSNameVecByID( group_id ).size() != 0 )
+    {
+        Print( "ERROR: AddAllToVSPAEROControlSurfaceGroupByID left control surfaces available" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddAllToVSPAEROControlSurfaceGroupByID( group_id )
+
+    assert len( GetAvailableCSNameVecByID( group_id ) ) == 0, "AddAllToVSPAEROControlSurfaceGroupByID left control surfaces available"
+
+    \endcode
+    \endPythonOnly
+    \sa RemoveAllFromVSPAEROControlSurfaceGroup, AddAllToVSPAEROControlSurfaceGroup
+    \param [in] group_id string Control surface group ID
+*/
+
+extern void AddAllToVSPAEROControlSurfaceGroupByID( const std::string & group_id );
 
 /*!
     \ingroup CSGroup
@@ -40795,10 +46670,61 @@ extern void AddAllToVSPAEROControlSurfaceGroup( int CSGroupIndex );
 
     \endcode
     \endPythonOnly
+    \sa RemoveAllFromVSPAEROControlSurfaceGroupByID
     \param [in] CSGroupIndex int Index of the control surface group
 */
 
 extern void RemoveAllFromVSPAEROControlSurfaceGroup( int CSGroupIndex );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Remove every control surface from a group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddAllToVSPAEROControlSurfaceGroupByID( group_id );
+
+    RemoveAllFromVSPAEROControlSurfaceGroupByID( group_id );
+
+    if ( GetActiveCSNameVecByID( group_id ).size() != 0 )
+    {
+        Print( "ERROR: RemoveAllFromVSPAEROControlSurfaceGroupByID left control surfaces in the group" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddAllToVSPAEROControlSurfaceGroupByID( group_id )
+
+    RemoveAllFromVSPAEROControlSurfaceGroupByID( group_id )
+
+    assert len( GetActiveCSNameVecByID( group_id ) ) == 0, "RemoveAllFromVSPAEROControlSurfaceGroupByID left control surfaces in the group"
+
+    \endcode
+    \endPythonOnly
+    \sa AddAllToVSPAEROControlSurfaceGroup, RemoveAllFromVSPAEROControlSurfaceGroup
+    \param [in] group_id string Control surface group ID
+*/
+
+extern void RemoveAllFromVSPAEROControlSurfaceGroupByID( const std::string & group_id );
 
 /*!
     \ingroup CSGroup
@@ -40853,11 +46779,157 @@ extern void RemoveAllFromVSPAEROControlSurfaceGroup( int CSGroupIndex );
 
     \endcode
     \endPythonOnly
+    \sa GetActiveCSNameVecByID
     \param [in] CSGroupIndex int Index of the control surface group
     \return vector \<string\> Array of active control surface names
 */
 
 extern std::vector < std::string > GetActiveCSNameVec( int CSGroupIndex );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the names of the control surfaces in a group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 );
+
+    if ( GetActiveCSNameVecByID( group_id ).size() != 1 )
+    {
+        Print( "ERROR: GetActiveCSNameVecByID did not return the control surface" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 )
+
+    assert len( GetActiveCSNameVecByID( group_id ) ) == 1, "GetActiveCSNameVecByID did not return the control surface"
+
+    \endcode
+    \endPythonOnly
+    \sa GetActiveCSSubSurfIDVec, GetActiveCSNameVec
+    \param [in] group_id string Control surface group ID
+    \return array<string> Array of control surface names
+*/
+
+extern std::vector < std::string > GetActiveCSNameVecByID( const std::string & group_id );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the subsurface IDs of the control surfaces in a group. A control surface is a subsurface and the index of one of its symmetric reflections; GetActiveCSReflectVec gives the reflections.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddSubSurfToCSGroup( group_id, ss_id, 1 );
+
+    array< string > @ids = GetActiveCSSubSurfIDVec( group_id );
+
+    if ( ids.size() != 1 || ids[0] != ss_id )
+    {
+        Print( "ERROR: GetActiveCSSubSurfIDVec did not return the subsurface" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddSubSurfToCSGroup( group_id, ss_id, 1 )
+
+    assert list( GetActiveCSSubSurfIDVec( group_id ) ) == [ ss_id ], "GetActiveCSSubSurfIDVec did not return the subsurface"
+
+    \endcode
+    \endPythonOnly
+    \sa GetActiveCSReflectVec, GetActiveCSNameVec
+    \param [in] group_id string Control surface group ID
+    \return array<string> Array of subsurface IDs
+*/
+
+extern std::vector < std::string > GetActiveCSSubSurfIDVec( const std::string & group_id );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the reflection indexes of the control surfaces in a group, in the order of GetActiveCSSubSurfIDVec.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddSubSurfToCSGroup( group_id, ss_id, 1 );
+
+    array< int > @refl = GetActiveCSReflectVec( group_id );
+
+    if ( refl.size() != 1 || refl[0] != 1 )
+    {
+        Print( "ERROR: GetActiveCSReflectVec did not return the reflection" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddSubSurfToCSGroup( group_id, ss_id, 1 )
+
+    assert list( GetActiveCSReflectVec( group_id ) ) == [ 1 ], "GetActiveCSReflectVec did not return the reflection"
+
+    \endcode
+    \endPythonOnly
+    \sa GetActiveCSSubSurfIDVec
+    \param [in] group_id string Control surface group ID
+    \return array<int> Array of reflection indexes
+*/
+
+extern std::vector < int > GetActiveCSReflectVec( const std::string & group_id );
 
 /*!
     \ingroup CSGroup
@@ -40910,6 +46982,88 @@ extern std::vector < std::string > GetActiveCSNameVec( int CSGroupIndex );
 */
 
 extern std::vector < std::string > GetCompleteCSNameVec();
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the subsurface IDs of every control surface, grouped or not, in the order of GetCompleteCSNameVec.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    array< string > @ids = GetCompleteCSSubSurfIDVec();
+
+    // A symmetric wing holds the control surface twice, once on each side.
+    if ( ids.size() != 2 || ids[0] != ss_id || ids[1] != ss_id )
+    {
+        Print( "ERROR: GetCompleteCSSubSurfIDVec did not return both reflections" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    # A symmetric wing holds the control surface twice, once on each side.
+    assert list( GetCompleteCSSubSurfIDVec() ) == [ ss_id, ss_id ], "GetCompleteCSSubSurfIDVec did not return both reflections"
+
+    \endcode
+    \endPythonOnly
+    \sa GetCompleteCSReflectVec, GetCompleteCSNameVec
+    \return array<string> Array of subsurface IDs
+*/
+
+extern std::vector < std::string > GetCompleteCSSubSurfIDVec();
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the reflection indexes of every control surface, in the order of GetCompleteCSSubSurfIDVec.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    array< int > @refl = GetCompleteCSReflectVec();
+
+    if ( refl.size() != 2 || refl[0] != 0 || refl[1] != 1 )
+    {
+        Print( "ERROR: GetCompleteCSReflectVec did not return both reflections" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    assert list( GetCompleteCSReflectVec() ) == [ 0, 1 ], "GetCompleteCSReflectVec did not return both reflections"
+
+    \endcode
+    \endPythonOnly
+    \sa GetCompleteCSSubSurfIDVec
+    \return array<int> Array of reflection indexes
+*/
+
+extern std::vector < int > GetCompleteCSReflectVec();
 
 /*!
     \ingroup CSGroup
@@ -40976,11 +47130,157 @@ extern std::vector < std::string > GetCompleteCSNameVec();
 
     \endcode
     \endPythonOnly
+    \sa GetAvailableCSNameVecByID
     \param [in] CSGroupIndex int Index of the control surface group
     \return vector \<string\> Array of active control surface names
 */
 
 extern std::vector < std::string > GetAvailableCSNameVec( int CSGroupIndex );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the names of the control surfaces not in a group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 );
+
+    if ( GetAvailableCSNameVecByID( group_id ).size() != 1 )
+    {
+        Print( "ERROR: GetAvailableCSNameVecByID did not return the other reflection" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 )
+
+    assert len( GetAvailableCSNameVecByID( group_id ) ) == 1, "GetAvailableCSNameVecByID did not return the other reflection"
+
+    \endcode
+    \endPythonOnly
+    \sa GetAvailableCSSubSurfIDVec, GetAvailableCSNameVec
+    \param [in] group_id string Control surface group ID
+    \return array<string> Array of control surface names
+*/
+
+extern std::vector < std::string > GetAvailableCSNameVecByID( const std::string & group_id );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the subsurface IDs of the control surfaces not in a group, in the order of GetAvailableCSNameVec.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 );
+
+    array< string > @ids = GetAvailableCSSubSurfIDVec( group_id );
+
+    if ( ids.size() != 1 || ids[0] != ss_id )
+    {
+        Print( "ERROR: GetAvailableCSSubSurfIDVec did not return the other reflection" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 )
+
+    assert list( GetAvailableCSSubSurfIDVec( group_id ) ) == [ ss_id ], "GetAvailableCSSubSurfIDVec did not return the other reflection"
+
+    \endcode
+    \endPythonOnly
+    \sa GetAvailableCSReflectVec
+    \param [in] group_id string Control surface group ID
+    \return array<string> Array of subsurface IDs
+*/
+
+extern std::vector < std::string > GetAvailableCSSubSurfIDVec( const std::string & group_id );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the reflection indexes of the control surfaces not in a group, in the order of GetAvailableCSSubSurfIDVec.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 );
+
+    array< int > @refl = GetAvailableCSReflectVec( group_id );
+
+    if ( refl.size() != 1 || refl[0] != 1 )
+    {
+        Print( "ERROR: GetAvailableCSReflectVec did not return the other reflection" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 )
+
+    assert list( GetAvailableCSReflectVec( group_id ) ) == [ 1 ], "GetAvailableCSReflectVec did not return the other reflection"
+
+    \endcode
+    \endPythonOnly
+    \sa GetAvailableCSSubSurfIDVec
+    \param [in] group_id string Control surface group ID
+    \return array<int> Array of reflection indexes
+*/
+
+extern std::vector < int > GetAvailableCSReflectVec( const std::string & group_id );
 
 /*!
     \ingroup CSGroup
@@ -41051,11 +47351,59 @@ extern std::vector < std::string > GetAvailableCSNameVec( int CSGroupIndex );
 
     \endcode
     \endPythonOnly
+    \sa SetVSPAEROControlGroupNameByID
     \param [in] name string Name to set for the control surface group
     \param [in] CSGroupIndex int Index of the control surface group
 */
 
 extern void SetVSPAEROControlGroupName(const std::string & name, int CSGroupIndex);
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Set the name of a control surface group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    SetVSPAEROControlGroupNameByID( "Ailerons", group_id );
+
+    if ( GetVSPAEROControlGroupNameByID( group_id ) != "Ailerons" )
+    {
+        Print( "ERROR: SetVSPAEROControlGroupNameByID did not name the group" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    SetVSPAEROControlGroupNameByID( "Ailerons", group_id )
+
+    assert GetVSPAEROControlGroupNameByID( group_id ) == "Ailerons", "SetVSPAEROControlGroupNameByID did not name the group"
+
+    \endcode
+    \endPythonOnly
+    \sa GetVSPAEROControlGroupName, SetVSPAEROControlGroupName
+    \param [in] name string New name for the group
+    \param [in] group_id string Control surface group ID
+*/
+
+extern void SetVSPAEROControlGroupNameByID( const std::string & name, const std::string & group_id );
 
 /*!
     \ingroup CSGroup
@@ -41120,10 +47468,58 @@ extern void SetVSPAEROControlGroupName(const std::string & name, int CSGroupInde
 
     \endcode
     \endPythonOnly
+    \sa GetVSPAEROControlGroupNameByID
     \param [in] CSGroupIndex int Index of the control surface group
 */
 
 extern std::string GetVSPAEROControlGroupName( int CSGroupIndex );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the name of a control surface group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    SetVSPAEROControlGroupName( "Ailerons", 0 );
+
+    if ( GetVSPAEROControlGroupNameByID( group_id ) != "Ailerons" )
+    {
+        Print( "ERROR: GetVSPAEROControlGroupNameByID did not return the name set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    SetVSPAEROControlGroupName( "Ailerons", 0 )
+
+    assert GetVSPAEROControlGroupNameByID( group_id ) == "Ailerons", "GetVSPAEROControlGroupNameByID did not return the name set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetVSPAEROControlGroupName, GetVSPAEROControlGroupName
+    \param [in] group_id string Control surface group ID
+    \return string Group name
+*/
+
+extern std::string GetVSPAEROControlGroupNameByID( const std::string & group_id );
 
 /*!
     \ingroup CSGroup
@@ -41296,6 +47692,110 @@ extern void RemoveSelectedFromCSGroup( const std::vector <int> &selected, int CS
     \ingroup CSGroup
 */
 /*!
+    Add a control surface to a group, by its subsurface ID and the index of its symmetric reflection.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 );
+
+    array< string > @ids = GetActiveCSSubSurfIDVec( group_id );
+
+    if ( ids.size() != 1 || ids[0] != ss_id )
+    {
+        Print( "ERROR: AddSubSurfToCSGroup did not add the control surface" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddSubSurfToCSGroup( group_id, ss_id, 0 )
+
+    assert list( GetActiveCSSubSurfIDVec( group_id ) ) == [ ss_id ], "AddSubSurfToCSGroup did not add the control surface"
+
+    \endcode
+    \endPythonOnly
+    \sa RemoveSubSurfFromCSGroup, GetAvailableCSSubSurfIDVec
+    \param [in] group_id string Control surface group ID
+    \param [in] ss_id string Control surface subsurface ID
+    \param [in] reflect_index int Index of the symmetric reflection of the subsurface
+*/
+
+extern void AddSubSurfToCSGroup( const std::string & group_id, const std::string & ss_id, int reflect_index );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Remove a control surface from a group, by its subsurface ID and the index of its symmetric reflection.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    AddAllToVSPAEROControlSurfaceGroupByID( group_id );
+
+    RemoveSubSurfFromCSGroup( group_id, ss_id, 1 );
+
+    array< int > @refl = GetActiveCSReflectVec( group_id );
+
+    if ( refl.size() != 1 || refl[0] != 0 )
+    {
+        Print( "ERROR: RemoveSubSurfFromCSGroup did not remove the reflection" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    AddAllToVSPAEROControlSurfaceGroupByID( group_id )
+
+    RemoveSubSurfFromCSGroup( group_id, ss_id, 1 )
+
+    assert list( GetActiveCSReflectVec( group_id ) ) == [ 0 ], "RemoveSubSurfFromCSGroup did not remove the reflection"
+
+    \endcode
+    \endPythonOnly
+    \sa AddSubSurfToCSGroup, GetActiveCSSubSurfIDVec
+    \param [in] group_id string Control surface group ID
+    \param [in] ss_id string Control surface subsurface ID
+    \param [in] reflect_index int Index of the symmetric reflection of the subsurface
+*/
+
+extern void RemoveSubSurfFromCSGroup( const std::string & group_id, const std::string & ss_id, int reflect_index );
+
+/*!
+    \ingroup CSGroup
+*/
+/*!
     Get the total number of control surface groups
     \forcpponly
     \code{.cpp}
@@ -41436,6 +47936,52 @@ extern int GetNumControlSurfaceGroups();
 
 extern std::string FindControlSurfaceGroup( int group_index );
 
+/*!
+    \ingroup CSGroup
+*/
+/*!
+    Get the IDs of the VSPAERO control surface groups, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_CONTROL );
+
+    Update();
+
+    string group_id = AddVSPAEROControlSurfaceGroup();
+
+    array< string > @ids = GetControlSurfaceGroupIDVec();
+
+    if ( ids.size() != uint( GetNumControlSurfaceGroups() ) || ids.find( group_id ) < 0 )
+    {
+        Print( "ERROR: GetControlSurfaceGroupIDVec did not return the group" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_CONTROL )
+
+    Update()
+
+    group_id = AddVSPAEROControlSurfaceGroup()
+
+    ids = GetControlSurfaceGroupIDVec()
+
+    assert len( ids ) == GetNumControlSurfaceGroups() and group_id in ids, "GetControlSurfaceGroupIDVec did not return the group"
+
+    \endcode
+    \endPythonOnly
+    \sa FindControlSurfaceGroup
+    \return array<string> Array of control surface group IDs
+*/
+
+extern std::vector < std::string > GetControlSurfaceGroupIDVec();
+
 
 //================ VSPAERO Actuator Disk and Unsteady Functions ==============//
 /*!
@@ -41487,12 +48033,91 @@ extern std::string FindControlSurfaceGroup( int group_index );
 
     \endcode
     \endPythonOnly
-    \sa PROP_MODE
+    \sa PROP_MODE, FindActuatorDiskByGeom
     \param [in] disk_index int Actuator disk index for the current VSPAERO set
     \return string Actuator disk ID
 */
 
 extern std::string FindActuatorDisk( int disk_index );
+
+/*!
+    \ingroup VSPAERODiskAndProp
+*/
+/*!
+    Find the actuator disk of a propeller surface.
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    SetParmVal( prop_id, "PropMode", "Design", PROP_DISK );
+
+    Update();
+
+    if ( FindActuatorDiskByGeom( prop_id, 0 ) != FindActuatorDisk( 0 ) )
+    {
+        Print( "ERROR: FindActuatorDiskByGeom did not find the propeller's disk" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    SetParmVal( prop_id, "PropMode", "Design", PROP_DISK )
+
+    Update()
+
+    assert FindActuatorDiskByGeom( prop_id, 0 ) == FindActuatorDisk( 0 ), "FindActuatorDiskByGeom did not find the propeller's disk"
+
+    \endcode
+    \endPythonOnly
+    \sa GetActuatorDiskGeomID, FindActuatorDisk
+    \param [in] geom_id string Propeller Geom ID
+    \param [in] surf_index int Surface index of the propeller
+    \return string Actuator disk ID
+*/
+
+extern std::string FindActuatorDiskByGeom( const std::string & geom_id, int surf_index );
+
+/*!
+    \ingroup VSPAERODiskAndProp
+*/
+/*!
+    Get the ID of the propeller an actuator disk belongs to.
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    SetParmVal( prop_id, "PropMode", "Design", PROP_DISK );
+
+    Update();
+
+    if ( GetActuatorDiskGeomID( FindActuatorDisk( 0 ) ) != prop_id )
+    {
+        Print( "ERROR: GetActuatorDiskGeomID did not return the propeller" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    SetParmVal( prop_id, "PropMode", "Design", PROP_DISK )
+
+    Update()
+
+    assert GetActuatorDiskGeomID( FindActuatorDisk( 0 ) ) == prop_id, "GetActuatorDiskGeomID did not return the propeller"
+
+    \endcode
+    \endPythonOnly
+    \sa FindActuatorDisk
+    \param [in] disk_id string Actuator disk ID
+    \return string Propeller Geom ID
+*/
+
+extern std::string GetActuatorDiskGeomID( const std::string & disk_id );
 
 /*!
     \ingroup VSPAERODiskAndProp
@@ -41567,6 +48192,48 @@ extern std::string FindActuatorDisk( int disk_index );
 */
 
 extern int GetNumActuatorDisks();
+
+/*!
+    \ingroup VSPAERODiskAndProp
+*/
+/*!
+    Get the IDs of the actuator disks, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP" );
+
+    SetParmVal( prop_id, "PropMode", "Design", PROP_DISK );
+
+    Update();
+
+    array< string > @ids = GetActuatorDiskIDVec();
+
+    if ( ids.size() != uint( GetNumActuatorDisks() ) || ids[0] != FindActuatorDisk( 0 ) )
+    {
+        Print( "ERROR: GetActuatorDiskIDVec did not return the disks in order" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP" )
+
+    SetParmVal( prop_id, "PropMode", "Design", PROP_DISK )
+
+    Update()
+
+    ids = GetActuatorDiskIDVec()
+
+    assert len( ids ) == GetNumActuatorDisks() and ids[0] == FindActuatorDisk( 0 ), "GetActuatorDiskIDVec did not return the disks in order"
+
+    \endcode
+    \endPythonOnly
+    \sa FindActuatorDisk
+    \return array<string> Array of actuator disk IDs
+*/
+
+extern std::vector < std::string > GetActuatorDiskIDVec();
 
 /*!
     \ingroup VSPAERODiskAndProp
@@ -41701,11 +48368,59 @@ extern std::string FindUnsteadyGroup( int group_index );
 
     \endcode
     \endPythonOnly
+    \sa GetUnsteadyGroupNameByID
     \param [in] group_index int Unsteady group index for the current VSPAERO set
     \return string Unsteady group name
 */
 
 extern std::string GetUnsteadyGroupName( int group_index );
+
+/*!
+    \ingroup VSPAERODiskAndProp
+*/
+/*!
+    Get the name of a VSPAERO unsteady group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    array< string > @groups = GetUnsteadyGroupIDVec();
+
+    // Fixed components are in group 0, the propeller in group 1
+    string group_id = groups[1];
+
+    if ( GetUnsteadyGroupNameByID( group_id ) != GetUnsteadyGroupName( 1 ) )
+    {
+        Print( "ERROR: GetUnsteadyGroupNameByID did not find the group" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    # Fixed components are in group 0, the propeller in group 1
+    group_id = GetUnsteadyGroupIDVec()[1]
+
+    assert GetUnsteadyGroupNameByID( group_id ) == GetUnsteadyGroupName( 1 ), "GetUnsteadyGroupNameByID did not find the group"
+
+    \endcode
+    \endPythonOnly
+    \sa GetUnsteadyGroupIDVec, GetUnsteadyGroupName
+    \param [in] group_id string Unsteady group ID
+    \return string Unsteady group name
+*/
+
+extern std::string GetUnsteadyGroupNameByID( const std::string & group_id );
 
 /*!
     \ingroup VSPAERODiskAndProp
@@ -41747,12 +48462,61 @@ extern std::string GetUnsteadyGroupName( int group_index );
 
     \endcode
     \endPythonOnly
-    \sa GetUnsteadyGroupSurfIndexes
+    \sa GetUnsteadyGroupSurfIndexes, GetUnsteadyGroupCompIDsByID
     \param [in] group_index int Unsteady group index for the current VSPAERO set
     \return vector \<string\> Array of component IDs
 */
 
 extern std::vector < std::string > GetUnsteadyGroupCompIDs( int group_index );
+
+/*!
+    \ingroup VSPAERODiskAndProp
+*/
+/*!
+    Get the IDs of the components in a VSPAERO unsteady group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    array< string > @groups = GetUnsteadyGroupIDVec();
+
+    // Fixed components are in group 0, the propeller in group 1
+    string group_id = groups[1];
+
+    array< string > @comps = GetUnsteadyGroupCompIDsByID( group_id );
+
+    if ( comps.size() != 1 || comps[0] != prop_id )
+    {
+        Print( "ERROR: GetUnsteadyGroupCompIDsByID did not return the propeller" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    # Fixed components are in group 0, the propeller in group 1
+    group_id = GetUnsteadyGroupIDVec()[1]
+
+    assert list( GetUnsteadyGroupCompIDsByID( group_id ) ) == [ prop_id ], "GetUnsteadyGroupCompIDsByID did not return the propeller"
+
+    \endcode
+    \endPythonOnly
+    \sa GetUnsteadyGroupSurfIndexes, GetUnsteadyGroupCompIDs
+    \param [in] group_id string Unsteady group ID
+    \return array<string> Array of component Geom IDs
+*/
+
+extern std::vector < std::string > GetUnsteadyGroupCompIDsByID( const std::string & group_id );
 
 /*!
     \ingroup VSPAERODiskAndProp
@@ -41794,12 +48558,63 @@ extern std::vector < std::string > GetUnsteadyGroupCompIDs( int group_index );
 
     \endcode
     \endPythonOnly
-    \sa GetUnsteadyGroupCompIDs
+    \sa GetUnsteadyGroupCompIDs, GetUnsteadyGroupSurfIndexesByID
     \param [in] group_index int Unsteady group index for the current VSPAERO set
     \return vector \<int\> Array of surface indexes
 */
 
 extern std::vector < int > GetUnsteadyGroupSurfIndexes( int group_index );
+
+/*!
+    \ingroup VSPAERODiskAndProp
+*/
+/*!
+    Get the surface indexes of the components in a VSPAERO unsteady group, by group ID.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    array< string > @groups = GetUnsteadyGroupIDVec();
+
+    // Fixed components are in group 0, the propeller in group 1
+    string group_id = groups[1];
+
+    array< int > @surfs = GetUnsteadyGroupSurfIndexesByID( group_id );
+
+    array< int > @by_index = GetUnsteadyGroupSurfIndexes( 1 );
+
+    if ( surfs.size() != 1 || surfs[0] != by_index[0] )
+    {
+        Print( "ERROR: GetUnsteadyGroupSurfIndexesByID did not return the propeller's surface" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    # Fixed components are in group 0, the propeller in group 1
+    group_id = GetUnsteadyGroupIDVec()[1]
+
+    assert list( GetUnsteadyGroupSurfIndexesByID( group_id ) ) == list( GetUnsteadyGroupSurfIndexes( 1 ) ), "GetUnsteadyGroupSurfIndexesByID did not return the propeller's surface"
+
+    \endcode
+    \endPythonOnly
+    \sa GetUnsteadyGroupCompIDs, GetUnsteadyGroupSurfIndexes
+    \param [in] group_id string Unsteady group ID
+    \return array<int> Array of surface indexes
+*/
+
+extern std::vector < int > GetUnsteadyGroupSurfIndexesByID( const std::string & group_id );
 
 /*!
     \ingroup VSPAERODiskAndProp
@@ -41887,6 +48702,48 @@ extern std::vector < int > GetUnsteadyGroupSurfIndexes( int group_index );
 */
 
 extern int GetNumUnsteadyGroups();
+
+/*!
+    \ingroup VSPAERODiskAndProp
+*/
+/*!
+    Get the IDs of the VSPAERO unsteady groups, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string wing_id = AddGeom( "WING" );
+
+    string prop_id = AddGeom( "PROP" );
+
+    Update();
+
+    array< string > @groups = GetUnsteadyGroupIDVec();
+
+    if ( groups.size() != uint( GetNumUnsteadyGroups() ) || groups[1] != FindUnsteadyGroup( 1 ) )
+    {
+        Print( "ERROR: GetUnsteadyGroupIDVec did not return the groups in order" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wing_id = AddGeom( "WING" )
+
+    prop_id = AddGeom( "PROP" )
+
+    Update()
+
+    groups = GetUnsteadyGroupIDVec()
+
+    assert len( groups ) == GetNumUnsteadyGroups() and groups[1] == FindUnsteadyGroup( 1 ), "GetUnsteadyGroupIDVec did not return the groups in order"
+
+    \endcode
+    \endPythonOnly
+    \sa FindUnsteadyGroup
+    \return array<string> Array of unsteady group IDs
+*/
+
+extern std::vector < std::string > GetUnsteadyGroupIDVec();
 
 /*!
     \ingroup VSPAERODiskAndProp
@@ -42339,6 +49196,568 @@ extern void UpdateParasiteDrag();
 */
 
 extern std::string ExportParasiteDragToCSV( const std::string & file_name );
+
+/*!
+    \ingroup ParasiteDrag
+*/
+/*!
+    Set the Parasite Drag reference wing, kept with the model, and use it for the reference quantities, as SetVSPAERORefWingID does. An empty string goes back to manual reference quantities. The WingID analysis input overrides the wing for one run.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    SetParasiteDragRefWingID( wid );
+
+    if ( GetParasiteDragRefWingID() != wid )
+    {
+        Print( "ERROR: SetParasiteDragRefWingID did not set the reference wing" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    SetParasiteDragRefWingID( wid )
+
+    assert GetParasiteDragRefWingID() == wid, "SetParasiteDragRefWingID did not set the reference wing"
+
+    \endcode
+    \endPythonOnly
+    \sa GetParasiteDragRefWingID
+    \param [in] geom_id string Wing Geom ID, or an empty string
+*/
+
+extern void SetParasiteDragRefWingID( const std::string & geom_id );
+
+/*!
+    \ingroup ParasiteDrag
+*/
+/*!
+    Get the Parasite Drag reference wing the analysis uses, kept with the model.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    SetParasiteDragRefWingID( wid );
+
+    if ( GetParasiteDragRefWingID() != wid )
+    {
+        Print( "ERROR: GetParasiteDragRefWingID did not return the reference wing set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    SetParasiteDragRefWingID( wid )
+
+    assert GetParasiteDragRefWingID() == wid, "GetParasiteDragRefWingID did not return the reference wing set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetParasiteDragRefWingID
+    \return string Geom ID, or an empty string for none
+*/
+
+extern std::string GetParasiteDragRefWingID();
+
+/*!
+    \ingroup ParasiteDrag
+*/
+/*!
+    Set the Parasite Drag mode the analysis uses when its use-mode flag is on, kept with the model. The ModeID analysis input overrides it for one run. The flag is the "UseModeMassFlag" Parm, group "ParasiteDrag", of the "ParasiteDragSettings" container.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetParasiteDragModeID( mid );
+
+    if ( GetParasiteDragModeID() != mid )
+    {
+        Print( "ERROR: SetParasiteDragModeID did not set the mode" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetParasiteDragModeID( mid )
+
+    assert GetParasiteDragModeID() == mid, "SetParasiteDragModeID did not set the mode"
+
+    \endcode
+    \endPythonOnly
+    \sa GetParasiteDragModeID
+    \param [in] mode_id string Mode ID, or an empty string
+*/
+
+extern void SetParasiteDragModeID( const std::string & mode_id );
+
+/*!
+    \ingroup ParasiteDrag
+*/
+/*!
+    Get the Parasite Drag mode the analysis uses, kept with the model.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetParasiteDragModeID( mid );
+
+    if ( GetParasiteDragModeID() != mid )
+    {
+        Print( "ERROR: GetParasiteDragModeID did not return the mode set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetParasiteDragModeID( mid )
+
+    assert GetParasiteDragModeID() == mid, "GetParasiteDragModeID did not return the mode set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetParasiteDragModeID
+    \return string Mode ID, or an empty string for none
+*/
+
+extern std::string GetParasiteDragModeID();
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Set the Wave Drag reference wing, kept with the model, and use it for the reference quantities, as SetVSPAERORefWingID does. An empty string goes back to manual reference quantities. The WingID analysis input overrides the wing for one run.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    SetWaveDragRefWingID( wid );
+
+    if ( GetWaveDragRefWingID() != wid )
+    {
+        Print( "ERROR: SetWaveDragRefWingID did not set the reference wing" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    SetWaveDragRefWingID( wid )
+
+    assert GetWaveDragRefWingID() == wid, "SetWaveDragRefWingID did not set the reference wing"
+
+    \endcode
+    \endPythonOnly
+    \sa GetWaveDragRefWingID
+    \param [in] geom_id string Wing Geom ID, or an empty string
+*/
+
+extern void SetWaveDragRefWingID( const std::string & geom_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the Wave Drag reference wing the analysis uses, kept with the model.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    SetWaveDragRefWingID( wid );
+
+    if ( GetWaveDragRefWingID() != wid )
+    {
+        Print( "ERROR: GetWaveDragRefWingID did not return the reference wing set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    SetWaveDragRefWingID( wid )
+
+    assert GetWaveDragRefWingID() == wid, "GetWaveDragRefWingID did not return the reference wing set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetWaveDragRefWingID
+    \return string Geom ID, or an empty string for none
+*/
+
+extern std::string GetWaveDragRefWingID();
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Set the Wave Drag mode the analysis uses when its use-mode flag is on, kept with the model. The ModeID analysis input overrides it for one run. The flag is the "UseMode" Parm, group "WaveDrag", of the "WaveDragSettings" container.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetWaveDragModeID( mid );
+
+    if ( GetWaveDragModeID() != mid )
+    {
+        Print( "ERROR: SetWaveDragModeID did not set the mode" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetWaveDragModeID( mid )
+
+    assert GetWaveDragModeID() == mid, "SetWaveDragModeID did not set the mode"
+
+    \endcode
+    \endPythonOnly
+    \sa GetWaveDragModeID
+    \param [in] mode_id string Mode ID, or an empty string
+*/
+
+extern void SetWaveDragModeID( const std::string & mode_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the Wave Drag mode the analysis uses, kept with the model.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetWaveDragModeID( mid );
+
+    if ( GetWaveDragModeID() != mid )
+    {
+        Print( "ERROR: GetWaveDragModeID did not return the mode set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetWaveDragModeID( mid )
+
+    assert GetWaveDragModeID() == mid, "GetWaveDragModeID did not return the mode set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetWaveDragModeID
+    \return string Mode ID, or an empty string for none
+*/
+
+extern std::string GetWaveDragModeID();
+
+/*!
+    \ingroup VSPAERO
+*/
+/*!
+    Set the mode the VSPAERO analysis uses when its use-mode flag is on, kept with the model, or an empty string for none. The analysis input overrides it for one run. The flag is the "UseMode" Parm, group "VSPAERO", of the "VSPAEROSettings" container.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetVSPAEROModeID( mid );
+
+    if ( GetVSPAEROModeID() != mid )
+    {
+        Print( "ERROR: SetVSPAEROModeID did not set the mode" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetVSPAEROModeID( mid )
+
+    assert GetVSPAEROModeID() == mid, "SetVSPAEROModeID did not set the mode"
+
+    \endcode
+    \endPythonOnly
+    \sa GetVSPAEROModeID
+    \param [in] mode_id string Mode ID, or an empty string
+*/
+
+extern void SetVSPAEROModeID( const std::string & mode_id );
+
+/*!
+    \ingroup VSPAERO
+*/
+/*!
+    Get the mode the VSPAERO analysis uses, kept with the model.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetVSPAEROModeID( mid );
+
+    if ( GetVSPAEROModeID() != mid )
+    {
+        Print( "ERROR: GetVSPAEROModeID did not return the mode set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetVSPAEROModeID( mid )
+
+    assert GetVSPAEROModeID() == mid, "GetVSPAEROModeID did not return the mode set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetVSPAEROModeID
+    \return string Mode ID, or an empty string for none
+*/
+
+extern std::string GetVSPAEROModeID();
+
+/*!
+    \ingroup VSPAERO
+*/
+/*!
+    Set the mode the VSPAERO screen's Mass Prop button uses to find the CG when its CG use-mode flag is on, kept with the model, or an empty string for none. Only that button uses it: the CGModeID input of the VSPAEROSweep analysis has no effect. The flag is the "CGUseMode" Parm, group "VSPAERO", of the "VSPAEROSettings" container.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetVSPAEROCGModeID( mid );
+
+    if ( GetVSPAEROCGModeID() != mid )
+    {
+        Print( "ERROR: SetVSPAEROCGModeID did not set the mode" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetVSPAEROCGModeID( mid )
+
+    assert GetVSPAEROCGModeID() == mid, "SetVSPAEROCGModeID did not set the mode"
+
+    \endcode
+    \endPythonOnly
+    \sa GetVSPAEROCGModeID
+    \param [in] mode_id string Mode ID, or an empty string
+*/
+
+extern void SetVSPAEROCGModeID( const std::string & mode_id );
+
+/*!
+    \ingroup VSPAERO
+*/
+/*!
+    Get the mode the VSPAERO mass properties (CG) analysis uses, kept with the model.
+    \forcpponly
+    \code{.cpp}
+    AddGeom( "POD" );
+
+    string mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE );
+
+    SetVSPAEROCGModeID( mid );
+
+    if ( GetVSPAEROCGModeID() != mid )
+    {
+        Print( "ERROR: GetVSPAEROCGModeID did not return the mode set" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    AddGeom( "POD" )
+
+    mid = CreateAndAddMode( "Clean", SET_ALL, SET_NONE )
+
+    SetVSPAEROCGModeID( mid )
+
+    assert GetVSPAEROCGModeID() == mid, "GetVSPAEROCGModeID did not return the mode set"
+
+    \endcode
+    \endPythonOnly
+    \sa SetVSPAEROCGModeID
+    \return string Mode ID, or an empty string for none
+*/
+
+extern std::string GetVSPAEROCGModeID();
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Add a subsurface to the faces the Wave Drag analysis treats as flow through.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_RECTANGLE );
+
+    AddWaveDragFlowSubSurf( ss_id );
+
+    array< string > @ids = GetWaveDragFlowSubSurfVec();
+
+    if ( ids.size() != 1 || ids[0] != ss_id )
+    {
+        Print( "ERROR: AddWaveDragFlowSubSurf did not add the face" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_RECTANGLE )
+
+    AddWaveDragFlowSubSurf( ss_id )
+
+    assert list( GetWaveDragFlowSubSurfVec() ) == [ ss_id ], "AddWaveDragFlowSubSurf did not add the face"
+
+    \endcode
+    \endPythonOnly
+    \sa DeleteWaveDragFlowSubSurf, GetWaveDragFlowSubSurfVec
+    \param [in] ss_id string SubSurface ID
+*/
+
+extern void AddWaveDragFlowSubSurf( const std::string & ss_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Remove a subsurface from the faces the Wave Drag analysis treats as flow through.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_RECTANGLE );
+
+    AddWaveDragFlowSubSurf( ss_id );
+
+    DeleteWaveDragFlowSubSurf( ss_id );
+
+    if ( GetWaveDragFlowSubSurfVec().size() != 0 )
+    {
+        Print( "ERROR: DeleteWaveDragFlowSubSurf did not remove the face" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_RECTANGLE )
+
+    AddWaveDragFlowSubSurf( ss_id )
+
+    DeleteWaveDragFlowSubSurf( ss_id )
+
+    assert len( GetWaveDragFlowSubSurfVec() ) == 0, "DeleteWaveDragFlowSubSurf did not remove the face"
+
+    \endcode
+    \endPythonOnly
+    \sa AddWaveDragFlowSubSurf
+    \param [in] ss_id string SubSurface ID
+*/
+
+extern void DeleteWaveDragFlowSubSurf( const std::string & ss_id );
+
+/*!
+    \ingroup Analysis
+*/
+/*!
+    Get the IDs of the subsurfaces the Wave Drag analysis treats as flow through, kept with the model. The SSFlow_vec analysis input overrides them for one run.
+    \forcpponly
+    \code{.cpp}
+    string wid = AddGeom( "WING" );
+
+    string ss_id = AddSubSurf( wid, SS_RECTANGLE );
+
+    AddWaveDragFlowSubSurf( ss_id );
+
+    array< string > @ids = GetWaveDragFlowSubSurfVec();
+
+    if ( ids.size() != 1 || ids[0] != ss_id )
+    {
+        Print( "ERROR: GetWaveDragFlowSubSurfVec did not return the face" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    wid = AddGeom( "WING" )
+
+    ss_id = AddSubSurf( wid, SS_RECTANGLE )
+
+    AddWaveDragFlowSubSurf( ss_id )
+
+    assert list( GetWaveDragFlowSubSurfVec() ) == [ ss_id ], "GetWaveDragFlowSubSurfVec did not return the face"
+
+    \endcode
+    \endPythonOnly
+    \sa AddWaveDragFlowSubSurf
+    \return array<string> Array of SubSurface IDs
+*/
+
+extern std::vector < std::string > GetWaveDragFlowSubSurfVec();
 
 /*!
     \ingroup ParasiteDrag
@@ -45933,7 +53352,7 @@ extern std::vector < vec3d > ControlSurfaceHingeLine( const std::string & id, in
 
     SetParmVal( pid2, "Z_Rel_Location", "XForm", 4.0 );
 
-    string rid = AddRuler( pid1, 1, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" );
+    string rid = AddRuler( pid1, 0, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" );
 
     SetParmVal( FindParm( rid, "X_Offset", "Measure" ), 6.0 );
 
@@ -45954,7 +53373,7 @@ extern std::vector < vec3d > ControlSurfaceHingeLine( const std::string & id, in
 
     SetParmVal( pid2, "Z_Rel_Location", "XForm", 4.0 )
 
-    rid = AddRuler( pid1, 1, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" )
+    rid = AddRuler( pid1, 0, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" )
 
     SetParmVal( FindParm( rid, "X_Offset", "Measure" ), 6.0 )
 
@@ -46516,6 +53935,270 @@ extern void DeleteAllProtractors();
     \ingroup Measure
 */
 /*!
+    Set the Geom the origin of a ruler, probe, RST probe or protractor lies on.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+    string pod2 = AddGeom( "POD" );
+
+    Update();
+
+    string rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" );
+    string tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" );
+
+    SetMeasureOriginGeomID( rid, pod2 );
+
+    if ( GetMeasureOriginGeomID( rid ) != pod2 )
+    {
+        Print( "ERROR: SetMeasureOriginGeomID did not set the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+    pod2 = AddGeom( "POD" )
+
+    Update()
+
+    rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" )
+    tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" )
+
+    SetMeasureOriginGeomID( rid, pod2 )
+
+    assert GetMeasureOriginGeomID( rid ) == pod2, "SetMeasureOriginGeomID did not set the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa GetMeasureOriginGeomID
+    \param [in] measure_id string Measure ID
+    \param [in] geom_id string Geom ID, or an empty string
+*/
+
+extern void SetMeasureOriginGeomID( const std::string & measure_id, const std::string & geom_id );
+
+/*!
+    \ingroup Measure
+*/
+/*!
+    Get the Geom the origin of a ruler, probe, RST probe or protractor lies on.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+
+    Update();
+
+    string rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" );
+    string tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" );
+
+    if ( GetMeasureOriginGeomID( rid ) != pod1 )
+    {
+        Print( "ERROR: GetMeasureOriginGeomID did not return the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+
+    Update()
+
+    rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" )
+    tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" )
+
+    assert GetMeasureOriginGeomID( rid ) == pod1, "GetMeasureOriginGeomID did not return the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa SetMeasureOriginGeomID
+    \param [in] measure_id string Measure ID
+    \return string Geom ID
+*/
+
+extern std::string GetMeasureOriginGeomID( const std::string & measure_id );
+
+/*!
+    \ingroup Measure
+*/
+/*!
+    Set the Geom the middle point of a protractor lies on.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+    string pod2 = AddGeom( "POD" );
+
+    Update();
+
+    string rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" );
+    string tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" );
+
+    SetMeasureMidGeomID( tid, pod2 );
+
+    if ( GetMeasureMidGeomID( tid ) != pod2 )
+    {
+        Print( "ERROR: SetMeasureMidGeomID did not set the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+    pod2 = AddGeom( "POD" )
+
+    Update()
+
+    rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" )
+    tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" )
+
+    SetMeasureMidGeomID( tid, pod2 )
+
+    assert GetMeasureMidGeomID( tid ) == pod2, "SetMeasureMidGeomID did not set the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa GetMeasureMidGeomID
+    \param [in] measure_id string Measure ID
+    \param [in] geom_id string Geom ID, or an empty string
+*/
+
+extern void SetMeasureMidGeomID( const std::string & measure_id, const std::string & geom_id );
+
+/*!
+    \ingroup Measure
+*/
+/*!
+    Get the Geom the middle point of a protractor lies on.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+
+    Update();
+
+    string rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" );
+    string tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" );
+
+    if ( GetMeasureMidGeomID( tid ) != pod1 )
+    {
+        Print( "ERROR: GetMeasureMidGeomID did not return the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+
+    Update()
+
+    rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" )
+    tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" )
+
+    assert GetMeasureMidGeomID( tid ) == pod1, "GetMeasureMidGeomID did not return the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa SetMeasureMidGeomID
+    \param [in] measure_id string Measure ID
+    \return string Geom ID
+*/
+
+extern std::string GetMeasureMidGeomID( const std::string & measure_id );
+
+/*!
+    \ingroup Measure
+*/
+/*!
+    Set the Geom the end of a ruler or protractor lies on.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+    string pod2 = AddGeom( "POD" );
+
+    Update();
+
+    string rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" );
+    string tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" );
+
+    SetMeasureEndGeomID( rid, pod2 );
+
+    if ( GetMeasureEndGeomID( rid ) != pod2 )
+    {
+        Print( "ERROR: SetMeasureEndGeomID did not set the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+    pod2 = AddGeom( "POD" )
+
+    Update()
+
+    rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" )
+    tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" )
+
+    SetMeasureEndGeomID( rid, pod2 )
+
+    assert GetMeasureEndGeomID( rid ) == pod2, "SetMeasureEndGeomID did not set the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa GetMeasureEndGeomID
+    \param [in] measure_id string Measure ID
+    \param [in] geom_id string Geom ID, or an empty string
+*/
+
+extern void SetMeasureEndGeomID( const std::string & measure_id, const std::string & geom_id );
+
+/*!
+    \ingroup Measure
+*/
+/*!
+    Get the Geom the end of a ruler or protractor lies on.
+    \forcpponly
+    \code{.cpp}
+    string pod1 = AddGeom( "POD" );
+
+    Update();
+
+    string rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" );
+    string tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" );
+
+    if ( GetMeasureEndGeomID( rid ) != pod1 )
+    {
+        Print( "ERROR: GetMeasureEndGeomID did not return the Geom" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod1 = AddGeom( "POD" )
+
+    Update()
+
+    rid = AddRuler( pod1, 0, 0.2, 0.0, pod1, 0, 0.8, 0.0, "Span" )
+    tid = AddProtractor( pod1, 0, 0.2, 0.0, pod1, 0, 0.5, 0.0, pod1, 0, 0.8, 0.0, "Angle" )
+
+    assert GetMeasureEndGeomID( rid ) == pod1, "GetMeasureEndGeomID did not return the Geom"
+
+    \endcode
+    \endPythonOnly
+    \sa SetMeasureEndGeomID
+    \param [in] measure_id string Measure ID
+    \return string Geom ID
+*/
+
+extern std::string GetMeasureEndGeomID( const std::string & measure_id );
+
+/*!
+    \ingroup Measure
+*/
+/*!
     Create and add an RST Probe object to the Measure Tool.  An RST Probe marks a point in the
     volume of a Geom rather than on its surface.
     \forcpponly
@@ -46792,9 +54475,9 @@ extern std::string AddRuler( const std::string & startgeomid, int startsurfindx,
 
     SetParmVal( pid2, "Z_Rel_Location", "XForm", 4.0 );
 
-    string rid1 = AddRuler( pid1, 1, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" );
+    string rid1 = AddRuler( pid1, 0, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" );
 
-    string rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 1, 0.8, 0.9, "Ruler 2" );
+    string rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 0, 0.8, 0.9, "Ruler 2" );
 
     array< string > @ruler_array = GetAllRulers();
     if ( ruler_array.length() == 0 )
@@ -46821,9 +54504,9 @@ extern std::string AddRuler( const std::string & startgeomid, int startsurfindx,
 
     SetParmVal( pid2, "Z_Rel_Location", "XForm", 4.0 )
 
-    rid1 = AddRuler( pid1, 1, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" )
+    rid1 = AddRuler( pid1, 0, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" )
 
-    rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 1, 0.8, 0.9, "Ruler 2" )
+    rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 0, 0.8, 0.9, "Ruler 2" )
 
     ruler_array = GetAllRulers()
     assert len( ruler_array ) > 0, "GetAllRulers returned nothing"
@@ -46856,9 +54539,9 @@ extern std::vector < std::string > GetAllRulers();
 
     SetParmVal( pid2, "Z_Rel_Location", "XForm", 4.0 );
 
-    string rid1 = AddRuler( pid1, 1, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" );
+    string rid1 = AddRuler( pid1, 0, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" );
 
-    string rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 1, 0.8, 0.9, "Ruler 2" );
+    string rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 0, 0.8, 0.9, "Ruler 2" );
 
     array< string > @ruler_array = GetAllRulers();
 
@@ -46882,9 +54565,9 @@ extern std::vector < std::string > GetAllRulers();
 
     SetParmVal( pid2, "Z_Rel_Location", "XForm", 4.0 )
 
-    rid1 = AddRuler( pid1, 1, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" )
+    rid1 = AddRuler( pid1, 0, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" )
 
-    rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 1, 0.8, 0.9, "Ruler 2" )
+    rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 0, 0.8, 0.9, "Ruler 2" )
 
     ruler_array = GetAllRulers()
 
@@ -46915,9 +54598,9 @@ extern void DelRuler( const std::string &id );
 
     SetParmVal( pid2, "Z_Rel_Location", "XForm", 4.0 );
 
-    string rid1 = AddRuler( pid1, 1, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" );
+    string rid1 = AddRuler( pid1, 0, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" );
 
-    string rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 1, 0.8, 0.9, "Ruler 2" );
+    string rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 0, 0.8, 0.9, "Ruler 2" );
 
     DeleteAllRulers();
     if ( GetAllRulers().length() != 0 )
@@ -46938,9 +54621,9 @@ extern void DelRuler( const std::string &id );
 
     SetParmVal( pid2, "Z_Rel_Location", "XForm", 4.0 )
 
-    rid1 = AddRuler( pid1, 1, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" )
+    rid1 = AddRuler( pid1, 0, 0.2, 0.3, pid2, 0, 0.2, 0.3, "Ruler 1" )
 
-    rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 1, 0.8, 0.9, "Ruler 2" )
+    rid2 = AddRuler( pid1, 0, 0.4, 0.6, pid1, 0, 0.8, 0.9, "Ruler 2" )
 
     DeleteAllRulers()
     assert len( GetAllRulers() ) == 0, "DeleteAllRulers left something behind"
@@ -47318,12 +55001,64 @@ extern void DeleteAllProbes();
 
     \endcode
     \endPythonOnly
-    \sa PasteAirfoil, CopyXSec
+    \sa PasteAirfoil, CopyXSec, CopyAirfoilByID
     \param [in] geom_id string Wing Geom ID
     \param [in] index int Wing section index
 */
 
 extern void CopyAirfoil( const std::string & geom_id, int index );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Copy the airfoil of a wing section to the clipboard, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_0 = GetXSec( xsec_surf, 0 );
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    ChangeXSecShapeByID( xsec_1, XS_SIX_SERIES );
+
+    CopyAirfoilByID( xsec_1 );
+
+    PasteAirfoilByID( xsec_0 );
+
+    if ( GetXSecShape( xsec_0 ) != XS_SIX_SERIES )
+    {
+        Print( "ERROR: CopyAirfoilByID did not copy the airfoil" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_0 = GetXSec( xsec_surf, 0 )
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    ChangeXSecShapeByID( xsec_1, XS_SIX_SERIES )
+
+    CopyAirfoilByID( xsec_1 )
+
+    PasteAirfoilByID( xsec_0 )
+
+    assert GetXSecShape( xsec_0 ) == XS_SIX_SERIES, "CopyAirfoilByID did not copy the airfoil"
+
+    \endcode
+    \endPythonOnly
+    \sa PasteAirfoil, CopyAirfoil
+    \param [in] xsec_id string Wing section XSec ID
+*/
+
+extern void CopyAirfoilByID( const std::string & xsec_id );
 
 /*!
     \ingroup Geom
@@ -47359,7 +55094,7 @@ extern void CopyAirfoil( const std::string & geom_id, int index );
 
     \endcode
     \endPythonOnly
-    \sa CopyAirfoil, PasteXSec
+    \sa CopyAirfoil, PasteXSec, PasteAirfoilByID
     \param [in] geom_id string Wing Geom ID
     \param [in] index int Wing section index
 */
@@ -47367,11 +55102,64 @@ extern void CopyAirfoil( const std::string & geom_id, int index );
 extern void PasteAirfoil( const std::string & geom_id, int index );
 
 /*!
+    \ingroup XSec
+*/
+/*!
+    Paste the airfoil on the clipboard into a wing section, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string gid = AddGeom( "WING" );
+
+    string xsec_surf = GetXSecSurf( gid, 0 );
+
+    string xsec_0 = GetXSec( xsec_surf, 0 );
+    string xsec_1 = GetXSec( xsec_surf, 1 );
+
+    ChangeXSecShapeByID( xsec_0, XS_SIX_SERIES );
+
+    CopyAirfoilByID( xsec_0 );
+
+    PasteAirfoilByID( xsec_1 );
+
+    if ( GetXSecShape( xsec_1 ) != XS_SIX_SERIES )
+    {
+        Print( "ERROR: PasteAirfoilByID did not paste the airfoil" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    gid = AddGeom( "WING" )
+
+    xsec_surf = GetXSecSurf( gid, 0 )
+
+    xsec_0 = GetXSec( xsec_surf, 0 )
+    xsec_1 = GetXSec( xsec_surf, 1 )
+
+    ChangeXSecShapeByID( xsec_0, XS_SIX_SERIES )
+
+    CopyAirfoilByID( xsec_0 )
+
+    PasteAirfoilByID( xsec_1 )
+
+    assert GetXSecShape( xsec_1 ) == XS_SIX_SERIES, "PasteAirfoilByID did not paste the airfoil"
+
+    \endcode
+    \endPythonOnly
+    \sa CopyAirfoil, PasteAirfoil
+    \param [in] xsec_id string Wing section XSec ID
+*/
+
+extern void PasteAirfoilByID( const std::string & xsec_id );
+
+/*!
     \ingroup Geom
 */
 /*!
     Clear the skinning of one cross section, or of every cross section when the index is left at -1.
-    This is the Skinning tab's Clear and Clear All buttons.
+    This is the Skinning tab's Clear and Clear All buttons. A Geom whose cross sections are not skinned, or an index
+    past the last cross section, is an error.
     \forcpponly
     \code{.cpp}
     string sid = AddGeom( "STACK", "" );
@@ -47457,12 +55245,62 @@ extern void PasteAirfoil( const std::string & geom_id, int index );
 
     \endcode
     \endPythonOnly
-    \sa ResetXSecSkinParms
+    \sa ResetXSecSkinParms, ClearSkinningByID
     \param [in] geom_id string Geom ID
     \param [in] index int Cross section index, or -1 for every section
 */
 
 extern void ClearSkinning( const std::string & geom_id, int index = -1 );
+
+/*!
+    \ingroup XSec
+*/
+/*!
+    Release the skinning controls of one cross-section, by XSec ID.
+    \forcpponly
+    \code{.cpp}
+    string sid = AddGeom( "STACK" );
+
+    string xsec = GetXSec( GetXSecSurf( sid, 0 ), 1 );
+
+    SetXSecTanAngles( xsec, XSEC_BOTH_SIDES, 15.0, -1.0e12, -1.0e12, -1.0e12 );
+
+    Update();
+
+    ClearSkinningByID( xsec );
+
+    Update();
+
+    if ( abs( GetParmVal( GetXSecParm( xsec, "TopLAngleSet" ) ) ) > 1e-12 )
+    {
+        Print( "ERROR: ClearSkinningByID did not release the section" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    sid = AddGeom( "STACK" )
+
+    xsec = GetXSec( GetXSecSurf( sid, 0 ), 1 )
+
+    SetXSecTanAngles( xsec, XSEC_BOTH_SIDES, 15.0, -1.0e12, -1.0e12, -1.0e12 )
+
+    Update()
+
+    ClearSkinningByID( xsec )
+
+    Update()
+
+    assert abs( GetParmVal( GetXSecParm( xsec, "TopLAngleSet" ) ) ) < 1e-12, "ClearSkinningByID did not release the section"
+
+    \endcode
+    \endPythonOnly
+    \sa ClearSkinning, ResetXSecSkinParms
+    \param [in] xsec_id string XSec ID
+*/
+
+extern void ClearSkinningByID( const std::string & xsec_id );
 
 /*!
     \ingroup Geom
@@ -48341,6 +56179,46 @@ extern int GetNumParmLinks();
 */
 
 extern std::string GetParmLinkID( int index );
+
+/*!
+    \ingroup ParmLink
+*/
+/*!
+    Get the IDs of the Parm links, in the order of their indexes.
+    \forcpponly
+    \code{.cpp}
+    string pod_id = AddGeom( "POD" );
+
+    DelAllParmLinks();
+
+    string link_id = AddParmLink( FindParm( pod_id, "Length", "Design" ), FindParm( pod_id, "FineRatio", "Design" ) );
+
+    array< string > @ids = GetAllParmLinks();
+
+    if ( ids.size() != 1 || ids[0] != link_id )
+    {
+        Print( "ERROR: GetAllParmLinks did not return the link" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pod_id = AddGeom( "POD" )
+
+    DelAllParmLinks()
+
+    link_id = AddParmLink( FindParm( pod_id, "Length", "Design" ), FindParm( pod_id, "FineRatio", "Design" ) )
+
+    assert list( GetAllParmLinks() ) == [ link_id ], "GetAllParmLinks did not return the link"
+
+    \endcode
+    \endPythonOnly
+    \sa GetParmLinkID, GetNumParmLinks
+    \return array<string> Array of Parm link IDs
+*/
+
+extern std::vector < std::string > GetAllParmLinks();
 
 /*!
     \ingroup ParmLink
@@ -49771,7 +57649,7 @@ extern std::string GetAdvLinkName( int index );
     \ingroup AdvancedLink
 */
 /*!
-    Set the name of an advanced link.
+    Set the name of an advanced link. Links are found by name, so a name another link already has is refused with an error.
     \forcpponly
     \code{.cpp}
     AddAdvLink( "ExampleLink" );
@@ -49841,7 +57719,7 @@ extern void SetAdvLinkName( int index, const std::string & name );
     \ingroup AdvancedLink
 */
 /*!
-    Delete one advanced link, by index.
+    Delete one advanced link, by index. An index out of range is an error.
     \forcpponly
     \code{.cpp}
     AddAdvLink( "TestLink" );

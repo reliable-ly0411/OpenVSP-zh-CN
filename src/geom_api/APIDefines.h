@@ -316,7 +316,7 @@ enum CF_TURB_EQN { CF_TURB_EXPLICIT_FIT_SPALDING = 0,	/*!< Explicit Fit of Spald
                    DO_NOT_USE_CF_TURB_ROUGHNESS_SCHLICHTING_LOCAL,	/*!< Roughness Schlichting Local turbulent Cf equation (DO NOT USE) */
                    DO_NOT_USE_CF_TURB_ROUGHNESS_WHITE,	/*!< Roughness White turbulent Cf equation (DO NOT USE) */
                    CF_TURB_ROUGHNESS_SCHLICHTING_AVG_FLOW_CORRECTION,	/*!< Roughness Schlichting Avg Compressible turbulent Cf equation. */
-                   CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH	/*!< Heat Transfer White-Christoph turbulent Cf equation. */
+                   DO_NOT_USE_CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH	/*!< Heat Transfer White-Christoph turbulent Cf equation (DO NOT USE) */
 };
 
 /*!
@@ -555,6 +555,7 @@ enum ERROR_CODE {   VSP_UNKNOWN = -1,	/*!< Unknown error */
                     VSP_GUI_DEVICE_DEACTIVATED, /*!< A deactivated GUI device was touched */
                     VSP_COULD_NOT_CREATE_BACKGROUND3D,	/*!< Could not create and add Background3D */
                     VSP_CLONE_ORIGINAL_LOST,	/*!< A Clone Geom no longer has the Geom it was copying */
+                    VSP_GEOM_IN_BOTH_SETS,	/*!< A Geom is in both the thick and the thin set of an analysis */
                     VSP_NUM_ERROR_CODE	/*!< Total number of VSP error codes */
 };
 

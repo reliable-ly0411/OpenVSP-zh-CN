@@ -13,11 +13,13 @@
 #include <functional>
 #include <atomic>
 #include <exception>
+#include <iterator>
 #include "SurfaceIntersectionMgr.h"
 #include "ResultsMgr.h"
 #include "VspUtil.h"
 #include "SubSurfaceMgr.h"
 #include "StringUtil.h"
+#include "StlHelper.h"
 #include "FileUtil.h"
 #include <cfloat>  //For DBL_EPSILON
 #include "ModeMgr.h"
@@ -349,6 +351,7 @@ SurfaceIntersectionSingleton::SurfaceIntersectionSingleton() : ParmContainer()
     m_NumComps = -10;
 
     m_MeshInProgress = false;
+    m_DrawObjsStale = false;
 
     m_MessageName = "SurfIntersectMessage";
 
@@ -454,6 +457,11 @@ SurfaceIntersectionSingleton::~SurfaceIntersectionSingleton()
 #endif
 
 }
+
+// Set true to build and show the draw objects for debugging the intersector: the planes each
+// chain is approximated by, the points that were deleted, and the two patches every
+// intersection segment was found between.  Off, none of it is gathered.
+static const bool DEBUG_ISECT_DRAW = false;
 
 // Where AddIntersectionSeg puts what it makes.  Set for the length of one piece of the
 // intersection, so a piece's output stays together whichever thread ran it.
@@ -703,7 +711,7 @@ void SurfaceIntersectionSingleton::IntersectSurfaces()
 
     RecordResults();
 
-    UpdateDrawObjs();
+    m_DrawObjsStale = true;
 
     addOutputText( "Done\n" );
 
@@ -1000,6 +1008,8 @@ void SurfaceIntersectionSingleton::EndProgress( int output_type )
 
 void SurfaceIntersectionSingleton::CleanUp()
 {
+    m_DrawObjsStale = false;
+
     int i;
     //==== Delete Old Surfs ====//
     for ( i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
@@ -1052,6 +1062,8 @@ void SurfaceIntersectionSingleton::CleanUp()
     m_DelISegChainVec.clear();
 
     m_AllIPnts.clear(); // Pointers should already be deallocated 
+    vector < IPntEdge >().swap( m_AllIPntEdges );
+    vector < int >().swap( m_AllIPntPartner );
 
     m_PossCoPlanarSurfMap.clear();
 
@@ -2220,15 +2232,15 @@ void SurfaceIntersectionSingleton::BuildNURBSCurvesVec( bool classify, bool cad 
             // Check if the curve is interenal or external
             // Identify test point
             vec3d cp;
-            if ( ( *i_seg )->m_ISegDeque.size() <= 2 )
+            if ( ( *i_seg )->m_ISegVec.size() <= 2 )
             {
                 // Take midpoint of first segment
-                cp = ( ( *i_seg )->m_ISegDeque[0]->m_IPnt[0]->m_Pnt + ( *i_seg )->m_ISegDeque[0]->m_IPnt[1]->m_Pnt ) / 2.0;
+                cp = ( ( *i_seg )->m_ISegVec[0]->m_IPnt[0]->m_Pnt + ( *i_seg )->m_ISegVec[0]->m_IPnt[1]->m_Pnt ) / 2.0;
             }
             else
             {
                 // Identify point approximately halfway on border curve
-                cp = ( *i_seg )->m_ISegDeque[( *i_seg )->m_ISegDeque.size() / 2]->m_IPnt[0]->m_Pnt;
+                cp = ( *i_seg )->m_ISegVec[( *i_seg )->m_ISegVec.size() / 2]->m_IPnt[0]->m_Pnt;
             }
 
             // Check 3 directions and take majority result
@@ -2441,13 +2453,34 @@ void SurfaceIntersectionSingleton::IntersectPairs()
 
     EndProgress( VOCAL_OUTPUT );
 
+    // The pieces' output is gathered in one go, so each list is sized once for all of it.
+    size_t npuw = m_DelPuwVec.size();
+    size_t nipnt = 0;
+    for ( int k = 0 ; k < nwork ; k++ )
+    {
+        npuw += out[k].m_Puws.size();
+        nipnt += out[k].m_IPnts.size();
+    }
+    m_DelPuwVec.reserve( npuw );
+    m_DelIPntVec.reserve( m_DelIPntVec.size() + nipnt );
+    m_AllIPnts.reserve( m_AllIPnts.size() + nipnt );
+    m_AllIPntEdges.reserve( m_AllIPntEdges.size() + nipnt );
+
     for ( int k = 0 ; k < nwork ; k++ )
     {
         m_DelPuwVec.insert( m_DelPuwVec.end(), out[k].m_Puws.begin(), out[k].m_Puws.end() );
         m_DelIPntVec.insert( m_DelIPntVec.end(), out[k].m_IPnts.begin(), out[k].m_IPnts.end() );
-        m_AllIPnts.insert( m_AllIPnts.end(), out[k].m_IPnts.begin(), out[k].m_IPnts.end() );
-        m_IPatchADrawLines.insert( m_IPatchADrawLines.end(), out[k].m_PatchADraw.begin(), out[k].m_PatchADraw.end() );
-        m_IPatchBDrawLines.insert( m_IPatchBDrawLines.end(), out[k].m_PatchBDraw.begin(), out[k].m_PatchBDraw.end() );
+        for ( size_t j = 0 ; j < out[k].m_IPnts.size() ; j++ )
+        {
+            out[k].m_IPnts[j]->m_AllIndex = ( int )m_AllIPnts.size();
+            m_AllIPnts.push_back( out[k].m_IPnts[j] );
+        }
+        m_AllIPntEdges.insert( m_AllIPntEdges.end(), out[k].m_Edges.begin(), out[k].m_Edges.end() );
+        m_IPatchADrawLines.insert( m_IPatchADrawLines.end(), std::make_move_iterator( out[k].m_PatchADraw.begin() ), std::make_move_iterator( out[k].m_PatchADraw.end() ) );
+        m_IPatchBDrawLines.insert( m_IPatchBDrawLines.end(), std::make_move_iterator( out[k].m_PatchBDraw.begin() ), std::make_move_iterator( out[k].m_PatchBDraw.end() ) );
+
+        // Gathered, so the piece's own lists go now rather than with the rest at the end.
+        out[k] = IsectOutput();
     }
 }
 
@@ -2500,6 +2533,93 @@ void SurfaceIntersectionSingleton::Intersect()
     addOutputText( "BuildCurves\n" );
     BuildCurves();
     // DebugWriteChains( "BuildCurves", false );
+
+    DeleteUnusedIPnts();
+}
+
+// Delete the intersection points, and the surface points, that no chain uses.  Merging a chain's
+// interior points keeps one of each pair that meet, and the chains that were cleaned away leave
+// theirs; nothing reaches either again.
+void SurfaceIntersectionSingleton::DeleteUnusedIPnts()
+{
+    for ( list< ISegChain* >::const_iterator c = m_ISegChainList.begin(); c != m_ISegChainList.end(); ++c )
+    {
+        const vector< ISeg* > &segs = ( *c )->m_ISegVec;
+        for ( size_t i = 0; i < segs.size(); i++ )
+        {
+            KeepIPnt( segs[i]->m_IPnt[0] );
+            KeepIPnt( segs[i]->m_IPnt[1] );
+        }
+        const vector< IPnt* > &tess = ( *c )->m_TessVec;
+        for ( size_t i = 0; i < tess.size(); i++ )
+        {
+            KeepIPnt( tess[i] );
+        }
+    }
+
+    size_t nkeep = 0;
+    for ( size_t i = 0; i < m_DelIPntVec.size(); i++ )
+    {
+        if ( m_DelIPntVec[i]->m_KeepFlag )
+        {
+            nkeep++;
+        }
+    }
+    vector< IPnt* > keepipnt;
+    keepipnt.reserve( nkeep );
+    for ( size_t i = 0; i < m_DelIPntVec.size(); i++ )
+    {
+        if ( m_DelIPntVec[i]->m_KeepFlag )
+        {
+            keepipnt.push_back( m_DelIPntVec[i] );
+        }
+        else
+        {
+            delete m_DelIPntVec[i];
+        }
+    }
+    m_DelIPntVec.swap( keepipnt );
+
+    nkeep = 0;
+    for ( size_t i = 0; i < m_DelPuwVec.size(); i++ )
+    {
+        if ( m_DelPuwVec[i]->m_KeepFlag )
+        {
+            nkeep++;
+        }
+    }
+    vector< Puw* > keeppuw;
+    keeppuw.reserve( nkeep );
+    for ( size_t i = 0; i < m_DelPuwVec.size(); i++ )
+    {
+        if ( m_DelPuwVec[i]->m_KeepFlag )
+        {
+            keeppuw.push_back( m_DelPuwVec[i] );
+        }
+        else
+        {
+            delete m_DelPuwVec[i];
+        }
+    }
+    m_DelPuwVec.swap( keeppuw );
+
+    // It held every point the patches found, and only building the chains reads it
+    vector< IPnt* >().swap( m_AllIPnts );
+}
+
+// Mark a point a chain uses, and its surface points.  Only building the chains reads its segments.
+void SurfaceIntersectionSingleton::KeepIPnt( IPnt* ip )
+{
+    if ( ip->m_KeepFlag )
+    {
+        return;
+    }
+    ip->m_KeepFlag = true;
+    for ( size_t i = 0; i < ip->m_Puws.size(); i++ )
+    {
+        ip->m_Puws[i]->m_KeepFlag = true;
+    }
+    vector< ISeg* >().swap( ip->m_Segs );
 }
 
 // The edge of triangle tri of patch p, corners q, that point pnt is nearest, and how near it is
@@ -2703,8 +2823,8 @@ void SurfaceIntersectionSingleton::AddIntersectionSeg( const SurfPatch& pA, cons
 
     IPnt* ipnt0 = new IPnt( puwA0, puwB0 );
     ipnt0->m_Pnt = ip0;
-    ipnt0->m_Edge = FindEdge( ip0, pA, qa, triA, pB, qb, triB );
     tl_isect_out->m_IPnts.push_back( ipnt0 );
+    tl_isect_out->m_Edges.push_back( FindEdge( ip0, pA, qa, triA, pB, qb, triB ) );
 
     Puw* puwA1 = new Puw( pA.get_surf_ptr(), proj_uwA1 );
     tl_isect_out->m_Puws.push_back( puwA1 );
@@ -2714,12 +2834,15 @@ void SurfaceIntersectionSingleton::AddIntersectionSeg( const SurfPatch& pA, cons
 
     IPnt* ipnt1 = new IPnt( puwA1, puwB1 );
     ipnt1->m_Pnt = ip1;
-    ipnt1->m_Edge = FindEdge( ip1, pA, qa, triA, pB, qb, triB );
     tl_isect_out->m_IPnts.push_back( ipnt1 );
+    tl_isect_out->m_Edges.push_back( FindEdge( ip1, pA, qa, triA, pB, qb, triB ) );
 
     // Identify rectangles to represent final patches
-    tl_isect_out->m_PatchADraw.push_back( pA.GetPatchDrawLines() );
-    tl_isect_out->m_PatchBDraw.push_back( pB.GetPatchDrawLines() );
+    if ( DEBUG_ISECT_DRAW )
+    {
+        tl_isect_out->m_PatchADraw.push_back( pA.GetPatchDrawLines() );
+        tl_isect_out->m_PatchBDraw.push_back( pB.GetPatchDrawLines() );
+    }
 
     new ISeg( pA.get_surf_ptr(), pB.get_surf_ptr(), ipnt0, ipnt1 );
 }
@@ -2805,20 +2928,21 @@ void SurfaceIntersectionSingleton::WriteISegs()
 struct IPntEdgeEntry
 {
     int m_SurfLo, m_SurfHi;
-    IPnt* m_IPnt;
+    int m_Index;                // In m_AllIPnts
+    const IPntEdge* m_Edge;
 
     bool SameEdge( const IPntEdgeEntry &o ) const
     {
-        const IPntEdge &a = m_IPnt->m_Edge;
-        const IPntEdge &b = o.m_IPnt->m_Edge;
+        const IPntEdge &a = *m_Edge;
+        const IPntEdge &b = *o.m_Edge;
         return m_SurfLo == o.m_SurfLo && m_SurfHi == o.m_SurfHi && a.m_SurfID == b.m_SurfID && a.m_Kind == b.m_Kind &&
                a.m_Val[0] == b.m_Val[0] && a.m_Val[1] == b.m_Val[1] && a.m_Val[2] == b.m_Val[2] && a.m_Val[3] == b.m_Val[3];
     }
 
     bool operator<( const IPntEdgeEntry &o ) const
     {
-        const IPntEdge &a = m_IPnt->m_Edge;
-        const IPntEdge &b = o.m_IPnt->m_Edge;
+        const IPntEdge &a = *m_Edge;
+        const IPntEdge &b = *o.m_Edge;
         if ( m_SurfLo != o.m_SurfLo ) return m_SurfLo < o.m_SurfLo;
         if ( m_SurfHi != o.m_SurfHi ) return m_SurfHi < o.m_SurfHi;
         if ( a.m_SurfID != b.m_SurfID ) return a.m_SurfID < b.m_SurfID;
@@ -2835,13 +2959,13 @@ void SurfaceIntersectionSingleton::LinkIPntPartners()
 {
     vector< IPntEdgeEntry > entries;
     entries.reserve( m_AllIPnts.size() );
+    m_AllIPntPartner.assign( m_AllIPnts.size(), -1 );
 
     for ( size_t i = 0; i < m_AllIPnts.size(); i++ )
     {
         IPnt* ip = m_AllIPnts[i];
-        ip->m_Partner = nullptr;
 
-        if ( ip->m_Edge.m_Kind == IPntEdge::NONE || ip->m_Puws.size() != 2 )
+        if ( m_AllIPntEdges[i].m_Kind == IPntEdge::NONE || ip->m_Puws.size() != 2 )
         {
             continue;
         }
@@ -2852,7 +2976,8 @@ void SurfaceIntersectionSingleton::LinkIPntPartners()
         IPntEdgeEntry e;
         e.m_SurfLo = std::min( sa, sb );
         e.m_SurfHi = std::max( sa, sb );
-        e.m_IPnt = ip;
+        e.m_Index = ( int )i;
+        e.m_Edge = &m_AllIPntEdges[i];
         entries.push_back( e );
     }
 
@@ -2864,11 +2989,11 @@ void SurfaceIntersectionSingleton::LinkIPntPartners()
     size_t i = 0;
     while ( i + 1 < entries.size() )
     {
-        IPnt* a = entries[i].m_IPnt;
-        IPnt* b = entries[i + 1].m_IPnt;
+        IPnt* a = m_AllIPnts[ entries[i].m_Index ];
+        IPnt* b = m_AllIPnts[ entries[i + 1].m_Index ];
 
         bool partners = false;
-        if ( entries[i].SameEdge( entries[i + 1] ) && a->m_Edge.m_Side != b->m_Edge.m_Side )
+        if ( entries[i].SameEdge( entries[i + 1] ) && entries[i].m_Edge->m_Side != entries[i + 1].m_Edge->m_Side )
         {
             double seglen = 0.0;
             if ( !a->m_Segs.empty() )
@@ -2884,8 +3009,8 @@ void SurfaceIntersectionSingleton::LinkIPntPartners()
 
         if ( partners )
         {
-            a->m_Partner = b;
-            b->m_Partner = a;
+            m_AllIPntPartner[ entries[i].m_Index ] = entries[i + 1].m_Index;
+            m_AllIPntPartner[ entries[i + 1].m_Index ] = entries[i].m_Index;
             i += 2;
         }
         else
@@ -2900,6 +3025,7 @@ void SurfaceIntersectionSingleton::BuildChains()
     LinkIPntPartners();
 
     PntNodeCloud i_pnt_cloud;
+    i_pnt_cloud.ReserveMorePntNodes( m_AllIPnts.size() );
 
     for ( size_t i = 0; i < m_AllIPnts.size(); i++ )
     {
@@ -2919,7 +3045,7 @@ void SurfaceIntersectionSingleton::BuildChains()
             ISegChain* chain = new ISegChain;           // Create New Chain
             chain->m_SurfA = seg->m_SurfA;
             chain->m_SurfB = seg->m_SurfB;
-            chain->m_ISegDeque.push_back( seg );
+            chain->m_ISegVec.push_back( seg );
             ExpandChain( chain, &index );
             if ( chain->Valid() )
             {
@@ -2932,6 +3058,10 @@ void SurfaceIntersectionSingleton::BuildChains()
             }
         }
     }
+
+    // The chains are built, and nothing past them asks what edge a point was on.
+    vector < IPntEdge >().swap( m_AllIPntEdges );
+    vector < int >().swap( m_AllIPntPartner );
 }
 
 void SurfaceIntersectionSingleton::CleanChains()
@@ -2951,7 +3081,7 @@ void SurfaceIntersectionSingleton::CleanChains()
 
 void SurfaceIntersectionSingleton::CleanChain( ISegChain* c )
 {
-    if ( c->m_ISegDeque.size() < 2 )
+    if ( c->m_ISegVec.size() < 2 )
     {
         return;
     }
@@ -2964,21 +3094,21 @@ void SurfaceIntersectionSingleton::CleanChain( ISegChain* c )
     double s = 0;
     list < double > ds;
     list < ISeg* > segList;
-    for ( j = 0; j < ( int ) c->m_ISegDeque.size(); j++ )
+    for ( j = 0; j < ( int ) c->m_ISegVec.size(); j++ )
     {
-        segList.push_back( c->m_ISegDeque[j] );
+        segList.push_back( c->m_ISegVec[j] );
 
-        vec2d uw1 = c->m_ISegDeque[j]->m_IPnt[0]->GetPuw( c->m_SurfA )->m_UW;
-        vec3d pt1 = c->m_ISegDeque[j]->m_IPnt[0]->GetPuw( c->m_SurfA )->m_Surf->CompPnt( uw1[0], uw1[1] );
-        vec2d uw2 = c->m_ISegDeque[j]->m_IPnt[1]->GetPuw( c->m_SurfA )->m_UW;
-        vec3d pt2 = c->m_ISegDeque[j]->m_IPnt[1]->GetPuw( c->m_SurfA )->m_Surf->CompPnt( uw2[0], uw2[1] );
+        vec2d uw1 = c->m_ISegVec[j]->m_IPnt[0]->GetPuw( c->m_SurfA )->m_UW;
+        vec3d pt1 = c->m_ISegVec[j]->m_IPnt[0]->GetPuw( c->m_SurfA )->m_Surf->CompPnt( uw1[0], uw1[1] );
+        vec2d uw2 = c->m_ISegVec[j]->m_IPnt[1]->GetPuw( c->m_SurfA )->m_UW;
+        vec3d pt2 = c->m_ISegVec[j]->m_IPnt[1]->GetPuw( c->m_SurfA )->m_Surf->CompPnt( uw2[0], uw2[1] );
         double d = dist( pt1, pt2 );
         s += d;
         ds.push_back( d );
     }
 
     // Average segment length.
-    double save = s / c->m_ISegDeque.size();
+    double save = s / c->m_ISegVec.size();
 
 
     list< ISeg* >::iterator sit;
@@ -3067,12 +3197,8 @@ void SurfaceIntersectionSingleton::CleanChain( ISegChain* c )
         }
     }
 
-    // Put list back into deque.
-    c->m_ISegDeque.clear();
-    for ( sit = segList.begin(); sit != segList.end(); ++sit )
-    {
-        c->m_ISegDeque.push_back( *sit );
-    }
+    // Put list back into the chain.
+    c->m_ISegVec.assign( segList.begin(), segList.end() );
 }
 
 void SurfaceIntersectionSingleton::RefineChains()
@@ -3271,18 +3397,59 @@ void SurfaceIntersectionSingleton::RefineISegChainSeg( ISegChain* c, IPnt* ipnt,
 void SurfaceIntersectionSingleton::RefineISegChain( ISegChain* c )
 {
 
-    int nseg = c->m_ISegDeque.size();
+    int nseg = c->m_ISegVec.size();
 
-    RefineISegChainSeg( c, c->m_ISegDeque[0]->m_IPnt[0], true );
+    RefineISegChainSeg( c, c->m_ISegVec[0]->m_IPnt[0], true );
 
     for ( int i = 0; i < nseg; i++ )
     {
-        RefineISegChainSeg( c, c->m_ISegDeque[i]->m_IPnt[1], i == nseg - 1 );
+        RefineISegChainSeg( c, c->m_ISegVec[i]->m_IPnt[1], i == nseg - 1 );
+    }
+}
+
+// Add seg to the front or back of a chain being built, turned so its end joinIPnt is next to
+// the chain
+static void AddChainSeg( TwoEndedVector< ISeg* > &segs, ISeg* seg, bool frontFlag, IPnt* joinIPnt )
+{
+    if ( frontFlag )
+    {
+        if ( seg->m_IPnt[0] == joinIPnt )
+        {
+            seg->FlipDir();
+        }
+        segs.push_front( seg );
+    }
+    else
+    {
+        if ( seg->m_IPnt[1] == joinIPnt )
+        {
+            seg->FlipDir();
+        }
+        segs.push_back( seg );
+    }
+}
+
+// Add seg to the front or back of a chain being built, joined to the segment at that end
+static void AddChainSeg( TwoEndedVector< ISeg* > &segs, ISeg* seg, bool frontFlag )
+{
+    if ( frontFlag )
+    {
+        ISeg* frontSeg = segs.front();
+        frontSeg->JoinFront( seg );
+        segs.push_front( seg );
+    }
+    else
+    {
+        ISeg* backSeg  = segs.back();
+        backSeg->JoinBack( seg );
+        segs.push_back( seg );
     }
 }
 
 void SurfaceIntersectionSingleton::ExpandChain( ISegChain* chain, PNTree* PN_tree )
 {
+    TwoEndedVector< ISeg* > segs( chain->m_ISegVec.front() );
+
     bool stillExpanding = true;
     bool expandFront = true;
     bool firstIter = true;
@@ -3296,11 +3463,11 @@ void SurfaceIntersectionSingleton::ExpandChain( ISegChain* chain, PNTree* PN_tre
         IPnt* testIPnt;
         if ( expandFront )
         {
-            testIPnt = chain->m_ISegDeque.front()->m_IPnt[0];
+            testIPnt = segs.front()->m_IPnt[0];
         }
         else
         {
-            testIPnt = chain->m_ISegDeque.back()->m_IPnt[1];
+            testIPnt = segs.back()->m_IPnt[1];
         }
 
         IPnt* matchIPnt = nullptr;
@@ -3308,7 +3475,11 @@ void SurfaceIntersectionSingleton::ExpandChain( ISegChain* chain, PNTree* PN_tre
         // The point across the edge this one lies on is the next along the curve, however far
         // the two patches' flat approximations of it put them apart
         bool by_partner = false;
-        IPnt* partner = testIPnt->m_Partner;
+        IPnt* partner = nullptr;
+        if ( testIPnt->m_AllIndex >= 0 && m_AllIPntPartner[ testIPnt->m_AllIndex ] >= 0 )
+        {
+            partner = m_AllIPnts[ m_AllIPntPartner[ testIPnt->m_AllIndex ] ];
+        }
         if ( partner && !partner->m_UsedFlag && partner->m_Puws.size() == 2 &&
              partner->m_Puws[0]->m_Surf == testIPnt->m_Puws[0]->m_Surf &&
              partner->m_Puws[1]->m_Surf == testIPnt->m_Puws[1]->m_Surf )
@@ -3352,13 +3523,13 @@ void SurfaceIntersectionSingleton::ExpandChain( ISegChain* chain, PNTree* PN_tre
         }
         else
         {
-            if ( firstIter && expandFront && !by_partner && ( dist( chain->m_ISegDeque.front()->m_IPnt[0]->m_Pnt, matchIPnt->m_Pnt ) > dist( chain->m_ISegDeque.back()->m_IPnt[1]->m_Pnt, matchIPnt->m_Pnt ) ) )
+            if ( firstIter && expandFront && !by_partner && ( dist( segs.front()->m_IPnt[0]->m_Pnt, matchIPnt->m_Pnt ) > dist( segs.back()->m_IPnt[1]->m_Pnt, matchIPnt->m_Pnt ) ) )
             {
                 // This segment's orientation needs to be reversed because expandFront was set true on the first iteration,
                 // but the back point is closer. 
-                IPnt* temp_pnt = chain->m_ISegDeque.front()->m_IPnt[0];
-                chain->m_ISegDeque.front()->m_IPnt[0] = chain->m_ISegDeque.front()->m_IPnt[1];
-                chain->m_ISegDeque.front()->m_IPnt[1] = temp_pnt;
+                IPnt* temp_pnt = segs.front()->m_IPnt[0];
+                segs.front()->m_IPnt[0] = segs.front()->m_IPnt[1];
+                segs.front()->m_IPnt[1] = temp_pnt;
             }
 
             firstIter = false;
@@ -3367,16 +3538,18 @@ void SurfaceIntersectionSingleton::ExpandChain( ISegChain* chain, PNTree* PN_tre
             if ( by_partner )
             {
                 // Joined through the partner, which is the end next to the chain
-                chain->AddSeg( seg, expandFront, matchIPnt );
+                AddChainSeg( segs, seg, expandFront, matchIPnt );
             }
             else
             {
-                chain->AddSeg( seg, expandFront );
+                AddChainSeg( segs, seg, expandFront );
             }
             seg->m_IPnt[0]->m_UsedFlag = true;
             seg->m_IPnt[1]->m_UsedFlag = true;
         }
     }
+
+    chain->m_ISegVec = segs.GetVector();
 }
 
 void SurfaceIntersectionSingleton::WriteChains()
@@ -3452,10 +3625,10 @@ void SurfaceIntersectionSingleton::WriteChains()
 //BLACK,WHITE, RED, BLUE, GREEN, PURPLE, YELLOW, GREY or GRAY,
 //AQUA,DARK_BLUE,DARK_RED, DARK_PURPLE, DARK_ORANGE, DARK_GREY or
 //DARK_GRAY and LIGHT_BLUE
-                for ( int s = 0 ; s < ( int )( *c )->m_ISegDeque.size() ; s++ )
+                for ( int s = 0 ; s < ( int )( *c )->m_ISegVec.size() ; s++ )
                 {
-                    IPnt* ip0 = ( *c )->m_ISegDeque[s]->m_IPnt[0];
-                    IPnt* ip1 = ( *c )->m_ISegDeque[s]->m_IPnt[1];
+                    IPnt* ip0 = ( *c )->m_ISegVec[s]->m_IPnt[0];
+                    IPnt* ip1 = ( *c )->m_ISegVec[s]->m_IPnt[1];
 
                     int puwind = -1;
                     for ( int p = 0 ; p < ( int )ip0->m_Puws.size() ; p++ )
@@ -3707,7 +3880,7 @@ void SurfaceIntersectionSingleton::LoadBorderCurves()
             p1->CompPnt();
 
             ISeg* seg = new ISeg( surfA, surfB, p0, p1 );
-            chain->m_ISegDeque.push_back( seg );
+            chain->m_ISegVec.push_back( seg );
 
         }
 
@@ -3730,10 +3903,24 @@ void SurfaceIntersectionSingleton::LoadBorderCurves()
     for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
     {
         fprintf( m_DebugFile, "   Chain Num Segs = %zu Border %d \n",
-                 ( *c )->m_ISegDeque.size(), ( int )( ( *c )->m_BorderFlag ) );
+                 ( *c )->m_ISegVec.size(), ( int )( ( *c )->m_BorderFlag ) );
     }
 #endif
 
+}
+
+// Whether the line where a region's original U parameter is uo is an edge of the patch, where
+// the patch has a border curve, rather than a seam inside it between two joined pieces
+static bool RegionEdgeOnPatchEdgeU( const UWRegion &reg, double uo, const SurfCore* core, double tol )
+{
+    double up = reg.ToPatchU( uo );
+    return std::abs( up - core->GetMinU() ) < tol || std::abs( up - core->GetMaxU() ) < tol;
+}
+
+static bool RegionEdgeOnPatchEdgeW( const UWRegion &reg, double wo, const SurfCore* core, double tol )
+{
+    double wp = reg.ToPatchW( wo );
+    return std::abs( wp - core->GetMinW() ) < tol || std::abs( wp - core->GetMaxW() ) < tol;
 }
 
 void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
@@ -3888,15 +4075,18 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                         new_chain = true;
                         continue; // Skip if either point has a value not on this surface
                     }
-                    if ( ((std::abs( uw_pnt0[0]-max_u ) < tol && std::abs( uw_pnt1[0]-max_u ) < tol) ||
-                            (std::abs( uw_pnt0[1]-max_w ) < tol && std::abs( uw_pnt1[1]-max_w ) < tol) ||
-                            (std::abs( uw_pnt0[0]-min_u ) < tol && std::abs( uw_pnt1[0]-min_u ) < tol) ||
-                            (std::abs( uw_pnt0[1]-min_w ) < tol && std::abs( uw_pnt1[1]-min_w ) < tol)) )
+                    // A segment along the patch's own edge repeats the border curve there, and two
+                    // curves on one line cannot both be held by the triangulator.  An edge of this
+                    // region inside the patch -- the seam between two pieces joined into one -- has
+                    // no border curve, so a segment along it, such as the join line, stays.
+                    const SurfCore* core = surf->GetSurfCore();
+                    if ( ( std::abs( uw_pnt0[0]-max_u ) < tol && std::abs( uw_pnt1[0]-max_u ) < tol && RegionEdgeOnPatchEdgeU( reg, max_u, core, tol ) ) ||
+                         ( std::abs( uw_pnt0[1]-max_w ) < tol && std::abs( uw_pnt1[1]-max_w ) < tol && RegionEdgeOnPatchEdgeW( reg, max_w, core, tol ) ) ||
+                         ( std::abs( uw_pnt0[0]-min_u ) < tol && std::abs( uw_pnt1[0]-min_u ) < tol && RegionEdgeOnPatchEdgeU( reg, min_u, core, tol ) ) ||
+                         ( std::abs( uw_pnt0[1]-min_w ) < tol && std::abs( uw_pnt1[1]-min_w ) < tol && RegionEdgeOnPatchEdgeW( reg, min_w, core, tol ) ) )
                     {
-                        // A segment along the patch's own edge repeats the border curve there,
-                        // and two curves on one line cannot both be held by the triangulator.
                         new_chain = true;
-                        continue; // Skip if both end points are on the same edge of the surface
+                        continue; // Skip if both end points are on the same border edge of the surface
                     }
 
                     double delta_u = ( uw_pnt1[0] - uw_pnt0[0] ) / num_sects;
@@ -3943,7 +4133,7 @@ void SurfaceIntersectionSingleton::BuildSubSurfIntChains()
                         p1->CompPnt();
 
                         ISeg* seg = new ISeg( surf, surf, p0, p1 );
-                        chain->m_ISegDeque.push_back( seg );
+                        chain->m_ISegVec.push_back( seg );
                     }
                 }
                 if ( chain )
@@ -3977,8 +4167,8 @@ void SurfaceIntersectionSingleton::SplitBorderCurves()
     {
         if  ( !( *c )->m_BorderFlag ) // Non Border Chains
         {
-            splitPnts.push_back( ( *c )->m_ISegDeque.front()->m_IPnt[0] );
-            splitPnts.push_back( ( *c )->m_ISegDeque.back()->m_IPnt[1]  );
+            splitPnts.push_back( ( *c )->m_ISegVec.front()->m_IPnt[0] );
+            splitPnts.push_back( ( *c )->m_ISegVec.back()->m_IPnt[1]  );
         }
     }
 
@@ -4065,14 +4255,14 @@ void SurfaceIntersectionSingleton::SplitBorderCurves()
     for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
     {
         vector< vec3d > crv;
-        for ( int i = 0 ; i < ( int )( *c )->m_ISegDeque.size() ; i++ )
+        for ( int i = 0 ; i < ( int )( *c )->m_ISegVec.size() ; i++ )
         {
-            IPnt* ip = ( *c )->m_ISegDeque[i]->m_IPnt[0];
+            IPnt* ip = ( *c )->m_ISegVec[i]->m_IPnt[0];
             crv.push_back( ip->m_Pnt );
 
-            if ( i == ( int )( *c )->m_ISegDeque.size() - 1 )
+            if ( i == ( int )( *c )->m_ISegVec.size() - 1 )
             {
-                ip = ( *c )->m_ISegDeque[i]->m_IPnt[1];
+                ip = ( *c )->m_ISegVec[i]->m_IPnt[1];
                 crv.push_back( ip->m_Pnt );
             }
         }
@@ -4128,6 +4318,15 @@ void SurfaceIntersectionSingleton::IntersectSplitChains()
 
     // DebugWriteChainVec( "IntersectChainVec", chains );
     // WriteChainSplits( "IntersectChainVec", chains );
+
+    // The boxes have done their work; only the debugging draw objects look at them again.
+    if ( !DEBUG_ISECT_DRAW )
+    {
+        for ( int i = 0 ; i < ( int )chains.size() ; i++ )
+        {
+            chains[i]->ClearBoxes();
+        }
+    }
 
     //==== Merge Splits ====//
     for ( int i = 0 ; i < ( int )chains.size() ; i++ )
@@ -4226,23 +4425,23 @@ void SurfaceIntersectionSingleton::DebugWriteChainVec( const char* name, vector<
                 fprintf( fp, "u=[" );
                 int j;
                 vec2d uw1, uw2;
-                for ( j = 0 ; j < ( int )( *c )->m_ISegDeque.size() - 1 ; j++ )
+                for ( j = 0 ; j < ( int )( *c )->m_ISegVec.size() - 1 ; j++ )
                 {
-                    uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                    uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
                     fprintf( fp, "%.19e;\n", uw1[0] );
                 }
-                uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                uw2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                uw2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
                 fprintf( fp, "%.19e;\n%.19e];\n", uw1[0], uw2[0] );
 
                 fprintf( fp, "w=[" );
-                for ( j = 0 ; j < ( int )( *c )->m_ISegDeque.size() - 1 ; j++ )
+                for ( j = 0 ; j < ( int )( *c )->m_ISegVec.size() - 1 ; j++ )
                 {
-                    uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                    uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
                     fprintf( fp, "%.19e;\n", uw1[1] );
                 }
-                uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                uw2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                uw2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
                 fprintf( fp, "%.19e;\n%.19e];\n", uw1[1], uw2[1] );
 
                 fprintf( fp, "figure(1)\n" );
@@ -4307,27 +4506,27 @@ void SurfaceIntersectionSingleton::DebugWriteChains( const char* name, bool tess
                         fprintf( fp, "u=[" );
                         int j;
                         vec2d uw1, uw2;
-                        for ( j = 0 ; j < ( int )( *c )->m_ISegDeque.size() - 1 ; j++ )
+                        for ( j = 0 ; j < ( int )( *c )->m_ISegVec.size() - 1 ; j++ )
                         {
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
                             fprintf( fp, "%.19e;\n", uw1[0] );
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
                             fprintf( fp, "%.19e;\n", uw1[0] );
                         }
-                        uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                        uw2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                        uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                        uw2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
                         fprintf( fp, "%.19e;\n%.19e];\n", uw1[0], uw2[0] );
 
                         fprintf( fp, "w=[" );
-                        for ( j = 0 ; j < ( int )( *c )->m_ISegDeque.size() - 1 ; j++ )
+                        for ( j = 0 ; j < ( int )( *c )->m_ISegVec.size() - 1 ; j++ )
                         {
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
                             fprintf( fp, "%.19e;\n", uw1[1] );
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
                             fprintf( fp, "%.19e;\n", uw1[1] );
                         }
-                        uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                        uw2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                        uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                        uw2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
                         fprintf( fp, "%.19e;\n%.19e];\n", uw1[1], uw2[1] );
 
                         fprintf( fp, "figure(1)\n" );
@@ -4336,51 +4535,51 @@ void SurfaceIntersectionSingleton::DebugWriteChains( const char* name, bool tess
 
                         fprintf( fp, "x=[" );
                         vec3d pt, pt2;
-                        for ( j = 0 ; j < ( int )( *c )->m_ISegDeque.size() - 1 ; j++ )
+                        for ( j = 0 ; j < ( int )( *c )->m_ISegVec.size() - 1 ; j++ )
                         {
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                            pt = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                            pt = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
                             fprintf( fp, "%.19e;\n", pt.x() );
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
-                            pt = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                            pt = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
                             fprintf( fp, "%.19e;\n", pt.x() );
                         }
-                        uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                        pt = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
-                        uw2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
-                        pt2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw2[0], uw2[1] );
+                        uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                        pt = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
+                        uw2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                        pt2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw2[0], uw2[1] );
                         fprintf( fp, "%.19e;\n%.19e];\n", pt.x(), pt2.x() );
 
                         fprintf( fp, "y=[" );
-                        for ( j = 0 ; j < ( int )( *c )->m_ISegDeque.size() - 1 ; j++ )
+                        for ( j = 0 ; j < ( int )( *c )->m_ISegVec.size() - 1 ; j++ )
                         {
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                            pt = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                            pt = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
                             fprintf( fp, "%.19e;\n", pt.y() );
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
-                            pt = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                            pt = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
                             fprintf( fp, "%.19e;\n", pt.y() );
                         }
-                        uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                        pt = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
-                        uw2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
-                        pt2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw2[0], uw2[1] );
+                        uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                        pt = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
+                        uw2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                        pt2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw2[0], uw2[1] );
                         fprintf( fp, "%.19e;\n%.19e];\n", pt.y(), pt2.y() );
 
                         fprintf( fp, "z=[" );
-                        for ( j = 0 ; j < ( int )( *c )->m_ISegDeque.size() - 1 ; j++ )
+                        for ( j = 0 ; j < ( int )( *c )->m_ISegVec.size() - 1 ; j++ )
                         {
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                            pt = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                            pt = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
                             fprintf( fp, "%.19e;\n", pt.z() );
-                            uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
-                            pt = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
+                            uw1 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                            pt = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
                             fprintf( fp, "%.19e;\n", pt.z() );
                         }
-                        uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                        pt = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
-                        uw2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
-                        pt2 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw2[0], uw2[1] );
+                        uw1 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                        pt = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw1[0], uw1[1] );
+                        uw2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                        pt2 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_Surf->CompPnt( uw2[0], uw2[1] );
                         fprintf( fp, "%.19e;\n%.19e];\n", pt.z(), pt2.z() );
 
                         fprintf( fp, "figure(2)\n" );
@@ -4522,11 +4721,11 @@ void SurfaceIntersectionSingleton::DebugWriteChains( const char* name, bool tess
 
                     if ( ! tessFlag )
                     {
-                        for ( int j = 0 ; j < ( int )( *c )->m_ISegDeque.size() ; j++ )
+                        for ( int j = 0 ; j < ( int )( *c )->m_ISegVec.size() ; j++ )
                         {
                             fprintf( fp, "MOVE \n" );
-                            vec2d uw0 = ( *c )->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
-                            vec2d uw1 = ( *c )->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
+                            vec2d uw0 = ( *c )->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_SurfVec[i] )->m_UW;
+                            vec2d uw1 = ( *c )->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_SurfVec[i] )->m_UW;
                             vec2d tmp = uw0 + ( uw1 - uw0 ) * 0.1;
                             uw1 = uw1 + ( uw0 - uw1 ) * 0.1;
                             uw0 = tmp;
@@ -4883,25 +5082,6 @@ void SurfaceIntersectionSingleton::UpdateDrawObjs()
         }
     }
 
-    // Normal Vec is not required, load placeholder.
-    m_RawIsectCurveDO.m_NormVec = m_RawIsectCurveDO.m_PntVec;
-    m_RawIsectPtsDO.m_NormVec = m_RawIsectPtsDO.m_PntVec;
-    m_RawBorderCurveDO.m_NormVec = m_RawBorderCurveDO.m_PntVec;
-    m_RawBorderPtsDO.m_NormVec = m_RawBorderPtsDO.m_PntVec;
-
-    for ( int k = 0; k < NUM_CUBIC; k++ )
-    {
-        m_CubicCurveDO[k].m_NormVec = m_CubicCurveDO[k].m_PntVec;
-        m_CubicEndPtsDO[k].m_NormVec = m_CubicEndPtsDO[k].m_PntVec;
-        m_CubicCtrlPtsDO[k].m_NormVec = m_CubicCtrlPtsDO[k].m_PntVec;
-    }
-
-    m_RawPatchJoinCurveDO.m_NormVec = m_RawPatchJoinCurveDO.m_PntVec;
-    m_RawPatchJoinPtsDO.m_NormVec = m_RawPatchJoinPtsDO.m_PntVec;
-
-    m_RawNonManifoldCurveDO.m_NormVec = m_RawNonManifoldCurveDO.m_PntVec;
-    m_RawNonManifoldPtsDO.m_NormVec = m_RawNonManifoldPtsDO.m_PntVec;
-
     m_RawIsectCurveDO.m_GeomChanged = true;
     m_RawIsectPtsDO.m_GeomChanged = true;
     m_RawBorderCurveDO.m_GeomChanged = true;
@@ -4921,7 +5101,7 @@ void SurfaceIntersectionSingleton::UpdateDrawObjs()
     m_RawNonManifoldPtsDO.m_GeomChanged = true;
 
     //=====  Visualizatino tools for SurfaceINtersectionMgr debugging =====//
-    if ( false ) // Set to true to turn visualization tools ON
+    if ( DEBUG_ISECT_DRAW )
     {
         // Set each DrawObj "m_Visible" to true to turn ON
         m_ApproxPlanesDO.m_PntVec.clear();
@@ -5005,6 +5185,12 @@ void SurfaceIntersectionSingleton::LoadDrawObjs( vector< DrawObj* > &draw_obj_ve
         return;
     }
 
+    if ( m_DrawObjsStale )
+    {
+        m_DrawObjsStale = false;
+        UpdateDrawObjs();
+    }
+
     m_RawIsectCurveDO.m_Visible = GetSettingsPtr()->m_DrawIsectFlag &&
                                   GetSettingsPtr()->m_DrawCurveFlag &&
                                   GetSettingsPtr()->m_DrawRawFlag;
@@ -5074,7 +5260,7 @@ void SurfaceIntersectionSingleton::LoadDrawObjs( vector< DrawObj* > &draw_obj_ve
     draw_obj_vec.push_back( &m_RawBorderPtsDO );
 
     //=====  Visualizatino tools for SurfaceINtersectionMgr debugging =====//
-    if ( false ) // Set to true to turn visualization tools ON
+    if ( DEBUG_ISECT_DRAW )
     {
         m_ApproxPlanesDO.m_Visible = false;
         draw_obj_vec.push_back( &m_ApproxPlanesDO );

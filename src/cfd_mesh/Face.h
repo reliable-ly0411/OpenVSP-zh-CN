@@ -45,15 +45,15 @@ public:
         fixed = m_DeleteMeFlag = false;
         edgeVec.reserve( 6 );
     }
-    virtual ~Node();
+    ~Node();
 
     list< Node* >::iterator list_ptr;
 
     bool m_DeleteMeFlag;
+    bool fixed;             // Dont move or delete
 
     vec3d pnt;              // Position
     vec2d uw;               // Parametric
-    bool fixed;             // Dont move or delete
 
     vector< Edge* >  edgeVec;       // All Edges Which Use This Node
 
@@ -103,11 +103,9 @@ public:
         target_len = 0;
         m_Length = 0;
     }
-    virtual ~Edge()                         {}
+    ~Edge()                         {}
 
     list< Edge* >::iterator list_ptr;
-
-    bool m_DeleteMeFlag;
 
     Node* n0;
     Node* n1;
@@ -119,14 +117,17 @@ public:
     Face* f0;
     Face* f1;
 
+    bool m_DeleteMeFlag;
+
     bool ridge;             // Dont Remove but Can Split
     bool border;            // Dont remove or split
 
     bool debugFlag;         // Flag for testing
 
+    bool m_LengthDirty = true;  // m_Length needs working out again
+
     double target_len;
     double m_Length;
-    bool m_LengthDirty = true;
 
     // Which pass last offered this edge to the collapse.  Collapse gathers its candidates
     // from two places -- edges that are too short, then faces that are the wrong shape --
@@ -194,7 +195,7 @@ public:
     Face();
     Face( Node* nn0, Node* nn1, Node* nn2, Edge* ee0, Edge* ee1, Edge* ee2 );
     Face( Node* nn0, Node* nn1, Node* nn2, Node* nn3, Edge* ee0, Edge* ee1, Edge* ee2, Edge* ee3 );
-    virtual ~Face();
+    ~Face();
 
     static void ComputeCosAngles( Node* nn0, Node* nn1, Node* nn2, double* ang0, double* ang1, double* ang2 );
     static void ComputeCosAngles( Node* nn0, Node* nn1, Node* nn2, Node* nn3, double* ang0, double* ang1, double* ang2, double* ang3 );
@@ -249,6 +250,9 @@ public:
     list< Face* >::iterator list_ptr;
     bool m_DeleteMeFlag;
 
+    // Its place in its mesh's face list, where a pass has numbered them
+    int m_Index = -1;
+
     Node* n0;
     Node* n1;
     Node* n2;
@@ -264,11 +268,6 @@ public:
     // Which round last measured this face's shape, so a face reached from two of its edges is
     // only measured once.  See Mesh::Collapse.
     int m_ShapeStamp = -1;
-
-    // true if inside surface with a cid corresponding to an index.
-    vector< bool > insideSurf;
-
-    vector< int > insideCount;
 
     // Set to true if face should be removed
     bool deleteFlag;
@@ -288,9 +287,6 @@ public:
         m_isQuad = false;
         ind0 = ind1 = ind2 = ind3 = -1;
         m_reason = -1;
-        m_MinAngle = -1.0;
-        m_LenRatio = -1.0;
-        m_TargetLen = -1.0;
         m_WorstLenRatio = -1.0;
         m_OffBorder = false;
     }
@@ -305,13 +301,6 @@ public:
     vector<int> m_Tags;
     int m_iSurf;
     int m_reason;
-
-    // Filled in by CfdMeshMgrSingleton::Subtag, which already visits every face and already
-    // asks the target length map about it.
-    double m_MinAngle;      // Smallest angle of the face, in degrees.
-    double m_LenRatio;      // Mean edge length over the target length at the face's centre.
-    double m_TargetLen;     // The target length at the face's centre, so a per-corner ratio
-                            // can be formed from it.
 
     // Worst of this face's own edges, each measured against the target length that edge was
     // built to, expressed so that 1.0 is on target and larger is worse whichever way the edge

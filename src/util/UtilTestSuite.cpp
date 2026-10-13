@@ -14,6 +14,8 @@
 #include "StringUtil.h"
 #include "StlHelper.h"
 #include "VspUtil.h"
+#include "UnitConversion.h"
+#include "APIDefines.h"
 
 //==== Test vec2d ====//
 void UtilTestSuite::Vec2dUtilTest()
@@ -237,22 +239,6 @@ void UtilTestSuite::StringUtilTest()
 //==== Test StlHelper =====//
 void UtilTestSuite::StlHelperTest()
 {
-    deque< string > str_deque;
-    str_deque.push_back( "ABCD" );
-    str_deque.push_back( "BCBC" );
-    str_deque.push_back( "ABCE" );
-    str_deque.push_back( "ABCD" );
-    str_deque.push_back( "BBBB" );
-    str_deque.push_back( "ABCE" );
-
-    TEST_ASSERT( deque_contains_val < string >( str_deque, string( "ABCE" ) ) );
-
-    deque_remove_val < string >( str_deque, string( "ABCE" ) );
-
-    TEST_ASSERT( str_deque.size() == 4 );
-    TEST_ASSERT( str_deque[0] == "ABCD" && str_deque[1] == "BCBC" );
-    TEST_ASSERT( str_deque[2] == "ABCD" && str_deque[3] == "BBBB" );
-
     vector< string > str_vector;
     str_vector.push_back( "ABCD" );
     str_vector.push_back( "BCBC" );
@@ -1126,4 +1112,16 @@ void UtilTestSuite::NumbersTest()
 
 //        printf( "%d\t%f\t%f\t%f\t%f\t%f\n", i, di, magx, magrd, magru, magp1ru );
     }
+}
+
+// Viscosity between slug/ft-s, ft^2/s (imperial) and kg/m-s, m^2/s (metric)
+void UtilTestSuite::ViscosityConversionTest()
+{
+    TEST_ASSERT_DELTA( ConvertDynaVis( 1.0, vsp::PD_UNITS_IMPERIAL, vsp::PD_UNITS_METRIC ), 47.8803, 1e-9 );
+    TEST_ASSERT_DELTA( ConvertDynaVis( 47.8803, vsp::PD_UNITS_METRIC, vsp::PD_UNITS_IMPERIAL ), 1.0, 1e-9 );
+    TEST_ASSERT_DELTA( ConvertDynaVis( 2.0, vsp::PD_UNITS_METRIC, vsp::PD_UNITS_METRIC ), 2.0, 1e-12 );
+
+    TEST_ASSERT_DELTA( ConvertKineVis( 10.7639, vsp::PD_UNITS_IMPERIAL, vsp::PD_UNITS_METRIC ), 1.0, 1e-9 );
+    TEST_ASSERT_DELTA( ConvertKineVis( 1.0, vsp::PD_UNITS_METRIC, vsp::PD_UNITS_IMPERIAL ), 10.7639, 1e-9 );
+    TEST_ASSERT_DELTA( ConvertKineVis( 2.0, vsp::PD_UNITS_IMPERIAL, vsp::PD_UNITS_IMPERIAL ), 2.0, 1e-12 );
 }

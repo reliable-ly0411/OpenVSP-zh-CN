@@ -28,6 +28,7 @@
 
 #include "IDMgr.h"
 
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 
@@ -388,6 +389,18 @@ vector < string > AttributeMgrSingleton::FindAttributesByName( const string & se
                 attribute_ids.push_back( attrIter->first );
             }
     }
+
+    // The map is unordered; sort by name, then ID, so FindAttributeByName's index is stable
+    std::sort( attribute_ids.begin(), attribute_ids.end(), [this]( const string & a, const string & b )
+    {
+        const string & na = m_AttrPtrMap[ a ]->GetName();
+        const string & nb = m_AttrPtrMap[ b ]->GetName();
+        if ( na != nb )
+        {
+            return na < nb;
+        }
+        return a < b;
+    } );
     return attribute_ids;
 }
 
@@ -404,7 +417,7 @@ string AttributeMgrSingleton::FindAttributeByName( const string & search_str, in
     return attribute_id;
 }
 
-string AttributeMgrSingleton::FindAttributeInCollection( const string & obj_id, const string & search_str, int index )
+vector< string > AttributeMgrSingleton::FindAttributesInCollection( const string & obj_id, const string & search_str )
 {
     // if collection id,  search collection
     // if object id, search its collection
@@ -413,8 +426,6 @@ string AttributeMgrSingleton::FindAttributeInCollection( const string & obj_id, 
 
     string lower_str = ToLower( search_str );
     string lower_aname;
-
-    string attribute_id = "ID_ERROR";
 
     AttributeCollection* coll;
     AttributeCollection* coll_from_obj;
@@ -448,11 +459,18 @@ string AttributeMgrSingleton::FindAttributeInCollection( const string & obj_id, 
         }
     }
 
+    return attribute_ids;
+}
+
+string AttributeMgrSingleton::FindAttributeInCollection( const string & obj_id, const string & search_str, int index )
+{
+    vector< string > attribute_ids = FindAttributesInCollection( obj_id, search_str );
+
     if ( index >-1 && index < attribute_ids.size() )
     {
-        attribute_id = attribute_ids.at( index );
+        return attribute_ids.at( index );
     }
-    return attribute_id;
+    return "ID_ERROR";
 }
 
 vector< string > AttributeMgrSingleton::FindAttributedObjects()
@@ -1397,6 +1415,10 @@ vector < string > AttributeMgrSingleton::PasteAttribute( const string &obj_id, b
     if ( !ac )
     {
         ac = GetCollectionFromParentID( obj_id );
+        if ( !ac )
+        {
+            return vector < string >();
+        }
         coll_id = ac->GetID();
     }
     return PasteAttributeUtil( coll_id, updateFlag );

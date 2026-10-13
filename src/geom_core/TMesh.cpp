@@ -906,49 +906,56 @@ bool TTri::SplitTri( bool dumpCase )
     //==== Add Edge Nodes ====//
     for ( i = 0 ; i < ( int )pVec.size() ; i++ )
     {
+        vec3d p = pVec[i];
+        if ( uwflag )
+        {
+            p = uwVec[i];
+        }
+
+        // Near a sharp corner both edges can be within tolerance, so split the nearest.
+        int jnear = -1;
+        double dnear = 0.0;
         for ( j = 0 ; j < ( int )m_EVec.size() ; j++ )
         {
-            bool onEdgeFlag = false;
-
-            if ( uwflag )
+            double t;
+            if ( OnEdge( p, m_EVec[j], onEdgeTol, t ) )
             {
-                double t;
-                onEdgeFlag = !!OnEdge( uwVec[i], m_EVec[j], onEdgeTol, t );
+                vec3d pon;
+                double d = pointSegDistSquared( p, m_EVec[j]->m_N0->m_Pnt, m_EVec[j]->m_N1->m_Pnt, t, pon );
+                if ( jnear < 0 || d < dnear )
+                {
+                    jnear = j;
+                    dnear = d;
+                }
             }
-            else
-            {
-                double t;
-                onEdgeFlag = !!OnEdge( pVec[i], m_EVec[j], onEdgeTol, t );
-            }
+        }
 
-            if ( onEdgeFlag )
-            {
-                //==== SplitEdge ====//
-                TNode* sn = new TNode();        // New node
-                sn->m_IsectFlag = 1;
-                m_NVec.push_back( sn );
-                matchNodeIndex[i] = m_NVec.size() - 1;
-                sn->SetXYZPnt( pVec[i] );
+        if ( jnear >= 0 )
+        {
+            //==== SplitEdge ====//
+            TNode* sn = new TNode();        // New node
+            sn->m_IsectFlag = 1;
+            m_NVec.push_back( sn );
+            matchNodeIndex[i] = m_NVec.size() - 1;
+            sn->SetXYZPnt( pVec[i] );
 
 #ifdef DEBUG_TMESH
-                if ( !PtInTri( m_NVec[0]->m_Pnt, m_NVec[1]->m_Pnt, m_NVec[2]->m_Pnt, sn->m_Pnt ) )
-                {
-                    printf( "Outlier point added %s : %d.\n", __FILE__, __LINE__ );
-                }
+            if ( !PtInTri( m_NVec[0]->m_Pnt, m_NVec[1]->m_Pnt, m_NVec[2]->m_Pnt, sn->m_Pnt ) )
+            {
+                printf( "Outlier point added %s : %d.\n", __FILE__, __LINE__ );
+            }
 #endif
 
-                sn->SetUWPnt( uwVec[i] );
-                if ( uwflag )
-                {
-                    sn->MakePntUW();
-                }
-                TEdge* se = new TEdge();        // New Edge
-                se->m_N0 = m_EVec[j]->m_N0;
-                se->m_N1 = sn;
-                m_EVec[j]->m_N0 = sn;               // Change Split Edge
-                m_EVec.push_back( se );
-                break;
+            sn->SetUWPnt( uwVec[i] );
+            if ( uwflag )
+            {
+                sn->MakePntUW();
             }
+            TEdge* se = new TEdge();        // New Edge
+            se->m_N0 = m_EVec[jnear]->m_N0;
+            se->m_N1 = sn;
+            m_EVec[jnear]->m_N0 = sn;               // Change Split Edge
+            m_EVec.push_back( se );
         }
     }
 
@@ -2200,11 +2207,16 @@ void TBndBox::SplitBox()
             m_SBoxVec[cnt]->AddTri( m_TriVec[i] );
         }
 
+        // The children hold the triangles now, and every search goes to them once they
+        // exist, so this box's own list is never read again.
+        size_t ntri = m_TriVec.size();
+        vector< TTri* >().swap( m_TriVec );
+
         int contSplitFlag = 1;
 
         for ( i = 0 ; i < 8 ; i++ )
         {
-            if ( m_TriVec.size() == m_SBoxVec[i]->m_TriVec.size() )
+            if ( ntri == m_SBoxVec[i]->m_TriVec.size() )
             {
                 contSplitFlag = 0;
                 break;
@@ -2837,7 +2849,7 @@ double TBndBox::MinAngleTri( const vec3d &norm, const vec3d &v0, const vec3d &v1
                 m_back_b[j] = prot2;
             }
 
-            // Case (a): mesh vertex swept into T's plane — check PtInTri on original T.
+            // Case (a): mesh vertex swept into T's plane -- check PtInTri on original T.
             for ( int j = 0; j < 3; j++ )
             {
                 if ( angle_less( theta_m[j], curr_min_angle ) && PtInTri( v0, v1, v2, m_back[j] ) )
@@ -2855,7 +2867,7 @@ double TBndBox::MinAngleTri( const vec3d &norm, const vec3d &v0, const vec3d &v1
                 }
             }
 
-            // Case (b): T vertex swept into mesh triangle's plane — check PtInTri on mesh triangle.
+            // Case (b): T vertex swept into mesh triangle's plane -- check PtInTri on mesh triangle.
             for ( int j = 0; j < 3; j++ )
             {
                 vec3d prot1, prot2;
@@ -3257,6 +3269,31 @@ void TBndBox::Intersect( TBndBox* iBox, bool UWFlag, bool checkSharedEdges )
             }
         }
     }
+}
+
+//==== The tris of every leaf box within tol of pnt ====//
+void TBndBox::FindTrisNear( const vec3d & pnt, double tol, vector < TTri* > & triVec ) const
+{
+    // An empty box has its min above its max, so no point is near it.
+    const vec3d lo = m_Box.GetMin();
+    const vec3d hi = m_Box.GetMax();
+    if ( pnt.x() < lo.x() - tol || pnt.x() > hi.x() + tol ||
+         pnt.y() < lo.y() - tol || pnt.y() > hi.y() + tol ||
+         pnt.z() < lo.z() - tol || pnt.z() > hi.z() + tol )
+    {
+        return;
+    }
+
+    if ( m_SBoxVec[0] )
+    {
+        for ( int i = 0 ; i < 8 ; i++ )
+        {
+            m_SBoxVec[i]->FindTrisNear( pnt, tol, triVec );
+        }
+        return;
+    }
+
+    triVec.insert( triVec.end(), m_TriVec.begin(), m_TriVec.end() );
 }
 
 void  TBndBox::RayCast( const vec3d & orig, const vec3d & dir, vector<double> & tParmVec, vector <TTri*> & triVec ) const
@@ -4706,6 +4743,18 @@ void TMesh::IgnoreNone()
 
 void TMesh::DeterIntExt( const vector< TMesh* >& meshVec, const vec3d &dir )
 {
+    vector< TMeshFaceZone > zones;
+    BuildFaceZones( meshVec, zones );
+
+    int own = -1;
+    for ( int m = 0 ; m < ( int )meshVec.size() ; m++ )
+    {
+        if ( meshVec[m] == this )
+        {
+            own = m;
+        }
+    }
+
     for ( int t = 0 ; t < ( int )m_TVec.size() ; t++ )
     {
         TTri* tri = m_TVec[t];
@@ -4715,12 +4764,12 @@ void TMesh::DeterIntExt( const vector< TMesh* >& meshVec, const vec3d &dir )
         {
             for ( int s = 0 ; s < ( int )tri->m_SplitVec.size() ; s++ )
             {
-                DeterIntExtTri( tri->m_SplitVec[s], meshVec, dir );
+                DeterIntExtTri( tri->m_SplitVec[s], meshVec, dir, own, zones );
             }
         }
         else
         {
-            DeterIntExtTri( tri, meshVec, dir );
+            DeterIntExtTri( tri, meshVec, dir, own, zones );
         }
     }
 }
@@ -4941,6 +4990,13 @@ double TMesh::ComputeWaveDragArea( const std::unordered_map< string, int > &idma
 double TMesh::ComputeTheoVol()
 {
     m_TheoVol = 0.0;
+
+    // A thin or transparent surface -- a propeller disk, a ground plane -- encloses nothing.
+    if ( !m_ThickSurf || m_SurfCfdType == vsp::CFD_TRANSPARENT )
+    {
+        return m_TheoVol;
+    }
+
     for ( int t = 0 ; t < ( int )m_TVec.size() ; t++ )
     {
         TTri* tri = m_TVec[t];
@@ -4954,6 +5010,12 @@ double TMesh::ComputeTheoVol()
 double TMesh::ComputeTrimVol()
 {
     double trimVol = 0;
+
+    // A thin or transparent surface -- a propeller disk, a ground plane -- encloses nothing.
+    if ( !m_ThickSurf || m_SurfCfdType == vsp::CFD_TRANSPARENT )
+    {
+        return trimVol;
+    }
 
     for ( int t = 0 ; t < ( int )m_TVec.size() ; t++ )
     {
@@ -5099,11 +5161,13 @@ bool TMesh::AddTri( const vec3d &v0, const vec3d &v1, const vec3d &v2, const vec
     // Kahan's arrangement of Heron's formula, in Vec3d.cpp -- which keeps the cancellation
     // that the naive form loses on a needle.
     //
-    // The cutoff is an area in the model's own units.  Turning a twenty unit model to an
-    // arbitrary angle leaves the triangles meant here below 1e-8 and the smallest triangle
-    // actually wanted at 1e-6; this sits between.  Being an absolute area it travels with the
-    // size of the model, so a model built at a very different scale deserves a fresh look.
-    if ( area( v0, v1, v2 ) < TRI_AREA_TOL )
+    // The cutoff is meant to catch only triangles that are degenerate to within the precision
+    // of the surface evaluation -- three corners in a line -- whatever the size of the model.
+    // So it is put as the area over the square of the longest edge.  Over models from 0.001 to
+    // 1000 times their default size, turned to arbitrary angles, degenerate triangles measure
+    // below 1e-8 and real ones above 1e-4.
+    double lmax = std::max( dist( v0, v1 ), std::max( dist( v1, v2 ), dist( v2, v0 ) ) );
+    if ( area( v0, v1, v2 ) <= TRI_AREA_TOL * lmax * lmax )
     {
         return false;
     }
@@ -5124,7 +5188,7 @@ bool TMesh::AddTri( const vec3d &v0, const vec3d &v1, const vec3d &v2, const vec
 
     ttri->m_N0->SetCoordInfo( TNode::HAS_XYZ );
     ttri->m_N1->SetCoordInfo( TNode::HAS_XYZ );
-    ttri->m_N1->SetCoordInfo( TNode::HAS_XYZ );
+    ttri->m_N2->SetCoordInfo( TNode::HAS_XYZ );
 
     m_TVec.push_back( ttri );
     m_NVec.push_back( ttri->m_N0 );
@@ -5246,7 +5310,7 @@ void TMesh::AddUWTri( const vec3d & uw0, const vec3d & uw1, const vec3d & uw2, c
 
     ttri->m_N0->SetCoordInfo( TNode::HAS_UW );
     ttri->m_N1->SetCoordInfo( TNode::HAS_UW );
-    ttri->m_N1->SetCoordInfo( TNode::HAS_UW );
+    ttri->m_N2->SetCoordInfo( TNode::HAS_UW );
     ttri->m_N0->SetXYZFlag( false );
     ttri->m_N1->SetXYZFlag( false );
     ttri->m_N2->SetXYZFlag( false );
@@ -5261,6 +5325,7 @@ void TMesh::AddUWTri( const vec3d & uw0, const vec3d & uw1, const vec3d & uw2, c
 void TMesh::LoadBndBox()
 {
     m_TBox.Reset();
+    m_TBox.m_TriVec.reserve( m_TVec.size() );
 
     for ( int i = 0 ; i < ( int )m_TVec.size() ; i++ )
     {
@@ -5623,7 +5688,7 @@ void TMesh::WriteTRI( string fname, double scale )
 
 void TMesh::WriteVSPGeom( const string file_name )
 {
-    vector < deque < TEdge > > wakes;
+    vector < vector < TEdge > > wakes;
     IdentifyWakes( wakes );
 
     //==== Open file ====//
@@ -5813,7 +5878,7 @@ static bool AboutEqualWakeEdges( const TEdge &a, const TEdge &b )
 }
 
 // Called from: void TMesh::WriteVSPGeom( const string file_name )
-void TMesh::IdentifyWakes( vector < deque < TEdge > > &wakes )
+void TMesh::IdentifyWakes( vector < vector < TEdge > > &wakes )
 {
     vector < TEdge > wakeedges;
 
@@ -5853,38 +5918,35 @@ void TMesh::IdentifyWakes( vector < deque < TEdge > > &wakes )
 
 
     wakes.clear();
-    int iwake = 0;
 
     while ( !wlist.empty() )
     {
         list < TEdge >::iterator wit = wlist.begin();
 
-        iwake = wakes.size();
-        wakes.resize( iwake + 1 );
-        wakes[iwake].push_back( *wit );
+        TwoEndedVector < TEdge > wake( *wit );
         wit = wlist.erase( wit );
 
         while ( wit != wlist.end() )
         {
-            if ( AboutEqualWakeNodes( wakes[iwake].back().m_N1, (*wit).m_N0 ) )
+            if ( AboutEqualWakeNodes( wake.back().m_N1, (*wit).m_N0 ) )
             {
-                wakes[iwake].push_back( *wit );
+                wake.push_back( *wit );
                 wlist.erase( wit );
                 wit = wlist.begin();
                 continue;
             }
-            else if ( AboutEqualWakeNodes( wakes[iwake].begin()->m_N0, (*wit).m_N1 ) )
+            else if ( AboutEqualWakeNodes( wake.front().m_N0, (*wit).m_N1 ) )
             {
-                wakes[iwake].push_front( *wit );
+                wake.push_front( *wit );
                 wlist.erase( wit );
                 wit = wlist.begin();
                 continue;
             }
             wit++;
         }
-    }
 
-    int nwake = wakes.size();
+        wakes.push_back( wake.GetVector() );
+    }
 }
 
 // IdentifyWakes -- standalone version for pre-built indexed meshes (Indexed Mesh API)
@@ -5897,7 +5959,7 @@ void TMesh::IdentifyWakes( vector < deque < TEdge > > &wakes )
 //   - Populates polyvec with the XYZ vertex coordinates of each assembled wake polyline.
 //
 // Called by: MeshGeom::WriteVSPGeom, Vehicle::WriteVSPGeomFile
-void IdentifyWakes( const vector< TTri* > &trivec, vector< deque< TEdge > > &wakes, vector< vector< vec3d > > &polyvec )
+void IdentifyWakes( const vector< TTri* > &trivec, vector< vector< TEdge > > &wakes, vector< vector< vec3d > > &polyvec )
 {
     vector < TEdge > wakeedges;
 
@@ -5935,57 +5997,56 @@ void IdentifyWakes( const vector< TTri* > &trivec, vector< deque< TEdge > > &wak
     list < TEdge > wlist( wakeedges.begin(), wakeedges.end() );
 
     wakes.clear();
-    int iwake = 0;
 
     while ( !wlist.empty() )
     {
         list < TEdge >::iterator wit = wlist.begin();
 
-        iwake = wakes.size();
-        wakes.resize( iwake + 1 );
-        wakes[iwake].push_back( *wit );
+        TwoEndedVector < TEdge > wake( *wit );
         wit = wlist.erase( wit );
 
         while ( wit != wlist.end() )
         {
-            if ( AboutEqualWakeNodes( wakes[iwake].back().m_N1, (*wit).m_N0 ) )
+            if ( AboutEqualWakeNodes( wake.back().m_N1, (*wit).m_N0 ) )
             {
-                wakes[iwake].push_back( *wit );
+                wake.push_back( *wit );
                 wlist.erase( wit );
                 wit = wlist.begin();
                 continue;
             }
-            else if ( AboutEqualWakeNodes( wakes[iwake].begin()->m_N0, (*wit).m_N1 ) )
+            else if ( AboutEqualWakeNodes( wake.front().m_N0, (*wit).m_N1 ) )
             {
-                wakes[iwake].push_front( *wit );
+                wake.push_front( *wit );
                 wlist.erase( wit );
                 wit = wlist.begin();
                 continue;
             }
-            else if ( AboutEqualWakeNodes( wakes[iwake].back().m_N1, (*wit).m_N1 ) )
+            else if ( AboutEqualWakeNodes( wake.back().m_N1, (*wit).m_N1 ) )
             {
                 (*wit).SwapEdgeDirection();
-                wakes[iwake].push_back( *wit );
+                wake.push_back( *wit );
                 wlist.erase( wit );
                 wit = wlist.begin();
                 continue;
             }
-            else if ( AboutEqualWakeNodes( wakes[iwake].begin()->m_N0, (*wit).m_N0 ) )
+            else if ( AboutEqualWakeNodes( wake.front().m_N0, (*wit).m_N0 ) )
             {
                 (*wit).SwapEdgeDirection();
-                wakes[iwake].push_front( *wit );
+                wake.push_front( *wit );
                 wlist.erase( wit );
                 wit = wlist.begin();
                 continue;
             }
             wit++;
         }
+
+        wakes.push_back( wake.GetVector() );
     }
 
     int nwake = wakes.size();
     polyvec.resize( nwake );
 
-    for ( iwake = 0; iwake < nwake; iwake++ )
+    for ( int iwake = 0; iwake < nwake; iwake++ )
     {
         int iwe;
         int nwe = wakes[iwake].size();
@@ -5999,7 +6060,7 @@ void IdentifyWakes( const vector< TTri* > &trivec, vector< deque< TEdge > > &wak
     }
 }
 
-void TMesh::WriteVSPGeomWakes( FILE* file_id, vector < deque < TEdge > > &wakes )
+void TMesh::WriteVSPGeomWakes( FILE* file_id, vector < vector < TEdge > > &wakes )
 {
     int nwake = wakes.size();
 
@@ -6220,7 +6281,7 @@ void TMesh::FindEdge( TNode* node, TTri* tri0, TTri* tri1 )
         t1n0 = tri1->m_N0;
         t1n1 = tri1->m_N2;
     }
-    else if ( tri0->m_N2 == node )
+    else if ( tri1->m_N2 == node )
     {
         t1n0 = tri1->m_N0;
         t1n1 = tri1->m_N1;
@@ -6483,7 +6544,6 @@ void TMesh::BuildNodeMaps()
 
     for ( n = 0 ; n < ( int )m_NVec.size() ; n++ )
     {
-        m_NVec[n]->m_MergeVec.clear();
         pnCloud.AddPntNode( m_NVec[n]->m_Pnt );
     }
 
@@ -6507,7 +6567,6 @@ void TMesh::BuildNodeMaps()
         if ( !(pnCloud.UsedNode( islave )) ) // This point is a NanoFlann slave.
         {
             int imaster = pnCloud.GetNodeBaseIndex( islave );
-            m_NVec[imaster]->m_MergeVec.push_back( m_NVec[islave] );
             m_NAMap[m_NVec[imaster]].push_back( m_NVec[islave] ); // Add node islave to imaster's list of aliases
             m_NSMMap[m_NVec[islave]] = m_NVec[imaster]; // Set islave's master to be imaster
         }
@@ -6573,7 +6632,6 @@ void TMesh::DeleteDupNodes()
             delete *lit;
         }
 
-        nk->m_MergeVec.clear();
         nk->m_TriVec.clear();
         m_NVec.push_back( nk );
     }
@@ -6719,6 +6777,14 @@ void TMesh::SwapEdges( double ang )
             if ( edge->m_Tri1 )
             {
                 SwapEdge( edge );
+
+                // SwapEdge wires the new edge into the triangles' edge pointers.
+                // Give the mesh ownership so it is freed with the rest of m_EVec.
+                m_EVec.push_back( edge );
+            }
+            else
+            {
+                delete edge;
             }
         }
     }

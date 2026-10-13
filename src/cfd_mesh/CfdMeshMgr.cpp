@@ -17,6 +17,7 @@
 #include "FileUtil.h"
 #include "HingeGeom.h"
 #include "StlHelper.h"
+#include "StringUtil.h"
 
 #include <algorithm>
 #include <functional>
@@ -28,6 +29,10 @@
 #include "StringUtil.h"
 
 
+
+// Set true to gather, and report after every mesh, how far the edges came out from the
+// length they were sized to.  Off, none of it is gathered.
+static const bool TARGET_LENGTH_REPORT = false;
 
 CfdMeshMgrSingleton::CfdMeshMgrSingleton() : SurfaceIntersectionSingleton()
 {
@@ -177,10 +182,13 @@ void CfdMeshMgrSingleton::GenerateMesh()
 
     RecordResults();
 
-    // string lenTxt = TargetLengthReport();
-    // addOutputText( lenTxt );
+    if ( TARGET_LENGTH_REPORT )
+    {
+        string lenTxt = TargetLengthReport();
+        addOutputText( lenTxt );
+    }
 
-    UpdateDrawObjs();
+    m_DrawObjsStale = true;
 
     m_MeshInProgress = false;
     MessageMgr::getInstance().Send( "ScreenMgr", "UpdateAllScreens" );
@@ -1288,22 +1296,26 @@ void CfdMeshMgrSingleton::PostMesh()
     RunIndexed( nsurf, nthread, [&]( int i )
     {
         m_SurfVec[ i ]->GetMesh()->LoadSimpFaces();
-        m_SurfVec[ i ]->GetMesh()->AccumLengthRatios( lenratio[i] );
 
-        // The same misses counted per face instead of per edge, which is what the coloured
-        // picture shows: a face is as bad as its worst edge, so the share of bad faces is
-        // always larger than the share of bad edges and the two must not be confused.
-        const vector< SimpFace > &sfv = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
-
-        for ( int f = 0 ; f < ( int )sfv.size() ; f++ )
+        if ( TARGET_LENGTH_REPORT )
         {
-            if ( sfv[f].m_WorstLenRatio > 0.0 )
-            {
-                faceratio[i].push_back( sfv[f].m_WorstLenRatio );
+            m_SurfVec[ i ]->GetMesh()->AccumLengthRatios( lenratio[i] );
 
-                if ( sfv[f].m_OffBorder )
+            // The same misses counted per face instead of per edge, which is what the coloured
+            // picture shows: a face is as bad as its worst edge, so the share of bad faces is
+            // always larger than the share of bad edges and the two must not be confused.
+            const vector< SimpFace > &sfv = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+
+            for ( int f = 0 ; f < ( int )sfv.size() ; f++ )
+            {
+                if ( sfv[f].m_WorstLenRatio > 0.0 )
                 {
-                    borderratio[i].push_back( sfv[f].m_WorstLenRatio );
+                    faceratio[i].push_back( sfv[f].m_WorstLenRatio );
+
+                    if ( sfv[f].m_OffBorder )
+                    {
+                        borderratio[i].push_back( sfv[f].m_WorstLenRatio );
+                    }
                 }
             }
         }
@@ -1454,7 +1466,16 @@ void CfdMeshMgrSingleton::ExportFiles()
 void CfdMeshMgrSingleton::WriteTaggedSTL( const string &filename )
 {
     //==== Find All Points and Tri Counts ====//
+    size_t npnt = 0;
+    size_t nallface = 0;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        npnt += m_SurfVec[i]->GetMesh()->GetSimpPntVec().size();
+        nallface += m_SurfVec[i]->GetMesh()->GetSimpFaceVec().size();
+    }
+
     vector< vec3d > allPntVec;
+    allPntVec.reserve( npnt );
     vector < vector < int > > allPntKey;
     allPntKey.resize( m_SurfVec.size() );
     int k = 0;
@@ -1480,6 +1501,7 @@ void CfdMeshMgrSingleton::WriteTaggedSTL( const string &filename )
 
     //==== Assemble Normal Tris ====//
     vector< SimpFace > allFaceVec;
+    allFaceVec.reserve( nallface );
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
         vector < SimpFace >& sFaceVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
@@ -1507,6 +1529,7 @@ void CfdMeshMgrSingleton::WriteTaggedSTL( const string &filename )
     }
     //==== Assemble All Used Points ====//
     vector< vec3d > allUsedPntVec;
+    allUsedPntVec.reserve( pnCloud.m_NumUsedPts );
     for ( int i = 0 ; i < ( int )allPntVec.size() ; i++ )
     {
         if ( pnCloud.UsedNode( i ) )
@@ -1514,6 +1537,11 @@ void CfdMeshMgrSingleton::WriteTaggedSTL( const string &filename )
             allUsedPntVec.push_back( allPntVec[i] );
         }
     }
+
+    // The faces are numbered now, so the map and the points it was built from are done with.
+    pnCloud.Cleanup();
+    vector< vec3d >().swap( allPntVec );
+    vector < vector < int > >().swap( allPntKey );
 
     FILE* file_id = fopen( filename.c_str(), "w" );
     if ( file_id )
@@ -1638,7 +1666,14 @@ void CfdMeshMgrSingleton::WriteTetGen( const string &filename )
     }
 
     int face_cnt = 0;
+    size_t npnt = 0;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        npnt += m_SurfVec[i]->GetMesh()->GetSimpPntVec().size();
+    }
+
     vector< vec3d > allPntVec;
+    allPntVec.reserve( npnt );
     vector < vector < int > > allPntKey;
     allPntKey.resize( m_SurfVec.size() );
     int k = 0;
@@ -1827,8 +1862,26 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
     double tol = 1e-12;
 
     //==== Find All Points and Tri Counts ====//
+    size_t npnt = 0;
+    size_t nwpnt = 0;
+    size_t nallface = 0;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        if ( m_SurfVec[i]->GetWakeFlag() )
+        {
+            nwpnt += m_SurfVec[i]->GetMesh()->GetSimpPntVec().size();
+        }
+        else
+        {
+            npnt += m_SurfVec[i]->GetMesh()->GetSimpPntVec().size();
+        }
+        nallface += m_SurfVec[i]->GetMesh()->GetSimpFaceVec().size();
+    }
+
     vector< vec3d > allPntVec;
+    allPntVec.reserve( npnt );
     vector< vec3d > wakeAllPntVec;
+    wakeAllPntVec.reserve( nwpnt );
     vector < vector < int > > allPntKey;
     allPntKey.resize( m_SurfVec.size() );
     vector < vector < int > > allWPntKey;
@@ -1875,11 +1928,15 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
 
     //==== Assemble Normal Tris ====//
     vector< SimpFace > allFaceVec;
+    allFaceVec.reserve( nallface );
     int ntristrict = 0;
-    vector< int > allSurfIDVec;
     // Four parameter pairs per face, laid end to end.  A vector per face is an allocation
-    // per face, and a mesh has a million of them.
+    // per face, and a mesh has a million of them.  Only the VSPGEOM file reads them.
     vector< vec2d > allUWVec;
+    if ( !vspgeom_fn.empty() )
+    {
+        allUWVec.reserve( 4 * nallface );
+    }
     vector < pair < int, int > > wedges;
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
@@ -1905,7 +1962,6 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 sface.m_Tags = sFaceVec[t].m_Tags;
                 ntristrict++;
                 allFaceVec.push_back( sface );
-                allSurfIDVec.push_back( m_SurfVec[i]->GetSurfID() );
 
                 vec2d uwFace[4];
                 uwFace[0] = sUWVec[ sFaceVec[t].ind0 ];
@@ -1915,7 +1971,10 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 {
                     uwFace[3] = sUWVec[ sFaceVec[t].ind3 ];
                 }
-                allUWVec.insert( allUWVec.end(), uwFace, uwFace + 4 );
+                if ( !vspgeom_fn.empty() )
+                {
+                    allUWVec.insert( allUWVec.end(), uwFace, uwFace + 4 );
+                }
 
                 if ( m_SurfVec[i]->GetSurfaceVSPType() == vsp::WING_SURF )
                 {
@@ -2013,40 +2072,41 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
 
     list < pair < int, int > > wlist( wedges.begin(), wedges.end() );
 
-    vector < deque < pair < int, int > > > wakes;
+    vector < vector < pair < int, int > > > wakes;
 
     while ( !wlist.empty() )
     {
         list < pair < int, int > >::iterator wit = wlist.begin();
 
-        int iwake = wakes.size();
-        wakes.resize( iwake + 1 );
-        wakes[iwake].push_back( *wit );
+        TwoEndedVector < pair < int, int > > wake( *wit );
         wit = wlist.erase( wit );
 
         while ( wit != wlist.end() )
         {
-            if ( wakes[iwake].back().second == (*wit).first )
+            if ( wake.back().second == (*wit).first )
             {
-                wakes[iwake].push_back( *wit );
+                wake.push_back( *wit );
                 wlist.erase( wit );
                 wit = wlist.begin();
                 continue;
             }
-            else if ( wakes[iwake].begin()->first == (*wit).second )
+            else if ( wake.front().first == (*wit).second )
             {
-                wakes[iwake].push_front( *wit );
+                wake.push_front( *wit );
                 wlist.erase( wit );
                 wit = wlist.begin();
                 continue;
             }
             wit++;
         }
+
+        wakes.push_back( wake.GetVector() );
     }
 
 
     //==== Assemble All Used Points ====//
     vector< vec3d > allUsedPntVec;
+    allUsedPntVec.reserve( pnCloud.m_NumUsedPts + wakepnCloud.m_NumUsedPts );
     for ( int i = 0 ; i < ( int )allPntVec.size() ; i++ )
     {
         if ( pnCloud.UsedNode( i ) )
@@ -2086,7 +2146,6 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 sface.m_Tags = sFaceVec[f].m_Tags;
                 ntristrict++;
                 allFaceVec.push_back( sface );
-                allSurfIDVec.push_back( m_SurfVec[i]->GetSurfID() );
 
                 vec2d uwFace[4];
                 uwFace[0] = sUWVec[ sFaceVec[f].ind0 ];
@@ -2096,7 +2155,10 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
                 {
                     uwFace[3] = sUWVec[ sFaceVec[f].ind3 ];
                 }
-                allUWVec.insert( allUWVec.end(), uwFace, uwFace + 4 );
+                if ( !vspgeom_fn.empty() )
+                {
+                    allUWVec.insert( allUWVec.end(), uwFace, uwFace + 4 );
+                }
 
             }
         }
@@ -2110,6 +2172,14 @@ void CfdMeshMgrSingleton::WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const
             allUsedPntVec.push_back( wakeAllPntVec[i] );
         }
     }
+
+    // The faces are numbered now, so the maps and the points they were built from are done with.
+    pnCloud.Cleanup();
+    wakepnCloud.Cleanup();
+    vector< vec3d >().swap( allPntVec );
+    vector< vec3d >().swap( wakeAllPntVec );
+    vector < vector < int > >().swap( allPntKey );
+    vector < vector < int > >().swap( allWPntKey );
 
     //=====================================================================================//
     //==== Write NASCART File =================================================================//
@@ -2990,7 +3060,16 @@ void CfdMeshMgrSingleton::WriteFacet( const string &facet_fn )
     // Note: Wake mesh not included in Facet export
 
     //==== Find All Points and Tri Counts ====//
+    size_t npnt = 0;
+    size_t nallface = 0;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        npnt += m_SurfVec[i]->GetMesh()->GetSimpPntVec().size();
+        nallface += m_SurfVec[i]->GetMesh()->GetSimpFaceVec().size();
+    }
+
     vector< vec3d > allPntVec;
+    allPntVec.reserve( npnt );
     vector < vector < int > > allPntKey;
     allPntKey.resize( m_SurfVec.size() );
     int k = 0;
@@ -3019,6 +3098,7 @@ void CfdMeshMgrSingleton::WriteFacet( const string &facet_fn )
 
     //==== Assemble Normal Tris ====//
     vector< SimpFace > allFaceVec;
+    allFaceVec.reserve( nallface );
     for ( int i = 0; i < (int)m_SurfVec.size(); i++ )
     {
         if ( !m_SurfVec[i]->GetWakeFlag() )
@@ -3047,6 +3127,7 @@ void CfdMeshMgrSingleton::WriteFacet( const string &facet_fn )
     }
     //==== Assemble All Used Points ====//
     vector< vec3d > allUsedPntVec;
+    allUsedPntVec.reserve( pnCloud.m_NumUsedPts );
     for ( int i = 0; i < (int)allPntVec.size(); i++ )
     {
         if ( pnCloud.UsedNode( i ) )
@@ -3054,6 +3135,11 @@ void CfdMeshMgrSingleton::WriteFacet( const string &facet_fn )
             allUsedPntVec.push_back( allPntVec[i] );
         }
     }
+
+    // The faces are numbered now, so the map and the points it was built from are done with.
+    pnCloud.Cleanup();
+    vector< vec3d >().swap( allPntVec );
+    vector < vector < int > >().swap( allPntKey );
 
     //=====================================================================================//
     //==== Write Facet File for Xpatch ====================================================//
@@ -3557,7 +3643,9 @@ bool CfdMeshMgrSingleton::WritePOGSCompFile( const string &fn, const vector < in
                 // The surface's number within its Geom, which counts symmetry copies
                 // separately -- the main surface id does not, so a symmetric pair would
                 // otherwise share a name.
-                name = srf->GetName() + "_" + to_string( srf->GetFeaPartSurfNum() ) + "_" + srf->GetGeomID();
+                string srf_name = srf->GetName();
+                StringUtil::change_space_to_underscore( srf_name );
+                name = srf_name + "_" + to_string( srf->GetFeaPartSurfNum() ) + "_" + srf->GetGeomID();
             }
             else if ( srf->GetFarFlag() )
             {
@@ -3868,33 +3956,37 @@ void CfdMeshMgrSingleton::WritePOGS( const string &pogs_fn )
     double tol = 1e-12;
 
     //==== Find All Points and Tri Counts ====//
-    vector< vec3d > allPntVec;
-    vector< vec3d > wakeAllPntVec;
-    vector < vector < int > > allPntKey;
-    allPntKey.resize( m_SurfVec.size() );
-    vector < vector < int > > allWPntKey;
-    allWPntKey.resize( m_SurfVec.size() );
-    int k = 0;
-    int wk = 0;
+    // Wakes are kept out of the triangulation, so their points are left out too.
+    size_t npnt = 0;
+    size_t nallface = 0;
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
+        if ( !m_SurfVec[i]->GetWakeFlag() )
+        {
+            npnt += m_SurfVec[i]->GetMesh()->GetSimpPntVec().size();
+            nallface += m_SurfVec[i]->GetMesh()->GetSimpFaceVec().size();
+        }
+    }
+
+    vector< vec3d > allPntVec;
+    allPntVec.reserve( npnt );
+    vector < vector < int > > allPntKey;
+    allPntKey.resize( m_SurfVec.size() );
+    int k = 0;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        if ( m_SurfVec[i]->GetWakeFlag() )
+        {
+            continue;
+        }
+
         vector< vec3d >& sPntVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
         allPntKey[i].resize( sPntVec.size() );
-        allWPntKey[i].resize( sPntVec.size() );
         for ( int v = 0 ; v < ( int )sPntVec.size() ; v++ )
         {
-            if ( m_SurfVec[i]->GetWakeFlag() )
-            {
-                wakeAllPntVec.push_back( sPntVec[v] );
-                allWPntKey[i][v] = wk;
-                wk++;
-            }
-            else
-            {
-                allPntVec.push_back( sPntVec[v] );
-                allPntKey[i][v] = k;
-                k++;
-            }
+            allPntVec.push_back( sPntVec[v] );
+            allPntKey[i][v] = k;
+            k++;
         }
     }
 
@@ -3906,27 +3998,15 @@ void CfdMeshMgrSingleton::WritePOGS( const string &pogs_fn )
     //==== Use NanoFlann to Find Close Points and Group ====//
     IndexPntNodes( pnCloud, tol2 );
 
-    // //==== Build Wake Map If Available ====//
-    // PntNodeCloud wakepnCloud;
-    // if ( wakeAllPntVec.size() )
-    // {
-    //     wakepnCloud.AddPntNodes( wakeAllPntVec );
-    //     IndexPntNodes( wakepnCloud, tol2 );
-    // }
-
     //==== Assemble Normal Tris ====//
     vector< SimpFace > allFaceVec;
+    allFaceVec.reserve( nallface );
     int ntristrict = 0;
-    vector< int > allSurfIDVec;
-    vector< vector< vec2d > > allUWVec;
-    vector < pair < int, int > > wedges;
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
         if ( !m_SurfVec[i]->GetWakeFlag() )
         {
             vector < SimpFace >& sFaceVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
-            vector< vec3d >& sPntVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
-            vector< vec2d >& sUWVec = m_SurfVec[i]->GetMesh()->GetSimpUWPntVec();
             for ( int t = 0 ; t <  ( int )sFaceVec.size() ; t++ )
             {
                 SimpFace sface;
@@ -3945,18 +4025,6 @@ void CfdMeshMgrSingleton::WritePOGS( const string &pogs_fn )
                 sface.m_iSurf = i;
                 ntristrict++;
                 allFaceVec.push_back( sface );
-                allSurfIDVec.push_back( m_SurfVec[i]->GetSurfID() );
-
-                vector< vec2d > uwFace( 4 );
-                uwFace[0] = sUWVec[ sFaceVec[t].ind0 ];
-                uwFace[1] = sUWVec[ sFaceVec[t].ind1 ];
-                uwFace[2] = sUWVec[ sFaceVec[t].ind2 ];
-                if( sFaceVec[t].m_isQuad )
-                {
-                    uwFace[3] = sUWVec[ sFaceVec[t].ind3 ];
-                }
-                allUWVec.push_back( uwFace );
-
             }
 
         }
@@ -3965,6 +4033,7 @@ void CfdMeshMgrSingleton::WritePOGS( const string &pogs_fn )
 
     //==== Assemble All Used Points ====//
     vector< vec3d > allUsedPntVec;
+    allUsedPntVec.reserve( pnCloud.m_NumUsedPts );
     for ( int i = 0 ; i < ( int )allPntVec.size() ; i++ )
     {
         if ( pnCloud.UsedNode( i ) )
@@ -3972,6 +4041,11 @@ void CfdMeshMgrSingleton::WritePOGS( const string &pogs_fn )
             allUsedPntVec.push_back( allPntVec[i] );
         }
     }
+
+    // The faces are numbered now, so the map and the points it was built from are done with.
+    pnCloud.Cleanup();
+    vector< vec3d >().swap( allPntVec );
+    vector < vector < int > >().swap( allPntKey );
 
 
     //=====================================================================================//
@@ -4408,17 +4482,58 @@ void CfdMeshMgrSingleton::RecordResults()
     res->Add( new NameValData( "Water_Tight", tight, "Flag set when the mesh is closed." ) );
 }
 
+// A face's corners as merged point indices, and how many it has
+static int CheckFaceCorners( const SimpFace &face, const vector < int > &key, PntNodeCloud &cloud, int ind[4] )
+{
+    ind[0] = cloud.GetNodeUsedIndex( key[ face.ind0 ] );
+    ind[1] = cloud.GetNodeUsedIndex( key[ face.ind1 ] );
+    ind[2] = cloud.GetNodeUsedIndex( key[ face.ind2 ] );
+    if ( face.m_isQuad )
+    {
+        ind[3] = cloud.GetNodeUsedIndex( key[ face.ind3 ] );
+        return 4;
+    }
+    return 3;
+}
+
+// The Node at merged point ind, made the first time it is asked for and kept in store
+static Node* CheckNodeAt( int ind, const vector < vec3d > &pnts, unordered_map < int, Node* > &nodes, vector < Node* > &store )
+{
+    unordered_map < int, Node* >::const_iterator it = nodes.find( ind );
+    if ( it != nodes.end() )
+    {
+        return it->second;
+    }
+    Node* nd = new Node();
+    nd->pnt = pnts[ ind ];
+    store.push_back( nd );
+    nodes[ ind ] = nd;
+    return nd;
+}
+
+// Count the edges of the mesh with one face, and the faces past the second on an edge.  Only
+// the edges and faces found wrong are kept, as Nodes, Edges and Faces, to be drawn.
 string CfdMeshMgrSingleton::CheckWaterTight()
 {
-    vector< Face* > faceVec;
+    vector < bool > checked( m_SurfVec.size(), false );
+    size_t npnt = 0;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        if( m_SurfVec[i]->GetSurfaceCfdType() != vsp::CFD_TRANSPARENT || m_SurfVec[i]->GetFarFlag() || m_SurfVec[i]->GetSymPlaneFlag() )
+        {
+            checked[i] = true;
+            npnt += m_SurfVec[i]->GetMesh()->GetSimpPntVec().size();
+        }
+    }
 
     vector< vec3d > allPntVec;
+    allPntVec.reserve( npnt );
     vector < vector < int > > allPntKey;
     allPntKey.resize( m_SurfVec.size() );
     int k = 0;
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
-        if( m_SurfVec[i]->GetSurfaceCfdType() != vsp::CFD_TRANSPARENT || m_SurfVec[i]->GetFarFlag() || m_SurfVec[i]->GetSymPlaneFlag() )
+        if ( checked[i] )
         {
             vector< vec3d >& sPntVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
             allPntKey[i].resize( sPntVec.size() );
@@ -4439,123 +4554,117 @@ string CfdMeshMgrSingleton::CheckWaterTight()
     //==== Use NanoFlann to Find Close Points and Group ====//
     IndexPntNodes( pnCloud, tol );
 
-    //==== Create Nodes ====//
+    // Every side of every face, as the merged indices of its ends, lowest first, packed in
+    // one integer, beside the face's place in the order the faces are visited.  Sorted, the
+    // faces on one edge come together in that order: an edge with one face is a border, and
+    // every face past the second on an edge is one too many.
+    vector < pair < unsigned long long, int > > sides;
+    int nface = 0;
+    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    {
+        if ( checked[i] )
+        {
+            const vector < SimpFace >& sFaceVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+            for ( int f = 0 ; f < ( int )sFaceVec.size() ; f++ )
+            {
+                int ind[4];
+                int n = CheckFaceCorners( sFaceVec[f], allPntKey[i], pnCloud, ind );
+                for ( int c = 0 ; c < n ; c++ )
+                {
+                    unsigned long long a = ind[c];
+                    unsigned long long b = ind[ ( c + 1 ) % n ];
+                    if ( b < a )
+                    {
+                        std::swap( a, b );
+                    }
+                    sides.push_back( pair < unsigned long long, int >( ( a << 32 ) | b, nface ) );
+                }
+                nface++;
+            }
+        }
+    }
+
+    std::sort( sides.begin(), sides.end() );
+
+    int num_border_edges = 0;
+    int moreThanTwoTriPerEdge = 0;
+    vector < bool > badface( nface, false );
+    vector < pair < int, int > > border;
+
+    for ( size_t j = 0 ; j < sides.size() ; )
+    {
+        size_t r = j;
+        while ( r < sides.size() && sides[r].first == sides[j].first )
+        {
+            r++;
+        }
+
+        if ( r - j == 1 )
+        {
+            num_border_edges++;
+            border.push_back( pair < int, int >( ( int )( sides[j].first >> 32 ), ( int )( sides[j].first & 0xffffffffULL ) ) );
+        }
+
+        for ( size_t q = j + 2 ; q < r ; q++ )
+        {
+            printf( "Edge: More Than 2 Faces\n" );
+            moreThanTwoTriPerEdge++;
+            badface[ sides[q].second ] = true;
+        }
+
+        j = r;
+    }
+    vector < pair < unsigned long long, int > >().swap( sides );
+
+    //==== Keep what is wrong, to be drawn ====//
+    vector < vec3d > usedPnt;
+    usedPnt.reserve( pnCloud.m_NumUsedPts );
     for ( int i = 0 ; i < ( int )allPntVec.size() ; i++ )
     {
         if ( pnCloud.UsedNode( i ) )
         {
-            Node* n = new Node();
-            n->pnt = allPntVec[i];
-            m_nodeStore.push_back( n );
+            usedPnt.push_back( allPntVec[i] );
         }
     }
 
-    //==== Create Edges and Tris ====//
-    int moreThanTwoTriPerEdge = 0;
-    unordered_map< int, vector<Edge*> > edgeMap;
-    for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
+    unordered_map < int, Node* > nodes;
+
+    for ( int j = 0 ; j < ( int )border.size() ; j++ )
     {
-        if( m_SurfVec[i]->GetSurfaceCfdType() != vsp::CFD_TRANSPARENT || m_SurfVec[i]->GetFarFlag() || m_SurfVec[i]->GetSymPlaneFlag() )
+        Edge* e = new Edge( CheckNodeAt( border[j].first, usedPnt, nodes, m_nodeStore ), CheckNodeAt( border[j].second, usedPnt, nodes, m_nodeStore ) );
+        e->debugFlag = true;
+        m_BadEdges.push_back( e );
+    }
+
+    if ( moreThanTwoTriPerEdge )
+    {
+        int iface = 0;
+        for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
         {
-            vector < SimpFace >& sFaceVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
-            vector< vec3d >& sPntVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
-            for ( int f = 0 ; f < ( int )sFaceVec.size() ; f++ )
+            if ( checked[i] )
             {
-                int ind1 = pnCloud.GetNodeUsedIndex( allPntKey[i][sFaceVec[f].ind0] );
-                int ind2 = pnCloud.GetNodeUsedIndex( allPntKey[i][sFaceVec[f].ind1] );
-                int ind3 = pnCloud.GetNodeUsedIndex( allPntKey[i][sFaceVec[f].ind2] );
-
-                Edge *e0 = nullptr, *e1 = nullptr, *e2 = nullptr, *e3 = nullptr;
-
-                Face* face = nullptr;
-                if ( sFaceVec[f].m_isQuad )
+                const vector < SimpFace >& sFaceVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+                for ( int f = 0 ; f < ( int )sFaceVec.size() ; f++ )
                 {
-                    int ind4 = pnCloud.GetNodeUsedIndex( allPntKey[i][sFaceVec[f].ind3] );
-
-                    e0 = FindAddEdge( edgeMap, m_nodeStore, ind1, ind2 );
-                    e1 = FindAddEdge( edgeMap, m_nodeStore, ind2, ind3 );
-                    e2 = FindAddEdge( edgeMap, m_nodeStore, ind3, ind4 );
-                    e3 = FindAddEdge( edgeMap, m_nodeStore, ind4, ind1 );
-
-                    face = new Face( m_nodeStore[ind1], m_nodeStore[ind2], m_nodeStore[ind3],  m_nodeStore[ind4], e0, e1, e2, e3 );
-                }
-                else
-                {
-                    e0 = FindAddEdge( edgeMap, m_nodeStore, ind1, ind2 );
-                    e1 = FindAddEdge( edgeMap, m_nodeStore, ind2, ind3 );
-                    e2 = FindAddEdge( edgeMap, m_nodeStore, ind3, ind1 );
-                    face = new Face( m_nodeStore[ind1], m_nodeStore[ind2], m_nodeStore[ind3], e0, e1, e2 );
-                }
-
-                if ( !e0->SetFace( face ) )
-                {
-                    face->debugFlag = true;
-                    moreThanTwoTriPerEdge++;
-                }
-                if ( !e1->SetFace( face ) )
-                {
-                    face->debugFlag = true;
-                    moreThanTwoTriPerEdge++;
-                }
-                if ( !e2->SetFace( face ) )
-                {
-                    face->debugFlag = true;
-                    moreThanTwoTriPerEdge++;
-                }
-
-                if ( sFaceVec[f].m_isQuad )
-                {
-                    if ( !e3->SetFace( face ) )
+                    if ( badface[ iface ] )
                     {
+                        int ind[4];
+                        Face* face;
+                        if ( CheckFaceCorners( sFaceVec[f], allPntKey[i], pnCloud, ind ) == 4 )
+                        {
+                            face = new Face( CheckNodeAt( ind[0], usedPnt, nodes, m_nodeStore ), CheckNodeAt( ind[1], usedPnt, nodes, m_nodeStore ), CheckNodeAt( ind[2], usedPnt, nodes, m_nodeStore ), CheckNodeAt( ind[3], usedPnt, nodes, m_nodeStore ),
+                                             nullptr, nullptr, nullptr, nullptr );
+                        }
+                        else
+                        {
+                            face = new Face( CheckNodeAt( ind[0], usedPnt, nodes, m_nodeStore ), CheckNodeAt( ind[1], usedPnt, nodes, m_nodeStore ), CheckNodeAt( ind[2], usedPnt, nodes, m_nodeStore ), nullptr, nullptr, nullptr );
+                        }
                         face->debugFlag = true;
-                        moreThanTwoTriPerEdge++;
+                        m_BadFaces.push_back( face );
                     }
-                }
-
-                faceVec.push_back( face );
-
-                if ( face->debugFlag )
-                {
-                    m_BadFaces.push_back( face );
+                    iface++;
                 }
             }
-        }
-    }
-
-    //==== Find Border Edges ====//
-    int num_border_edges = 0;
-    unordered_map<int, vector<Edge*> >::const_iterator iter;
-    for ( iter = edgeMap.begin() ; iter != edgeMap.end() ; ++iter )
-    {
-        for ( int i = 0 ; i < ( int )iter->second.size() ; i++ )
-        {
-            Edge* e = iter->second[i];
-            if ( !( e->f0 && e->f1 ) )
-            {
-                m_BadEdges.push_back( e );
-                e->debugFlag = true;
-                num_border_edges++;
-            }
-
-        }
-    }
-
-    //==== Clean Up ====//
-    for ( iter = edgeMap.begin() ; iter != edgeMap.end() ; ++iter )
-    {
-        for ( int i = 0 ; i < ( int )iter->second.size() ; i++ )
-        {
-            if ( ! iter->second[i]->debugFlag )
-            {
-                delete iter->second[i];
-            }
-        }
-    }
-    for ( int i = 0 ; i < ( int )faceVec.size() ; i++ )
-    {
-        if ( ! faceVec[i]->debugFlag )
-        {
-            delete faceVec[i];
         }
     }
 
@@ -4575,32 +4684,6 @@ string CfdMeshMgrSingleton::CheckWaterTight()
 
     return string( resultStr );
 
-}
-
-Edge* CfdMeshMgrSingleton::FindAddEdge( unordered_map< int, vector<Edge*> > & edgeMap, vector< Node* > & nodeVec, int ind1, int ind2 )
-{
-    Edge* e = nullptr;
-    unordered_map<int, vector<Edge*> >::const_iterator iter;
-    int combind = ind1 + ind2;
-    iter = edgeMap.find( combind );
-
-    if ( iter != edgeMap.end() )    // Found Edge Vec so Check
-    {
-        const vector<Edge*> &eVec = iter->second;
-        for ( int i = 0 ; i < ( int )eVec.size() ; i++ )
-        {
-            if ( eVec[i]->ContainsNodes( nodeVec[ind1], nodeVec[ind2] ) )
-            {
-                return eVec[i];
-            }
-        }
-    }
-
-    //==== No Edge Found so Create
-    e = new Edge( nodeVec[ind1], nodeVec[ind2] );
-    edgeMap[combind].push_back( e );
-
-    return e;
 }
 
 vector< Surf* > CfdMeshMgrSingleton::CreateDomainSurfs()
@@ -4871,6 +4954,7 @@ void CfdMeshMgrSingleton::TessellateChains()
         {
             vector< double > u = ( *c )->GetWakeAttachChain()->m_ACurve.GetUTessPnts();
             ( *c )->m_ACurve.Tesselate( u ); // Copy tessellation from matching chain.
+            ( *c )->m_ACurve.CleanupDistTable();
             ( *c )->TransferTess();
             ( *c )->ApplyTess( this );
         }
@@ -5217,7 +5301,7 @@ void CfdMeshMgrSingleton::MergeCoincidentTessPnts()
     list< ISegChain* >::iterator c;
     for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
     {
-        deque< IPnt* > &tv = ( *c )->m_TessVec;
+        vector< IPnt* > &tv = ( *c )->m_TessVec;
         for ( int j = 0 ; j < ( int )tv.size() ; j += 2 )
         {
             if ( !cloudIndex.count( tv[j] ) )
@@ -5324,7 +5408,7 @@ void CfdMeshMgrSingleton::MergeCoincidentTessPnts()
 
     for ( c = m_ISegChainList.begin() ; c != m_ISegChainList.end(); ++c )
     {
-        deque< IPnt* > &tv = ( *c )->m_TessVec;
+        vector< IPnt* > &tv = ( *c )->m_TessVec;
         for ( int j = 0 ; j < ( int )tv.size() ; j += 2 )
         {
             std::unordered_map< IPnt*, IPnt* >::iterator mit = mergedOf.find( tv[j] );
@@ -5575,34 +5659,32 @@ void CfdMeshMgrSingleton::RunRayCastStage( const string &label, int n,
 // One surface's share of the interior/exterior test.  It casts a ray from each of its own
 // triangles against every other surface and writes the verdict onto its own faces, so the
 // surfaces are independent of each other here.
-void CfdMeshMgrSingleton::RemoveInteriorTrisOneSurf( int s, double x_dist )
+// Face k of surface s is inside component c where inside[ k * ncross + c ], and count holds the
+// votes of its neighbours the same way.
+void CfdMeshMgrSingleton::RemoveInteriorTrisOneSurf( int s, double x_dist, int ncross, vector< bool > &inside, vector< int > &count )
 {
     int s_comp_id = m_SurfVec[s]->GetCompID();
 
     // A reference.  The list is only walked here, and copying it would copy a node per triangle.
     const list <Face*> &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
 
+    inside.assign( faceList.size() * ncross, false );
+    count.assign( faceList.size() * ncross, 0 );
+
     // Built once and emptied per triangle.  It is a vector of vectors as wide as the model has
     // components.
-    int ncross = m_NumComps + 6;
-
-    if ( GetSettingsPtr()->m_SymSplittingOnFlag )
-    {
-        ncross = m_NumComps + 10;   // room for the outer domain and the symmetry plane
-    }
-
     vector< vector< double > > t_vec_vec( ncross );
 
+    int k = 0;
     list< Face* >::const_iterator f;
-    for ( f = faceList.begin() ; f != faceList.end(); ++f ) // every triangle
+    for ( f = faceList.begin() ; f != faceList.end(); ++f, ++k ) // every triangle
     {
+        ( *f )->m_Index = k;
+
         for ( int i = 0 ; i < ncross ; i++ )
         {
             t_vec_vec[i].clear();
         }
-
-        ( *f )->insideSurf.resize( ncross );
-        ( *f )->insideCount.resize( ncross );
 
         vec3d cp = ( *f )->ComputeCenterPnt( m_SurfVec[s] );
         vec3d ep = cp + vec3d( x_dist, 1.0e-4, 1.0e-4 );
@@ -5637,14 +5719,14 @@ void CfdMeshMgrSingleton::RemoveInteriorTrisOneSurf( int s, double x_dist )
         {
             int c = m_SurfVec[i]->GetCompID();
 
-            if ( c >= 0 && c < ( *f )->insideSurf.size() )
+            if ( c >= 0 && c < ncross )
             {
                 if ( m_SurfVec[s]->GetSymPlaneFlag() && m_SurfVec[i]->GetFarFlag() &&
                      GetSettingsPtr()->m_FarCompFlag )
                 {
                     if ( ( int )( t_vec_vec[c].size() + 1 ) % 2 == 1 ) // +1 Reverse action on sym plane wrt outer boundary.
                     {
-                        ( *f )->insideSurf[c] = true;
+                        inside[ k * ncross + c ] = true;
                     }
                 }
                 else
@@ -5652,7 +5734,7 @@ void CfdMeshMgrSingleton::RemoveInteriorTrisOneSurf( int s, double x_dist )
 
                     if ( ( int )t_vec_vec[c].size() % 2 == 1)
                     {
-                        ( *f )->insideSurf[c] = true;
+                        inside[ k * ncross + c ] = true;
                     }
                 }
             }
@@ -5670,18 +5752,18 @@ void CfdMeshMgrSingleton::RemoveInteriorTrisOneSurf( int s, double x_dist )
         for ( int i = 0 ; i < ( int )m_SurfVec.size() ; ++i )
         {
             int c = m_SurfVec[i]->GetCompID();
-            if ( c >= 0 && c < ( *f )->insideSurf.size() )
+            if ( c >= 0 && c < ncross )
             {
 
                 for ( sf = faceSet.begin() ; sf != faceSet.end() ; ++sf )
                 {
-                    if ( ( *f )->insideSurf[c] )
+                    if ( inside[ ( *f )->m_Index * ncross + c ] )
                     {
-                        ( *sf )->insideCount[c]++;
+                        count[ ( *sf )->m_Index * ncross + c ]++;
                     }
                     else
                     {
-                        ( *sf )->insideCount[c]--;
+                        count[ ( *sf )->m_Index * ncross + c ]--;
                     }
                 }
             }
@@ -5702,10 +5784,21 @@ void CfdMeshMgrSingleton::RemoveInteriorTris()
     }
     double x_dist = 1.0 + big_box.GetMax( 0 ) - big_box.GetMin( 0 );
 
+    int ncross = m_NumComps + 6;
+
+    if ( GetSettingsPtr()->m_SymSplittingOnFlag )
+    {
+        ncross = m_NumComps + 10;   // room for the outer domain and the symmetry plane
+    }
+
+    // Each surface's inside flags and neighbour votes, held only while they are worked out
+    vector< vector< bool > > inside( m_SurfVec.size() );
+    vector< vector< int > > count( m_SurfVec.size() );
+
     //==== Count Number of Component Crossings for Each Component =====//
     RunRayCastStage( "Inside/outside", ( int )m_SurfVec.size(), [&]( int is )
     {
-        RemoveInteriorTrisOneSurf( is, x_dist );
+        RemoveInteriorTrisOneSurf( is, x_dist, ncross, inside[is], count[is] );
     } );
 
     list< Face* >::const_iterator f;
@@ -5716,20 +5809,21 @@ void CfdMeshMgrSingleton::RemoveInteriorTris()
         const list <Face*> &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
         for ( f = faceList.begin() ; f != faceList.end(); ++f )
         {
+            int k = ( *f )->m_Index;
             for ( int i = 0 ; i < ( int )m_SurfVec.size() ; ++i )
             {
                 int c = m_SurfVec[i]->GetCompID();
 
-                if ( c >= 0 && c < ( *f )->insideSurf.size() )
+                if ( c >= 0 && c < ncross )
                 {
 
-                    if (( *f )->insideCount[c] > 0 )
+                    if ( count[s][ k * ncross + c ] > 0 )
                     {
-                        ( *f )->insideSurf[c] = true;
+                        inside[s][ k * ncross + c ] = true;
                     }
-                    else if (( *f )->insideCount[c] < 0 )
+                    else if ( count[s][ k * ncross + c ] < 0 )
                     {
-                        ( *f )->insideSurf[c] = false;
+                        inside[s][ k * ncross + c ] = false;
                     }
                     else // Can't determine if Tri is inside or outside based on neighbor votes
                     {
@@ -5741,6 +5835,7 @@ void CfdMeshMgrSingleton::RemoveInteriorTris()
         }
     }
 
+    vector< bool > faceinside( ncross );
     for ( int a = 0 ; a < ( int )m_SurfVec.size() ; a++ )
     {
         const list< Face * > &faceList = m_SurfVec[ a ]->GetMesh()->GetFaceList();
@@ -5753,9 +5848,17 @@ void CfdMeshMgrSingleton::RemoveInteriorTris()
             }
             else
             {
-                ( *f )->deleteFlag = SetDeleteTriFlag( m_SurfVec[a]->GetSurfaceCfdType(), m_SurfVec[a]->GetSymPlaneFlag(), ( *f )->insideSurf );
+                int k = ( *f )->m_Index;
+                for ( int c = 0 ; c < ncross ; c++ )
+                {
+                    faceinside[c] = inside[a][ k * ncross + c ];
+                }
+                ( *f )->deleteFlag = SetDeleteTriFlag( m_SurfVec[a]->GetSurfaceCfdType(), m_SurfVec[a]->GetSymPlaneFlag(), faceinside );
             }
         }
+
+        vector< bool >().swap( inside[a] );
+        vector< int >().swap( count[a] );
     }
 
     //==== Check For Half Mesh ====//
@@ -5844,7 +5947,7 @@ void CfdMeshMgrSingleton::MatchBorderNodes( const vector< Node* > & nodeVec )
 
     double tol = PT_MERGE_TOL;
     //==== Use NanoFlann to Find Close Points and Group ====//
-    IndexPntNodes( pnCloud, tol );
+    IndexPntNodes( pnCloud, tol, true );
 
     for ( int i = 0; i < ptVec.size(); i++ )
     {
@@ -6065,11 +6168,11 @@ void CfdMeshMgrSingleton::UpdateDrawObjs()
 
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
-        vector< vec3d > pVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
-        vector < SimpFace > fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+        const vector< vec3d >& pVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
+        const vector< SimpFace >& fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
         for ( int f = 0 ; f < ( int ) fVec.size() ; f++ )
         {
-            SimpFace* sface = &fVec[f];
+            const SimpFace* sface = &fVec[f];
 
             if ( sface->m_reason >= 0 && sface->m_reason < num_reason )
             {
@@ -6131,11 +6234,11 @@ void CfdMeshMgrSingleton::UpdateDrawObjs()
 
     for ( int i = 0 ; i < ( int )m_SurfVec.size() ; i++ )
     {
-        vector< vec3d > pVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
-        vector < SimpFace > fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+        const vector< vec3d >& pVec = m_SurfVec[i]->GetMesh()->GetSimpPntVec();
+        const vector< SimpFace >& fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
         for ( int f = 0 ; f < ( int ) fVec.size() ; f++ )
         {
-            SimpFace* sface = &fVec[f];
+            const SimpFace* sface = &fVec[f];
             if ( sface->m_isQuad )
             {
                 dmit = tag_quad_dobj_map.find( SubSurfaceMgr.GetTag( sface->m_Tags ) );
@@ -6191,10 +6294,10 @@ void CfdMeshMgrSingleton::UpdateDrawObjs()
         ISegChain* dchain = m_DegenCornerChains[i];
 
         // Add points
-        for ( int j = 0; j < dchain->m_ISegDeque.size(); j++ )
+        for ( int j = 0; j < dchain->m_ISegVec.size(); j++ )
         {
-            m_DegenCornerPointDO.m_PntVec.push_back( dchain->m_ISegDeque[j]->m_IPnt[0]->m_Pnt );
-            m_DegenCornerPointDO.m_PntVec.push_back( dchain->m_ISegDeque[j]->m_IPnt[1]->m_Pnt );
+            m_DegenCornerPointDO.m_PntVec.push_back( dchain->m_ISegVec[j]->m_IPnt[0]->m_Pnt );
+            m_DegenCornerPointDO.m_PntVec.push_back( dchain->m_ISegVec[j]->m_IPnt[1]->m_Pnt );
         }
 
         for ( int j = 0; j < dchain->m_TessVec.size() - 1; j++ )
@@ -6551,10 +6654,10 @@ void CfdMeshMgrSingleton::LoadDrawObjs( vector< DrawObj* > &draw_obj_vec )
 
         if ( m_SurfVec[ i ]->GetWakeFlag() )
         {
-            vector < SimpFace > fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+            const vector< SimpFace >& fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
             if ( fVec.size() > 0 )
             {
-                SimpFace *sface = &fVec[ 0 ];
+                const SimpFace *sface = &fVec[ 0 ];
 
                 dmit = tag_tri_dobj_map.find( SubSurfaceMgr.GetTag( sface->m_Tags ) );
                 obj = dmit->second;
@@ -6567,10 +6670,10 @@ void CfdMeshMgrSingleton::LoadDrawObjs( vector< DrawObj* > &draw_obj_vec )
         }
         else if ( m_SurfVec[ i ]->GetFarFlag() )
         {
-            vector < SimpFace > fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+            const vector< SimpFace >& fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
             if ( fVec.size() > 0 )
             {
-                SimpFace *sface = &fVec[ 0 ];
+                const SimpFace *sface = &fVec[ 0 ];
 
                 dmit = tag_tri_dobj_map.find( SubSurfaceMgr.GetTag( sface->m_Tags ) );
                 obj = dmit->second;
@@ -6583,10 +6686,10 @@ void CfdMeshMgrSingleton::LoadDrawObjs( vector< DrawObj* > &draw_obj_vec )
         }
         else if ( m_SurfVec[ i ]->GetSymPlaneFlag() )
         {
-            vector < SimpFace > fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
+            const vector< SimpFace >& fVec = m_SurfVec[ i ]->GetMesh()->GetSimpFaceVec();
             if ( fVec.size() > 0 )
             {
-                SimpFace *sface = &fVec[ 0 ];
+                const SimpFace *sface = &fVec[ 0 ];
 
                 dmit = tag_tri_dobj_map.find( SubSurfaceMgr.GetTag( sface->m_Tags ) );
                 obj = dmit->second;
@@ -6919,71 +7022,10 @@ void CfdMeshMgrSingleton::SetSimpSubSurfTags( int tag_offset )
     }
 }
 
-// How good a face is, by the two measures the mesher can be judged on.
-//
-// The smallest angle says whether it is a usable triangle.  The mean edge length over the
-// target length says whether it is the size that was asked for -- which the angle cannot
-// say, because a triangle can be a perfect equilateral at twice the size it should be.
-void CfdMeshMgrSingleton::SetFaceQuality( SimpFace &face, const vector< vec3d > &xyz, double tgt )
-{
-    int n = 3;
-    int ind[4] = { face.ind0, face.ind1, face.ind2, face.ind3 };
-
-    if ( face.m_isQuad )
-    {
-        n = 4;
-    }
-
-    double lsum = 0.0;
-    double mincos = -1.0;
-
-    for ( int i = 0 ; i < n ; i++ )
-    {
-        const vec3d &a = xyz[ ind[ ( i + n - 1 ) % n ] ];
-        const vec3d &b = xyz[ ind[i] ];
-        const vec3d &c = xyz[ ind[ ( i + 1 ) % n ] ];
-
-        double lab = dist( a, b );
-        double lbc = dist( b, c );
-
-        lsum += lbc;
-
-        if ( lab > 0.0 && lbc > 0.0 )
-        {
-            // Cosine of the corner at b.  The largest cosine is the smallest angle.
-            double cosb = dot( a - b, c - b ) / ( lab * lbc );
-
-            if ( cosb > mincos )
-            {
-                mincos = cosb;
-            }
-        }
-    }
-
-    if ( mincos > 1.0 )
-    {
-        mincos = 1.0;
-    }
-    if ( mincos < -1.0 )
-    {
-        mincos = -1.0;
-    }
-
-    face.m_MinAngle = acos( mincos ) * 180.0 / M_PI;
-
-    face.m_TargetLen = tgt;
-
-    if ( tgt > 0.0 )
-    {
-        face.m_LenRatio = ( lsum / ( double )n ) / tgt;
-    }
-}
-
 void CfdMeshMgrSingleton::Subtag( Surf* surf, std::set< std::vector< int > > &combo )
 {
     vector< SimpFace >& face_vec = surf->GetMesh()->GetSimpFaceVec();
     const vector< vec2d >& pnts = surf->GetMesh()->GetSimpUWPntVec();
-    const vector< vec3d >& xyz = surf->GetMesh()->GetSimpPntVec();
     vector< SimpleSubSurface > simp_s_surfs = GetSimpSubSurfs( surf->GetGeomID(), surf->GetMainSurfID() , surf->GetCompID() );
 
     for ( int f = 0; f < (int)face_vec.size(); f++ )
@@ -7000,11 +7042,9 @@ void CfdMeshMgrSingleton::Subtag( Surf* surf, std::set< std::vector< int > > &co
             center = ( pnts[face.ind0] + pnts[face.ind1] + pnts[face.ind2] ) * 1 / 3.0;
         }
 
-        double tgt = surf->InterpTargetMap( center.x(), center.y(), face.m_reason );
-
-        // The two quality measures, taken here because this is already a pass over every
-        // face and the target length at its centre is already being asked for.
-        SetFaceQuality( face, xyz, tgt );
+        // Sets the reason the target length at the face's centre is what it is, which the mesh
+        // is colored by.
+        surf->InterpTargetMap( center.x(), center.y(), face.m_reason );
 
         // The centre is in this patch's parameters.  Subsurfaces are drawn in the Geom's,
         // so a patch built from two pieces of the surface has to say which piece this face
@@ -7042,19 +7082,19 @@ void CfdMeshMgrSingleton::FindDegenCorners()
                     if (((( *c )->m_SurfA == ( *d )->m_SurfA ) || (( *c )->m_SurfA == ( *d )->m_SurfB )) &&
                         ((( *c )->m_SurfB == ( *d )->m_SurfA ) || (( *c )->m_SurfB == ( *d )->m_SurfB )))
                     {
-                        ISeg* frontSegC = ( *c )->m_ISegDeque.front();
+                        ISeg* frontSegC = ( *c )->m_ISegVec.front();
                         frontSegC->m_IPnt[0]->CompPnt();
                         vec3d pC0 = frontSegC->m_IPnt[0]->m_Pnt;
 
-                        ISeg* frontSegD = ( *d )->m_ISegDeque.front();
+                        ISeg* frontSegD = ( *d )->m_ISegVec.front();
                         frontSegD->m_IPnt[0]->CompPnt();
                         vec3d pD0 = frontSegD->m_IPnt[0]->m_Pnt;
 
-                        ISeg* backSegC = ( *c )->m_ISegDeque.back();
+                        ISeg* backSegC = ( *c )->m_ISegVec.back();
                         backSegC->m_IPnt[1]->CompPnt();
                         vec3d pC1 = backSegC->m_IPnt[1]->m_Pnt;
 
-                        ISeg* backSegD = ( *d )->m_ISegDeque.back();
+                        ISeg* backSegD = ( *d )->m_ISegVec.back();
                         backSegD->m_IPnt[1]->CompPnt();
                         vec3d pD1 = backSegD->m_IPnt[1]->m_Pnt;
 
@@ -7151,7 +7191,7 @@ void CfdMeshMgrSingleton::AddDegenCornerChains()
             ISegChain* chain = new ISegChain;           // Create New Chain
             chain->m_SurfA = s;
             chain->m_SurfB = s;
-            chain->m_ISegDeque.push_back( seg1 );
+            chain->m_ISegVec.push_back( seg1 );
 
             chain->m_BorderFlag = false;
 

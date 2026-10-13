@@ -254,6 +254,53 @@ def testASectionCopiedAgainAndAgainPastesOneCopyOfItsAttributes():
     pop_errors()
 
 
+def testAttributesFoundByNameComeInAStableOrder():
+    """FindAttributesByName returns its matches sorted by name, and FindAttributeByName indexes that order."""
+    fresh()
+    for i in range( 12 ):
+        pod = vsp.AddGeom( "POD" )
+        vsp.AddAttributeDouble( vsp.GetChildCollection( pod ), "Weight %02d" % ( 11 - i ), float( i ) )
+    vsp.Update()
+    found = list( vsp.FindAttributesByName( "Weight" ) )
+    names = [ vsp.GetAttributeName( a ) for a in found ]
+    assert names == sorted( names ), names
+    for i, attr in enumerate( found ):
+        assert vsp.FindAttributeByName( "Weight", i ) == attr
+
+
+def testListingAMissingCollectionIsAnError():
+    vsp.VSPRenew()
+    pop_errors()
+    vsp.FindAttributesInCollection( "no such collection" )
+    assert pop_errors(), "FindAttributesInCollection accepted a missing collection"
+    vsp.FindAttributeNamesInCollection( "no such collection" )
+    assert pop_errors(), "FindAttributeNamesInCollection accepted a missing collection"
+
+
+def testPastingAttributesOntoAnUnknownIDPastesNothing():
+    vsp.VSPRenew()
+    pod = vsp.AddGeom( "POD" )
+    attr = vsp.AddAttributeString( vsp.GetChildCollection( pod ), "Supplier", "Acme" )
+    vsp.CopyAttribute( attr )
+
+    assert len( vsp.PasteAttribute( "BADID" ) ) == 0
+
+    mgr = vsp.ErrorMgrSingleton.getInstance()
+    while mgr.GetNumTotalErrors() > 0:
+        mgr.PopLastError()
+
+
+def testASetCollectionPastTheLastUserSetIsRefused():
+    vsp.VSPRenew()
+    n_user = vsp.GetNumSets() - vsp.SET_FIRST_USER
+    assert vsp.GetGeomSetCollection( n_user - 1 ) != ""
+
+    assert vsp.GetGeomSetCollection( n_user ) == ""
+
+    mgr = vsp.ErrorMgrSingleton.getInstance()
+    while mgr.GetNumTotalErrors() > 0:
+        mgr.PopLastError()
+
 if __name__ == "__main__":
     for name, fn in sorted( list( globals().items() ) ):
         if name.startswith( "test" ) and callable( fn ):

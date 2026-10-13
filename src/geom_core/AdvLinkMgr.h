@@ -12,10 +12,8 @@
 #define ADVLINKMGR__INCLUDED_
 
 #include "AdvLink.h"
-#include <deque>
 using std::string;
 using std::vector;
-using std::deque;
 
 
 //==== Adv Link Manager ====//
@@ -60,6 +58,7 @@ public:
     vector< string > GetLinkNames();
 
     bool DuplicateLinkName( const string & name );
+    bool SetLinkName( AdvLink* link_ptr, const string & name );
 
     xmlNodePtr EncodeXml( xmlNodePtr & node );
     xmlNodePtr DecodeXml( xmlNodePtr & node );

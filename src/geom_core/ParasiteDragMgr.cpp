@@ -16,6 +16,7 @@
 #include "WingGeom.h"
 #include "ParasiteDragMgr.h"
 #include "ModeMgr.h"
+#include "StringUtil.h"
 
 #include <numeric>
 
@@ -32,7 +33,6 @@ ParasiteDragMgrSingleton::ParasiteDragMgrSingleton() : ParmContainer()
     m_RefGeomID = "";
     m_ModeID = "";
     m_CurrentExcresIndex = -1;
-    m_CompGeomResults = nullptr;
 
     // ==== Parm Initialize and Description Setting ==== //
     // Reference Qualities Parms
@@ -49,7 +49,7 @@ ParasiteDragMgrSingleton::ParasiteDragMgrSingleton() : ParmContainer()
     m_LamCfEqnType.SetDescript( "Laminar Cf Equation Choice" );
 
     m_TurbCfEqnType.Init( "TurbCfEqnType", groupname, this, m_TurbTypeDefault, vsp::CF_TURB_EXPLICIT_FIT_SPALDING,
-                          vsp::CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH );
+                          vsp::DO_NOT_USE_CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH );
     m_TurbCfEqnType.SetDescript( "Turbulent Cf Equation Choice" );
 
     m_AltLengthUnit.Init( "AltLengthUnit", groupname, this, vsp::PD_UNITS_IMPERIAL, vsp::PD_UNITS_IMPERIAL, vsp::PD_UNITS_METRIC );
@@ -60,6 +60,9 @@ ParasiteDragMgrSingleton::ParasiteDragMgrSingleton() : ParmContainer()
 
     m_TempUnit.Init( "TempUnit", groupname, this, vsp::TEMP_UNIT_F, vsp::TEMP_UNIT_K, vsp::TEMP_UNIT_R );
     m_TempUnit.SetDescript( "Temperature Units" );
+
+    m_PresUnit.Init( "PresUnit", groupname, this, vsp::PRES_UNIT_PSF, vsp::PRES_UNIT_PSF, vsp::PRES_UNIT_ATM );
+    m_PresUnit.SetDescript( "Pressure Units" );
 
     // Air Qualities Parms
     m_FreestreamType.Init( "FreestreamType", groupname, this, vsp::ATMOS_TYPE_US_STANDARD_1976,
@@ -128,7 +131,8 @@ ParasiteDragMgrSingleton::ParasiteDragMgrSingleton() : ParmContainer()
                   vsp::DO_NOT_USE_CF_TURB_SCHULTZ_GRUNOW_HIGH_RE,
                   vsp::DO_NOT_USE_CF_TURB_WHITE_CHRISTOPH_COMPRESSIBLE,
                   vsp::DO_NOT_USE_CF_TURB_ROUGHNESS_SCHLICHTING_LOCAL,
-                  vsp::DO_NOT_USE_CF_TURB_ROUGHNESS_WHITE };
+                  vsp::DO_NOT_USE_CF_TURB_ROUGHNESS_WHITE,
+                  vsp::DO_NOT_USE_CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH };
     m_TurbBlackList.insert( m_TurbBlackList.begin(), tmp, &tmp[ sizeof( tmp ) / sizeof( *tmp ) ] );
 
     // Populate list of alternate equations for black-listed ones.
@@ -138,7 +142,8 @@ ParasiteDragMgrSingleton::ParasiteDragMgrSingleton() : ParmContainer()
                    vsp::CF_TURB_SCHULTZ_GRUNOW_SCHOENHERR,
                    m_TurbTypeDefault,
                    m_TurbTypeDefault,
-                   vsp::CF_TURB_ROUGHNESS_SCHLICHTING_AVG };
+                   vsp::CF_TURB_ROUGHNESS_SCHLICHTING_AVG,
+                   m_TurbTypeDefault };
     m_TurbAlternateList.insert( m_TurbAlternateList.begin(), tmp2, &tmp2[ sizeof( tmp2 ) / sizeof( *tmp2 ) ] );
 
 }
@@ -151,8 +156,8 @@ void ParasiteDragMgrSingleton::Renew()
     m_TableRowVec.clear();
     m_ExcresRowVec.clear();
 
-    m_DegenGeomVec.clear();
-    m_CompGeomResults = nullptr;
+    SetDegenGeomVec( vector < DegenGeom > () );
+    m_TagWetAreaMap.clear();
 
     SetDefaultStruct();
 
@@ -189,6 +194,7 @@ void ParasiteDragMgrSingleton::SetDefaultStruct()
     m_DefaultStruct.PercTotalCD = -1;
     m_DefaultStruct.SurfNum = 0;
     m_DefaultStruct.GroupedAncestorGen = 0;
+    m_DefaultStruct.Grouped = false;
     m_DefaultStruct.ExpandedList = false;
 }
 
@@ -217,12 +223,38 @@ void ParasiteDragMgrSingleton::InitTableVec()
     }
 }
 
+//==== A disk, or a surface CFD sees through (a prop disk, a gear's ground plane), has no skin ====//
+static bool NoWettedArea( Geom* geom, int isurf )
+{
+    if ( geom->GetSurfType( isurf ) == vsp::DISK_SURF )
+    {
+        return true;
+    }
+    const VspSurf* surf = geom->GetSurfPtr( isurf );
+    return surf && surf->GetSurfCfdType() == vsp::CFD_TRANSPARENT;
+}
+
+//==== The first surface with wetted area, whose DegenGeom gives a Geom its references ====//
+static int FirstAreaSurf( Geom* geom )
+{
+    for ( int j = 0; j < geom->GetNumTotalSurfs(); j++ )
+    {
+        if ( !NoWettedArea( geom, j ) )
+        {
+            return j;
+        }
+    }
+    return 0;
+}
+
 void ParasiteDragMgrSingleton::LoadMainTableUserInputs()
 {
     Geom* geom;
     char str[256];
     string lastGeomID = "";
     string lastSSID = "";
+    int igeom = 0;
+    int issmaster = 0;
     Vehicle *veh = VehicleMgr.GetVehicle();
 
     if ( !veh )
@@ -235,24 +267,30 @@ void ParasiteDragMgrSingleton::LoadMainTableUserInputs()
         geom = veh->FindGeom( m_PDGeomIDVec[i] );
         if ( geom )
         {
+            // A Clone may use its original's drag settings
+            Geom* dragGeom = geom->GetParasiteDragGeom();
+
             if ( geom->GetID().compare( lastGeomID ) != 0 )
             {
-                // Create Master Geom Row
+                // Create Master Geom Row, typed by the surface its DegenGeom comes from
+                int iref = FirstAreaSurf( geom );
+                igeom = m_geo_masterRow.size();
+                m_geo_sourceRow.push_back( igeom );
                 m_geo_masterRow.push_back( true );
                 m_geo_name.push_back( geom->GetName() );
                 m_geo_groupedAncestorGen.push_back( geom->m_GroupedAncestorGen() );
-                m_geo_percLam.push_back( geom->m_PercLam() );
-                m_geo_ffIn.push_back( geom->m_FFUser() );
-                m_geo_Q.push_back( geom->m_Q() );
-                m_geo_Roughness.push_back( geom->m_Roughness() );
-                m_geo_TeTwRatio.push_back( geom->m_TeTwRatio() );
-                m_geo_TawTwRatio.push_back( geom->m_TawTwRatio() );
+                m_geo_percLam.push_back( dragGeom->m_PercLam() );
+                m_geo_ffIn.push_back( dragGeom->m_FFUser() );
+                m_geo_Q.push_back( dragGeom->m_Q() );
+                m_geo_Roughness.push_back( dragGeom->m_Roughness() );
+                m_geo_TeTwRatio.push_back( dragGeom->m_TeTwRatio() );
+                m_geo_TawTwRatio.push_back( dragGeom->m_TawTwRatio() );
                 m_geo_surfNum.push_back( 0 );
                 m_geo_expandedList.push_back( geom->m_ExpandedListFlag() );
 
                 if ( geom->GetBehaviorType() == CUSTOM_GEOM_TYPE )
                 {
-                    if ( geom->GetSurfType(0) == vsp::NORMAL_SURF )
+                    if ( geom->GetSurfType( iref ) == vsp::NORMAL_SURF )
                     {
                         snprintf( str, sizeof( str ),  "[B] %s", geom->GetName().c_str() );
                     }
@@ -266,15 +304,16 @@ void ParasiteDragMgrSingleton::LoadMainTableUserInputs()
                     snprintf( str, sizeof( str ),  "%s", geom->GetName().c_str() );
                 }
 
-                m_geo_shapeType.push_back( geom->GetSurfType(0) ); // Form Factor Shape Type
+                m_geo_shapeType.push_back( geom->GetSurfType( iref ) ); // Form Factor Shape Type
+                m_geo_noArea.push_back( false );
 
-                if ( geom->GetSurfType(0) == vsp::NORMAL_SURF )
+                if ( geom->GetSurfType( iref ) == vsp::NORMAL_SURF )
                 {
-                    m_geo_ffType.push_back( geom->m_FFBodyEqnType() );
+                    m_geo_ffType.push_back( dragGeom->m_FFBodyEqnType() );
                 }
                 else
                 {
-                    m_geo_ffType.push_back( geom->m_FFWingEqnType() );
+                    m_geo_ffType.push_back( dragGeom->m_FFWingEqnType() );
                 }
                 m_geo_geomID.push_back( geom->GetID() );
                 m_geo_subsurfID.push_back( "" );
@@ -292,6 +331,7 @@ void ParasiteDragMgrSingleton::LoadMainTableUserInputs()
                     // Custom Geom Check: if surf type is the same, apply same qualities
                     if ( j > 0 && geom->GetSurfType(j) == geom->GetSurfType(j - 1) )
                     {
+                        m_geo_sourceRow.push_back( igeom );
                         m_geo_masterRow.push_back( false );
                         m_geo_name.push_back( geom->GetName() );
                         m_geo_groupedAncestorGen.push_back( geom->m_GroupedAncestorGen() );
@@ -322,8 +362,9 @@ void ParasiteDragMgrSingleton::LoadMainTableUserInputs()
                         else
                         {
                             snprintf( str, sizeof( str ),  "%s_%i", geom->GetName().c_str(), j );
-                            m_geo_surfNum.push_back( 0 );
+                            m_geo_surfNum.push_back( j );
                         }
+                        m_geo_sourceRow.push_back( igeom );
                         m_geo_masterRow.push_back( false );
                         m_geo_name.push_back( geom->GetName() );
                         m_geo_groupedAncestorGen.push_back( geom->m_GroupedAncestorGen() );
@@ -337,14 +378,15 @@ void ParasiteDragMgrSingleton::LoadMainTableUserInputs()
                     }
 
                     m_geo_shapeType.push_back( geom->GetSurfType(j) ); // Form Factor Shape Type
+                    m_geo_noArea.push_back( NoWettedArea( geom, j ) );
 
                     if ( geom->GetSurfType(j) == vsp::NORMAL_SURF )
                     {
-                        m_geo_ffType.push_back( geom->m_FFBodyEqnType() );
+                        m_geo_ffType.push_back( dragGeom->m_FFBodyEqnType() );
                     }
                     else
                     {
-                        m_geo_ffType.push_back( geom->m_FFWingEqnType() );
+                        m_geo_ffType.push_back( dragGeom->m_FFWingEqnType() );
                     }
                     m_geo_geomID.push_back( geom->GetID() );
                     m_geo_subsurfID.push_back( "" );
@@ -361,12 +403,23 @@ void ParasiteDragMgrSingleton::LoadMainTableUserInputs()
                     {
                         if ( surf->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT && lastSSID.compare( surf->GetID() ) != 0 )
                         {
+                            issmaster = m_geo_masterRow.size();
+                            m_geo_sourceRow.push_back( issmaster );
                             m_geo_masterRow.push_back( true );
                             m_geo_name.push_back( surf->GetName() );
                             m_geo_percLam.push_back( surf->m_PercLam() );
                             m_geo_ffIn.push_back( surf->m_FFUser() );
                             m_geo_Q.push_back( surf->m_Q() );
-                            m_geo_Roughness.push_back( surf->m_Roughness() );
+
+                            // A subsurface's roughness defaults to -1, unset: use its Geom's
+                            if ( surf->m_Roughness() < 0 )
+                            {
+                                m_geo_Roughness.push_back( dragGeom->m_Roughness() );
+                            }
+                            else
+                            {
+                                m_geo_Roughness.push_back( surf->m_Roughness() );
+                            }
                             m_geo_TeTwRatio.push_back( surf->m_TeTwRatio() );
                             m_geo_TawTwRatio.push_back( surf->m_TawTwRatio() );
                             if ( geom->GetSurfType(k) == vsp::NORMAL_SURF )
@@ -380,16 +433,27 @@ void ParasiteDragMgrSingleton::LoadMainTableUserInputs()
                         }
                         else
                         {
+                            // A Separate subsurface's surfaces follow its row, any other its Geom's
+                            int isrc = igeom;
+                            if ( surf->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT )
+                            {
+                                isrc = issmaster;
+                            }
+                            m_geo_sourceRow.push_back( isrc );
                             m_geo_masterRow.push_back( false );
                             m_geo_name.push_back( surf->GetName() );
-                            m_geo_percLam.push_back( m_geo_percLam[m_geo_percLam.size() - 1] );
-                            m_geo_ffIn.push_back( m_geo_ffIn[m_geo_ffIn.size() - 1] );
-                            m_geo_Q.push_back( m_geo_Q[m_geo_Q.size() - 1] );
-                            m_geo_Roughness.push_back( m_geo_Roughness[m_geo_Roughness.size() - 1] );
-                            m_geo_TeTwRatio.push_back( m_geo_TeTwRatio[m_geo_TeTwRatio.size() - 1] );
-                            m_geo_TawTwRatio.push_back( m_geo_TawTwRatio[m_geo_TawTwRatio.size() - 1] );
+                            m_geo_percLam.push_back( m_geo_percLam[isrc] );
+                            m_geo_ffIn.push_back( m_geo_ffIn[isrc] );
+                            m_geo_Q.push_back( m_geo_Q[isrc] );
+                            m_geo_Roughness.push_back( m_geo_Roughness[isrc] );
+                            m_geo_TeTwRatio.push_back( m_geo_TeTwRatio[isrc] );
+                            m_geo_TawTwRatio.push_back( m_geo_TawTwRatio[isrc] );
 
-                            if ( geom->GetSurfType(k) == vsp::NORMAL_SURF )
+                            if ( isrc == igeom )
+                            {
+                                m_geo_ffType.push_back( m_geo_ffType[igeom] );
+                            }
+                            else if ( geom->GetSurfType(k) == vsp::NORMAL_SURF )
                             {
                                 m_geo_ffType.push_back( surf->m_FFBodyEqnType() );
                             }
@@ -402,6 +466,7 @@ void ParasiteDragMgrSingleton::LoadMainTableUserInputs()
                         m_geo_groupedAncestorGen.push_back( -1 );
                         m_geo_surfNum.push_back( k );
                         m_geo_shapeType.push_back( geom->GetSurfType(k) ); // Form Factor Shape Type
+                        m_geo_noArea.push_back( NoWettedArea( geom, k ) );
                         m_geo_expandedList.push_back( false );
                         m_geo_geomID.push_back( geom->GetID() );
                         m_geo_subsurfID.push_back( surf->GetID() );
@@ -441,52 +506,73 @@ void ParasiteDragMgrSingleton::SetupFullCalculation()
         }
     }
 
-    if ( veh && (m_RecomputeGeom || (m_DegenGeomVec.size() == 0 && !m_CompGeomResults)))
+    if ( veh && ( m_RecomputeGeom || m_DegenGeomVec.empty() ) )
     {
         veh->ClearDegenGeom();
 
         ClearInputVectors();
         ClearOutputVectors();
 
-        vector < string > geomIDVec = veh->GetGeomSet( set );
-
         // Don't pass mode parameters here as they've already been applied to 'set'.
         veh->CreateDegenGeom( set, /* useMode */ false, /* modeID */ "" );
-        string meshID = veh->CompGeomAndFlatten( set, 0 );
-        veh->DeleteGeomVec( { meshID } );
-
-        // Restore set visibility. At this point, all geoms in the set will only be in the 
-        //  Not_Shown set. We want the Parasite Drag table to contain the same geoms before 
-        //  and after tool execution.
-        if ( set == vsp::SET_NOT_SHOWN )
-        {
-            veh->ShowSet( 0 ); // show all
-        }
-
-        for ( size_t i = 0; i < geomIDVec.size(); i++ )
-        {
-            Geom* geom = veh->FindGeom( geomIDVec[i] );
-            if ( geom )
-            {
-                if ( set == vsp::SET_NOT_SHOWN ) // Place back in Not_Shown set
-                {
-                    geom->SetSetFlag( vsp::SET_SHOWN, false );
-                    geom->SetSetFlag( vsp::SET_NOT_SHOWN, true );
-                }
-                else // Show only indicated set
-                {
-                    geom->SetSetFlag( vsp::SET_SHOWN, true );
-                    geom->SetSetFlag( vsp::SET_NOT_SHOWN, false );
-                }
-            }
-        }
+        ComputeWetAreas( set );
 
         // First Assignment of DegenGeomVec, Will Carry Through to Rest of Calculate_X
-        m_DegenGeomVec = veh->GetDegenGeomVec();
-
-        // First Assignment of CompGeon, Will Carry Through to Rest of Calculate_X
-        m_CompGeomResults = ResultsMgr.FindResultsPtr( ResultsMgr.FindLatestResultsID( "Comp_Geom" ) );
+        SetDegenGeomVec( veh->GetDegenGeomVec() );
     }
+}
+
+// Runs CompGeom on the set and keeps a copy of its wetted area by tag
+void ParasiteDragMgrSingleton::ComputeWetAreas( int set )
+{
+    m_TagWetAreaMap.clear();
+
+    Vehicle* veh = VehicleMgr.GetVehicle();
+    if ( !veh )
+    {
+        return;
+    }
+
+    string before_id = ResultsMgr.FindLatestResultsID( "Comp_Geom" );
+    // Without hiding the set, so the model's Shown and NotShown sets are left as they were
+    string meshID = veh->CompGeomAndFlatten( set, 0, 1, vsp::SET_NONE, false );
+    veh->DeleteGeomVec( { meshID } );
+
+    // An empty CompGeom makes no results; an older one is not this model's
+    string res_id = ResultsMgr.FindLatestResultsID( "Comp_Geom" );
+    if ( res_id == before_id )
+    {
+        return;
+    }
+
+    Results* res = ResultsMgr.FindResultsPtr( res_id );
+    if ( !res )
+    {
+        return;
+    }
+
+    NameValData* tag_nvd = res->FindPtr( "Tag_ID" );
+    NameValData* area_nvd = res->FindPtr( "Tag_Wet_Area" );
+    if ( !tag_nvd || !area_nvd )
+    {
+        return;
+    }
+
+    vector < string > tagvec = tag_nvd->GetStringData();
+    for ( int i = 0; i < ( int )tagvec.size(); i++ )
+    {
+        m_TagWetAreaMap[ tagvec[i] ] = area_nvd->GetDouble( i );
+    }
+}
+
+double ParasiteDragMgrSingleton::FindWetArea( const string & tag )
+{
+    map < string, double >::const_iterator it = m_TagWetAreaMap.find( tag );
+    if ( it == m_TagWetAreaMap.end() )
+    {
+        return 0;
+    }
+    return it->second;
 }
 
 int ParasiteDragMgrSingleton::CalcRowSize()
@@ -503,89 +589,121 @@ int ParasiteDragMgrSingleton::CalcRowSize()
         Geom* geom = veh->FindGeom( m_PDGeomIDVec[i] );
         if ( geom )
         {
-            m_RowSize += geom->GetNumTotalSurfs() + 1; // +1 for Master Geom Row that keeps track of totals
-
-            // Add Row / SubSurface
-            for ( size_t j = 0; j < geom->GetSubSurfVec().size(); ++j )
-            {
-                for ( size_t k = 0; k < geom->GetNumSymmCopies(); ++k )
-                {
-                    ++m_RowSize;
-                }
-
-                // Subsurfaces are essentially separate geometries and as such get their own master row
-                if ( geom->GetSubSurfVec()[j]->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT )
-                {
-                    ++m_RowSize;
-                }
-            }
+            m_RowSize += CalcGeomRowSize( geom ) + 1; // +1 for Master Geom Row that keeps track of totals
         }
     }
     return m_RowSize;
+}
+
+// Rows LoadMainTableUserInputs makes for a Geom, less its master row
+int ParasiteDragMgrSingleton::CalcGeomRowSize( Geom* geom )
+{
+    int nsurf = geom->GetNumTotalSurfs();
+    int nrow = nsurf;
+
+    // One row per surface for each subsurface
+    for ( size_t j = 0; j < geom->GetSubSurfVec().size(); ++j )
+    {
+        nrow += nsurf;
+
+        // Subsurfaces are essentially separate geometries and as such get their own master row
+        if ( geom->GetSubSurfVec()[j]->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT )
+        {
+            ++nrow;
+        }
+    }
+    return nrow;
 }
 
 void ParasiteDragMgrSingleton::Calculate_Swet()
 {
     Vehicle* veh = VehicleMgr.GetVehicle();
     char str[256];
-    string newstr;
-    int searchIndex;
 
     if ( !veh )
     {
         return;
     }
 
-    int iSurf = 0;
+    // A region inside several subsurfaces has its own tag listing them all; one of them takes its
+    // area: a zero drag one, else the first Separate one, else the first.
+    map < string, double > overlap_area;
+    for ( map < string, double >::const_iterator it = m_TagWetAreaMap.begin(); it != m_TagWetAreaMap.end(); ++it )
+    {
+        vector < string > parts = StringUtil::csv_to_vecstr( it->first.c_str() );
+        if ( parts.size() > 2 )
+        {
+            Geom* geom = veh->FindGeom( parts[0].substr( 0, parts[0].find( "_Surf" ) ) );
+            if ( geom )
+            {
+                string zero, separate, first;
+                vector < SubSurface* > ssvec = geom->GetSubSurfVec();
+                for ( size_t j = 0; j < ssvec.size(); j++ )
+                {
+                    if ( std::find( parts.begin() + 1, parts.end(), ssvec[j]->GetID() ) == parts.end() )
+                    {
+                        continue;
+                    }
+                    if ( first.empty() )
+                    {
+                        first = ssvec[j]->GetID();
+                    }
+                    if ( separate.empty() && ssvec[j]->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT )
+                    {
+                        separate = ssvec[j]->GetID();
+                    }
+                    if ( zero.empty() && ssvec[j]->m_IncludeType() == vsp::SS_INC_ZERO_DRAG )
+                    {
+                        zero = ssvec[j]->GetID();
+                    }
+                }
+
+                string owner = first;
+                if ( !zero.empty() )
+                {
+                    owner = zero;
+                }
+                else if ( !separate.empty() )
+                {
+                    owner = separate;
+                }
+                overlap_area[ parts[0] + "," + owner ] += it->second;
+            }
+        }
+    }
+
     for ( int i = 0; i < m_RowSize; ++i )
     {
         if ( !m_DegenGeomVec.empty() )
         {
             Geom* geom = veh->FindGeom( m_geo_geomID[i] );
-            if (geom)
+            if ( geom && !m_geo_masterRow[i] )
             {
                 // If DegenGeom Exists Pull Swet
-                if ( !m_geo_masterRow[i] )
+                if ( m_geo_subsurfID[i].compare( "" ) == 0 )
                 {
-                    NameValData * nvd = m_CompGeomResults->FindPtr( "Tag_ID" );
-                    vector < string > tagidvec;
-                    if ( nvd )
-                    {
-                        tagidvec = nvd->GetStringData();
-                    }
-                    if ( m_geo_subsurfID[i].compare( "" ) == 0 )
-                    {
-                        snprintf( str, sizeof( str ),  "%s_Surf%i", geom->GetID().c_str(), m_geo_surfNum[i] );
-                        newstr = str;
-                        searchIndex = vector_find_val( tagidvec, newstr );
-                        nvd = m_CompGeomResults->FindPtr( "Tag_Wet_Area" );
-                        if ( nvd )
-                        {
-                            m_geo_swet.push_back( nvd->GetDouble( searchIndex ) );
-                        }
-                        ++iSurf;
-                    }
-                    else
-                    {
-                        snprintf( str, sizeof( str ),  "%s_Surf%i,%s", geom->GetID().c_str(), m_geo_surfNum[i],
-                             m_geo_subsurfID[i].c_str() );
-                        newstr = str;
-                        searchIndex = vector_find_val( tagidvec, newstr );
-                        nvd = m_CompGeomResults->FindPtr( "Tag_Wet_Area" );
-                        if ( nvd )
-                        {
-                            m_geo_swet.push_back( nvd->GetDouble( searchIndex ) );
-                        }
-                    }
+                    snprintf( str, sizeof( str ),  "%s_Surf%i", geom->GetID().c_str(), m_geo_surfNum[i] );
                 }
                 else
                 {
-                    m_geo_swet.push_back( 0.0 ); // Master Geom Swet is 0 until updated by UpdateWettedAreaTotals()
+                    snprintf( str, sizeof( str ),  "%s_Surf%i,%s", geom->GetID().c_str(), m_geo_surfNum[i],
+                         m_geo_subsurfID[i].c_str() );
                 }
+                double area = 0;
+                if ( !m_geo_noArea[i] )
+                {
+                    area = FindWetArea( str );
+                    map < string, double >::const_iterator it = overlap_area.find( str );
+                    if ( it != overlap_area.end() )
+                    {
+                        area += it->second;
+                    }
+                }
+                m_geo_swet.push_back( area );
             }
             else
             {
-                m_geo_swet.push_back( 0.0 );
+                m_geo_swet.push_back( 0.0 ); // Master Geom Swet is 0 until updated by UpdateWettedAreaTotals()
             }
         }
         else
@@ -600,70 +718,26 @@ void ParasiteDragMgrSingleton::Calculate_Swet()
 
 void ParasiteDragMgrSingleton::Calculate_Lref()
 {
-    // Initialize Variablse
-    int iSurf = 0;
-
     for ( int i = 0; i < m_RowSize; ++i )
     {
-        if ( !m_DegenGeomVec.empty() )
+        double lref = -1;
+        if ( m_geo_masterRow[i] )
         {
-            Geom* geom = VehicleMgr.GetVehicle()->FindGeom(m_geo_geomID[i]);
-            if ( geom )
+            int idegen = FindDegenIndex( m_geo_geomID[i] );
+            if ( idegen >= 0 )
             {
-                // If DegenGeom Exists Calculate Lref
-                if ( m_geo_masterRow[i] )
-                {
-                    if ( m_geo_subsurfID[i].compare( "" ) == 0 )
-                    {
-                        if ( m_DegenGeomVec[iSurf].getType() != DegenGeom::DISK_TYPE )
-                        {
-                            m_geo_lref.push_back( CalcReferenceLength( iSurf ) );
-
-                            if (geom->GetBehaviorType() != PROP_GEOM_TYPE)
-                            {
-                                iSurf += geom->GetNumSymmCopies();
-                            }
-                            else
-                            {
-                                string numBladesID = geom->FindParm("NumBlade", "Design");
-                                IntParm* tNumBladeParm = (IntParm*)ParmMgr.FindParm(numBladesID);
-                                if (tNumBladeParm)
-                                {
-                                    iSurf += tNumBladeParm->Get() * geom->GetNumSymmCopies();
-                                }
-                            }
-                        }
-                        else
-                        {
-                            --i;
-                            iSurf += geom->GetNumSymmCopies();
-                        }
-                    }
-                    else
-                    {
-                        m_geo_lref.push_back( CalcReferenceLength( iSurf - 1 ) );
-                    }
-                }
-                else
-                {
-                    m_geo_lref.push_back( m_geo_lref[m_geo_lref.size() - 1] );
-                }
-            }
-            else
-            {
-                // Else Push Back Default Val
-                m_geo_lref.push_back( -1 );
+                lref = CalcReferenceLength( idegen, m_geo_geomID[i] );
             }
         }
-        else
+        else if ( !m_geo_lref.empty() )
         {
-            // Else Push Back Default Val
-            m_geo_lref.push_back( -1 );
+            lref = m_geo_lref.back();
         }
+        m_geo_lref.push_back( lref );
     }
 }
 
-double ParasiteDragMgrSingleton::CalcReferenceLength( int index )
+double ParasiteDragMgrSingleton::CalcReferenceLength( int index, const string & geom_id )
 {
     double lref = 0;
     if ( m_DegenGeomVec[index].getType() == DegenGeom::BODY_TYPE )
@@ -672,12 +746,12 @@ double ParasiteDragMgrSingleton::CalcReferenceLength( int index )
 
         if ( lref <= 1e-6 )
         {
-            lref = CalcReferenceChord( index );
+            lref = CalcReferenceChord( index, geom_id );
         }
     }
     else if ( m_DegenGeomVec[index].getType() == DegenGeom::SURFACE_TYPE )
     {
-        lref = CalcReferenceChord( index );
+        lref = CalcReferenceChord( index, geom_id );
 
         if ( lref <= 1e-6 )
         {
@@ -701,6 +775,10 @@ double ParasiteDragMgrSingleton::CalcReferenceBodyLength( int index )
     // TODO: Improve Reference Length Calculations
     double delta_x, delta_y, delta_z, lref;
     vector <DegenStick> m_DegenStick = m_DegenGeomVec[index].getDegenSticks();
+    if ( m_DegenStick.empty() || m_DegenStick[0].xle.empty() )
+    {
+        return 0;
+    }
     delta_x = abs( m_DegenStick[0].xle.front().x() - m_DegenStick[0].xle.back().x() );
     delta_y = abs( m_DegenStick[0].xle.front().y() - m_DegenStick[0].xle.back().y() );
     delta_z = abs( m_DegenStick[0].xle.front().z() - m_DegenStick[0].xle.back().z() );
@@ -710,26 +788,47 @@ double ParasiteDragMgrSingleton::CalcReferenceBodyLength( int index )
 }
 
 // Use weighted average to approximate reference chord
-double ParasiteDragMgrSingleton::CalcReferenceChord( int index )
+double ParasiteDragMgrSingleton::CalcReferenceChord( int index, const string & geom_id )
 {
-    // TODO: Improve Reference Length Calculations
-    vector <DegenStick> m_DegenStick = m_DegenGeomVec[index].getDegenSticks();
-    double secArea, totalArea = 0, weightedChordSum = 0;
-    double delta_x, delta_y, delta_z, section_span;
-    for ( size_t j = 0; j <= m_DegenStick[0].areaTop.size() - 1; ++j )
+    // A wing-like Geom computes its own mean aerodynamic chord
+    Geom* geom = VehicleMgr.GetVehicle()->FindGeom( geom_id );
+    if ( geom )
     {
-        delta_x = abs( m_DegenStick[0].xle[j].x() - m_DegenStick[0].xle[j + 1].x() );
-        delta_y = abs( m_DegenStick[0].xle[j].y() - m_DegenStick[0].xle[j + 1].y() );
-        delta_z = abs( m_DegenStick[0].xle[j].z() - m_DegenStick[0].xle[j + 1].z() );
-        section_span = sqrt( pow( delta_x, 2.0 ) + pow( delta_y, 2.0 ) + pow( delta_z, 2.0 ) );
-        secArea = section_span * ( 0.5 * ( m_DegenStick[0].chord[j] + m_DegenStick[0].chord[j + 1] ) );
-
-        totalArea += secArea;
-
-        weightedChordSum += ( ( 0.5 * ( m_DegenStick[0].chord[j] + m_DegenStick[0].chord[j + 1] ) ) * secArea );
+        double mac = geom->ComputeMAC();
+        if ( mac > 0 )
+        {
+            return mac;
+        }
     }
 
-    return weightedChordSum / totalArea;
+    // Otherwise integral( c^2 ) / integral( c ) along the span, with the chord linear across
+    // each strip
+    vector <DegenStick> m_DegenStick = m_DegenGeomVec[index].getDegenSticks();
+    double totalArea = 0, chordSqSum = 0;
+    if ( m_DegenStick.empty() )
+    {
+        return 0;
+    }
+    for ( size_t j = 0; j < m_DegenStick[0].areaTop.size(); ++j )
+    {
+        double c0 = m_DegenStick[0].chord[j];
+        double c1 = m_DegenStick[0].chord[j + 1];
+
+        // Strip width across the chord, so sweep does not stretch it
+        vec3d dle = m_DegenStick[0].xle[j + 1] - m_DegenStick[0].xle[j];
+        vec3d cdir = ( m_DegenStick[0].xte[j] - m_DegenStick[0].xle[j] ) + ( m_DegenStick[0].xte[j + 1] - m_DegenStick[0].xle[j + 1] );
+        cdir.normalize();
+        double width = ( dle - cdir * dot( dle, cdir ) ).mag();
+
+        totalArea += width * 0.5 * ( c0 + c1 );
+        chordSqSum += width * ( c0 * c0 + c0 * c1 + c1 * c1 ) / 3.0;
+    }
+
+    if ( totalArea <= 0 )
+    {
+        return 0;
+    }
+    return chordSqSum / totalArea;
 }
 
 void ParasiteDragMgrSingleton::Calculate_Re()
@@ -815,9 +914,6 @@ void ParasiteDragMgrSingleton::ReynoldsNumCalc( int index )
 
 void ParasiteDragMgrSingleton::Calculate_Cf()
 {
-    // Initialize Variables
-    double lref, rho, kineVisc, vinf;
-
     for ( int i = 0; i < m_RowSize; ++i )
     {
         if ( !m_DegenGeomVec.empty() )
@@ -826,18 +922,14 @@ void ParasiteDragMgrSingleton::Calculate_Cf()
             if ( m_geo_subsurfID[i].compare( "" ) == 0 ||
                     VehicleMgr.GetVehicle()->FindGeom( m_geo_geomID[i] )->GetSubSurf( m_geo_subsurfID[i] )->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT )
             {
-                vinf = ConvertVelocity( m_Vinf(), m_VinfUnitType.Get(), vsp::V_UNIT_M_S );
-                rho = ConvertDensity( m_Atmos.GetDensity(), m_AltLengthUnit(), vsp::RHO_UNIT_KG_M3 ); // lb/ft3 to kg/m3
-                lref = ConvertLength( m_geo_lref[i], m_LengthUnit(), vsp::LEN_M );
-                kineVisc = m_Atmos.GetDynaVisc() / rho;
-
                 // Will calculate full turbulence
                 m_geo_cf.push_back( CalcPartialTurbulence( m_geo_percLam[i], m_geo_Re[i], m_geo_lref[i], m_ReqL(),
                    m_geo_Roughness[i], m_geo_TawTwRatio[i], m_geo_TeTwRatio[i] ) );
+
             }
             else
             {
-                m_geo_cf.push_back( m_geo_cf[m_geo_cf.size() - 1] );
+                m_geo_cf.push_back( m_geo_cf[ m_geo_sourceRow[i] ] );
             }
         }
         else
@@ -856,91 +948,55 @@ double ParasiteDragMgrSingleton::CalcPartialTurbulence( double perclam, double r
     {
         // Prevent dividing by 0 in some equations
         double LamPerc = ( perclam / 100 );
-        double CffullTurb = CalcTurbCf( re, lref, m_TurbCfEqnType(), roughness, m_SpecificHeatRatio(), tawtwrat, tetwrat );
-        double CffullLam = CalcLamCf( re, m_LamCfEqnType.Get() ); // WARNING: Not used
+
+        // At low Re the turbulent fits fall below the laminar Cf, where they no longer hold
+        double CffullTurb = max( CalcTurbCf( re, lref, m_TurbCfEqnType(), roughness, m_SpecificHeatRatio(), tawtwrat, tetwrat ),
+                                 CalcLamCf( re, m_LamCfEqnType() ) );
 
         double LamPercRefLen = LamPerc * lref;
 
         double ReLam = reqL * LamPercRefLen;
 
-        double CfpartLam = CalcLamCf( ReLam, m_LamCfEqnType() );
-        double CfpartTurb = CalcTurbCf( ReLam, lref, m_TurbCfEqnType(), roughness, m_SpecificHeatRatio(), tawtwrat, tetwrat );
-
         m_TurbCfEqnName = AssignTurbCfEqnName( m_TurbCfEqnType() );
         m_LamCfEqnName = AssignLamCfEqnName( m_LamCfEqnType() );
 
-        cf = CffullTurb - ( CfpartTurb * LamPerc ) + ( CfpartLam * LamPerc );
+        cf = CffullTurb;
+        if ( LamPerc >= 1.0 )
+        {
+            cf = CalcLamCf( re, m_LamCfEqnType() );
+        }
+        else if ( ReLam >= 1.0e3 )
+        {
+            // Below this the turbulent fits fail; the laminar Cf is above them there, so the
+            // laminar run's correction is zero either side
+            double CfpartLam = CalcLamCf( ReLam, m_LamCfEqnType() );
+            double CfpartTurb = max( CalcTurbCf( ReLam, LamPercRefLen, m_TurbCfEqnType(), roughness, m_SpecificHeatRatio(), tawtwrat, tetwrat ),
+                                     CfpartLam );
+
+            cf = CffullTurb - ( CfpartTurb * LamPerc ) + ( CfpartLam * LamPerc );
+        }
     }
     return cf;
 }
 
 void ParasiteDragMgrSingleton::Calculate_fineRat_and_toc()
 {
-    Vehicle* veh = VehicleMgr.GetVehicle();
-
-    if ( !veh )
-    {
-        return;
-    }
-
-    int iSurf = 0;
-
     for ( int i = 0; i < m_RowSize; ++i )
     {
-        if ( !m_DegenGeomVec.empty() )
+        double finerat = -1;
+        if ( m_geo_masterRow[i] )
         {
-            Geom* geom = veh->FindGeom( m_geo_geomID[i] );
-            if (geom)
+            int idegen = FindDegenIndex( m_geo_geomID[i] );
+            if ( idegen >= 0 )
             {
-                // If DegenGeom Exists Calculate Fineness Ratio
-                if ( m_geo_masterRow[i] )
-                {
-                    if ( m_geo_subsurfID[i].compare( "" ) == 0 )
-                    {
-                        if ( m_DegenGeomVec[iSurf].getType() != DegenGeom::DISK_TYPE )
-                        {
-                            m_geo_fineRat_or_toc.push_back( CalculateFinessRatioAndTOC( iSurf, i) );
-
-                            if ( geom->GetBehaviorType() != PROP_GEOM_TYPE )
-                            {
-                                iSurf += geom->GetNumSymmCopies();
-                            }
-                            else
-                            {
-                                string numBladesID = geom->FindParm( "NumBlade", "Design" );
-                                IntParm* tNumBladeParm = (IntParm*) ParmMgr.FindParm( numBladesID );
-                                if ( tNumBladeParm )
-                                {
-                                    iSurf += tNumBladeParm->Get() * geom->GetNumSymmCopies();
-                                }
-                            }
-                        }
-                        else
-                        {
-                            --i;
-                            iSurf += geom->GetNumSymmCopies();
-                        }
-                    }
-                    else
-                    {
-                        m_geo_fineRat_or_toc.push_back( CalculateFinessRatioAndTOC( iSurf - 1, i) );
-                    }
-                }
-                else
-                {
-                    m_geo_fineRat_or_toc.push_back( m_geo_fineRat_or_toc[m_geo_fineRat_or_toc.size() - 1] );
-                }
-            }
-            else
-            {
-                m_geo_fineRat_or_toc.push_back( -1 );
+                finerat = CalculateFinessRatioAndTOC( idegen, i );
             }
         }
-        else
+        else if ( !m_geo_fineRat_or_toc.empty() )
         {
-            // Else Push Back Default Val
-            m_geo_fineRat_or_toc.push_back( -1 );
+            finerat = m_geo_fineRat_or_toc.back();
         }
+        m_geo_fineRat_or_toc.push_back( finerat );
     }
 }
 
@@ -954,13 +1010,40 @@ double ParasiteDragMgrSingleton::CalculateFinessRatioAndTOC( int isurf, int irow
     // Grab Degen Sticks for Appropriate Geom
     vector <DegenStick> degenSticks = m_DegenGeomVec[isurf].getDegenSticks();
 
-    if ( m_DegenGeomVec[isurf].getType() == DegenGeom::SURFACE_TYPE )
+    if ( m_DegenGeomVec[isurf].getType() == DegenGeom::SURFACE_TYPE && !degenSticks[0].toc2.empty() )
     {
-        // Wing Type
-        it = max_element( degenSticks[0].toc.begin(), degenSticks[0].toc.end() );
-        finerat = *it;
+        // Wing Type: planform area weighted t/c, found on the section curve where there is one,
+        // with t/c and chord linear across each strip
+        const DegenStick &stick = degenSticks[0];
+        double area_sum = 0;
+        double toc_sum = 0;
+        for ( size_t j = 0; j + 1 < stick.toc2.size() && j + 1 < stick.chord.size(); j++ )
+        {
+            vec3d dle = stick.xle[j + 1] - stick.xle[j];
+            vec3d cdir = ( stick.xte[j] - stick.xle[j] ) + ( stick.xte[j + 1] - stick.xle[j + 1] );
+            cdir.normalize();
+            double width = ( dle - cdir * dot( dle, cdir ) ).mag();
+
+            double c0 = stick.chord[j];
+            double c1 = stick.chord[j + 1];
+            double t0 = stick.toc2[j];
+            double t1 = stick.toc2[j + 1];
+
+            area_sum += width * 0.5 * ( c0 + c1 );
+            toc_sum += width * ( 2.0 * c0 * t0 + c0 * t1 + c1 * t0 + 2.0 * c1 * t1 ) / 6.0;
+        }
+
+        if ( area_sum > 0 )
+        {
+            finerat = toc_sum / area_sum;
+        }
+        else
+        {
+            it = max_element( stick.toc2.begin(), stick.toc2.end() );
+            finerat = *it;
+        }
     }
-    else if ( m_DegenGeomVec[isurf].getType() == DegenGeom::BODY_TYPE )
+    else if ( m_DegenGeomVec[isurf].getType() == DegenGeom::BODY_TYPE && !degenSticks[0].sectarea.empty() )
     {
         it = max_element( degenSticks[0].sectarea.begin(), degenSticks[0].sectarea.end() );
         max_xsecarea = *it;
@@ -976,77 +1059,39 @@ double ParasiteDragMgrSingleton::CalculateFinessRatioAndTOC( int isurf, int irow
 
 void ParasiteDragMgrSingleton::Calculate_FF()
 {
-    int iSurf = 0;
-
     for ( int i = 0; i < m_RowSize; ++i )
     {
-        if ( !m_DegenGeomVec.empty() )
+        if ( m_geo_masterRow[i] )
         {
-            // If DegenGeom Exists Calculate Form Factor
-            if ( m_geo_masterRow[i] )
+            int idegen = FindDegenIndex( m_geo_geomID[i] );
+            if ( idegen >= 0 )
             {
-                if ( m_geo_subsurfID[i].compare( "" ) == 0 )
+                m_geo_ffOut.push_back( CalculateFormFactor( idegen, i ) );
+
+                if ( m_DegenGeomVec[idegen].getType() == DegenGeom::SURFACE_TYPE )
                 {
-                    if ( m_DegenGeomVec[iSurf].getType() != DegenGeom::DISK_TYPE )
-                    {
-                        m_geo_ffOut.push_back( CalculateFormFactor( iSurf, i ) );
-
-                        if ( m_DegenGeomVec[iSurf].getType() == DegenGeom::SURFACE_TYPE )
-                        {
-                            m_geo_ffName.push_back( AssignFFWingEqnName( m_geo_ffType[i] ) );
-                        }
-                        else
-                        {
-                            m_geo_ffName.push_back( AssignFFBodyEqnName( m_geo_ffType[i] ) );
-                        }
-                    }
-                    else
-                    {
-                        --i;
-                    }
-
-                    Geom* geom = VehicleMgr.GetVehicle()->FindGeom( m_geo_geomID[i] );
-                    if (geom)
-                    {
-                        if ( geom->GetBehaviorType() != PROP_GEOM_TYPE )
-                        {
-                            iSurf += geom->GetNumSymmCopies();
-                        }
-                        else
-                        {
-                            string numBladesID = geom->FindParm( "NumBlade", "Design" );
-                            IntParm* tNumBladeParm = (IntParm*) ParmMgr.FindParm( numBladesID );
-                            if ( tNumBladeParm )
-                            {
-                                iSurf += tNumBladeParm->Get() * geom->GetNumSymmCopies();
-                            }
-                        }
-                    }
+                    m_geo_ffName.push_back( AssignFFWingEqnName( m_geo_ffType[i] ) );
                 }
                 else
                 {
-                    m_geo_ffOut.push_back( CalculateFormFactor( iSurf - 1, i ) );
-                    if ( m_DegenGeomVec[iSurf - 1].getType() == DegenGeom::SURFACE_TYPE )
-                    {
-                        m_geo_ffName.push_back( AssignFFWingEqnName( m_geo_ffType[i] ) );
-                    }
-                    else
-                    {
-                        m_geo_ffName.push_back( AssignFFBodyEqnName( m_geo_ffType[i] ) );
-                    }
+                    m_geo_ffName.push_back( AssignFFBodyEqnName( m_geo_ffType[i] ) );
                 }
             }
             else
             {
-                m_geo_ffOut.push_back( m_geo_ffOut[m_geo_ffOut.size() - 1] );
-                if ( m_geo_ffType[i] == vsp::FF_W_JENKINSON_TAIL )
-                {
-                    m_geo_Q[i] = 1.2;
-                }
-                m_geo_ffName.push_back( m_geo_ffName[m_geo_ffName.size() - 1] );
+                m_geo_ffOut.push_back( -1 );
+                m_geo_ffName.push_back( "" );
             }
         }
-        // Else Push Back Default Val
+        else if ( !m_geo_ffOut.empty() )
+        {
+            m_geo_ffOut.push_back( m_geo_ffOut[ m_geo_sourceRow[i] ] );
+            if ( m_geo_ffType[i] == vsp::FF_W_JENKINSON_TAIL )
+            {
+                m_geo_Q[i] = 1.2;
+            }
+            m_geo_ffName.push_back( m_geo_ffName[ m_geo_sourceRow[i] ] );
+        }
         else
         {
             m_geo_ffOut.push_back( -1 );
@@ -1073,7 +1118,20 @@ double ParasiteDragMgrSingleton::CalculateFormFactor( int isurf, int irow )
 
         Calculate_AvgSweep( degenSticks );
 
-        formfactor = CalcFFWing( toc, m_geo_ffType[irow], m_geo_percLam[irow], m_Sweep25, m_Sweep50 );
+        // Chord weighted location of maximum thickness, found on the section curve where there is one
+        double toc_loc = 0;
+        double chord_sum = 0;
+        for ( size_t j = 0; j < degenSticks[0].tLoc2.size() && j < degenSticks[0].chord.size(); j++ )
+        {
+            toc_loc += degenSticks[0].chord[j] * degenSticks[0].tLoc2[j];
+            chord_sum += degenSticks[0].chord[j];
+        }
+        if ( chord_sum > 0 )
+        {
+            toc_loc /= chord_sum;
+        }
+
+        formfactor = CalcFFWing( toc, m_geo_ffType[irow], toc_loc, m_Sweep25, m_Sweep50 );
         if ( m_geo_ffType[irow] == vsp::FF_W_JENKINSON_TAIL )
         {
             m_geo_Q[irow] = 1.2;
@@ -1091,6 +1149,12 @@ void ParasiteDragMgrSingleton::Calculate_AvgSweep( const vector<DegenStick> &deg
 {
     // Find Quarter Chord Using Derived Eqn from Geometry
     double width, secSweep25, secSweep50, secArea, weighted25Sum = 0, weighted50Sum = 0, totalArea = 0;
+    m_Sweep25 = 0;
+    m_Sweep50 = 0;
+    if ( degenSticks.empty() )
+    {
+        return;
+    }
     for ( int j = 0; j < degenSticks[0].areaTop.size(); j++ )
     {
         width = degenSticks[0].areaTop[j] /
@@ -1098,16 +1162,16 @@ void ParasiteDragMgrSingleton::Calculate_AvgSweep( const vector<DegenStick> &deg
 
         // Section Quarter Chord Sweep
         secSweep25 = atan( tan( degenSticks[0].sweeple[j] * M_PI / 180.0 ) +
-                           ( 0.25 * ( ( degenSticks[0].chord[j] - degenSticks[0].chord[j + 1] ) / width ) ) ) *
+                           ( 0.25 * ( ( degenSticks[0].chord[j + 1] - degenSticks[0].chord[j] ) / width ) ) ) *
                      180.0 / M_PI;
 
         // Section Half Chord Sweep
         secSweep50 = atan( tan( degenSticks[0].sweeple[j] * M_PI / 180.0 ) +
-                           ( 0.50 * ( ( degenSticks[0].chord[j] - degenSticks[0].chord[j + 1] ) / width ) ) ) *
+                           ( 0.50 * ( ( degenSticks[0].chord[j + 1] - degenSticks[0].chord[j] ) / width ) ) ) *
                      180.0 / M_PI;
 
         // Section Area
-        secArea = degenSticks[0].chord[j] * width;
+        secArea = 0.5 * ( degenSticks[0].chord[j] + degenSticks[0].chord[j + 1] ) * width;
 
         // Add Weighted Value to Weighted Sum
         weighted25Sum += secArea * secSweep25;
@@ -1115,6 +1179,11 @@ void ParasiteDragMgrSingleton::Calculate_AvgSweep( const vector<DegenStick> &deg
 
         // Continue to sum up Total Area
         totalArea += secArea;
+    }
+
+    if ( totalArea <= 0 )
+    {
+        return;
     }
 
     // Calculate Sweep @ c/4 & c/2
@@ -1185,7 +1254,7 @@ void ParasiteDragMgrSingleton::Calculate_CD()
             if ( !m_DegenGeomVec.empty() )
             {
                 // If DegenGeom Exists Calculate CD
-                if ( ! ( m_geo_f[i] != m_geo_f[i] ) )
+                if ( std::isfinite( m_geo_f[i] ) )
                 {
                     m_geo_CD.push_back( m_geo_f[i] / m_Sref.Get() );
                 }
@@ -1220,6 +1289,14 @@ void ParasiteDragMgrSingleton::Calculate_ALL()
     ClearInputVectors();
     LoadMainTableUserInputs(); // Load User Input Values
 
+    // Every per-row vector is sized from these
+    m_RowSize = m_geo_masterRow.size();
+
+    for ( int i = 0; i < m_RowSize; i++ )
+    {
+        m_geo_groupRow.push_back( GroupMasterRow( i ) );
+    }
+
     // Calculate All Necessary Values
     Calculate_Swet();
     Calculate_Lref();
@@ -1241,6 +1318,7 @@ void ParasiteDragMgrSingleton::Calculate_ALL()
     {
         tempStruct.MasterRow = m_geo_masterRow[i];
         tempStruct.GroupedAncestorGen = m_geo_groupedAncestorGen[i];
+        tempStruct.Grouped = m_geo_groupRow[i] >= 0;
         tempStruct.GeomID = m_geo_geomID[i];
         tempStruct.SubSurfID = m_geo_subsurfID[i];
         tempStruct.Label = m_geo_label[i];
@@ -1312,12 +1390,56 @@ string ParasiteDragMgrSingleton::ComputeBuildUp()
         Update();
 
         Calculate_ALL();
+        ReportNoDragRows();
+        ReportRefWing();
 
         UpdateExportLabels();
 
         return ExportToCSV();
     }
     return "";
+}
+
+//==== Calculate_CD counts a component whose f is not finite as no drag; say so ====//
+// Not from Calculate_ALL: the screen runs that on every update, and an error is a dialog there.
+void ParasiteDragMgrSingleton::ReportNoDragRows()
+{
+    string invalid;
+    for ( int i = 0; i < m_RowSize; i++ )
+    {
+        if ( m_geo_masterRow[i] && IsNotZeroLineItem( i ) && !std::isfinite( m_geo_f[i] ) )
+        {
+            invalid += " " + m_geo_label[i];
+        }
+    }
+    if ( !invalid.empty() )
+    {
+        MessageData errMsgData;
+        errMsgData.m_String = "Error";
+        errMsgData.m_IntVec.push_back( vsp::VSP_INVALID_CF_EQN );
+        errMsgData.m_StringVec.push_back( "Error:  No drag for" + invalid +
+                                          "; a form factor or Cf equation is not valid at these conditions." );
+        MessageMgr::getInstance().SendAll( errMsgData );
+    }
+}
+
+//==== A reference wing that is not a wing leaves S_ref as it was; say so ====//
+void ParasiteDragMgrSingleton::ReportRefWing()
+{
+    if ( m_RefFlag() != vsp::COMPONENT_REF )
+    {
+        return;
+    }
+
+    Geom* refgeom = VehicleMgr.GetVehicle()->FindGeom( m_RefGeomID );
+    if ( !refgeom || refgeom->GetBehaviorType() != MS_WING_GEOM_TYPE )
+    {
+        MessageData errMsgData;
+        errMsgData.m_String = "Error";
+        errMsgData.m_IntVec.push_back( vsp::VSP_INVALID_ID );
+        errMsgData.m_StringVec.push_back( "Error:  The reference wing '" + m_RefGeomID + "' is not a wing; S_ref was not updated." );
+        MessageMgr::getInstance().SendAll( errMsgData );
+    }
 }
 
 void ParasiteDragMgrSingleton::OverwritePropertiesFromAncestorGeom()
@@ -1327,26 +1449,19 @@ void ParasiteDragMgrSingleton::OverwritePropertiesFromAncestorGeom()
     {
         for ( size_t i = 0; i < m_RowSize; ++i )
         {
-            Geom *geom = veh->FindGeom( m_geo_geomID[i] );
-            if ( geom )
+            if ( m_geo_subsurfID[i].compare( "" ) == 0 )
             {
-                if ( m_geo_groupedAncestorGen[i] > 0 )
+                int j = m_geo_groupRow[i];
+                if ( j >= 0 )
                 {
-                    for ( size_t j = 0; j < m_RowSize; ++j )
-                    {
-                        if ( m_geo_geomID[j].compare( geom->GetAncestorID( m_geo_groupedAncestorGen[i] ) ) == 0 &&
-                                m_geo_surfNum[j] == 0 )
-                        {
-                            m_geo_lref[i] = m_geo_lref[j];
-                            m_geo_Re[i] = m_geo_Re[j];
-                            m_geo_fineRat_or_toc[i] = m_geo_fineRat_or_toc[j];
-                            m_geo_ffOut[i] = m_geo_ffOut[j];
-                            m_geo_ffType[i] = m_geo_ffType[j];
-                            m_geo_percLam[i] = m_geo_percLam[j];
-                            m_geo_Q[i] = m_geo_Q[j];
-                            m_geo_cf[i] = m_geo_cf[j];
-                        }
-                    }
+                    m_geo_lref[i] = m_geo_lref[j];
+                    m_geo_Re[i] = m_geo_Re[j];
+                    m_geo_fineRat_or_toc[i] = m_geo_fineRat_or_toc[j];
+                    m_geo_ffOut[i] = m_geo_ffOut[j];
+                    m_geo_ffType[i] = m_geo_ffType[j];
+                    m_geo_percLam[i] = m_geo_percLam[j];
+                    m_geo_Q[i] = m_geo_Q[j];
+                    m_geo_cf[i] = m_geo_cf[j];
                 }
             }
         }
@@ -1420,7 +1535,8 @@ double ParasiteDragMgrSingleton::CalcTurbCf( double ReyIn, double ref_leng, int 
         double roughness_h = 0, double gamma = 1.4, double taw_tw_ratio = 0, double te_tw_ratio = 0 )
 {
     double CfOut = 0;
-    double CfGuess, f, heightRatio, multiBy = 1.0;
+    double CfGuess, f, heightRatio;
+    double lnterm;
     double r = 0.89; // Recovery Factor
     double n = 0.67; // Viscosity Power-Law Exponent
 
@@ -1430,15 +1546,6 @@ double ParasiteDragMgrSingleton::CalcTurbCf( double ReyIn, double ref_leng, int 
     }
 
     eli::mutil::nls::newton_raphson_method < double > nrm;
-
-    if ( m_LengthUnit.Get() == vsp::LEN_FT )
-    {
-        multiBy = 12.0;
-    }
-    else if ( m_LengthUnit.Get() == vsp::LEN_M )
-    {
-        multiBy = 39.3701;
-    }
 
     // Unfortunately, there is substantial opportunity for confusion around these equations.  The primary source of
     // confusion is inconsistent nomenclature in the literature around two related quantities -- the local skin friction
@@ -1539,7 +1646,10 @@ double ParasiteDragMgrSingleton::CalcTurbCf( double ReyIn, double ref_leng, int 
         CfGuess = pow( ( 1.0 / ( ( 3.46 * log10( ReyIn ) ) - 5.6 ) ), 2.0 );
 
         nrm.set_initial_guess( CfGuess );
-        nrm.find_root( CfOut, sfun, sfunprm, 0.0 );
+        if ( nrm.find_root( CfOut, sfun, sfunprm, 0.0 ) != eli::mutil::nls::newton_raphson_method < double >::converged )
+        {
+            CfOut = CfGuess;
+        }
         break;
 
     case vsp::DO_NOT_USE_CF_TURB_IMPLICIT_KARMAN:
@@ -1564,7 +1674,10 @@ double ParasiteDragMgrSingleton::CalcTurbCf( double ReyIn, double ref_leng, int 
         CfGuess = pow( ( 1.0 / ( ( 3.46 * log10( ReyIn ) ) - 5.6 ) ), 2.0 );
 
         nrm.set_initial_guess( CfGuess );
-        nrm.find_root( CfOut, ksfun, ksfunprm, 0.0 );
+        if ( nrm.find_root( CfOut, ksfun, ksfunprm, 0.0 ) != eli::mutil::nls::newton_raphson_method < double >::converged )
+        {
+            CfOut = CfGuess;
+        }
         break;
 
     case vsp::DO_NOT_USE_CF_TURB_ROUGHNESS_WHITE:
@@ -1581,23 +1694,35 @@ double ParasiteDragMgrSingleton::CalcTurbCf( double ReyIn, double ref_leng, int 
         break;
 
     case vsp::CF_TURB_ROUGHNESS_SCHLICHTING_AVG:
-        heightRatio = ref_leng / ( roughness_h * multiBy );
-        CfOut = pow( ( 1.89 + ( 1.62 * log10( heightRatio ) ) ), -2.5 );    // White 6-84b, Schlicting 21.38
+        if ( roughness_h > 0 )
+        {
+            heightRatio = ref_leng / roughness_h;
+            CfOut = pow( ( 1.89 + ( 1.62 * log10( heightRatio ) ) ), -2.5 );    // White 6-84b, Schlicting 21.38
+        }
+
+        // Fully rough friction; a smoother plate has at least the smooth turbulent friction
+        CfOut = max( CfOut, CalcTurbCf( ReyIn, ref_leng, m_TurbTypeDefault, roughness_h, gamma, taw_tw_ratio, te_tw_ratio ) );
         break;
 
     case vsp::CF_TURB_ROUGHNESS_SCHLICHTING_AVG_FLOW_CORRECTION:
-        heightRatio = ref_leng / ( roughness_h * multiBy );
-        CfOut = pow( ( 1.89 + ( 1.62 * log10( heightRatio ) ) ), -2.5 ) /
-                ( pow( ( 1.0 + ( ( gamma - 1.0 ) / 2.0 ) * m_Mach() ), 0.467 ) );
+        if ( roughness_h > 0 )
+        {
+            heightRatio = ref_leng / roughness_h;
+            CfOut = pow( ( 1.89 + ( 1.62 * log10( heightRatio ) ) ), -2.5 );
+        }
+        CfOut = max( CfOut, CalcTurbCf( ReyIn, ref_leng, m_TurbTypeDefault, roughness_h, gamma, taw_tw_ratio, te_tw_ratio ) );
+
+        // The compressibility correction applies to the smooth floor as well
+        CfOut /= pow( ( 1.0 + ( ( gamma - 1.0 ) / 2.0 ) * m_Mach() * m_Mach() ), 0.467 );
         break;
 
-    case vsp::CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH:
-        f = ( 1 + ( 0.22 * r * ( ( roughness_h  - 1.0 ) / 2.0 ) *
+    case vsp::DO_NOT_USE_CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH:
+        f = ( 1 + ( 0.22 * r * ( ( gamma - 1.0 ) / 2.0 ) *
                     m_Mach() * m_Mach() * te_tw_ratio ) ) /
             ( 1 + ( 0.3 * ( taw_tw_ratio - 1.0 ) ) );
 
-        CfOut = ( 0.451 * f * f * te_tw_ratio ) /
-                ( log( 0.056 * f * pow( te_tw_ratio, 1.0 + n ) * ReyIn ) );
+        lnterm = log( 0.056 * f * pow( te_tw_ratio, 1.0 + n ) * ReyIn );
+        CfOut = ( 0.451 * f * f * te_tw_ratio ) / ( lnterm * lnterm );
 
         break;
 
@@ -1726,11 +1851,11 @@ string ParasiteDragMgrSingleton::AssignTurbCfEqnName( int cf_case )
         break;
 
     case vsp::CF_TURB_ROUGHNESS_SCHLICHTING_AVG_FLOW_CORRECTION:
-        m_TurbCfEqnName = "Schlichting Avg Roughness w Flow Correctioin";
+        eqn_name = "Schlichting Avg Roughness w Flow Correction";
         break;
 
-    case vsp::CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH:
-        eqn_name = "White-Christoph w Heat Transfer";
+    case vsp::DO_NOT_USE_CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH:
+        eqn_name = "(Do Not Use) White-Christoph w Heat Transfer";
         break;
 
     default:
@@ -1775,7 +1900,7 @@ int ParasiteDragMgrSingleton::FindAlternateTurb( int cf_case )
 }
 
 double ParasiteDragMgrSingleton::CalcFFWing( double toc, int ff_case,
-        double perc_lam = 0, double sweep25 = 0, double sweep50 = 0 )
+        double toc_loc = 0, double sweep25 = 0, double sweep50 = 0 )
 {
     // Values recreated using Plot Digitizer and fitted to a 3rd power polynomial
     double Interval[] = { 0.25, 0.6, 0.8, 0.9 };
@@ -1815,10 +1940,16 @@ double ParasiteDragMgrSingleton::CalcFFWing( double toc, int ff_case,
         break;
 
     case vsp::FF_W_KROO:
+        // No supervelocity from thickness once the normal Mach reaches 1
+        if ( pow( mach, 2.0 ) * pow( cos( sweep25 ), 2.0 ) >= 1.0 )
+        {
+            ff = 1.0;
+            break;
+        }
         double part1A, part1B, part2A, part2B;
         part1A = ( 2.2 * pow( cos( sweep25 ), 2.0 ) * toc );
         part1B = ( sqrt( 1.0 - ( pow( mach, 2.0 ) * pow( cos( sweep25 ), 2.0 ) ) ) );
-        part2A = ( 4.84 * pow( cos( sweep25 ), 2.0 ) * ( 1.0 + 5.0 * pow( cos( sweep25 ), 2.0 ) ) * pow( toc, 2.0 ) );
+        part2A = ( 1.21 * pow( cos( sweep25 ), 2.0 ) * ( 1.0 + 5.0 * pow( cos( sweep25 ), 2.0 ) ) * pow( toc, 2.0 ) );
         part2B = ( 2.0 * ( 1.0 - ( pow( mach, 2.0 ) * pow( cos( sweep25 ), 2.0 ) ) ) );
         ff = 1.0 + ( part1A / part1B ) + ( part2A / part2B );
         break;
@@ -1830,8 +1961,8 @@ double ParasiteDragMgrSingleton::CalcFFWing( double toc, int ff_case,
     case vsp::FF_W_DATCOM:
         double L, x, RLS_Low, RLS_High;
 
-        // L value Decided based on xtrans/c
-        if ( perc_lam <= 30.0 )
+        // L from the chordwise location of maximum thickness
+        if ( toc_loc < 0.3 )
         { L = 2.0; }
         else
         { L = 1.2; }
@@ -2316,8 +2447,9 @@ void ParasiteDragMgrSingleton::AddExcrescence()
 
 void ParasiteDragMgrSingleton::AddExcrescence( const std::string & excresName, int excresType, double excresVal )
 {
-    m_ExcresValue.Set( excresVal );
     m_ExcresType.Set( excresType );
+    SetExcresValueLimits( m_ExcresType() );
+    m_ExcresValue.Set( excresVal );
     m_ExcresName = excresName;
 
     AddExcrescence();
@@ -2325,20 +2457,26 @@ void ParasiteDragMgrSingleton::AddExcrescence( const std::string & excresName, i
 
 void ParasiteDragMgrSingleton::DeleteExcrescence()
 {
-    if ( m_CurrentExcresIndex != -1 )
+    if ( m_CurrentExcresIndex < 0 || m_CurrentExcresIndex >= ( int )m_ExcresRowVec.size() )
     {
-        m_ExcresRowVec.erase( m_ExcresRowVec.begin() + m_CurrentExcresIndex );
+        return;
     }
 
-    if ( m_CurrentExcresIndex > m_ExcresRowVec.size() -1 )
-    {
-        m_CurrentExcresIndex = m_ExcresRowVec.size() -1;
-        UpdateCurrentExcresVal();
-    }
-    else if ( m_ExcresRowVec.empty() )
+    m_ExcresRowVec.erase( m_ExcresRowVec.begin() + m_CurrentExcresIndex );
+
+    if ( m_ExcresRowVec.empty() )
     {
         m_CurrentExcresIndex = -1;
+        return;
     }
+
+    if ( m_CurrentExcresIndex >= ( int )m_ExcresRowVec.size() )
+    {
+        m_CurrentExcresIndex = m_ExcresRowVec.size() - 1;
+    }
+
+    // m_ExcresValue still holds the deleted one's value; UpdateExcres would give it to this one
+    UpdateCurrentExcresVal();
 }
 
 void ParasiteDragMgrSingleton::DeleteExcrescence( int index )
@@ -2507,9 +2645,11 @@ bool ParasiteDragMgrSingleton::ShouldAddSubSurfToMasterGeom( const size_t &i, co
                 Geom *geom = veh->FindGeom(m_geo_geomID[j]);
                 if (geom)
                 {
-                    return ((m_geo_geomID[i].compare(m_geo_geomID[j]) == 0 &&
+                    // Only a Geom's own master row takes the subsurfaces treated as its parent
+                    bool geomMaster = m_geo_subsurfID[i].compare( "" ) == 0;
+                    return ((geomMaster && m_geo_geomID[i].compare(m_geo_geomID[j]) == 0 &&
                              geom->GetSubSurf(m_geo_subsurfID[j])->m_IncludeType() == vsp::SS_INC_TREAT_AS_PARENT) ||
-                            (m_geo_geomID[i].compare(geom->GetAncestorID(m_geo_groupedAncestorGen[j])) == 0 &&
+                            (geomMaster && (int)i == m_geo_groupRow[j] &&
                              geom->GetSubSurf(m_geo_subsurfID[j])->m_IncludeType() == vsp::SS_INC_TREAT_AS_PARENT) ||
                             (geom->GetSubSurf(m_geo_subsurfID[j])->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT &&
                              m_geo_subsurfID[i].compare(m_geo_subsurfID[j]) == 0));
@@ -2540,30 +2680,63 @@ bool ParasiteDragMgrSingleton::ShouldAddGeomToMasterGeom( const size_t &i, const
         return false;
     }
 
-    // IF
-    // ==========
-    // Same Geom AND Geom[i] is main surface
-    // OR
-    // Not the same Geom AND Ancestor of Geom[j] is Geom[i] AND Geom[i] is 0th surface AND Geom[j] not an expanded list
-    // OR
-    // is custom geom (TODO: this could use some work)
-    // ==========
-    // AND
-    // ==========
-    // Shape types are the same AND
-    if ( i != j ) // If not the same geom
+    // A Geom's surface rows go to its own master row, and to the master row of the Geom it is
+    // grouped into.  Only surface rows move area, so the result does not depend on row order.
+    if ( i != j && m_geo_masterRow[i] && !m_geo_masterRow[j] && !m_geo_noArea[j] &&
+         m_geo_subsurfID[j].compare( "" ) == 0 && m_geo_subsurfID[i].compare( "" ) == 0 )
     {
-        if ( m_geo_masterRow[i] && m_geo_subsurfID[j].compare( "" ) == 0 && m_geo_subsurfID[i].compare( "" ) == 0 )
-        {
-            return ( ( m_geo_geomID[i].compare( m_geo_geomID[j] ) == 0 ) ||
-                     ( m_geo_geomID[i].compare( m_geo_geomID[j] ) != 0 &&
-                       m_geo_geomID[i].compare( geom->GetAncestorID( m_geo_groupedAncestorGen[j] ) ) == 0 ) ||
-                     ( ( m_geo_label[i].substr( 0, 3 ).compare( "[W]" ) == 0 || m_geo_label[i].substr( 0, 3 ).compare( "[B]" ) == 0 ) &&
-                       ( m_geo_geomID[i].compare( m_geo_geomID[j] ) == 0 ) ) ) &&
-                   ( m_geo_shapeType[i] == m_geo_shapeType[j] );
-        }
+        return m_geo_geomID[i].compare( m_geo_geomID[j] ) == 0 || (int)i == m_geo_groupRow[j];
     }
     return false;
+}
+
+//==== Master row of the Geom whose drag takes row irow's Geom, or -1 ====//
+// Follows groupings up to a Geom that is not grouped; stops at an ancestor not in the set or of
+// another shape type, which leaves the Geom with its own drag.
+int ParasiteDragMgrSingleton::GroupMasterRow( int irow )
+{
+    Vehicle* veh = VehicleMgr.GetVehicle();
+    if ( !veh )
+    {
+        return -1;
+    }
+
+    int target = -1;
+    int imaster = GeomMasterRow( m_geo_geomID[irow] );
+
+    // Bounded by the row count, so a ring of groupings ends
+    for ( int n = 0; n < m_RowSize && imaster >= 0; n++ )
+    {
+        Geom* geom = veh->FindGeom( m_geo_geomID[imaster] );
+        int gen = m_geo_groupedAncestorGen[imaster];
+        if ( !geom || gen <= 0 )
+        {
+            break;
+        }
+
+        int ianc = GeomMasterRow( geom->GetAncestorID( gen ) );
+        if ( ianc < 0 || ianc == imaster || m_geo_shapeType[ianc] != m_geo_shapeType[imaster] )
+        {
+            break;
+        }
+
+        target = ianc;
+        imaster = ianc;
+    }
+    return target;
+}
+
+//==== Master row of a Geom, not of one of its subsurfaces, or -1 ====//
+int ParasiteDragMgrSingleton::GeomMasterRow( const string &geom_id )
+{
+    for ( int i = 0; i < m_RowSize; i++ )
+    {
+        if ( m_geo_masterRow[i] && m_geo_subsurfID[i].compare( "" ) == 0 && m_geo_geomID[i].compare( geom_id ) == 0 )
+        {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void ParasiteDragMgrSingleton::UpdateRefWing()
@@ -2576,21 +2749,31 @@ void ParasiteDragMgrSingleton::UpdateRefWing()
     }
     else
     {
-        // Pull from existing geometry
-        Geom* refgeom = VehicleMgr.GetVehicle()->FindGeom( m_RefGeomID );
+        // Pull from existing geometry; with none chosen, the first wing, as the screen does
+        Vehicle* veh = VehicleMgr.GetVehicle();
+        if ( m_RefGeomID.empty() )
+        {
+            vector < string > geom_ids = veh->GetGeomVec();
+            for ( size_t i = 0; i < geom_ids.size(); i++ )
+            {
+                Geom* geom = veh->FindGeom( geom_ids[i] );
+                if ( geom && geom->GetBehaviorType() == MS_WING_GEOM_TYPE )
+                {
+                    m_RefGeomID = geom_ids[i];
+                    break;
+                }
+            }
+        }
+
+        Geom* refgeom = veh->FindGeom( m_RefGeomID );
 
         if ( refgeom )
         {
-            if ( refgeom->GetBehaviorType() == MS_WING_GEOM_TYPE )
+            WingRole* wing = Geom::CastTo< WingRole >( refgeom );
+            if ( wing )
             {
-                // A reference area is a property of the shape, so it comes from what is copied.
-                WingGeom* behavior_wing = dynamic_cast < WingGeom* > ( refgeom->GetBehaviorGeom() );
-
-                if ( behavior_wing )
-                {
-                    m_Sref.Set( behavior_wing->m_TotalArea() );
-                    m_Sref.Deactivate();
-                }
+                m_Sref.Set( wing->GetWingTotalArea() );
+                m_Sref.Deactivate();
             }
         }
         else
@@ -2644,6 +2827,9 @@ void ParasiteDragMgrSingleton::UpdateAtmos()
     else if ( m_FreestreamType() == vsp::ATMOS_TYPE_MANUAL_RE_L )
     {
         UpdateVinf( m_VinfUnitType() );
+
+        // The form factors read the Mach from the atmosphere
+        m_Atmos.SetMach( m_Mach() );
     }
 
     if ( m_FreestreamType() != vsp::ATMOS_TYPE_MANUAL_RE_L )
@@ -2811,24 +2997,21 @@ void ParasiteDragMgrSingleton::UpdatePercentageCD()
     double ftotal = 0;
     double percTotal = 0;
 
+    // The master rows carry the geometry's drag, as in GetGeometryCD; the other rows show their
+    // own share and are not summed.
     for ( int i = 0; i < m_geo_CD.size(); i++ )
     {
-        if ( !m_DegenGeomVec.empty() )
+        double perc = 0;
+        if ( !m_DegenGeomVec.empty() && totalCD0 > 0 )
         {
-            if ( !m_geo_masterRow[i] )
-            {
-                m_geo_percTotalCD.push_back( m_geo_CD[i] / totalCD0 );
-                percTotal += m_geo_CD[i] / totalCD0;
-                ftotal += m_geo_f[i];
-            }
-            else
-            {
-                m_geo_percTotalCD.push_back( 0.0 );
-            }
+            perc = m_geo_CD[i] / totalCD0;
         }
-        else
+        m_geo_percTotalCD.push_back( perc );
+
+        if ( !m_DegenGeomVec.empty() && m_geo_masterRow[i] && m_geo_CD[i] > 0.0 )
         {
-            m_geo_percTotalCD.push_back( 0 );
+            percTotal += perc;
+            ftotal += m_geo_f[i];
         }
     }
 
@@ -2839,7 +3022,7 @@ void ParasiteDragMgrSingleton::UpdatePercentageCD()
     percTotal = 0;
     for ( size_t i = 0; i < m_ExcresRowVec.size(); ++i )
     {
-        if ( !m_DegenGeomVec.empty() )
+        if ( !m_DegenGeomVec.empty() && totalCD0 > 0 )
         {
             m_ExcresRowVec[i].PercTotalCD = m_ExcresRowVec[i].Amount / totalCD0;
             percTotal += m_ExcresRowVec[i].Amount / totalCD0;
@@ -2853,38 +3036,7 @@ void ParasiteDragMgrSingleton::UpdatePercentageCD()
 
     m_ExcresfTotal = ftotal;
     m_ExcresPercTotal = percTotal;
-
-    UpdateMasterPercCD();
 }
-
-void ParasiteDragMgrSingleton::UpdateMasterPercCD()
-{
-    if ( !m_DegenGeomVec.empty() )
-    {
-        for ( size_t i = 0; i < m_RowSize; ++i )
-        {
-            for ( size_t j = 0; j < m_RowSize; ++j )
-            {
-                if ( ShouldAddSubSurfToMasterGeom( i, j ) )
-                {
-                    m_geo_percTotalCD[i] += m_geo_percTotalCD[j];
-                }
-            }
-        }
-
-        for ( size_t i = 0; i < m_RowSize; ++i )
-        {
-            for ( size_t j = 0; j < m_RowSize; ++j )
-            {
-                if ( ShouldAddGeomToMasterGeom( i, j ) )
-                {
-                    m_geo_percTotalCD[i] += m_geo_percTotalCD[j];
-                }
-            }
-        }
-    }
-}
-
 
 void ParasiteDragMgrSingleton::UpdateParmActivity()
 {
@@ -2925,8 +3077,7 @@ void ParasiteDragMgrSingleton::UpdateParmActivity()
         m_SpecificHeatRatio.Activate();
     }
 
-    if ( m_TurbCfEqnType() == vsp::CF_TURB_ROUGHNESS_SCHLICHTING_AVG_FLOW_CORRECTION ||
-         m_TurbCfEqnType() == vsp::CF_TURB_HEATTRANSFER_WHITE_CHRISTOPH )
+    if ( m_TurbCfEqnType() == vsp::CF_TURB_ROUGHNESS_SCHLICHTING_AVG_FLOW_CORRECTION )
     {
         m_SpecificHeatRatio.Activate();
     }
@@ -3109,42 +3260,36 @@ void ParasiteDragMgrSingleton::UpdateExcres()
         if ( i == m_CurrentExcresIndex )
         {
             m_ExcresRowVec[i].Input = m_ExcresValue();
-
-            if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_CD )
-            {
-                m_ExcresRowVec[i].Amount = m_ExcresValue();
-            }
-            else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_COUNT )
-            {
-                m_ExcresRowVec[i].Amount = m_ExcresValue() / 10000.0;
-            }
-            else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_PERCENT_GEOM )
-            {
-                m_ExcresRowVec[i].Amount = CalcPercentageGeomCD( m_ExcresValue() );
-            }
-            else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_MARGIN )
-            {
-                m_ExcresRowVec[i].Amount = CalcPercentageTotalCD( m_ExcresValue() );
-            }
-            else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_DRAGAREA )
-            {
-                m_ExcresRowVec[i].Amount = CalcDragAreaCD( m_ExcresValue() );
-            }
         }
-        else
+
+        if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_CD )
         {
-            if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_PERCENT_GEOM )
-            {
-                m_ExcresRowVec[i].Amount = CalcPercentageGeomCD( m_ExcresRowVec[i].Input );
-            }
-            else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_MARGIN )
-            {
-                m_ExcresRowVec[i].Amount = CalcPercentageTotalCD( m_ExcresRowVec[i].Input );
-            }
-            else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_DRAGAREA )
-            {
-                m_ExcresRowVec[i].Amount = CalcDragAreaCD( m_ExcresRowVec[i].Input );
-            }
+            m_ExcresRowVec[i].Amount = m_ExcresRowVec[i].Input;
+        }
+        else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_COUNT )
+        {
+            m_ExcresRowVec[i].Amount = m_ExcresRowVec[i].Input / 10000.0;
+        }
+        else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_PERCENT_GEOM )
+        {
+            m_ExcresRowVec[i].Amount = CalcPercentageGeomCD( m_ExcresRowVec[i].Input );
+        }
+        else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_DRAGAREA )
+        {
+            m_ExcresRowVec[i].Amount = CalcDragAreaCD( m_ExcresRowVec[i].Input );
+        }
+        else if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_MARGIN )
+        {
+            m_ExcresRowVec[i].Amount = 0;
+        }
+    }
+
+    // The margin is a share of the total, so it follows every other excrescence
+    for ( size_t i = 0; i < m_ExcresRowVec.size(); ++i )
+    {
+        if ( m_ExcresRowVec[i].Type == vsp::EXCRESCENCE_MARGIN )
+        {
+            m_ExcresRowVec[i].Amount = CalcPercentageTotalCD( m_ExcresRowVec[i].Input );
         }
     }
 
@@ -3163,27 +3308,33 @@ void ParasiteDragMgrSingleton::UpdateExcres()
 void ParasiteDragMgrSingleton::UpdateCurrentExcresVal()
 {
     m_ExcresType.Set( m_ExcresRowVec[m_CurrentExcresIndex].Type );
-    if ( m_ExcresType() == vsp::EXCRESCENCE_CD )
+    SetExcresValueLimits( m_ExcresType() );
+    m_ExcresValue.Set( m_ExcresRowVec[m_CurrentExcresIndex].Input );
+}
+
+void ParasiteDragMgrSingleton::SetExcresValueLimits( int type )
+{
+    if ( type == vsp::EXCRESCENCE_CD )
     {
         m_ExcresValue.SetLowerUpperLimits( 0.0, 10.0 );
     }
-    else if ( m_ExcresType() == vsp::EXCRESCENCE_COUNT )
+    else if ( type == vsp::EXCRESCENCE_COUNT )
     {
         m_ExcresValue.SetLowerUpperLimits( 0.0, 100000.0 );
     }
-    else if ( m_ExcresType() == vsp::EXCRESCENCE_PERCENT_GEOM )
+    else if ( type == vsp::EXCRESCENCE_PERCENT_GEOM )
     {
         m_ExcresValue.SetLowerUpperLimits( 0.0, 1000.0 );
     }
-    else if ( m_ExcresType() == vsp::EXCRESCENCE_MARGIN )
+    else if ( type == vsp::EXCRESCENCE_MARGIN )
     {
-        m_ExcresValue.SetLowerUpperLimits( 0.0, 1000.0 );
+        // A share of the total, so below 100%
+        m_ExcresValue.SetLowerUpperLimits( 0.0, 99.0 );
     }
-    else if ( m_ExcresType() == vsp::EXCRESCENCE_DRAGAREA )
+    else if ( type == vsp::EXCRESCENCE_DRAGAREA )
     {
         m_ExcresValue.SetLowerUpperLimits( 0.0, 10000.0 );
     }
-    m_ExcresValue.Set( m_ExcresRowVec[m_CurrentExcresIndex].Input );
 }
 
 string ParasiteDragMgrSingleton::ExportToCSV()
@@ -3243,9 +3394,10 @@ string ParasiteDragMgrSingleton::ExportToCSV()
             new_geo_f, new_geo_CD, new_geo_percTotalCD;
         vector <int> new_geo_ffType, new_geo_surfNum;
 
+        // A component is a master row: a Geom, or a subsurface given separate treatment
         for ( size_t i = 0; i < m_geo_geomID.size(); i++ )
         {
-            if ( std::find( new_ID_vec.begin(), new_ID_vec.end(), m_geo_geomID[i] ) == new_ID_vec.end() )
+            if ( m_geo_masterRow[i] )
             {
                 new_ID_vec.push_back( m_geo_geomID[i] );
                 new_geo_label.push_back( m_geo_label[i] );
@@ -3292,7 +3444,7 @@ string ParasiteDragMgrSingleton::ExportToCSV()
         res->Add( new NameValData( "Comp_f", new_geo_f, "Drag area." ) );
         res->Add( new NameValData( "Comp_CD", new_geo_CD, "Drag coefficient." ) );
         res->Add( new NameValData( "Comp_PercTotalCD", new_geo_percTotalCD, "Percent of total CD." ) );
-        res->Add( new NameValData( "Comp_SurfNum", m_geo_surfNum, "Geom surf number" ) );
+        res->Add( new NameValData( "Comp_SurfNum", new_geo_surfNum, "Geom surf number" ) );
     }
     else
     {
@@ -3358,6 +3510,9 @@ string ParasiteDragMgrSingleton::ExportToCSV( const string & file_name )
 void ParasiteDragMgrSingleton::ClearInputVectors()
 {
     m_geo_masterRow.clear();
+    m_geo_noArea.clear();
+    m_geo_sourceRow.clear();
+    m_geo_groupRow.clear();
     m_geo_geomID.clear();
     m_geo_subsurfID.clear();
     m_geo_name.clear();
@@ -3436,12 +3591,14 @@ xmlNodePtr ParasiteDragMgrSingleton::DecodeXml( xmlNodePtr & node )
         {
             snprintf( str, sizeof( str ),  "Excres_%i", i );
             xmlNodePtr excresqualnode = XmlUtil::GetNode( ExcresDragnode, str, 0 );
+            if ( !excresqualnode )
+            {
+                break;
+            }
 
-            m_ExcresType.Set( XmlUtil::FindInt( excresqualnode, "Type", 0 ) );
-            m_ExcresValue.Set( XmlUtil::FindDouble( excresqualnode, "Input", 0.0 ) );
-            m_ExcresName = XmlUtil::FindString(excresqualnode, "Label", "");
-
-            AddExcrescence();
+            AddExcrescence( XmlUtil::FindString( excresqualnode, "Label", "" ),
+                            XmlUtil::FindInt( excresqualnode, "Type", 0 ),
+                            XmlUtil::FindDouble( excresqualnode, "Input", 0.0 ) );
         }
     }
 
@@ -3617,6 +3774,7 @@ void ParasiteDragMgrSingleton::SortExcresByPercTotalCD()
 {
     vector < ExcrescenceTableRow > tempExcres;
     vector < bool > isSortedExcres( m_ExcresRowVec.size(), false );
+    int new_current = m_CurrentExcresIndex;
     int cur_max_ind = 0;
     int i = 0;
 
@@ -3638,6 +3796,12 @@ void ParasiteDragMgrSingleton::SortExcresByPercTotalCD()
             }
             isSortedExcres[cur_max_ind] = true;
             tempExcres.push_back( m_ExcresRowVec[cur_max_ind] );
+
+            // The current excrescence moves with its row
+            if ( cur_max_ind == m_CurrentExcresIndex )
+            {
+                new_current = tempExcres.size() - 1;
+            }
         }
 
         // Increase until max reached, then go back through to make sure everything is in its place
@@ -3652,6 +3816,7 @@ void ParasiteDragMgrSingleton::SortExcresByPercTotalCD()
     }
 
     m_ExcresRowVec = tempExcres;
+    m_CurrentExcresIndex = new_current;
 }
 
 void ParasiteDragMgrSingleton::SortMainTableVecByGroupedAncestorGeoms()
@@ -3787,20 +3952,7 @@ bool ParasiteDragMgrSingleton::IsSameGeomSet()
         Geom* geom = veh->FindGeom( newVecToCompare[i] );
         if ( geom )
         {
-            temprowsize += geom->GetNumTotalSurfs();
-            for ( size_t j = 0; j < geom->GetSubSurfVec().size(); ++j )
-            {
-                for ( size_t k = 0; k < geom->GetNumSymmCopies(); ++k )
-                {
-                    ++temprowsize;
-                }
-
-                // Subsurfaces are essentially separate geometries and as such get their own master row
-                if ( geom->GetSubSurfVec()[j]->m_IncludeType() == vsp::SS_INC_SEPARATE_TREATMENT )
-                {
-                    ++temprowsize;
-                }
-            }
+            temprowsize += CalcGeomRowSize( geom );
         }
     }
 
@@ -3864,7 +4016,7 @@ bool ParasiteDragMgrSingleton::IsNotZeroLineItem( int index )
 
     if ( m_geo_subsurfID[index].compare( "" ) == 0 )
     {
-        if ( m_geo_groupedAncestorGen[index] == 0 )
+        if ( m_geo_groupRow[index] < 0 && !m_geo_noArea[index] )
         {
             return true;
         }
@@ -3902,7 +4054,8 @@ void ParasiteDragMgrSingleton::RefreshBaseDataVectors()
     {
         // Reset Geo Vecs & Clear Degen Geom
         veh->ClearDegenGeom();
-        m_DegenGeomVec.clear();
+        SetDegenGeomVec( vector < DegenGeom > () );
+        m_TagWetAreaMap.clear();
 
         ClearInputVectors();
         ClearOutputVectors();
@@ -3932,13 +4085,45 @@ void ParasiteDragMgrSingleton::RenewDegenGeomVec()
     {
         // Don't pass mode parameters here as they've already been applied to 'set'.
         veh->CreateDegenGeom( set, /* useMode */ false, /* modeID */ "" );
-        string meshID = veh->CompGeomAndFlatten( set, 0);
-        veh->DeleteGeomVec( { meshID } );
-        veh->ShowOnlySet( set );
+        ComputeWetAreas( set );
 
         // First Assignment of DegenGeomVec, Will Carry Through to Rest of Calculate_X
-        m_DegenGeomVec = veh->GetDegenGeomVec();
+        SetDegenGeomVec( veh->GetDegenGeomVec() );
     }
+}
+
+void ParasiteDragMgrSingleton::SetDegenGeomVec( const vector < DegenGeom > & degen_vec )
+{
+    m_DegenGeomVec = degen_vec;
+
+    // Keyed by ID now, while the parent pointers are still good
+    m_DegenIndexMap.clear();
+    for ( int i = 0; i < ( int )m_DegenGeomVec.size(); i++ )
+    {
+        Geom* parent = m_DegenGeomVec[i].getParentGeom();
+        if ( parent && m_DegenGeomVec[i].getType() != DegenGeom::DISK_TYPE &&
+             m_DegenGeomVec[i].getCfdSurfType() != vsp::CFD_TRANSPARENT &&
+             m_DegenIndexMap.find( parent->GetID() ) == m_DegenIndexMap.end() )
+        {
+            m_DegenIndexMap[ parent->GetID() ] = i;
+        }
+    }
+}
+
+int ParasiteDragMgrSingleton::FindDegenIndex( const string & geom_id )
+{
+    map < string, int >::const_iterator it = m_DegenIndexMap.find( geom_id );
+    if ( it == m_DegenIndexMap.end() )
+    {
+        return -1;
+    }
+
+    if ( m_DegenGeomVec[ it->second ].getDegenSticks().empty() )
+    {
+        return -1;
+    }
+
+    return it->second;
 }
 
 bool ParasiteDragMgrSingleton::HasSameNames()

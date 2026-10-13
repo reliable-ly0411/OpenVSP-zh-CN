@@ -555,7 +555,7 @@ void AdvLinkScreen::CallBack( Fl_Widget *w )
             if ( edit_link )
             {
                 string lname = m_LinkBrowser->GetPopupValue();
-                edit_link->SetName( lname );
+                AdvLinkMgr.SetLinkName( edit_link, lname );
             }
         }
 
@@ -838,11 +838,7 @@ void AdvLinkScreen::GuiDeviceCallBack( GuiDevice* gui_device )
     {
         if ( edit_link )
         {
-            string name = m_NameInput.GetString();
-            if ( !AdvLinkMgr.DuplicateLinkName( name ) )
-            {
-                edit_link->SetName( m_NameInput.GetString() );
-            }
+            AdvLinkMgr.SetLinkName( edit_link, m_NameInput.GetString() );
         }
     }
     else if ( gui_device == &m_AddLink )

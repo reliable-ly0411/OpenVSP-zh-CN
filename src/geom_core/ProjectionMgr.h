@@ -39,11 +39,15 @@ public:
     virtual void SetGeomIDs( const string &tid, const string &bid, const string &did );
 
     static vec3d GetDirection( int dirtype, const string &dirid );
+    static bool CheckDirection( int dirtype, const string &dirid, const vec3d &dir );
 
     virtual void UpdateDirection();
     virtual vec3d GetDirection();
 
     virtual void Renew();
+
+    virtual xmlNodePtr EncodeXml( xmlNodePtr & node );
+    virtual xmlNodePtr DecodeXml( xmlNodePtr & node );
 
     virtual void LoadDrawObjs( vector< DrawObj* > & draw_obj_vec );
 

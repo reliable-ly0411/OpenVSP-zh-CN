@@ -93,7 +93,7 @@ GeometryAnalysisCase::GeometryAnalysisCase()
     m_UseSubSurfFlag.Init( "UseSubSurfFlag", m_GroupName, this, true, false, true );
 
     // Area Slice and Mass Prop
-    m_NumSlices.Init( "NumSlices", m_GroupName, this, 10, 1, 100 );
+    m_NumSlices.Init( "NumSlices", m_GroupName, this, 10, 1, 200 );
     m_NumSlices.SetDescript( "Number of slices used in computation" );
 
     m_SliceDir.Init( "SliceDir", m_GroupName, this, vsp::X_DIR, vsp::X_DIR, vsp::Z_DIR );
@@ -131,15 +131,8 @@ GeometryAnalysisCase::~GeometryAnalysisCase()
 
 void GeometryAnalysisCase::Update()
 {
-    // Dual-geometry analyses that require special geometry for secondary
-    if ( m_GeometryAnalysisType() == vsp::PLANE_2PT_ANGLE_INTERFERENCE ||
-         m_GeometryAnalysisType() == vsp::PLANE_1PT_ANGLE_INTERFERENCE ||
-         m_GeometryAnalysisType() == vsp::GEAR_TURN_ANALYSIS ||
-         m_GeometryAnalysisType() == vsp::CCE_INTERFERENCE ||
-         m_GeometryAnalysisType() == vsp::RISK_ANGLE )
-    {
-        m_SecondaryType = vsp::GEOM_TARGET;
-    }
+    UpdateTargetTypes();
+    UpdateExtentType();
 
     if ( m_SymmRotX() )
     {
@@ -156,19 +149,7 @@ void GeometryAnalysisCase::Update()
 
     if ( m_GeometryAnalysisType() == vsp::PROJ_AREA )
     {
-        vec3d dir = ProjectionMgr.GetDirection( m_DirectionType(), m_DirectionGeomID );
-
-        switch ( m_DirectionType() )
-        {
-            case vsp::X_PROJ:
-            case vsp::Y_PROJ:
-            case vsp::Z_PROJ:
-            case vsp::GEOM_PROJ:
-                m_DispX = dir.x();
-                m_DispY = dir.y();
-                m_DispZ = dir.z();
-                break;
-        }
+        UpdateDirection();
     }
 
     if ( m_AutoBoundsFlag() )
@@ -183,6 +164,114 @@ void GeometryAnalysisCase::Update()
     }
 
     UpdateDrawObj_Live();
+}
+
+// Force the primary and secondary target types the analysis type allows.  Evaluate calls this too,
+// so a case set up through the API follows the same rules as one set up in the GUI.
+void GeometryAnalysisCase::UpdateTargetTypes()
+{
+    // Primary must be singular geometry type -- no Set or Mode allowed.
+    if ( m_GeometryAnalysisType() == vsp::GEAR_CG_TIPBACK_ANALYSIS ||
+         m_GeometryAnalysisType() == vsp::GEAR_WEIGHT_DISTRIBUTION_ANALYSIS ||
+         m_GeometryAnalysisType() == vsp::GEAR_TIPOVER_ANALYSIS ||
+         m_GeometryAnalysisType() == vsp::AERO_CENTER )
+    {
+        m_PrimaryType = vsp::GEOM_TARGET;
+    }
+    else if ( m_PrimaryType() == vsp::MODE_TARGET && ModeMgr.GetNumModes() == 0 )
+    {
+        m_PrimaryType = vsp::SET_TARGET;
+    }
+
+    // Dual-geometry analyses that require special geometry for secondary
+    if ( m_GeometryAnalysisType() == vsp::PLANE_2PT_ANGLE_INTERFERENCE ||
+         m_GeometryAnalysisType() == vsp::PLANE_1PT_ANGLE_INTERFERENCE ||
+         m_GeometryAnalysisType() == vsp::GEAR_TURN_ANALYSIS ||
+         m_GeometryAnalysisType() == vsp::CCE_INTERFERENCE ||
+         m_GeometryAnalysisType() == vsp::RISK_ANGLE )
+    {
+        m_SecondaryType = vsp::GEOM_TARGET;
+    }
+    else if ( m_GeometryAnalysisType() == vsp::PLANE_STATIC_DISTANCE_INTERFERENCE )
+    {
+        if ( m_SecondaryType() != vsp::Z_TARGET )
+        {
+            m_SecondaryType = vsp::GEOM_TARGET;
+        }
+    }
+    // Only Plane Min/Max Distance takes a Z plane and only From Point Visibility a point.
+    else if ( m_SecondaryType() == vsp::Z_TARGET ||
+              ( m_SecondaryType() == vsp::XYZ_TARGET && m_GeometryAnalysisType() != vsp::VISIBLE_FROM_POINT_ANALYSIS ) )
+    {
+        m_SecondaryType = vsp::SET_TARGET;
+    }
+}
+
+// The extents a swept volume can take: a translating joint secondary slides between its limits,
+// anything else moves by the displacement.
+void GeometryAnalysisCase::GetExtentTypes( vector < int > &types ) const
+{
+    types.clear();
+    types.push_back( vsp::EXTENT_FORWARD_INF );
+    types.push_back( vsp::EXTENT_REVERSE_INF );
+
+    bool min_set;
+    bool max_set;
+    double start;
+    double end;
+    if ( GetSecondaryTranslatingJoint( min_set, start, max_set, end ) )
+    {
+        if ( min_set && max_set )
+        {
+            types.push_back( vsp::EXTENT_SLIDER_FULL );
+        }
+        if ( min_set )
+        {
+            types.push_back( vsp::EXTENT_SLIDER_BEFORE );
+        }
+        if ( max_set )
+        {
+            types.push_back( vsp::EXTENT_SLIDER_AFTER );
+        }
+    }
+    else
+    {
+        types.push_back( vsp::EXTENT_FORWARD_FINITE );
+        types.push_back( vsp::EXTENT_REVERSE_FINITE );
+    }
+}
+
+// An extent the secondary no longer offers falls back to the first one.
+void GeometryAnalysisCase::UpdateExtentType()
+{
+    if ( m_GeometryAnalysisType() != vsp::LINEAR_SWEPT_VOLUME_ANALYSIS )
+    {
+        return;
+    }
+
+    vector < int > types;
+    GetExtentTypes( types );
+    if ( !vector_contains_val( types, m_ExtentType() ) )
+    {
+        m_ExtentType = types[ 0 ];
+    }
+}
+
+void GeometryAnalysisCase::UpdateDirection()
+{
+    vec3d dir = ProjectionMgr.GetDirection( m_DirectionType(), m_DirectionGeomID );
+
+    switch ( m_DirectionType() )
+    {
+        case vsp::X_PROJ:
+        case vsp::Y_PROJ:
+        case vsp::Z_PROJ:
+        case vsp::GEOM_PROJ:
+            m_DispX = dir.x();
+            m_DispY = dir.y();
+            m_DispZ = dir.z();
+            break;
+    }
 }
 
 void GeometryAnalysisCase::AddAzEl( double az, double el )
@@ -252,7 +341,9 @@ void GeometryAnalysisCase::RenameParms()
 
 string GeometryAnalysisCase::GetPrimaryName() const
 {
-    if ( m_PrimaryType() == vsp::SET_TARGET )
+    // A Mode that is gone falls back to the primary set
+    if ( m_PrimaryType() == vsp::SET_TARGET ||
+         ( m_PrimaryType() == vsp::MODE_TARGET && !ModeMgr.GetMode( m_PrimaryModeID ) ) )
     {
         Vehicle *veh = VehicleMgr.GetVehicle();
         if ( veh )
@@ -320,6 +411,26 @@ string GeometryAnalysisCase::GetSecondaryName() const
     return string();
 }
 
+// Whether the analysis reads the secondary at all.
+bool GeometryAnalysisCase::UsesSecondary() const
+{
+    if ( m_GeometryAnalysisType() == vsp::EXTERNAL_SELF_INTERFERENCE ||
+         m_GeometryAnalysisType() == vsp::GEAR_CG_TIPBACK_ANALYSIS ||
+         m_GeometryAnalysisType() == vsp::GEAR_WEIGHT_DISTRIBUTION_ANALYSIS ||
+         m_GeometryAnalysisType() == vsp::GEAR_TIPOVER_ANALYSIS ||
+         m_GeometryAnalysisType() == vsp::VISIBLE_AT_SURF_ANALYSIS ||
+         m_GeometryAnalysisType() == vsp::COMP_GEOM ||
+         m_GeometryAnalysisType() == vsp::PLANAR_SLICE ||
+         m_GeometryAnalysisType() == vsp::MASS_PROP ||
+         m_GeometryAnalysisType() == vsp::AERO_CENTER ||
+       ( m_GeometryAnalysisType() == vsp::PROJ_AREA &&
+        !m_BoundaryEnableFlag() ) )
+    {
+        return false;
+    }
+    return true;
+}
+
 vector< TMesh* > GeometryAnalysisCase::GetPrimaryTMeshVec()
 {
     BndBox bbox;
@@ -335,13 +446,10 @@ vector< TMesh* > GeometryAnalysisCase::GetPrimaryTMeshVec( BndBox & bbox )
     {
         if ( m_PrimaryType() == vsp::SET_TARGET || m_PrimaryType() == vsp::MODE_TARGET )
         {
-            int set = vsp::SET_NONE;
+            // A Mode that is gone falls back to the primary set
+            int set = m_PrimarySet();
 
-            if ( m_PrimaryType() == vsp::SET_TARGET )
-            {
-                set = m_PrimarySet();
-            }
-            else
+            if ( m_PrimaryType() == vsp::MODE_TARGET )
             {
                 Mode *m = ModeMgr.GetMode( m_PrimaryModeID );
                 if ( m )
@@ -370,13 +478,10 @@ vector< TetraMassProp* > GeometryAnalysisCase::GetPrimaryTetraMassPropVec()
     {
         if ( m_PrimaryType() == vsp::SET_TARGET || m_PrimaryType() == vsp::MODE_TARGET )
         {
-            int set = vsp::SET_NONE;
+            // A Mode that is gone falls back to the primary set
+            int set = m_PrimarySet();
 
-            if ( m_PrimaryType() == vsp::SET_TARGET )
-            {
-                set = m_PrimarySet();
-            }
-            else
+            if ( m_PrimaryType() == vsp::MODE_TARGET )
             {
                 Mode *m = ModeMgr.GetMode( m_PrimaryModeID );
                 if ( m )
@@ -463,13 +568,10 @@ BndBox GeometryAnalysisCase::GetPrimaryScaleIndependentBBox() const
     {
         if ( m_PrimaryType() == vsp::SET_TARGET || m_PrimaryType() == vsp::MODE_TARGET )
         {
-            int set = vsp::SET_NONE;
+            // A Mode that is gone falls back to the primary set
+            int set = m_PrimarySet();
 
-            if ( m_PrimaryType() == vsp::SET_TARGET )
-            {
-                set = m_PrimarySet();
-            }
-            else
+            if ( m_PrimaryType() == vsp::MODE_TARGET )
             {
                 Mode *m = ModeMgr.GetMode( m_PrimaryModeID );
                 if ( m )
@@ -533,13 +635,10 @@ AuxiliaryRole* GeometryAnalysisCase::GetPrimaryAuxiliaryGeom() const
     {
         if ( m_PrimaryType() == vsp::SET_TARGET || m_PrimaryType() == vsp::MODE_TARGET )
         {
-            int set = vsp::SET_NONE;
+            // A Mode that is gone falls back to the primary set
+            int set = m_PrimarySet();
 
-            if ( m_PrimaryType() == vsp::SET_TARGET )
-            {
-                set = m_PrimarySet();
-            }
-            else
+            if ( m_PrimaryType() == vsp::MODE_TARGET )
             {
                 Mode *m = ModeMgr.GetMode( m_PrimaryModeID );
                 if ( m )
@@ -591,61 +690,68 @@ bool GeometryAnalysisCase::GetPrimaryPtNormalMeanContactPtPivotAxisCG( vec3d &pt
     return false;
 }
 
-bool GeometryAnalysisCase::GetDisplacement( double dist, vec3d &dstart, vec3d &disp )
+// The secondary Geom's joint, when it translates, with its limits.
+JointRole* GeometryAnalysisCase::GetSecondaryTranslatingJoint( bool &min_set, double &start, bool &max_set, double &end ) const
 {
     if ( m_SecondaryType() == vsp::GEOM_TARGET )
     {
         Vehicle *veh = VehicleMgr.GetVehicle();
         if ( veh )
         {
-            Geom* geom = veh->FindGeom( m_SecondaryGeomID );
+            JointRole* joint = Geom::CastTo< JointRole >( veh->FindGeom( m_SecondaryGeomID ) );
 
-            if ( geom )
+            if ( joint && joint->GetJointTransMotion( min_set, start, max_set, end ) )
             {
-                // Axis and deflection from this Geom; limits from the joint.
-                bool min_set;
-                bool max_set;
-                double start;
-                double end;
-
-                JointRole* joint = Geom::CastTo< JointRole >( geom );
-
-                if ( joint && joint->GetJointTransMotion( min_set, start, max_set, end ) )
-                {
-                    vec3d dir = joint->GetJointAxis();
-
-                    const double pos = joint->GetJointTranslate();
-
-                    if ( m_ExtentType() == vsp::EXTENT_FORWARD_INF )
-                    {
-                        dstart.set_xyz( 0, 0, 0 );
-                        disp = dist * dir;
-                    }
-                    else if ( m_ExtentType() == vsp::EXTENT_REVERSE_INF )
-                    {
-                        dstart.set_xyz( 0, 0, 0 );
-                        disp = -dist * dir;
-                    }
-                    else if ( m_ExtentType() == vsp::EXTENT_SLIDER_FULL )
-                    {
-                        dstart = ( start - pos ) * dir;
-                        disp = ( end - start ) * dir;
-                    }
-                    else if ( m_ExtentType() == vsp::EXTENT_SLIDER_BEFORE )
-                    {
-                        dstart.set_xyz( 0, 0, 0 );
-                        disp = ( start - pos ) * dir;
-                    }
-                    else if ( m_ExtentType() == vsp::EXTENT_SLIDER_AFTER )
-                    {
-                        dstart.set_xyz( 0, 0, 0 );
-                        disp = ( end - pos ) * dir;
-                    }
-
-                    return true;
-                }
+                return joint;
             }
         }
+    }
+    return nullptr;
+}
+
+bool GeometryAnalysisCase::GetDisplacement( double dist, vec3d &dstart, vec3d &disp )
+{
+    // Axis and deflection from this Geom; limits from the joint.
+    bool min_set;
+    bool max_set;
+    double start;
+    double end;
+
+    JointRole* joint = GetSecondaryTranslatingJoint( min_set, start, max_set, end );
+
+    if ( joint )
+    {
+        vec3d dir = joint->GetJointAxis();
+
+        const double pos = joint->GetJointTranslate();
+
+        if ( m_ExtentType() == vsp::EXTENT_FORWARD_INF )
+        {
+            dstart.set_xyz( 0, 0, 0 );
+            disp = dist * dir;
+        }
+        else if ( m_ExtentType() == vsp::EXTENT_REVERSE_INF )
+        {
+            dstart.set_xyz( 0, 0, 0 );
+            disp = -dist * dir;
+        }
+        else if ( m_ExtentType() == vsp::EXTENT_SLIDER_FULL )
+        {
+            dstart = ( start - pos ) * dir;
+            disp = ( end - start ) * dir;
+        }
+        else if ( m_ExtentType() == vsp::EXTENT_SLIDER_BEFORE )
+        {
+            dstart.set_xyz( 0, 0, 0 );
+            disp = ( start - pos ) * dir;
+        }
+        else if ( m_ExtentType() == vsp::EXTENT_SLIDER_AFTER )
+        {
+            dstart.set_xyz( 0, 0, 0 );
+            disp = ( end - pos ) * dir;
+        }
+
+        return true;
     }
 
     vec3d dir( m_DispX(), m_DispY(), m_DispZ() );
@@ -734,6 +840,7 @@ bool GeometryAnalysisCase::GetSecondaryPt( vector < vec3d > &pt_vec, vector < TM
     if ( m_SecondaryType() == vsp::XYZ_TARGET )
     {
         pt_vec.push_back( vec3d( m_SecondaryX(), m_SecondaryY(), m_SecondaryZ() ) );
+        fov_vec.resize( pt_vec.size(), nullptr );
         return true;
     }
     else
@@ -1024,6 +1131,9 @@ string GeometryAnalysisCase::Evaluate()
     DeleteTMeshVec( m_SliceTMeshVec );
     m_LinePtsVec.clear();
     m_PointsVec.clear();
+
+    UpdateTargetTypes();
+    UpdateExtentType();
 
     Vehicle *veh = VehicleMgr.GetVehicle();
     if ( veh )
@@ -2195,6 +2305,14 @@ string GeometryAnalysisCase::Evaluate()
             }
             case vsp::PROJ_AREA:
             {
+                // After the Mode, which can move the direction Geom.
+                UpdateDirection();
+
+                if ( !ProjectionMgr.CheckDirection( m_DirectionType(), m_DirectionGeomID, vec3d( m_DispX(), m_DispY(), m_DispZ() ) ) )
+                {
+                    break;
+                }
+
                 primary_tmv = GetPrimaryTMeshVec();
 
                 if ( !primary_tmv.empty() )
@@ -2701,7 +2819,9 @@ void GeometryAnalysisCase::ShowPrimary()
     Vehicle *veh = VehicleMgr.GetVehicle();
     if ( veh )
     {
-        if ( m_PrimaryType() == vsp::SET_TARGET )
+        // A Mode that is gone falls back to the primary set
+        if ( m_PrimaryType() == vsp::SET_TARGET ||
+             ( m_PrimaryType() == vsp::MODE_TARGET && !ModeMgr.GetMode( m_PrimaryModeID ) ) )
         {
             veh->ShowSet( m_PrimarySet() );
         }

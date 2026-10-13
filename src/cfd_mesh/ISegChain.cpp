@@ -20,12 +20,14 @@
 Puw::Puw()
 {
     m_Surf = nullptr;
+    m_KeepFlag = false;
 }
 
 Puw::Puw( Surf* s, const vec2d &uw )
 {
     m_Surf = s;
     m_UW = uw;
+    m_KeepFlag = false;
 }
 
 Puw::~Puw()
@@ -40,14 +42,17 @@ IPnt::IPnt()
 {
     m_UsedFlag = false;
     m_GroupedFlag = false;
-    m_Partner = nullptr;
+    m_KeepFlag = false;
+    m_AllIndex = -1;
 }
 
 IPnt::IPnt( Puw* p0, Puw* p1 )
 {
     m_UsedFlag = false;
     m_GroupedFlag = false;
-    m_Partner = nullptr;
+    m_KeepFlag = false;
+    m_AllIndex = -1;
+    m_Puws.reserve( 2 );
     m_Puws.push_back( p0 );
     m_Puws.push_back( p1 );
 }
@@ -213,7 +218,7 @@ void IPnt::AddSegRef( ISeg* seg )
 }
 void IPnt::RemoveSegRef( ISeg* seg )
 {
-    deque< ISeg* > svec;
+    vector< ISeg* > svec;
     for ( int i = 0 ; i < ( int )m_Segs.size() ; i++ )
     {
         if ( m_Segs[i] != seg )
@@ -443,8 +448,8 @@ void ISegBox::BuildSubDivide()
     vec2d uw0, uw1;
     for ( int i = m_BeginInd ; i < m_EndInd ; i++ )
     {
-        uw0 = m_ChainPtr->m_ISegDeque[i]->m_IPnt[0]->GetPuw( m_Surf )->m_UW;
-        uw1 = m_ChainPtr->m_ISegDeque[i]->m_IPnt[1]->GetPuw( m_Surf )->m_UW;
+        uw0 = m_ChainPtr->m_ISegVec[i]->m_IPnt[0]->GetPuw( m_Surf )->m_UW;
+        uw1 = m_ChainPtr->m_ISegVec[i]->m_IPnt[1]->GetPuw( m_Surf )->m_UW;
         m_Box.Update( vec3d( uw0.x(), uw0.y(), 0.0 ) );
         m_Box.Update( vec3d( uw1.x(), uw1.y(), 0.0 ) );
     }
@@ -620,19 +625,19 @@ void ISegBox::Intersect( ISegBox* box )
         //==== Check Segments for Intersections ====//
         for (  i = m_BeginInd ; i < m_EndInd ; i++ )
         {
-            vec2d p0 = m_ChainPtr->m_ISegDeque[i]->m_IPnt[0]->GetPuw( m_Surf )->m_UW;
-            vec2d p1 = m_ChainPtr->m_ISegDeque[i]->m_IPnt[1]->GetPuw( m_Surf )->m_UW;
+            vec2d p0 = m_ChainPtr->m_ISegVec[i]->m_IPnt[0]->GetPuw( m_Surf )->m_UW;
+            vec2d p1 = m_ChainPtr->m_ISegVec[i]->m_IPnt[1]->GetPuw( m_Surf )->m_UW;
             for ( j = box->m_BeginInd ; j < box->m_EndInd ; j++ )
             {
                 vec2d int_pnt;
-                vec2d p2 = box->m_ChainPtr->m_ISegDeque[j]->m_IPnt[0]->GetPuw( m_Surf )->m_UW;
-                vec2d p3 = box->m_ChainPtr->m_ISegDeque[j]->m_IPnt[1]->GetPuw( m_Surf )->m_UW;
+                vec2d p2 = box->m_ChainPtr->m_ISegVec[j]->m_IPnt[0]->GetPuw( m_Surf )->m_UW;
+                vec2d p3 = box->m_ChainPtr->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_Surf )->m_UW;
 
                 double t0, t1;
                 if ( seg_seg_intersect( p0, p1, p2, p3, int_pnt, t0, t1 ) )
                 {
-                    ISeg* seg0 = m_ChainPtr->m_ISegDeque[i];
-                    ISeg* seg1 = box->m_ChainPtr->m_ISegDeque[j];
+                    ISeg* seg0 = m_ChainPtr->m_ISegVec[i];
+                    ISeg* seg1 = box->m_ChainPtr->m_ISegVec[j];
 
                     // Each chain's other surface.  Two curves on one surface cross where it
                     // meets both of the others, so where the three are different surfaces the
@@ -763,9 +768,9 @@ ISegChain::ISegChain()
 ISegChain::~ISegChain()
 {
     int i;
-    for ( i = 0 ; i < ( int )m_ISegDeque.size() ; i++ )
+    for ( i = 0 ; i < ( int )m_ISegVec.size() ; i++ )
     {
-        delete m_ISegDeque[i];
+        delete m_ISegVec[i];
     }
 
     for ( i = 0 ; i < ( int )m_SplitVec.size() ; i++ )
@@ -782,24 +787,18 @@ ISegChain::~ISegChain()
 
 void ISegChain::FlipDir()
 {
-    deque< ISeg* > flipped;
-    for ( int i = ( int )m_ISegDeque.size() - 1 ; i >= 0 ; i-- )
-    {
-        flipped.push_back( m_ISegDeque[i] );
-    }
-    m_ISegDeque = flipped;
+    std::reverse( m_ISegVec.begin(), m_ISegVec.end() );
 
-    deque< ISeg* >::iterator s;
-    for ( s = m_ISegDeque.begin() ; s != m_ISegDeque.end(); ++s )
+    for ( int i = 0 ; i < ( int )m_ISegVec.size() ; i++ )
     {
-        ( *s )->FlipDir();
+        m_ISegVec[i]->FlipDir();
     }
 }
 
 double ISegChain::MatchDist( ISeg* seg )
 {
-    ISeg* frontSeg = m_ISegDeque.front();
-    ISeg* backSeg = m_ISegDeque.back();
+    ISeg* frontSeg = m_ISegVec.front();
+    ISeg* backSeg = m_ISegVec.back();
 
     if ( frontSeg->m_SurfA != seg->m_SurfA || frontSeg->m_SurfB != seg->m_SurfB )
     {
@@ -814,16 +813,16 @@ double ISegChain::MatchDist( ISeg* seg )
 
 double ISegChain::ChainDist( ISegChain* B )
 {
-    ISeg* frontSegA = m_ISegDeque.front();
-    ISeg* frontSegB = B->m_ISegDeque.front();
+    ISeg* frontSegA = m_ISegVec.front();
+    ISeg* frontSegB = B->m_ISegVec.front();
 
     if ( frontSegA->m_SurfA != frontSegB->m_SurfA || frontSegA->m_SurfB != frontSegB->m_SurfB )
     {
         return 1.0e12;
     }
 
-    ISeg* backSegA = m_ISegDeque.back();
-    ISeg* backSegB = B->m_ISegDeque.back();
+    ISeg* backSegA = m_ISegVec.back();
+    ISeg* backSegB = B->m_ISegVec.back();
 
     double close_dist = frontSegA->MinDist( frontSegB );
     close_dist = min( close_dist, frontSegA->MinDist( backSegB ) );
@@ -845,19 +844,19 @@ bool ISegChain::Match( ISegChain* B )
     }
 
     // Find 3d x,y,z coordinates of each chain's end points.
-    ISeg* frontSegA = m_ISegDeque.front();
+    ISeg* frontSegA = m_ISegVec.front();
     frontSegA->m_IPnt[0]->CompPnt();
     vec3d pA0 = frontSegA->m_IPnt[0]->m_Pnt;
 
-    ISeg* frontSegB = B->m_ISegDeque.front();
+    ISeg* frontSegB = B->m_ISegVec.front();
     frontSegB->m_IPnt[0]->CompPnt();
     vec3d pB0 = frontSegB->m_IPnt[0]->m_Pnt;
 
-    ISeg* backSegA = m_ISegDeque.back();
+    ISeg* backSegA = m_ISegVec.back();
     backSegA->m_IPnt[1]->CompPnt();
     vec3d pA1 = backSegA->m_IPnt[1]->m_Pnt;
 
-    ISeg* backSegB = B->m_ISegDeque.back();
+    ISeg* backSegB = B->m_ISegVec.back();
     backSegB->m_IPnt[1]->CompPnt();
     vec3d pB1 = backSegB->m_IPnt[1]->m_Pnt;
 
@@ -879,53 +878,17 @@ bool ISegChain::Match( ISegChain* B )
     return false;
 }
 
-void ISegChain::AddSeg( ISeg* seg, bool frontFlag, IPnt* joinIPnt )
-{
-    if ( frontFlag )
-    {
-        if ( seg->m_IPnt[0] == joinIPnt )
-        {
-            seg->FlipDir();
-        }
-        m_ISegDeque.push_front( seg );
-    }
-    else
-    {
-        if ( seg->m_IPnt[1] == joinIPnt )
-        {
-            seg->FlipDir();
-        }
-        m_ISegDeque.push_back( seg );
-    }
-}
-
-void ISegChain::AddSeg( ISeg* seg, bool frontFlag )
-{
-    if ( frontFlag )
-    {
-        ISeg* frontSeg = m_ISegDeque.front();
-        frontSeg->JoinFront( seg );
-        m_ISegDeque.push_front( seg );
-    }
-    else
-    {
-        ISeg* backSeg  = m_ISegDeque.back();
-        backSeg->JoinBack( seg );
-        m_ISegDeque.push_back( seg );
-    }
-}
-
 bool ISegChain::Valid()
 {
-    if ( m_ISegDeque.size() < 1 )
+    if ( m_ISegVec.size() < 1 )
     {
         return false;
     }
 
     double len = 0.0;
-    for ( int i = 0 ; i < ( int )m_ISegDeque.size() ; i++ )
+    for ( int i = 0 ; i < ( int )m_ISegVec.size() ; i++ )
     {
-        len += dist( m_ISegDeque[i]->m_IPnt[0]->m_Pnt, m_ISegDeque[i]->m_IPnt[1]->m_Pnt );
+        len += dist( m_ISegVec[i]->m_IPnt[0]->m_Pnt, m_ISegVec[i]->m_IPnt[1]->m_Pnt );
     }
 
     double tol = 1.0e-4;
@@ -935,19 +898,19 @@ bool ISegChain::Valid()
 
 void ISegChain::BuildBoxes()
 {
-    if ( m_ISegDeque.size() == 0 )
+    if ( m_ISegVec.size() == 0 )
     {
         return;
     }
 
-    m_SurfA = m_ISegDeque[0]->m_SurfA;
-    m_SurfB = m_ISegDeque[0]->m_SurfB;
+    m_SurfA = m_ISegVec[0]->m_SurfA;
+    m_SurfB = m_ISegVec[0]->m_SurfB;
 
     m_ISegBoxA.m_ChainPtr = this;
     m_ISegBoxA.m_Surf = m_SurfA;
 
     m_ISegBoxA.m_BeginInd = 0;
-    m_ISegBoxA.m_EndInd   = m_ISegDeque.size();
+    m_ISegBoxA.m_EndInd   = m_ISegVec.size();
 
     m_ISegBoxA.BuildSubDivide();
 
@@ -955,10 +918,23 @@ void ISegChain::BuildBoxes()
     m_ISegBoxB.m_Surf = m_SurfB;
 
     m_ISegBoxB.m_BeginInd = 0;
-    m_ISegBoxB.m_EndInd   = m_ISegDeque.size();
+    m_ISegBoxB.m_EndInd   = m_ISegVec.size();
 
     m_ISegBoxB.BuildSubDivide();
 
+}
+
+// Free the boxes BuildBoxes made below the two top ones.
+void ISegChain::ClearBoxes()
+{
+    ISegBox* boxes[2] = { &m_ISegBoxA, &m_ISegBoxB };
+    for ( int i = 0 ; i < 2 ; i++ )
+    {
+        delete boxes[i]->m_SubBox[0];
+        delete boxes[i]->m_SubBox[1];
+        boxes[i]->m_SubBox[0] = nullptr;
+        boxes[i]->m_SubBox[1] = nullptr;
+    }
 }
 
 void ISegChain::Intersect( Surf* surfPtr, ISegChain* B )
@@ -994,16 +970,16 @@ void ISegChain::AddSplit( Surf* surfPtr, int index, const vec2d &int_pnt, double
     //double tol = 0.00001;
     //if ( surfPtr == m_SurfA )
     //{
-    //  if ( dist( int_pnt, m_ISegDeque[index]->m_IPnt[0]->GetPuw(m_SurfA)->m_UW ) < tol )
+    //  if ( dist( int_pnt, m_ISegVec[index]->m_IPnt[0]->GetPuw(m_SurfA)->m_UW ) < tol )
     //      return;
-    //  if ( dist( int_pnt, m_ISegDeque[index]->m_IPnt[1]->GetPuw(m_SurfA)->m_UW ) < tol )
+    //  if ( dist( int_pnt, m_ISegVec[index]->m_IPnt[1]->GetPuw(m_SurfA)->m_UW ) < tol )
     //      return;
     //}
     //else if ( surfPtr == m_SurfB )
     //{
-    //  if ( dist( int_pnt, m_ISegDeque[index]->m_IPnt[0]->GetPuw(m_SurfB)->m_UW ) < tol )
+    //  if ( dist( int_pnt, m_ISegVec[index]->m_IPnt[0]->GetPuw(m_SurfB)->m_UW ) < tol )
     //      return;
-    //  if ( dist( int_pnt, m_ISegDeque[index]->m_IPnt[1]->GetPuw(m_SurfB)->m_UW ) < tol )
+    //  if ( dist( int_pnt, m_ISegVec[index]->m_IPnt[1]->GetPuw(m_SurfB)->m_UW ) < tol )
     //      return;
     //}
 
@@ -1040,14 +1016,14 @@ bool ISegChain::AddBorderSplit( Puw* uw )
         split_tol = 1e-1;
     }
 
-    for ( int i = 0 ; i < ( int )m_ISegDeque.size() ; i++ )
+    for ( int i = 0 ; i < ( int )m_ISegVec.size() ; i++ )
     {
         //==== Find Distance From Seg ====//
-        vec2d iuw0 = m_ISegDeque[i]->m_IPnt[0]->GetPuw( surfPtr )->m_UW;
-        vec2d iuw1 = m_ISegDeque[i]->m_IPnt[1]->GetPuw( surfPtr )->m_UW;
+        vec2d iuw0 = m_ISegVec[i]->m_IPnt[0]->GetPuw( surfPtr )->m_UW;
+        vec2d iuw1 = m_ISegVec[i]->m_IPnt[1]->GetPuw( surfPtr )->m_UW;
         double u = proj_pnt_on_line_u( iuw0, iuw1, uw->m_UW );
         if ( ( u >= 0.0 && u <= 1.0 ) && 
-            ( !( u >= ( 1.0 - 1e-5 ) && i == m_ISegDeque.size() - 1 ) && !( u <= 1e-5 && i == 0 ) ) ) // Do not split endpoints of m_ISegDeque
+            ( !( u >= ( 1.0 - 1e-5 ) && i == m_ISegVec.size() - 1 ) && !( u <= 1e-5 && i == 0 ) ) ) // Do not split endpoints of m_ISegVec
         {
             vec2d proj = iuw0 + ( iuw1 - iuw0 ) * u;
 
@@ -1106,10 +1082,10 @@ bool ISegChain::AddBorderSplit( Puw* uw )
 //  Surf* surfPtr = uw->m_Surf;
 //  bool add_flag = true;
 //  int  add_index = -1;
-//  for ( int i = 0 ; i < (int)m_ISegDeque.size() ; i++ )
+//  for ( int i = 0 ; i < (int)m_ISegVec.size() ; i++ )
 //  {
-//      vec2d iuw0 = m_ISegDeque[i]->m_IPnt[0]->GetPuw(surfPtr)->m_UW;
-//      vec2d iuw1 = m_ISegDeque[i]->m_IPnt[1]->GetPuw(surfPtr)->m_UW;
+//      vec2d iuw0 = m_ISegVec[i]->m_IPnt[0]->GetPuw(surfPtr)->m_UW;
+//      vec2d iuw1 = m_ISegVec[i]->m_IPnt[1]->GetPuw(surfPtr)->m_UW;
 //      double del_u = fabs( iuw0[0] - uw->m_UW[0] );
 //      double del_w = fabs( iuw0[1] - uw->m_UW[1] );
 //      if ( del_u > tol && del_w > tol )
@@ -1174,6 +1150,8 @@ void ISegChain::MergeSplits()
             {
                 merge_flag = true;
                 mergedVec[j].push_back( m_SplitVec[i] );
+                // A split joins one group only, so it is freed at most once below.
+                break;
             }
         }
         if ( !merge_flag )
@@ -1198,9 +1176,14 @@ void ISegChain::MergeSplits()
             }
         }
         newVec.push_back( keep );
-//9/22 jrg
-        //for ( k = 1 ; k < (int)mergedVec[j].size() ; k++ )            // Remove Unused Splits
-        //  delete mergedVec[j][k];
+
+        for ( int k = 0 ; k < ( int )mergedVec[j].size() ; k++ )
+        {
+            if ( mergedVec[j][k] != keep )
+            {
+                delete mergedVec[j][k];
+            }
+        }
     }
     m_SplitVec = newVec;
 }
@@ -1210,10 +1193,10 @@ void ISegChain::RemoveChainEndSplits()
 {
     double tol = 1.0e-7;
 
-    Puw* frontPuwA = m_ISegDeque.front()->m_IPnt[0]->GetPuw( m_SurfA );
-    Puw* frontPuwB = m_ISegDeque.front()->m_IPnt[0]->GetPuw( m_SurfB );
-    Puw* backPuwA  = m_ISegDeque.back()->m_IPnt[1]->GetPuw( m_SurfA );
-    Puw* backPuwB  = m_ISegDeque.back()->m_IPnt[1]->GetPuw( m_SurfB );
+    Puw* frontPuwA = m_ISegVec.front()->m_IPnt[0]->GetPuw( m_SurfA );
+    Puw* frontPuwB = m_ISegVec.front()->m_IPnt[0]->GetPuw( m_SurfB );
+    Puw* backPuwA  = m_ISegVec.back()->m_IPnt[1]->GetPuw( m_SurfA );
+    Puw* backPuwB  = m_ISegVec.back()->m_IPnt[1]->GetPuw( m_SurfB );
 
     //==== Check Distance ====//
     vector< ISegSplit* > newVec;
@@ -1256,6 +1239,10 @@ void ISegChain::RemoveChainEndSplits()
         {
             newVec.push_back( split );
         }
+        else
+        {
+            delete split;
+        }
 
     }
 
@@ -1291,7 +1278,7 @@ vector< ISegChain* > ISegChain::SortAndSplit( SurfaceIntersectionSingleton *Mesh
     for ( int i = 0 ; i < ( int )m_SplitVec.size() ; i++ )
     {
         ISegSplit* s = m_SplitVec[i];
-        ISeg* new_seg = m_ISegDeque[s->m_Index]->Split( *s, MeshMgr );
+        ISeg* new_seg = m_ISegVec[s->m_Index]->Split( *s, MeshMgr );
 
         if ( new_seg )
         {
@@ -1301,16 +1288,17 @@ vector< ISegChain* > ISegChain::SortAndSplit( SurfaceIntersectionSingleton *Mesh
             nc->m_PatchJoinFlag = m_PatchJoinFlag;
             nc->m_ALine = m_ALine;
             nc->m_BLine = m_BLine;
-            nc->m_ISegDeque.push_back( new_seg );
-            for ( int j = s->m_Index + 1 ; j < ( int )m_ISegDeque.size() ; j++ )
+            nc->m_ISegVec.reserve( m_ISegVec.size() - s->m_Index );
+            nc->m_ISegVec.push_back( new_seg );
+            for ( int j = s->m_Index + 1 ; j < ( int )m_ISegVec.size() ; j++ )
             {
-                nc->m_ISegDeque.push_back( m_ISegDeque[j] );
+                nc->m_ISegVec.push_back( m_ISegVec[j] );
             }
 
-            int num_remove = ( int )m_ISegDeque.size() - s->m_Index - 1;
+            int num_remove = ( int )m_ISegVec.size() - s->m_Index - 1;
             for ( int j = 0 ; j < num_remove ; j++ )
             {
-                m_ISegDeque.pop_back();
+                m_ISegVec.pop_back();
             }
 
             new_chains.push_back( nc );
@@ -1359,10 +1347,7 @@ vector< ISegChain* > ISegChain::FindCoPlanarChains( Surf* sPtr, SurfaceIntersect
         nc->m_BorderFlag = true;
         new_chains.push_back( nc );
 
-        for ( int i = 0 ; i < ( int )ipnt_vec.size() ; i++ )
-        {
-            nc->m_TessVec.push_back( ipnt_vec[i] );
-        }
+        nc->m_TessVec = ipnt_vec;
     }
 
     return new_chains;
@@ -1371,12 +1356,12 @@ vector< ISegChain* > ISegChain::FindCoPlanarChains( Surf* sPtr, SurfaceIntersect
 
 void ISegChain::MergeInteriorIPnts()
 {
-    for ( int i = 1 ; i < ( int )m_ISegDeque.size() ; i++ )
+    for ( int i = 1 ; i < ( int )m_ISegVec.size() ; i++ )
     {
-        IPnt* ipe = m_ISegDeque[i - 1]->m_IPnt[1];
+        IPnt* ipe = m_ISegVec[i - 1]->m_IPnt[1];
 
 #ifdef DEBUG_CFD_MESH
-        IPnt* ipb = m_ISegDeque[i]->m_IPnt[0];
+        IPnt* ipb = m_ISegVec[i]->m_IPnt[0];
         static double max_dist = 0.0;
         double d = dist( ipe->m_Pnt, ipb->m_Pnt );
 
@@ -1387,8 +1372,8 @@ void ISegChain::MergeInteriorIPnts()
         }
 #endif
 
-        m_ISegDeque[i]->m_IPnt[0] = ipe;
-        ipe->AddSegRef( m_ISegDeque[i] );
+        m_ISegVec[i]->m_IPnt[0] = ipe;
+        ipe->AddSegRef( m_ISegVec[i] );
 
 //      delete ipb;
     }
@@ -1398,12 +1383,12 @@ void ISegChain::MergeInteriorIPnts()
 void ISegChain::BuildCurves( )
 {
     //==== A SCurve ====//
-    vector< vec3d > auw_pnts( m_ISegDeque.size() + 1 );
-    Puw* uw = m_ISegDeque.front()->m_IPnt[0]->GetPuw( m_SurfA );
+    vector< vec3d > auw_pnts( m_ISegVec.size() + 1 );
+    Puw* uw = m_ISegVec.front()->m_IPnt[0]->GetPuw( m_SurfA );
     auw_pnts[0] = vec3d( uw->m_UW[0], uw->m_UW[1], 0.0 );
-    for ( int i = 0 ; i < ( int )m_ISegDeque.size() ; i++ )
+    for ( int i = 0 ; i < ( int )m_ISegVec.size() ; i++ )
     {
-        uw = m_ISegDeque[i]->m_IPnt[1]->GetPuw( m_SurfA );
+        uw = m_ISegVec[i]->m_IPnt[1]->GetPuw( m_SurfA );
         auw_pnts[ i + 1 ] = vec3d( uw->m_UW[0], uw->m_UW[1], 0.0 );
     }
 
@@ -1412,12 +1397,12 @@ void ISegChain::BuildCurves( )
     m_ACurve.SetParmLine( m_ALine );
 
     //==== B SCurve ====//
-    vector< vec3d > buw_pnts( m_ISegDeque.size() + 1 );
-    uw = m_ISegDeque.front()->m_IPnt[0]->GetPuw( m_SurfB );
+    vector< vec3d > buw_pnts( m_ISegVec.size() + 1 );
+    uw = m_ISegVec.front()->m_IPnt[0]->GetPuw( m_SurfB );
     buw_pnts[0] = vec3d( uw->m_UW[0], uw->m_UW[1], 0.0 );
-    for ( int i = 0 ; i < ( int )m_ISegDeque.size() ; i++ )
+    for ( int i = 0 ; i < ( int )m_ISegVec.size() ; i++ )
     {
-        uw = m_ISegDeque[i]->m_IPnt[1]->GetPuw( m_SurfB );
+        uw = m_ISegVec[i]->m_IPnt[1]->GetPuw( m_SurfB );
         buw_pnts[ i + 1 ] = vec3d( uw->m_UW[0], uw->m_UW[1], 0.0 );
     }
 
@@ -1440,6 +1425,8 @@ void ISegChain::ApplyTess( SurfaceIntersectionSingleton *MeshMgr )
     vector< vec3d > tuwa = m_ACurve.GetUWTessPnts();
     vector< vec3d > tuwb = m_BCurve.GetUWTessPnts();
     assert( tuwa.size() == tuwb.size() );
+
+    m_TessVec.reserve( tuwa.size() );
 
     //==== Add Other IPnts ====//
     for ( int i = 0 ; i < ( int )tuwa.size() ; i++ )
@@ -1556,14 +1543,14 @@ void ISegChain::Draw()
 {
     //glBegin( GL_LINES );
     //deque< ISeg* >::iterator s;
-    //for ( s = m_ISegDeque.begin() ; s != m_ISegDeque.end(); s++ )
+    //for ( s = m_ISegVec.begin() ; s != m_ISegVec.end(); s++ )
     //{
     //  (*s)->Draw();
     //}
     //glEnd();
 
-    //ISeg* backSeg  = m_ISegDeque.back();
-    //ISeg* frontSeg = m_ISegDeque.front();
+    //ISeg* backSeg  = m_ISegVec.back();
+    //ISeg* frontSeg = m_ISegVec.front();
 
 
     //glBegin( GL_POINTS );
@@ -1598,8 +1585,8 @@ void ISegChain::Draw()
     }
     glEnd();
 
-    //ISeg* backSeg  = m_ISegDeque.back();
-    //ISeg* frontSeg = m_ISegDeque.front();
+    //ISeg* backSeg  = m_ISegVec.back();
+    //ISeg* frontSeg = m_ISegVec.front();
 
     //glPointSize(4.0);
     //glBegin( GL_POINTS );
