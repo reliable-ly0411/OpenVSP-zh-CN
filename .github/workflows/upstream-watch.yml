@@ -160,7 +160,8 @@ jobs:
           fi
           mkdir verified-release
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir verified-release
-          cmp release-assets/SHA256SUMS.txt verified-release/SHA256SUMS.txt
+          python3 scripts/release_asset_names.py verify --tag "$RELEASE_TAG" \
+            --expected release-assets --directory verified-release
           (cd verified-release && sha256sum -c SHA256SUMS.txt)
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false
           echo "已公开预发布：https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
@@ -172,3 +173,4 @@ jobs:
     steps:
       - name: Explain failure boundary
         run: echo '自动同步或发布未完成。请检查准备、双平台构建、主分支并发更新和发布步骤；已有标签及公开资产不会被覆盖。' >> "$GITHUB_STEP_SUMMARY"
+

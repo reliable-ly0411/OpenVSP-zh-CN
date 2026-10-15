@@ -1,4 +1,5 @@
 import unittest
+from release_asset_names import asset_name
 from release_notes import release_title, release_body, update_notes
 
 
@@ -16,7 +17,7 @@ class ReleaseNotesTests(unittest.TestCase):
             self.assertEqual([line for line in body.splitlines() if line.startswith('## ')],
                              ['## 版本信息','## 本次更新','## 下载与校验','## 验证情况','## 兼容性与限制','## 许可与归属'])
             for platform in ['Ubuntu-24.04-x86_64','Windows-x64']:
-                self.assertIn(f'/releases/download/{tag}/OpenVSP-{tag}-{platform}.zip', body)
+                self.assertIn(f'/releases/download/{tag}/{asset_name(tag, platform)}', body)
             self.assertIn('/actions/runs/123',body)
             self.assertIn('当前修复',body)
             self.assertNotIn('GUI 全面验收通过',body)
@@ -25,3 +26,4 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(update_notes('## v-new\n- new\n\n## v-old\n- old\n','v-new'), '- new')
         with self.assertRaises(ValueError):
             update_notes('## v-new\n\n## v-old\n- old\n','v-new')
+

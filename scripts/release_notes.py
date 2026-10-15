@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 
 from check_localization_release import ROOT, TAG_RE
+from release_asset_names import asset_name
 
 
 def update_notes(readme: str, tag: str) -> str:
@@ -41,7 +42,7 @@ def release_body(tag: str, changes: str, repository: str, source_sha: str, run_i
     base = f'https://github.com/{repository}/releases/download/{tag}'
     rows = []
     for label, platform in [('Ubuntu 24.04 x86_64', 'Ubuntu-24.04-x86_64'), ('Windows x64', 'Windows-x64')]:
-        filename = f'OpenVSP-{tag}-{platform}.zip'
+        filename = asset_name(tag, platform)
         rows.append(f'| {label} | [{filename}]({base}/{filename}) |')
     rows.append(f'| SHA-256 清单 | [SHA256SUMS.txt]({base}/SHA256SUMS.txt) |')
     downloads = '\n'.join(rows)
@@ -100,3 +101,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

@@ -2,6 +2,7 @@
 """Test release notes, platform pairing and byte-preserving published assets."""
 
 import hashlib
+from release_asset_names import asset_name
 from pathlib import Path
 import tempfile
 import unittest
@@ -41,7 +42,7 @@ class AutoReleaseTests(unittest.TestCase):
             prepare_assets(packages, output, source_sha, tag)
             manifest = (output / 'SHA256SUMS.txt').read_text()
             for platform, data in payloads.items():
-                filename = f'OpenVSP-{tag}-{platform}.zip'
+                filename = asset_name(tag, platform)
                 self.assertEqual((output / filename).read_bytes(), data)
                 self.assertIn(f'{hashlib.sha256(data).hexdigest()}  {filename}\n', manifest)
 
@@ -60,3 +61,4 @@ class AutoReleaseTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

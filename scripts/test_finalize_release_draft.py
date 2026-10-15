@@ -13,6 +13,11 @@ spec.loader.exec_module(module)
 
 
 class DraftGuards(unittest.TestCase):
+    def test_maintenance_renderer_matches_new_asset_names(self):
+        body = module.release_body(module.TAG, "- change", "example/repo", "b"*40, "123", True)
+        self.assertIn("OpenVSP-3.54.0-win64-zh-CN.zip", body)
+        self.assertNotIn("/OpenVSP-" + module.TAG + "-Windows-x64.zip", body)
+
     def test_published_release_is_never_modified(self):
         with patch.object(module, 'api', return_value=[{'draft': False, 'tag_name': module.TAG}]) as api:
             with self.assertRaisesRegex(ValueError, 'published'):
@@ -43,3 +48,4 @@ class DraftGuards(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

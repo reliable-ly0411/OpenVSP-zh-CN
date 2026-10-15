@@ -26,19 +26,23 @@ NASA/OpenVSP 官方汉化。维护架构与强制规则统一见 [`AGENTS.md`](A
 从 [Releases](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases) 下载与系统对应的
 ZIP 和 `SHA256SUMS.txt`，校验后解压。发布包不会覆盖系统目录。
 
+历史 Release 的原始 SHA-256 清单可能仍记载旧文件名，名称对应关系及不变校验值见该 Release 正文。
+后续新发布的清单使用新文件名。
+
 以下命令以已发布的 3.53.0 为例；自动同步构建的下载方式见“上游更新与发布”。
 
 Ubuntu 24.04 x86_64：
 
 ```bash
 sudo apt-get install fonts-noto-cjk
-sha256sum -c SHA256SUMS.txt --ignore-missing
-unzip OpenVSP-3.53.0-Codex-AI-zh-CN-Ubuntu-24.04-x86_64.zip
+sha256sum OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip
+# 将输出与该 Release 正文公布的 SHA-256 比对一致后再解压
+unzip OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip
 cd OpenVSP-3.53.0-Linux
 ./vsp
 ```
 
-Windows x64：解压 `OpenVSP-3.53.0-Codex-AI-zh-CN-Windows-x64.zip`，运行目录中的
+Windows x64：解压 `OpenVSP-3.53.0-win64-zh-CN.zip`，运行目录中的
 `vsp.exe`。如 Windows 阻止从网络下载的程序，先在 ZIP 文件属性中解除锁定再解压。
 
 Ubuntu 图形构建固定采用 FLTK X11 后端，在 Wayland 会话中通过 XWayland 运行，以规避
@@ -102,6 +106,11 @@ cmake --build build --target package --config Release --parallel 2
 自动及手动发布的标题和六段式说明统一由 `scripts/release_notes.py` 生成。
 
 ## 未发布
+
+- 统一后续发布附件名为 `OpenVSP-<版本>-win64-zh-CN.zip` 和
+  `OpenVSP-<版本>-Ubuntu-24.04_amd64-zh-CN.zip`，保留真实 ZIP 格式；标签、程序版本和包内内容不变。
+  下载链接与 SHA-256 清单使用相同名称；草稿恢复兼容旧名与新名并校验原始包字节。
+  本次仅验证发布脚本单元测试，不代表重新完成双平台构建或 GUI 验收。
 
 ## 3.55.0-Codex-AI-zh-CN-auto.5240ef210f41
 
@@ -228,3 +237,4 @@ cmake --build build --target package --config Release --parallel 2
 - 发布流程强制读取目标标签的更新说明，并随 Linux/Windows ZIP 发布 SHA-256。
 - 新增仓库级 Agent 规则，要求后续修改和发布同步维护更新说明。
 - 验证：本地发布守卫、工作流语法、静态 CMINPACK 配置和 GitHub 托管双平台构建。
+

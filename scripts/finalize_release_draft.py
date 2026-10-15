@@ -9,6 +9,8 @@ import subprocess
 import sys
 from urllib.parse import quote
 import zipfile
+from release_asset_names import PLATFORMS, asset_name, asset_candidates
+from release_notes import release_body, release_title, update_notes
 
 WORK = Path('draft-work')
 REPO = os.environ['GITHUB_REPOSITORY']
@@ -87,8 +89,10 @@ def prepare():
     backup.mkdir(parents=True)
     (backup / 'release.json').write_text(json.dumps(release, indent=2))
     (backup / 'tag.json').write_text(json.dumps(api(f'git/ref/tags/{TAG}'), indent=2))
-    expected_names = {f'OpenVSP-{TAG}-{p}.zip' for p in ('Ubuntu-24.04-x86_64', 'Windows-x64')} | {'SHA256SUMS.txt'}
-    if {a['name'] for a in release['assets']} != expected_names:
+    names = [a['name'] for a in release['assets']]
+    allowed = {name for p in PLATFORMS for name in asset_candidates(TAG, p)} | {'SHA256SUMS.txt'}
+    if (len(names) != 3 or 'SHA256SUMS.txt' not in names or set(names) - allowed
+            or any(len(set(names).intersection(asset_candidates(TAG, p))) != 1 for p in PLATFORMS)):
         raise ValueError('Unexpected draft assets; refusing to replace')
     for asset in release['assets']:
         download_asset(asset, backup / asset['name'])
@@ -110,17 +114,17 @@ def prepare():
             gh('api', f'repos/{REPO}/actions/artifacts/{artifact["id"]}/zip', output=stream)
         if 'sha256:' + sha(outer) != artifact['digest']:
             raise ValueError('Artifact transport hash mismatch')
-        filename = f'OpenVSP-{TAG}-{platform}.zip'
+        filename = asset_name(TAG, platform)
         with zipfile.ZipFile(outer) as archive:
-            if archive.namelist() != [filename]:
+            entries = archive.namelist()
+            if len(entries) != 1 or entries[0] not in asset_candidates(TAG, platform):
                 raise ValueError('Unexpected artifact contents')
-            (output / filename).write_bytes(archive.read(filename))
+            (output / filename).write_bytes(archive.read(entries[0]))
         if sha(output / filename) != accepted:
             raise ValueError('Package differs from the desktop-accepted package')
     (output / 'SHA256SUMS.txt').write_text(''.join(
         f'{sha(p)}  {p.name}\n' for p in sorted(output.glob('*.zip'))))
-    sys.path.insert(0, str(Path('source/scripts').resolve()))
-    from release_notes import release_body, release_title, update_notes
+    # Use the maintenance naming renderer even when the accepted source predates it.
     changes = update_notes(Path('source/README_zh-CN.md').read_text(), TAG)
     body = release_body(TAG, changes, REPO, SOURCE, RUN, prerelease=True)
     note = os.environ['VALIDATION_NOTE'].strip()
@@ -177,3 +181,4 @@ if __name__ == '__main__':
     if any(not re.fullmatch(r'[0-9a-f]{64}', os.environ[k]) for k in ('LINUX_SHA256', 'WINDOWS_SHA256')):
         raise ValueError('Exact acceptance hashes required')
     {'prepare': prepare, 'apply': apply}[sys.argv[1]]()
+

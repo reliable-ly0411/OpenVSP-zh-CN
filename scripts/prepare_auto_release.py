@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 
 from check_localization_release import ROOT, verify_release_notes
+from release_asset_names import asset_name
 from release_notes import release_body, release_title, update_notes
 
 
@@ -25,7 +26,7 @@ def prepare_assets(packages: Path, output: Path, source_sha: str, tag: str) -> N
     output.mkdir()
     checksums = []
     for platform in platforms:
-        target = output / f"OpenVSP-{tag}-{platform}.zip"
+        target = output / asset_name(tag, platform)
         shutil.copyfile(packages / f"OpenVSP-{source_sha}-{platform}.zip", target)
         # ZIP 保持原始字节，只调整外部下载文件名；SHA-256 针对实际发布资产。
         with target.open("rb") as handle:
@@ -60,3 +61,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

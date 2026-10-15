@@ -110,7 +110,9 @@ jobs:
 
       - name: Release formatting regression tests
         if: runner.os == 'Linux'
-        run: python3 -m unittest discover -s scripts -p test_release_notes.py -v
+        run: |
+          python3 -m unittest discover -s scripts -p test_release_notes.py -v
+          python3 -m unittest discover -s scripts -p test_release_asset_names.py -v
 
       - name: Automatic release regression tests
         if: runner.os == 'Linux'
@@ -263,6 +265,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/release_asset_names.py normalize --tag "$RELEASE_TAG" --directory release-assets
           (cd release-assets && sha256sum -- ./*.zip | tee SHA256SUMS.txt)
           note_flags=()
           if [[ "$PRERELEASE" == true || "$RELEASE_TAG" == *-auto.* ]]; then
@@ -305,3 +308,4 @@ jobs:
           if [[ "$KEEP_DRAFT" != true ]]; then
             gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${release_flags[@]}"
           fi
+
