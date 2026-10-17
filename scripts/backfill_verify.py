@@ -127,6 +127,10 @@ def bundle_mac(root):
             run('install_name_tool', '-delete_rpath', path, target)
         graph.append({'file': target.relative_to(root).as_posix(), 'dependencies': edges})
     for p in machos(root):
+        # Mach-O N_OSO/debug-map entries can retain linker object paths even with
+        # compiler prefix maps. Remove debug symbols only, retaining runtime exports.
+        # This must happen before ad-hoc signing; all smoke/privacy checks run after it.
+        run('strip', '-S', p)
         run('codesign', '--force', '--sign', '-', p)
         run('codesign', '--verify', '--strict', p)
     (root/'third-party-dependencies.json').write_text(json.dumps(notices, indent=2) + '\n')
@@ -141,8 +145,10 @@ def privacy_scan(root, private_prefixes):
         if not p.is_file():
             continue
         data = p.read_bytes()
-        if SECRET.search(data) or any(prefix and prefix in data for prefix in private_prefixes):
-            raise ValueError(f'Privacy/path scan failed in packaged file: {p.relative_to(root)}')
+        if SECRET.search(data):
+            raise ValueError(f'Credential-like content in packaged file: {p.relative_to(root)}')
+        if any(prefix and prefix in data for prefix in private_prefixes):
+            raise ValueError(f'Runner/workspace path remains in packaged file: {p.relative_to(root)}')
         if p.name in ('.env', '.git-credentials', 'CMakeCache.txt') or '.git' in p.relative_to(root).parts:
             raise ValueError('Build metadata or credentials file found in package')
 
@@ -293,6 +299,15 @@ def main():
         if 'LOCALIZATION_SMOKE_PASS' not in smoke or 'LOCALIZATION_SMOKE_FAIL' in smoke:
             raise ValueError('Packaged model localization smoke failed')
         python_checks = python_smoke(root, os.environ['BACKFILL_VERSION'], scratch, env)
+        if not mac:
+            # Keep only the already-validated synthetic model for optional GUI capture.
+            # This directory is outside the package and is never included in its ZIP.
+            gui_input = Path(os.environ['GITHUB_WORKSPACE'])/'gui-input'
+            try:
+                gui_input.mkdir(exist_ok=True)
+                shutil.copyfile(Path(scratch)/'localization-smoke.vsp3', gui_input/'localization-smoke.vsp3')
+            except OSError:
+                print('Optional GUI model preparation unavailable; package verification continues.')
     workspace = os.environ['GITHUB_WORKSPACE'].encode()
     home = os.environ['HOME'].encode()
     privacy_scan(root, [workspace, home])
@@ -312,7 +327,7 @@ def main():
         'workflow_sha': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'],
         'archive': name, 'sha256': digest(archive), 'bytes': archive.stat().st_size,
         'packaging_changes': ['AGENTS.md supplemented from historical source if absent',
-                              'macOS non-system dylibs bundled with loader-relative links' if mac else 'No ELF dependency rewriting'],
+                              'macOS non-system dylibs bundled with loader-relative links; debug symbols stripped before ad-hoc signing' if mac else 'No ELF dependency rewriting'],
         'checks': ['native architecture', 'dependency closure / RPATH', 'Chinese CLI help',
                    'AngelScript model smoke', 'Python extension import/version',
                    'source examples/help/documents byte equality', 'ZIP integrity', 'privacy scan'],

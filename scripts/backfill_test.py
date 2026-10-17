@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
+from backfill_gui import capture
 from backfill_plan import matrix, PLATFORMS, validate_pilot
 from backfill_package import verify
 from backfill_verify import privacy_scan, rpaths, dependencies, audit_native, bundle_mac, minimum_macos, python_smoke, parse_minos
@@ -142,6 +143,14 @@ class PrivacyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 privacy_scan(root, [])
 
+    def test_diagnostic_does_not_echo_private_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root/'vsp').write_bytes(b'/Users/privateperson/work/source.o')
+            with self.assertRaises(ValueError) as caught:
+                privacy_scan(root, [b'/Users/privateperson'])
+            self.assertIn('Runner/workspace path remains', str(caught.exception))
+            self.assertNotIn('privateperson', str(caught.exception))
+
     def test_safe_document(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); (root/'LICENSE').write_text('OpenVSP public license')
@@ -209,7 +218,11 @@ class MacClosureTests(unittest.TestCase):
         self.assertEqual(len(graph), 3)
         self.assertEqual(len(list((self.root/'lib').glob('*.dylib'))), 2)
         calls = [c.args for c in commands.call_args_list]
+        self.assertEqual(sum(c[:2] == ('strip', '-S') for c in calls), 3)
         self.assertEqual(sum(c[:4] == ('codesign', '--force', '--sign', '-') for c in calls), 3)
+        for i, call in enumerate(calls):
+            if call[:4] == ('codesign', '--force', '--sign', '-'):
+                self.assertEqual(calls[i-1], ('strip', '-S', call[-1]))
         self.assertEqual(sum(c[:3] == ('codesign', '--verify', '--strict') for c in calls), 3)
         changes = [c for c in calls if c[:2] == ('install_name_tool', '-change')]
         self.assertEqual(len(changes), 2)
@@ -251,7 +264,11 @@ class MacClosureTests(unittest.TestCase):
     @patch('backfill_verify.machos')
     def test_signature_failure_stops_bundle(self, machos, deps, paths, commands):
         machos.return_value = [self.exe]
-        commands.side_effect = subprocess.CalledProcessError(1, ['codesign'])
+        def fail_codesign(*args, **kwargs):
+            if args[0] == 'codesign':
+                raise subprocess.CalledProcessError(1, ['codesign'])
+            return ''
+        commands.side_effect = fail_codesign
         with self.assertRaises(subprocess.CalledProcessError): bundle_mac(self.root)
         self.assertFalse((self.root/'third-party-dependencies.json').exists())
 
@@ -321,6 +338,25 @@ Load command 9
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); (root/'_vsp.so').write_bytes(b'fixture')
             with self.assertRaises(ValueError): python_smoke(root, '3.53.0', tmp, {})
+
+class GuiEvidenceTests(unittest.TestCase):
+    def test_missing_package_does_not_create_screenshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaises(ValueError):
+                capture(root, root/'missing.vsp3', root/'evidence')
+            self.assertFalse((root/'evidence').exists())
+
+    @patch('backfill_gui.subprocess.Popen')
+    def test_early_gui_exit_is_not_accepted(self, popen):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root/'vsp').write_text('fixture')
+            model = root/'sample.vsp3'; model.write_text('fixture')
+            popen.return_value.poll.return_value = 1
+            with self.assertRaises(RuntimeError): capture(root, model, root/'evidence')
+            self.assertFalse(list((root/'evidence').glob('*.png')))
+            self.assertEqual(popen.call_args.args[0][-1], model.name)
+            self.assertEqual(popen.call_args.kwargs['cwd'], model.parent)
 
 if __name__ == '__main__':
     unittest.main()

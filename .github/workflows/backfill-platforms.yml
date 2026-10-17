@@ -98,3 +98,24 @@ jobs:
           path: deliverables/*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Optional Linux GUI evidence (not an acceptance gate)
+        timeout-minutes: 5
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        shell: bash
+        run: |
+          sudo apt-get install --yes xvfb x11-utils imagemagick
+          xvfb-run -a --server-args="-screen 0 1600x1000x24" \
+            python3 tooling/scripts/backfill_gui.py
+      - name: Upload captured GUI evidence for visual review
+        if: runner.os == 'Linux' && hashFiles('gui-evidence/*.png') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: backfill-gui-${{ matrix.version }}-${{ matrix.platform }}
+          path: |
+            gui-evidence/*.png
+            gui-evidence/status.json
+          if-no-files-found: error
+          retention-days: 14
