@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from backfill_diagnostics import macho_regions, summarize_matches, symbol_categories
 
 SYSTEM_MAC = ('/usr/lib/', '/System/Library/')
 EXECUTABLES = ('vsp', 'vspscript', 'vspaero', 'vspviewer', 'vsploads')
@@ -137,7 +138,7 @@ def bundle_mac(root):
     return graph, notices
 
 
-def privacy_scan(root, private_prefixes):
+def privacy_scan(root, private_prefixes, diagnostic_dir=None, mac=False):
     """Fail without echoing matched secrets or their values to public CI logs."""
     for p in root.rglob('*'):
         if p.is_symlink() and not is_inside(p, root):
@@ -148,6 +149,26 @@ def privacy_scan(root, private_prefixes):
         if SECRET.search(data):
             raise ValueError(f'Credential-like content in packaged file: {p.relative_to(root)}')
         if any(prefix and prefix in data for prefix in private_prefixes):
+            if diagnostic_dir is not None:
+                report = {'schema': 1, 'rejected_file': p.relative_to(root).as_posix(),
+                          'contains_matched_values': False, 'binary_uploaded': False,
+                          'compiler_file_prefix_map': '-ffile-prefix-map=' in os.environ.get('CXXFLAGS', ''),
+                          'compiler_debug_prefix_map': '-fdebug-prefix-map=' in os.environ.get('CXXFLAGS', ''),
+                          'mac_debug_strip_before_signing': mac}
+                regions = []
+                if mac:
+                    try:
+                        regions = macho_regions(run('otool', '-l', p))
+                        report['symbol_categories'] = symbol_categories(run('nm', '-a', p), private_prefixes)
+                    except (subprocess.SubprocessError, OSError, ValueError):
+                        report['native_diagnostics'] = 'unavailable'
+                toolchain = Path(__file__).with_name('backfill_libxml_toolchain.cmake')
+                if mac and os.environ.get('BACKFILL_LIBXML_SYSCONFDIR') == '/etc' and toolchain.is_file():
+                    report['libxml_toolchain_sha256'] = digest(toolchain)
+                    report['libxml_sysconfdir_requested'] = '/etc'
+                report['matches'] = summarize_matches(data, private_prefixes, regions)
+                diagnostic_dir.mkdir(parents=True, exist_ok=True)
+                (diagnostic_dir/'privacy.json').write_text(json.dumps(report, indent=2) + '\n')
             raise ValueError(f'Runner/workspace path remains in packaged file: {p.relative_to(root)}')
         if p.name in ('.env', '.git-credentials', 'CMakeCache.txt') or '.git' in p.relative_to(root).parts:
             raise ValueError('Build metadata or credentials file found in package')
@@ -310,7 +331,7 @@ def main():
                 print('Optional GUI model preparation unavailable; package verification continues.')
     workspace = os.environ['GITHUB_WORKSPACE'].encode()
     home = os.environ['HOME'].encode()
-    privacy_scan(root, [workspace, home])
+    privacy_scan(root, [workspace, home], Path(os.environ['GITHUB_WORKSPACE'])/'diagnostics', mac)
     out.mkdir(exist_ok=True)
     name = f"OpenVSP-{os.environ['BACKFILL_VERSION']}-{os.environ['BACKFILL_PLATFORM']}-zh-CN.zip"
     archive = out/name
@@ -337,6 +358,9 @@ def main():
         'pending_review': ['GUI/font rendering on actual target platform',
                            'Third-party redistribution licenses and runtime requirements',
                            'Separate explicit release attachment approval'],
+        'source_worktree_clean': True,
+        'libxml_toolchain_sha256': digest(Path(__file__).with_name('backfill_libxml_toolchain.cmake')) if mac and os.environ.get('BACKFILL_LIBXML_SYSCONFDIR') == '/etc' else None,
+        'libxml_sysconfdir_mode': os.environ.get('BACKFILL_LIBXML_SYSCONFDIR', 'system-library'),
         'macos_signing': 'Local ad-hoc signature only; not Developer ID signed or notarized' if mac else None,
     }
     # No logs or environment dumps are exported. Reports have only curated fields.

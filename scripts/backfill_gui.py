@@ -2,11 +2,21 @@
 """Best-effort Linux GUI evidence inside Xvfb; never a release acceptance gate."""
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
 import time
 
+
+GUI_INPUT_DIRECTORY = Path("/tmp/openvsp-ui-evidence")
+
+def prepare_model(source):
+    # Fresh CI-only neutral path: GUI expands basenames into absolute paths in pixels.
+    GUI_INPUT_DIRECTORY.mkdir(exist_ok=False)
+    model = GUI_INPUT_DIRECTORY / "localization-smoke.vsp3"
+    shutil.copyfile(source, model)
+    return model
 
 def capture(root, model, output):
     if not (root/'vsp').is_file() or not model.is_file():
@@ -55,7 +65,8 @@ def main():
         roots = list((workspace/'stage').iterdir())
         if len(roots) != 1:
             raise ValueError('Ambiguous package directory')
-        image = capture(roots[0], workspace/'gui-input/localization-smoke.vsp3', output)
+        model = prepare_model(workspace/'gui-input/localization-smoke.vsp3')
+        image = capture(roots[0], model, output)
         report['status'] = 'captured_not_reviewed'
         report['screenshot'] = image.name
     except Exception as exc:

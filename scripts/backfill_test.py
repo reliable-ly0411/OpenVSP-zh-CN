@@ -3,12 +3,14 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
 
-from backfill_gui import capture
+from backfill_diagnostics import macho_regions, summarize_matches, symbol_categories
+from backfill_gui import capture, prepare_model, GUI_INPUT_DIRECTORY
 from backfill_plan import matrix, PLATFORMS, validate_pilot
 from backfill_package import verify
 from backfill_verify import privacy_scan, rpaths, dependencies, audit_native, bundle_mac, minimum_macos, python_smoke, parse_minos
@@ -340,6 +342,20 @@ Load command 9
             with self.assertRaises(ValueError): python_smoke(root, '3.53.0', tmp, {})
 
 class GuiEvidenceTests(unittest.TestCase):
+    def test_gui_input_path_is_neutral_and_workspace_independent(self):
+        self.assertEqual(str(GUI_INPUT_DIRECTORY), '/tmp/openvsp-ui-evidence')
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / 'runner-workspace-model.vsp3'
+            source.write_bytes(b'model')
+            target = Path(tmp) / 'neutral'
+            with patch('backfill_gui.GUI_INPUT_DIRECTORY', target):
+                model = prepare_model(source)
+                self.assertEqual(model.parent, target)
+                self.assertEqual(model.name, 'localization-smoke.vsp3')
+                self.assertEqual(model.read_bytes(), b'model')
+                with self.assertRaises(FileExistsError):
+                    prepare_model(source)
+
     def test_missing_package_does_not_create_screenshot(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -357,6 +373,83 @@ class GuiEvidenceTests(unittest.TestCase):
             self.assertFalse(list((root/'evidence').glob('*.png')))
             self.assertEqual(popen.call_args.args[0][-1], model.name)
             self.assertEqual(popen.call_args.kwargs['cwd'], model.parent)
+
+class PrivacyDiagnosticTests(unittest.TestCase):
+    def test_catalog_classification_never_emits_path_value(self):
+        prefix = b'/Users/privateperson/work/project'
+        data = b'file://' + prefix + b'/source/buildlibs/LIBXML2-prefix/etc/xml/catalog\0'
+        report = summarize_matches(data, [prefix, b'/Users/privateperson'], [(0, len(data), '__TEXT/__cstring')])
+        self.assertEqual(len(report), 2)
+        self.assertTrue(all(r['path_category'] == 'xml-default-catalog' for r in report))
+        text = json.dumps(report)
+        self.assertNotIn('privateperson', text)
+        self.assertNotIn('LIBXML2-prefix', text)
+        self.assertIn('__TEXT/__cstring', text)
+
+    def test_macho_section_offsets_and_symbol_table(self):
+        fixture = """Load command 0
+      cmd LC_SEGMENT_64
+Section
+  sectname __cstring
+   segname __TEXT
+      addr 0x0000000100001000
+      size 0x0000000000000020
+    offset 4096
+Load command 1
+     cmd LC_SYMTAB
+  stroff 8192
+ strsize 128
+"""
+        self.assertEqual(macho_regions(fixture), [(4096, 32, '__TEXT/__cstring'), (8192, 128, 'LC_SYMTAB/string-table')])
+
+    def test_nm_summary_only_fixed_categories(self):
+        result = symbol_categories('000000 - 00 0000 OSO /Users/private/file.o\n', [b'/Users/private'])
+        self.assertEqual(result, {'N_OSO': 1, 'N_SO': 0, 'other': 0})
+        self.assertNotIn('private', json.dumps(result))
+
+    def test_privacy_failure_writes_only_value_free_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)/'package'; root.mkdir()
+            (root/'vsp').write_bytes(b'file:///private/build/etc/xml/catalog\0')
+            diagnostic = Path(tmp)/'diagnostics'
+            with self.assertRaises(ValueError):
+                privacy_scan(root, [b'/private/build'], diagnostic)
+            text = (diagnostic/'privacy.json').read_text()
+            self.assertNotIn('/private/build', text)
+            self.assertEqual(json.loads(text)['matches'][0]['path_category'], 'xml-default-catalog')
+            self.assertEqual(list(diagnostic.iterdir()), [diagnostic/'privacy.json'])
+
+class LibxmlToolchainTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('cmake'), 'CMake unavailable in offline workspace')
+    def test_fresh_child_inherits_scoped_toolchain_without_changing_other_projects(self):
+        toolchain = Path(__file__).with_name('backfill_libxml_toolchain.cmake').resolve()
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            for path, expected in [('LIBXML2-prefix/src/LIBXML2', '/etc'), ('unrelated-project', 'unset')]:
+                source = base/path; source.mkdir(parents=True)
+                source.joinpath('CMakeLists.txt').write_text(
+                    'cmake_minimum_required(VERSION 3.24)\nproject(Fixture NONE)\n'
+                    'if(NOT DEFINED CMAKE_INSTALL_SYSCONFDIR)\nset(CMAKE_INSTALL_SYSCONFDIR unset)\nendif()\n'
+                    'file(WRITE "${CMAKE_BINARY_DIR}/result.txt" "${CMAKE_INSTALL_SYSCONFDIR}")\n')
+                build = source/'build'
+                env = dict(os.environ, CMAKE_TOOLCHAIN_FILE=str(toolchain))
+                if expected == '/etc':
+                    parent = base/'parent'; parent.mkdir()
+                    parent.joinpath('CMakeLists.txt').write_text(
+                        'cmake_minimum_required(VERSION 3.24)\nproject(Parent NONE)\n'
+                        'include(ExternalProject)\n'
+                        'ExternalProject_Add(LIBXML2 SOURCE_DIR "' + source.as_posix() + '"\n'
+                        ' BINARY_DIR "' + build.as_posix() + '"\n'
+                        ' DOWNLOAD_COMMAND "" BUILD_COMMAND "" INSTALL_COMMAND "")\n')
+                    parent_build = base/'parent-build'
+                    subprocess.run(['cmake', '-S', str(parent), '-B', str(parent_build)], env=env,
+                                   check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    subprocess.run(['cmake', '--build', str(parent_build)], env=env,
+                                   check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                else:
+                    subprocess.run(['cmake', '-S', str(source), '-B', str(build)], env=env,
+                                   check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                self.assertEqual((build/'result.txt').read_text(), expected)
 
 if __name__ == '__main__':
     unittest.main()

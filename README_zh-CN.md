@@ -107,6 +107,14 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- Mac 第二轮验证确认残留的是 runner 路径，单独移除调试符号未解决。源码核查发现
+  内置 libxml2 默认把其 CI 安装前缀编入 XML/SGML catalog 查找常量；补充构建现在仅
+  为采用 CMake 的该 ExternalProject（3.53.0 及后续三线）设置标准 /etc 查找目录，
+  并检查实际生成配置；旧两线 autotools 不套用此配置，待其自身实际扫描，不修改历史源码
+  或二进制字节。完整包路径扫描仍为硬门槛，修复效果等待实际构建证实。
+- 若路径扫描仍失败，只上传无原始匹配值的诊断 JSON：匹配类别/次数、Mach-O 区段及
+  符号类别计数、构建参数是否启用。被拒二进制不上传，原始路径和命令输出不进入诊断。
+
 - Linux ARM64 候选包验证后，可在 Xvfb 中载入已验证的两几何体模型并截取主界面与
   几何体树，截图仅存 Actions 独立证据附件。此步骤非阻断，截图须实际目视判读；
   失败或未判读不算 GUI 验收，不替代真实桌面及机翼页面检查，不写入发布包。
@@ -268,3 +276,5 @@ cmake --build build --target package --config Release --parallel 2
 - 验证：本地发布守卫、工作流语法、静态 CMINPACK 配置和 GitHub 托管双平台构建。
 
 
+
+GUI evidence uses a fresh fixed `/tmp/openvsp-ui-evidence` model directory because OpenVSP expands the model path in its status bar. Earlier Actions-only screenshots exposed the public runner workspace path in pixels and must not be republished. Screenshots remain subject to manual visual review.

@@ -35,7 +35,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Offline workflow regression tests
-        run: python3 -m unittest discover -s scripts -p backfill_test.py -v
+        run: |
+          cmake --version
+          python3 -m unittest discover -s scripts -p backfill_test.py -v
       - id: plan
         env:
           SCOPE: ${{ inputs.scope || 'pilot' }}
@@ -117,5 +119,14 @@ jobs:
           path: |
             gui-evidence/*.png
             gui-evidence/status.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload value-free failure diagnostics only
+        if: failure() && hashFiles('diagnostics/privacy.json') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: backfill-diagnostics-${{ matrix.version }}-${{ matrix.platform }}
+          path: diagnostics/privacy.json
           if-no-files-found: error
           retention-days: 14

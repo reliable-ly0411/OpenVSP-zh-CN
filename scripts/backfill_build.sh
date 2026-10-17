@@ -31,6 +31,13 @@ if [[ $(uname) == Darwin ]]; then
   libargs+=("-DCMAKE_OSX_ARCHITECTURES=$BACKFILL_ARCH")
   args+=("-DCMAKE_OSX_ARCHITECTURES=$BACKFILL_ARCH" "-DOpenMP_ROOT=$(brew --prefix libomp)" -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=ON)
   export LDFLAGS='-Wl,-headerpad_max_install_names'
+  if grep -q 'CMAKE_ARGS' Libraries/cmake/External_LibXml2.cmake; then
+    export CMAKE_TOOLCHAIN_FILE="$TOOLS/backfill_libxml_toolchain.cmake"
+    export BACKFILL_LIBXML_SYSCONFDIR=/etc
+  else
+    # 3.51.x uses historical autotools; do not assume CMake settings affect it.
+    export BACKFILL_LIBXML_SYSCONFDIR=historical-autotools-default
+  fi
 else
   args+=(-DCMAKE_INSTALL_RPATH_USE_LINK_PATH=OFF '-DCMAKE_INSTALL_RPATH=$ORIGIN/lib')
   libargs+=(-DVSP_USE_SYSTEM_LIBXML2=ON -DVSP_USE_SYSTEM_GLM=ON -DVSP_USE_SYSTEM_GLEW=ON)
@@ -44,11 +51,18 @@ else
 fi
 cmake -S Libraries -B buildlibs -DCMAKE_BUILD_TYPE=Release "${libargs[@]}"
 cmake --build buildlibs --parallel 2
+if [[ ${BACKFILL_LIBXML_SYSCONFDIR:-} == /etc ]]; then
+  # Fail if a child ignored the scoped toolchain setting; never patch binary bytes.
+  grep -Fx '#define XML_SYSCONFDIR "/etc"' buildlibs/LIBXML2-prefix/src/LIBXML2-build/config.h
+fi
 cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DVSP_CPACK_GEN=ZIP -DVSP_NO_PYDOC=ON -DPANDOC_EXECUTABLE=/nonexistent/pandoc \
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_PREFIX=/opt/OpenVSP \
   "-DVSP_LIBRARY_PATH=$SOURCE/buildlibs" "-DPython3_EXECUTABLE=$(command -v python)" \
   "-DPYTHON_EXECUTABLE=$(command -v python)" "${args[@]}"
 cmake --build build --target package --parallel 2
+# Build options must not rewrite the immutable historical source.
+git diff --quiet --exit-code
+git diff --cached --quiet --exit-code
 # Historical sources lack a common archive checker; verify the final relocated ZIP below.
 package=$(find build -maxdepth 1 -type f -name 'OpenVSP-*.zip')
 test "$(printf '%s\n' "$package" | wc -l | tr -d ' ')" = 1
