@@ -1,0 +1,100 @@
+name: Backfill localized native platforms
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/backfill-platforms.yml'
+      - 'scripts/backfill_*'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Build pilot first; all requires a reviewed successful pilot run
+        type: choice
+        options: [pilot, all]
+        default: pilot
+      pilot_run_id:
+        description: Successful pilot run ID (required for all)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: backfill-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Offline workflow regression tests
+        run: python3 -m unittest discover -s scripts -p backfill_test.py -v
+      - id: plan
+        env:
+          SCOPE: ${{ inputs.scope || 'pilot' }}
+          PILOT_RUN_ID: ${{ inputs.pilot_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/backfill_plan.py
+
+  build:
+    needs: plan
+    name: ${{ matrix.version }} / ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    env:
+      BACKFILL_VERSION: ${{ matrix.version }}
+      BACKFILL_TAG: ${{ matrix.tag }}
+      BACKFILL_SHA: ${{ matrix.sha }}
+      BACKFILL_PLATFORM: ${{ matrix.platform }}
+      BACKFILL_ARCH: ${{ matrix.arch }}
+      BACKFILL_LLVM: ${{ matrix.llvm }}
+      BACKFILL_PYTHON: ${{ matrix.python }}
+    steps:
+      - name: Checkout build tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: tooling
+          persist-credentials: false
+      - name: Checkout immutable historical source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.sha }}
+          path: source
+          persist-credentials: false
+      - name: Verify source and existing tag
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$BACKFILL_SHA"
+          git fetch --no-tags origin "refs/tags/$BACKFILL_TAG:refs/tags/$BACKFILL_TAG"
+          test "$(git rev-parse "$BACKFILL_TAG^{commit}")" = "$BACKFILL_SHA"
+          python3 scripts/check_localization_release.py
+          version=$(python3 scripts/check_localization_release.py --print-version)
+          test "$version" = "$BACKFILL_VERSION"
+      - name: Python 3.11 for macOS
+        if: runner.os == 'macOS'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+      - name: Build and verify native package
+        shell: bash
+        run: bash tooling/scripts/backfill_build.sh
+      - name: Upload verified package and review evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: backfill-${{ matrix.version }}-${{ matrix.platform }}
+          path: deliverables/*
+          if-no-files-found: error
+          retention-days: 14

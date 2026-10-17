@@ -107,6 +107,26 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- 新增独立的历史版本原生补充构建：先验证 3.53.0 的 macOS 14 ARM64、macOS 15
+  Intel 与 Ubuntu 24.04 ARM64，再扩展到固定提交的五条历史发布线。PR 只跑先导三项，
+  手动全量运行需提供同一构建工具版本的成功先导运行 ID；最多三个平台任务并发。
+- 仅输出 Actions 候选 ZIP 与逐包验证报告，无 Release 写权限；不移动原标签、不改
+  原软件版本、不替换已有附件或 SHA256SUMS.txt。正式补发另行审阅后，在 Release
+  正文追加新附件的 SHA-256 与验证限制。包名使用 OpenVSP、真实目标平台和 zh-CN。
+- macOS 使用 Python 3.11，Ubuntu 使用发行版 Python 3.12；不扩展 Python 版本矩阵。
+  Mac 包递归收集非系统动态库并改为包内相对路径，记录每个 Mach-O 的架构与最低系统
+  版本并汇总其中最高值；若超过所命名平台或实际测试主机则失败，不承诺支持低于该值
+  的系统。非系统 framework 暂不自动打包，遇到时停止。Linux 逐个核对 ARM64 ELF、
+  RPATH 和发行版运行依赖，保留内置静态 CMINPACK。
+  不宣称支持 macOS 11，也不宣称经过 Developer ID 签名、公证或 Gatekeeper 验收。
+- 构建后检查中文帮助、模型冒烟、_vsp 与 _vsp_g 在独立进程中的导入及软件版本，
+  记录实际解释器 SOABI；案例、HTML、帮助图片等源资源逐字节一致性、
+  ZIP 完整性与路径/凭据扫描。3.51.2/3.51.3 没有后续新增的 C++ 翻译测试套件，使用
+  独立跨版本模型及验包检查；3.51.2 包内补入其原历史提交中的 AGENTS.md。全线强制
+  使用源码内预生成 HTML，防止旧帮助构建改写已审核文件。当前仅做脚本静态及单元测试；
+  实际三平台编译、依赖闭包、
+  字体与 GUI 验收以对应运行和人工复核为准，不能把候选产物视为已发布成品。
+
 - 统一后续发布附件名为 `OpenVSP-<版本>-win64-zh-CN.zip` 和
   `OpenVSP-<版本>-Ubuntu-24.04_amd64-zh-CN.zip`，保留真实 ZIP 格式；标签、程序版本和包内内容不变。
   下载链接与 SHA-256 清单使用相同名称；草稿恢复兼容旧名与新名并校验原始包字节。
@@ -237,4 +257,5 @@ cmake --build build --target package --config Release --parallel 2
 - 发布流程强制读取目标标签的更新说明，并随 Linux/Windows ZIP 发布 SHA-256。
 - 新增仓库级 Agent 规则，要求后续修改和发布同步维护更新说明。
 - 验证：本地发布守卫、工作流语法、静态 CMINPACK 配置和 GitHub 托管双平台构建。
+
 
