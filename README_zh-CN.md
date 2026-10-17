@@ -107,6 +107,43 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- Mac 第二轮验证确认残留的是 runner 路径，单独移除调试符号未解决。源码核查发现
+  内置 libxml2 默认把其 CI 安装前缀编入 XML/SGML catalog 查找常量；补充构建现在仅
+  为采用 CMake 的该 ExternalProject（3.53.0 及后续三线）设置标准 /etc 查找目录，
+  并检查实际生成配置；旧两线 autotools 不套用此配置，待其自身实际扫描，不修改历史源码
+  或二进制字节。完整包路径扫描仍为硬门槛，修复效果等待实际构建证实。
+- 若路径扫描仍失败，只上传无原始匹配值的诊断 JSON：匹配类别/次数、Mach-O 区段及
+  符号类别计数、构建参数是否启用。被拒二进制不上传，原始路径和命令输出不进入诊断。
+
+- Linux ARM64 候选包验证后，可在 Xvfb 中载入已验证的两几何体模型并截取主界面与
+  几何体树，截图仅存 Actions 独立证据附件。此步骤非阻断，截图须实际目视判读；
+  失败或未判读不算 GUI 验收，不替代真实桌面及机翼页面检查，不写入发布包。
+
+- 原生补充构建先导在 macOS ARM64 完成编译、动态库与运行冒烟后，严格路径扫描
+  在 vspscript 上触发路径/凭据扫描，候选包未上传。针对可能残留的调试映射路径，
+  Mac 打包新增签名前移除调试符号（保留运行时导出），并区分不回显敏感值的失败类别；
+  仍执行原有扫描和全部运行检查，不放宽门槛。根因及修复效果待新一轮 Actions 证实。
+
+- 新增独立的历史版本原生补充构建：先验证 3.53.0 的 macOS 14 ARM64、macOS 15
+  Intel 与 Ubuntu 24.04 ARM64，再扩展到固定提交的五条历史发布线。PR 只跑先导三项，
+  手动全量运行需提供同一构建工具版本的成功先导运行 ID；最多三个平台任务并发。
+- 仅输出 Actions 候选 ZIP 与逐包验证报告，无 Release 写权限；不移动原标签、不改
+  原软件版本、不替换已有附件或 SHA256SUMS.txt。正式补发另行审阅后，在 Release
+  正文追加新附件的 SHA-256 与验证限制。包名使用 OpenVSP、真实目标平台和 zh-CN。
+- macOS 使用 Python 3.11，Ubuntu 使用发行版 Python 3.12；不扩展 Python 版本矩阵。
+  Mac 包递归收集非系统动态库并改为包内相对路径，记录每个 Mach-O 的架构与最低系统
+  版本并汇总其中最高值；若超过所命名平台或实际测试主机则失败，不承诺支持低于该值
+  的系统。非系统 framework 暂不自动打包，遇到时停止。Linux 逐个核对 ARM64 ELF、
+  RPATH 和发行版运行依赖，保留内置静态 CMINPACK。
+  不宣称支持 macOS 11，也不宣称经过 Developer ID 签名、公证或 Gatekeeper 验收。
+- 构建后检查中文帮助、模型冒烟、_vsp 与 _vsp_g 在独立进程中的导入及软件版本，
+  记录实际解释器 SOABI；案例、HTML、帮助图片等源资源逐字节一致性、
+  ZIP 完整性与路径/凭据扫描。3.51.2/3.51.3 没有后续新增的 C++ 翻译测试套件，使用
+  独立跨版本模型及验包检查；3.51.2 包内补入其原历史提交中的 AGENTS.md。全线强制
+  使用源码内预生成 HTML，防止旧帮助构建改写已审核文件。当前仅做脚本静态及单元测试；
+  实际三平台编译、依赖闭包、
+  字体与 GUI 验收以对应运行和人工复核为准，不能把候选产物视为已发布成品。
+
 - 统一后续发布附件名为 `OpenVSP-<版本>-win64-zh-CN.zip` 和
   `OpenVSP-<版本>-Ubuntu-24.04_amd64-zh-CN.zip`，保留真实 ZIP 格式；标签、程序版本和包内内容不变。
   下载链接与 SHA-256 清单使用相同名称；草稿恢复兼容旧名与新名并校验原始包字节。
@@ -238,3 +275,6 @@ cmake --build build --target package --config Release --parallel 2
 - 新增仓库级 Agent 规则，要求后续修改和发布同步维护更新说明。
 - 验证：本地发布守卫、工作流语法、静态 CMINPACK 配置和 GitHub 托管双平台构建。
 
+
+
+GUI evidence uses a fresh fixed `/tmp/openvsp-ui-evidence` model directory because OpenVSP expands the model path in its status bar. Earlier Actions-only screenshots exposed the public runner workspace path in pixels and must not be republished. Screenshots remain subject to manual visual review.
