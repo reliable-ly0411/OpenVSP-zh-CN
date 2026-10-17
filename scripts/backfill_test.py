@@ -6,16 +6,92 @@ import subprocess
 import shutil
 import tempfile
 import unittest
+import sys
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 import zipfile
 
 from backfill_diagnostics import macho_regions, summarize_matches, symbol_categories
-from backfill_gui import capture, prepare_model, GUI_INPUT_DIRECTORY
+from backfill_gui import capture, prepare_model, GUI_INPUT_DIRECTORY, gui_executable
 from backfill_plan import matrix, PLATFORMS, validate_pilot
 from backfill_package import verify
-from backfill_verify import privacy_scan, rpaths, dependencies, audit_native, bundle_mac, minimum_macos, python_smoke, parse_minos, cli_help
+from backfill_verify import privacy_scan, rpaths, dependencies, audit_native, bundle_mac, minimum_macos, python_smoke, parse_minos, cli_help, install_legacy_fonts, digest
 
 
+
+
+class LegacyFontTests(unittest.TestCase):
+    def test_only_old_linux_gets_supplements(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertIsNone(install_legacy_fonts(root, '3.53.0', True))
+            self.assertIsNone(install_legacy_fonts(root, '3.51.2', False))
+            self.assertFalse(list(root.iterdir()))
+
+    def test_hash_modes_original_and_duplicate_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root/'vsp').write_bytes(b'unchanged fixture')
+            original = digest(root/'vsp')
+            report = install_legacy_fonts(root, '3.51.2', True)
+            self.assertEqual(digest(root/'vsp'), original)
+            for record in report['files']:
+                f = root/record['file']
+                self.assertEqual(digest(f), record['sha256'])
+                self.assertEqual(oct(f.stat().st_mode & 0o777), record['mode'])
+            with self.assertRaises(ValueError): install_legacy_fonts(root, '3.51.2', True)
+
+    def test_configuration_retains_system_fonts_and_exact_aliases(self):
+        tree = ET.parse(Path(__file__).with_name('backfill_legacy_fonts.conf'))
+        self.assertEqual(tree.find('include').text, '/etc/fonts/fonts.conf')
+        aliases = {}
+        for rule in tree.findall('match'):
+            test = rule.find('test')
+            self.assertEqual(test.attrib, {'name': 'family', 'qual': 'any', 'compare': 'eq'})
+            aliases[test.find('string').text] = rule.find('edit/string').text
+        self.assertEqual(set(aliases), {'sans', 'sans-serif', 'Helvetica', 'mono', 'monospace', 'Courier'})
+        self.assertEqual(aliases['sans'], 'Noto Sans CJK SC')
+        self.assertEqual(aliases['mono'], 'Noto Sans Mono CJK SC')
+
+    def test_launcher_forwards_args_and_scopes_environment_with_spaces(self):
+        with tempfile.TemporaryDirectory(prefix='font fixture ') as tmp:
+            root = Path(tmp); bindir = root/'fake commands'; bindir.mkdir()
+            # Our own inert fixtures, never downloaded native binaries.
+            (root/'vsp').write_text('#!' + sys.executable + '\nimport os,sys,json\nprint(json.dumps([sys.argv[1:],os.environ.get("FONTCONFIG_FILE")]))\n')
+            (root/'vsp').chmod(0o755)
+            fc = bindir/'fc-match'
+            fc.write_text('#!/bin/sh\nfor last do :; done\ncase "$last" in mono|monospace|Courier) printf "Noto Sans Mono CJK SC";; *) printf "Noto Sans CJK SC";; esac\n')
+            fc.chmod(0o755)
+            install_legacy_fonts(root, '3.51.3', True)
+            env = dict(os.environ, PATH=str(bindir)+os.pathsep+os.environ['PATH'], FONTCONFIG_FILE='original')
+            args = ['space model.vsp3', '--flag', '中文', '']
+            output = subprocess.check_output([str(root/'vsp-zh-CN'), *args], env=env, text=True)
+            self.assertEqual(json.loads(output), [args, str(root/'openvsp-zh-fonts.conf')])
+            self.assertEqual(env['FONTCONFIG_FILE'], 'original')
+            fc.write_text('#!/bin/sh\nprintf "Wrong Font"\n')
+            failure = subprocess.run([str(root/'vsp-zh-CN')], env=env, capture_output=True, text=True)
+            self.assertNotEqual(failure.returncode, 0)
+            self.assertIn('fonts-noto-cjk', failure.stderr)
+            self.assertEqual(failure.stdout, '')
+
+    @unittest.skipUnless(shutil.which('fc-match'), 'Fontconfig unavailable')
+    def test_real_fontconfig_maps_all_actual_fltk_aliases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ, XDG_CACHE_HOME=tmp)
+            for family in ('Noto Sans CJK SC', 'Noto Sans Mono CJK SC'):
+                found = subprocess.check_output(['fc-match', '--format', '%{family}', family], env=env, stderr=subprocess.DEVNULL, text=True)
+                if family not in found:
+                    self.skipTest('Noto CJK unavailable; native CI launcher enforces every alias')
+            env['FONTCONFIG_FILE'] = str(Path(__file__).with_name('backfill_legacy_fonts.conf').resolve())
+            for alias in ('sans', 'sans-serif', 'Helvetica', 'mono', 'monospace', 'Courier'):
+                expected = 'Noto Sans Mono CJK SC' if alias in ('mono', 'monospace', 'Courier') else 'Noto Sans CJK SC'
+                actual = subprocess.check_output(['fc-match', '--format', '%{family}', alias], env=env, stderr=subprocess.DEVNULL, text=True)
+                self.assertIn(expected, actual)
+
+    def test_gui_uses_same_packaged_launcher_only_for_old_versions(self):
+        root = Path('/neutral')
+        self.assertEqual(gui_executable(root, '3.51.2'), root/'vsp-zh-CN')
+        self.assertEqual(gui_executable(root, '3.51.3'), root/'vsp-zh-CN')
+        self.assertEqual(gui_executable(root, '3.53.0'), root/'vsp')
 
 class CliHelpTests(unittest.TestCase):
     @patch('backfill_verify.run', return_value='用法: vsp')

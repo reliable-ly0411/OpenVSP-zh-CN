@@ -77,6 +77,32 @@ def digest(path):
     return h.hexdigest()
 
 
+
+def install_legacy_fonts(root, version, linux):
+    if not linux or version not in ('3.51.2', '3.51.3'):
+        return None
+    templates = {'backfill_legacy_launcher.sh': ('vsp-zh-CN', 0o755),
+                 'backfill_legacy_fonts.conf': ('openvsp-zh-fonts.conf', 0o644),
+                 'backfill_legacy_launcher_README.txt': ('README-zh-CN-launcher.txt', 0o644)}
+    original = digest(root/'vsp')
+    files = []
+    for template, (name, mode) in templates.items():
+        source = Path(__file__).with_name(template)
+        target = root/name
+        if target.exists() or target.is_symlink():
+            raise ValueError('Legacy font supplement unexpectedly already exists')
+        shutil.copyfile(source, target)
+        target.chmod(mode)
+        if digest(source) != digest(target):
+            raise ValueError('Legacy font supplement copy mismatch')
+        files.append(dict(file=name, sha256=digest(target), mode=oct(mode)))
+    if digest(root/'vsp') != original:
+        raise ValueError('Historical executable changed during font supplementation')
+    return {'launcher': 'vsp-zh-CN', 'files': files, 'original_vsp_sha256': original,
+            'scope': 'Process-local Fontconfig only; direct vsp may still show tofu',
+            'required_packages': ['fontconfig', 'fonts-noto-cjk']}
+
+
 def machos(root):
     return [p for p in root.rglob('*') if p.is_file() and 'Mach-O' in run('file', '-b', p)]
 
@@ -348,6 +374,7 @@ def main():
     notices = {}
     if mac:
         _, notices = bundle_mac(root)
+    legacy_fonts = install_legacy_fonts(root, os.environ['BACKFILL_VERSION'], not mac)
     records = audit_native(root, os.environ['BACKFILL_ARCH'], mac)
     macos_minimum = minimum_macos(records, platform.mac_ver()[0], os.environ['BACKFILL_PLATFORM']) if mac else None
     # Clean cwd and relocated install tree catch build-directory-relative dependencies.
@@ -357,6 +384,11 @@ def main():
             env.pop(key, None)
         cli_evidence = cli_help(root/'vsp', os.environ['BACKFILL_VERSION'], scratch, env,
                                 Path(os.environ['GITHUB_WORKSPACE'])/'diagnostics', not mac)
+        if legacy_fonts:
+            launcher_help = run('xvfb-run', '-a', root/'vsp-zh-CN', '-help', cwd=scratch, env=env)
+            if '用法' not in launcher_help:
+                raise ValueError('Packaged Chinese GUI launcher help failed')
+            legacy_fonts['launcher_help_exit_code'] = 0
         smoke = run(root/'vspscript', '-script', Path(__file__).with_name('backfill_smoke.as'), cwd=scratch, env=env)
         if 'LOCALIZATION_SMOKE_PASS' not in smoke or 'LOCALIZATION_SMOKE_FAIL' in smoke:
             raise ValueError('Packaged model localization smoke failed')
@@ -394,7 +426,7 @@ def main():
                    'AngelScript model smoke', 'Python extension import/version',
                    'source examples/help/documents byte equality', 'ZIP integrity', 'privacy scan'],
         'native': records, 'third_party_licenses': notices,
-        'cli_help': cli_evidence, 'python_extensions': python_checks, 'macos_minimum': macos_minimum,
+        'legacy_gui_fonts': legacy_fonts, 'cli_help': cli_evidence, 'python_extensions': python_checks, 'macos_minimum': macos_minimum,
         'publication_ready': False,
         'pending_review': ['GUI/font rendering on actual target platform',
                            'Third-party redistribution licenses and runtime requirements',
