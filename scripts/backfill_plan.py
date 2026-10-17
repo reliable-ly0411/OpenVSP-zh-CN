@@ -19,10 +19,12 @@ PLATFORMS = (
 )
 
 def matrix(scope):
-    if scope not in ('pilot', 'all'):
+    if scope not in ('pilot', 'all', 'legacy-linux'):
         raise ValueError('Unknown scope')
     return {'include': [dict(version=v, tag=t, sha=s, **p) for v,t,s in RELEASES
-                        if scope == 'all' or v == '3.53.0' for p in PLATFORMS]}
+                        if scope == 'all' or (scope == 'pilot' and v == '3.53.0')
+                        or (scope == 'legacy-linux' and v in ('3.51.2', '3.51.3'))
+                        for p in PLATFORMS if scope != 'legacy-linux' or p['runner'] == 'ubuntu-24.04-arm']}
 
 def validate_pilot(run, jobs, repository):
     if (run.get('conclusion') != 'success' or run.get('status') != 'completed'

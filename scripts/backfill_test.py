@@ -13,10 +13,92 @@ from backfill_diagnostics import macho_regions, summarize_matches, symbol_catego
 from backfill_gui import capture, prepare_model, GUI_INPUT_DIRECTORY
 from backfill_plan import matrix, PLATFORMS, validate_pilot
 from backfill_package import verify
-from backfill_verify import privacy_scan, rpaths, dependencies, audit_native, bundle_mac, minimum_macos, python_smoke, parse_minos
+from backfill_verify import privacy_scan, rpaths, dependencies, audit_native, bundle_mac, minimum_macos, python_smoke, parse_minos, cli_help
+
+
+
+class CliHelpTests(unittest.TestCase):
+    @patch('backfill_verify.run', return_value='用法: vsp')
+    def test_normal_help_requires_no_retry(self, command):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = cli_help(Path('vsp'), '3.51.2', tmp, {}, Path(tmp)/'diag', True)
+            self.assertEqual(result['initial_exit_code'], 0)
+            self.assertEqual(command.call_count, 1)
+
+    @patch('backfill_verify.run')
+    def test_only_exact_old_display_failure_can_retry(self, command):
+        command.side_effect = [subprocess.CalledProcessError(1, ['vsp'], output="Can't open display: \n"), '用法: vsp']
+        with tempfile.TemporaryDirectory() as tmp:
+            result = cli_help(Path('vsp'), '3.51.2', tmp, {}, Path(tmp)/'diag', True)
+            self.assertEqual(result['retry_exit_code'], 0)
+            self.assertEqual(command.call_args.args[0], 'xvfb-run')
+
+    def test_unrelated_failure_modern_version_and_mac_stay_failed(self):
+        for version, linux, output in [('3.51.2', True, 'private secret /runner/path'),
+                                        ('3.53.0', True, "Can't open display:"),
+                                        ('3.51.2', False, "Can't open display:")]:
+            with tempfile.TemporaryDirectory() as tmp, patch('backfill_verify.run') as command:
+                command.side_effect = subprocess.CalledProcessError(1, ['vsp'], output=output)
+                with self.assertRaises(ValueError):
+                    cli_help(Path('vsp'), version, tmp, {}, Path(tmp)/'diag', linux)
+                self.assertEqual(command.call_count, 1)
+                report = (Path(tmp)/'diag/runtime.json').read_text()
+                self.assertNotIn(output, report)
+
+    @patch('backfill_verify.run')
+    def test_failed_xvfb_retry_still_fails(self, command):
+        command.side_effect = [subprocess.CalledProcessError(1, ['vsp'], output="Can't open display:"),
+                               subprocess.CalledProcessError(2, ['vsp'], output='private values')]
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                cli_help(Path('vsp'), '3.51.3', tmp, {}, Path(tmp)/'diag', True)
+            report = json.loads((Path(tmp)/'diag/runtime.json').read_text())
+            self.assertEqual(report['xvfb_retry_exit_code'], 2)
+            self.assertNotIn('private values', json.dumps(report))
+
+    def test_timeout_or_missing_launcher_never_leaks_or_passes(self):
+        for retry in (False, True):
+            for error in (subprocess.TimeoutExpired('/private/workspace/vsp', 120, output='private'),
+                          FileNotFoundError('/private/workspace/launcher')):
+                with tempfile.TemporaryDirectory() as tmp, patch('backfill_verify.run') as command:
+                    failures = [error]
+                    if retry:
+                        failures.insert(0, subprocess.CalledProcessError(1, ['vsp'], output="Can't open display:"))
+                    command.side_effect = failures
+                    with self.assertRaises(ValueError) as raised:
+                        cli_help(Path('vsp'), '3.51.2', tmp, {}, Path(tmp)/'diag', True)
+                    self.assertEqual(command.call_count, 2 if retry else 1)
+                    report = (Path(tmp)/'diag/runtime.json').read_text()
+                    self.assertNotIn('private', report + str(raised.exception))
+                    self.assertIn('xvfb-retry' if retry else 'initial', report)
+
+    @patch('backfill_verify.run')
+    def test_non_one_exit_never_retries(self, command):
+        command.side_effect = subprocess.CalledProcessError(2, ['vsp'], output="Can't open display:")
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                cli_help(Path('vsp'), '3.51.2', tmp, {}, Path(tmp)/'diag', True)
+            self.assertEqual(command.call_count, 1)
+
+    @patch('backfill_verify.run', return_value='Usage: vsp')
+    def test_zero_exit_without_chinese_help_still_fails(self, command):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                cli_help(Path('vsp'), '3.51.2', tmp, {}, Path(tmp)/'diag', True)
 
 
 class PlanTests(unittest.TestCase):
+    def test_legacy_linux_has_only_two_fixed_targets(self):
+        jobs = matrix('legacy-linux')['include']
+        self.assertEqual(len(jobs), 2)
+        self.assertEqual({j['runner'] for j in jobs}, {'ubuntu-24.04-arm'})
+        self.assertEqual({j['arch'] for j in jobs}, {'aarch64'})
+        self.assertEqual({(j['version'], j['sha']) for j in jobs}, {
+            ('3.51.2', '24f270c1ffc52e7477b2305669172ba49b49b114'),
+            ('3.51.3', '4b523612b030d8d087dba49f79a716712496c403')})
+        for invalid in ('3.51.2', 'ubuntu-24.04-arm', 'legacy-linux,all', '*'):
+            with self.assertRaises(ValueError): matrix(invalid)
+
     def test_pilot_has_exactly_three_platforms(self):
         jobs = matrix('pilot')['include']
         self.assertEqual(len(jobs), 3)

@@ -15,7 +15,7 @@ else
   sudo apt-get update
   sudo apt-get install --yes build-essential gcc-13 g++-13 git zip unzip \
     python3-dev python3-venv libxml2-dev libjpeg-dev libglm-dev fonts-noto-cjk \
-    libglew-dev libglu1-mesa-dev libfltk1.3-dev fluid xorg-dev swig doxygen graphviz pandoc
+    xvfb xauth libglew-dev libglu1-mesa-dev libfltk1.3-dev fluid xorg-dev swig doxygen graphviz pandoc
   export CC=gcc-13 CXX=g++-13
   python3 -m venv "$ROOT/venv"
 fi

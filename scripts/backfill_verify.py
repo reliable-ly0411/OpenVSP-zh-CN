@@ -27,6 +27,48 @@ def run(*args, **kwargs):
                                    timeout=120, **kwargs)
 
 
+
+def cli_help(executable, version, scratch, env, diagnostics, linux):
+    """Never accept a failed help command; exact old X11 startup error may retry in Xvfb."""
+    evidence = {'display': 'none', 'initial_exit_code': 0}
+    def unavailable(exc, phase):
+        category = 'timeout' if isinstance(exc, subprocess.TimeoutExpired) else 'launcher-unavailable'
+        diagnostics.mkdir(parents=True, exist_ok=True)
+        (diagnostics/'runtime.json').write_text(json.dumps({
+            'schema': 1, 'command': 'vsp-help', 'phase': phase, 'category': category,
+            'contains_output_values': False, 'binary_uploaded': False}, indent=2) + '\n')
+        raise ValueError('Packaged CLI help unavailable; see value-free runtime diagnosis') from None
+    try:
+        text = run(executable, '-help', cwd=scratch, env=env)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        unavailable(exc, 'initial')
+    except subprocess.CalledProcessError as exc:
+        output = exc.output or ''
+        category = 'x11-display-unavailable' if output.strip() == "Can't open display:" else 'unclassified-runtime-failure'
+        evidence = {'display': 'none', 'initial_exit_code': exc.returncode, 'initial_category': category}
+        diagnostics.mkdir(parents=True, exist_ok=True)
+        report = {'schema': 1, 'command': 'vsp-help', 'exit_code': exc.returncode,
+                  'category': category, 'contains_output_values': False, 'binary_uploaded': False}
+        (diagnostics/'runtime.json').write_text(json.dumps(report, indent=2) + '\n')
+        if not (linux and version in ('3.51.2', '3.51.3') and exc.returncode == 1 and category == 'x11-display-unavailable'):
+            raise ValueError('Packaged CLI help failed; see value-free runtime diagnosis') from None
+        # Historical icon setup opens X11 before batchMode. Keep source immutable.
+        try:
+            text = run('xvfb-run', '-a', '--server-args=-screen 0 1600x1000x24',
+                       executable, '-help', cwd=scratch, env=env)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            unavailable(exc, 'xvfb-retry')
+        except subprocess.CalledProcessError as retry:
+            report['xvfb_retry_exit_code'] = retry.returncode
+            (diagnostics/'runtime.json').write_text(json.dumps(report, indent=2) + '\n')
+            raise ValueError('Packaged CLI help also failed with Xvfb') from None
+        evidence['display'] = 'Xvfb retry after exact X11 display-unavailable error'
+        evidence['retry_exit_code'] = 0
+    if '用法' not in text:
+        raise ValueError('Packaged Chinese CLI help failed')
+    return evidence
+
+
 def digest(path):
     h = hashlib.sha256()
     with path.open('rb') as f:
@@ -313,9 +355,8 @@ def main():
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
         for key in ('DISPLAY', 'DYLD_LIBRARY_PATH', 'LD_LIBRARY_PATH', 'PYTHONPATH'):
             env.pop(key, None)
-        help_text = run(root/'vsp', '-help', cwd=scratch, env=env)
-        if '用法' not in help_text:
-            raise ValueError('Packaged Chinese CLI help failed')
+        cli_evidence = cli_help(root/'vsp', os.environ['BACKFILL_VERSION'], scratch, env,
+                                Path(os.environ['GITHUB_WORKSPACE'])/'diagnostics', not mac)
         smoke = run(root/'vspscript', '-script', Path(__file__).with_name('backfill_smoke.as'), cwd=scratch, env=env)
         if 'LOCALIZATION_SMOKE_PASS' not in smoke or 'LOCALIZATION_SMOKE_FAIL' in smoke:
             raise ValueError('Packaged model localization smoke failed')
@@ -353,7 +394,7 @@ def main():
                    'AngelScript model smoke', 'Python extension import/version',
                    'source examples/help/documents byte equality', 'ZIP integrity', 'privacy scan'],
         'native': records, 'third_party_licenses': notices,
-        'python_extensions': python_checks, 'macos_minimum': macos_minimum,
+        'cli_help': cli_evidence, 'python_extensions': python_checks, 'macos_minimum': macos_minimum,
         'publication_ready': False,
         'pending_review': ['GUI/font rendering on actual target platform',
                            'Third-party redistribution licenses and runtime requirements',

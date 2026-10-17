@@ -10,7 +10,7 @@ on:
       scope:
         description: Build pilot first; all requires a reviewed successful pilot run
         type: choice
-        options: [pilot, all]
+        options: [pilot, legacy-linux, all]
         default: pilot
       pilot_run_id:
         description: Successful pilot run ID (required for all)
@@ -40,7 +40,9 @@ jobs:
           python3 -m unittest discover -s scripts -p backfill_test.py -v
       - id: plan
         env:
-          SCOPE: ${{ inputs.scope || 'pilot' }}
+          # PR covers legacy Linux only; common tooling changes require a manual
+          # three-platform pilot before all. Dispatch still defaults to pilot.
+          SCOPE: ${{ inputs.scope || 'legacy-linux' }}
           PILOT_RUN_ID: ${{ inputs.pilot_run_id }}
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/backfill_plan.py
@@ -123,10 +125,12 @@ jobs:
           retention-days: 14
 
       - name: Upload value-free failure diagnostics only
-        if: failure() && hashFiles('diagnostics/privacy.json') != ''
+        if: failure() && (hashFiles('diagnostics/privacy.json') != '' || hashFiles('diagnostics/runtime.json') != '')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: backfill-diagnostics-${{ matrix.version }}-${{ matrix.platform }}
-          path: diagnostics/privacy.json
+          path: |
+            diagnostics/privacy.json
+            diagnostics/runtime.json
           if-no-files-found: error
           retention-days: 14

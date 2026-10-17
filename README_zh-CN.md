@@ -278,3 +278,10 @@ cmake --build build --target package --config Release --parallel 2
 
 
 GUI evidence uses a fresh fixed `/tmp/openvsp-ui-evidence` model directory because OpenVSP expands the model path in its status bar. Earlier Actions-only screenshots exposed the public runner workspace path in pixels and must not be republished. Screenshots remain subject to manual visual review.
+
+
+### 旧版 Linux 运行验证
+
+3.51.2/3.51.3 在处理命令行参数前初始化 X11 图标。无显示的帮助检查只有在退出码为 1 且完整输出匹配 FLTK 显示不可用错误时，才在 Xvfb 下重试；重试仍须退出 0 并输出中文用法，其他错误保持失败。
+
+PR 自动检查仅覆盖固定的两项 legacy-linux 目标，不代表现代 Mac 回归。手动流程默认三平台 pilot；all 模式继续要求成功且工具一致的 pilot。已发布标签和附件保持不变。
