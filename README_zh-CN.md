@@ -278,3 +278,12 @@ cmake --build build --target package --config Release --parallel 2
 
 
 GUI evidence uses a fresh fixed `/tmp/openvsp-ui-evidence` model directory because OpenVSP expands the model path in its status bar. Earlier Actions-only screenshots exposed the public runner workspace path in pixels and must not be republished. Screenshots remain subject to manual visual review.
+
+
+### 旧版 Linux 运行验证
+
+3.51.2/3.51.3 在处理命令行参数前初始化 X11 图标。无显示的帮助检查只有在退出码为 1 且完整输出匹配 FLTK 显示不可用错误时，才在 Xvfb 下重试；重试仍须退出 0 并输出中文用法，其他错误保持失败。
+
+PR 自动检查仅覆盖固定的两项 legacy-linux 目标，不代表现代 Mac 回归。手动流程默认三平台 pilot；all 模式继续要求成功且工具一致的 pilot。已发布标签和附件保持不变。
+
+旧版 3.51.2/3.51.3 Ubuntu ARM 包附带 `vsp-zh-CN` 中文 GUI 启动器及应用专用 Fontconfig 配置。请安装 `fontconfig`、`fonts-noto-cjk` 后使用该启动器；直接运行原 `vsp` 仍可能显示中文方框。启动器仅设置自身进程的字体配置，包含系统字体目录与缓存，不修改系统/用户设置或历史二进制。包内说明和验收报告列出补充文件的 SHA-256/权限；GUI 截图通过同一包内启动器生成，字形仍需实际目视审核。

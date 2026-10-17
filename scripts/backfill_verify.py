@@ -27,12 +27,80 @@ def run(*args, **kwargs):
                                    timeout=120, **kwargs)
 
 
+
+def cli_help(executable, version, scratch, env, diagnostics, linux):
+    """Never accept a failed help command; exact old X11 startup error may retry in Xvfb."""
+    evidence = {'display': 'none', 'initial_exit_code': 0}
+    def unavailable(exc, phase):
+        category = 'timeout' if isinstance(exc, subprocess.TimeoutExpired) else 'launcher-unavailable'
+        diagnostics.mkdir(parents=True, exist_ok=True)
+        (diagnostics/'runtime.json').write_text(json.dumps({
+            'schema': 1, 'command': 'vsp-help', 'phase': phase, 'category': category,
+            'contains_output_values': False, 'binary_uploaded': False}, indent=2) + '\n')
+        raise ValueError('Packaged CLI help unavailable; see value-free runtime diagnosis') from None
+    try:
+        text = run(executable, '-help', cwd=scratch, env=env)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        unavailable(exc, 'initial')
+    except subprocess.CalledProcessError as exc:
+        output = exc.output or ''
+        category = 'x11-display-unavailable' if output.strip() == "Can't open display:" else 'unclassified-runtime-failure'
+        evidence = {'display': 'none', 'initial_exit_code': exc.returncode, 'initial_category': category}
+        diagnostics.mkdir(parents=True, exist_ok=True)
+        report = {'schema': 1, 'command': 'vsp-help', 'exit_code': exc.returncode,
+                  'category': category, 'contains_output_values': False, 'binary_uploaded': False}
+        (diagnostics/'runtime.json').write_text(json.dumps(report, indent=2) + '\n')
+        if not (linux and version in ('3.51.2', '3.51.3') and exc.returncode == 1 and category == 'x11-display-unavailable'):
+            raise ValueError('Packaged CLI help failed; see value-free runtime diagnosis') from None
+        # Historical icon setup opens X11 before batchMode. Keep source immutable.
+        try:
+            text = run('xvfb-run', '-a', '--server-args=-screen 0 1600x1000x24',
+                       executable, '-help', cwd=scratch, env=env)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            unavailable(exc, 'xvfb-retry')
+        except subprocess.CalledProcessError as retry:
+            report['xvfb_retry_exit_code'] = retry.returncode
+            (diagnostics/'runtime.json').write_text(json.dumps(report, indent=2) + '\n')
+            raise ValueError('Packaged CLI help also failed with Xvfb') from None
+        evidence['display'] = 'Xvfb retry after exact X11 display-unavailable error'
+        evidence['retry_exit_code'] = 0
+    if '用法' not in text:
+        raise ValueError('Packaged Chinese CLI help failed')
+    return evidence
+
+
 def digest(path):
     h = hashlib.sha256()
     with path.open('rb') as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b''):
             h.update(chunk)
     return h.hexdigest()
+
+
+
+def install_legacy_fonts(root, version, linux):
+    if not linux or version not in ('3.51.2', '3.51.3'):
+        return None
+    templates = {'backfill_legacy_launcher.sh': ('vsp-zh-CN', 0o755),
+                 'backfill_legacy_fonts.conf': ('openvsp-zh-fonts.conf', 0o644),
+                 'backfill_legacy_launcher_README.txt': ('README-zh-CN-launcher.txt', 0o644)}
+    original = digest(root/'vsp')
+    files = []
+    for template, (name, mode) in templates.items():
+        source = Path(__file__).with_name(template)
+        target = root/name
+        if target.exists() or target.is_symlink():
+            raise ValueError('Legacy font supplement unexpectedly already exists')
+        shutil.copyfile(source, target)
+        target.chmod(mode)
+        if digest(source) != digest(target):
+            raise ValueError('Legacy font supplement copy mismatch')
+        files.append(dict(file=name, sha256=digest(target), mode=oct(mode)))
+    if digest(root/'vsp') != original:
+        raise ValueError('Historical executable changed during font supplementation')
+    return {'launcher': 'vsp-zh-CN', 'files': files, 'original_vsp_sha256': original,
+            'scope': 'Process-local Fontconfig only; direct vsp may still show tofu',
+            'required_packages': ['fontconfig', 'fonts-noto-cjk']}
 
 
 def machos(root):
@@ -306,6 +374,7 @@ def main():
     notices = {}
     if mac:
         _, notices = bundle_mac(root)
+    legacy_fonts = install_legacy_fonts(root, os.environ['BACKFILL_VERSION'], not mac)
     records = audit_native(root, os.environ['BACKFILL_ARCH'], mac)
     macos_minimum = minimum_macos(records, platform.mac_ver()[0], os.environ['BACKFILL_PLATFORM']) if mac else None
     # Clean cwd and relocated install tree catch build-directory-relative dependencies.
@@ -313,9 +382,13 @@ def main():
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
         for key in ('DISPLAY', 'DYLD_LIBRARY_PATH', 'LD_LIBRARY_PATH', 'PYTHONPATH'):
             env.pop(key, None)
-        help_text = run(root/'vsp', '-help', cwd=scratch, env=env)
-        if '用法' not in help_text:
-            raise ValueError('Packaged Chinese CLI help failed')
+        cli_evidence = cli_help(root/'vsp', os.environ['BACKFILL_VERSION'], scratch, env,
+                                Path(os.environ['GITHUB_WORKSPACE'])/'diagnostics', not mac)
+        if legacy_fonts:
+            launcher_help = run('xvfb-run', '-a', root/'vsp-zh-CN', '-help', cwd=scratch, env=env)
+            if '用法' not in launcher_help:
+                raise ValueError('Packaged Chinese GUI launcher help failed')
+            legacy_fonts['launcher_help_exit_code'] = 0
         smoke = run(root/'vspscript', '-script', Path(__file__).with_name('backfill_smoke.as'), cwd=scratch, env=env)
         if 'LOCALIZATION_SMOKE_PASS' not in smoke or 'LOCALIZATION_SMOKE_FAIL' in smoke:
             raise ValueError('Packaged model localization smoke failed')
@@ -353,7 +426,7 @@ def main():
                    'AngelScript model smoke', 'Python extension import/version',
                    'source examples/help/documents byte equality', 'ZIP integrity', 'privacy scan'],
         'native': records, 'third_party_licenses': notices,
-        'python_extensions': python_checks, 'macos_minimum': macos_minimum,
+        'legacy_gui_fonts': legacy_fonts, 'cli_help': cli_evidence, 'python_extensions': python_checks, 'macos_minimum': macos_minimum,
         'publication_ready': False,
         'pending_review': ['GUI/font rendering on actual target platform',
                            'Third-party redistribution licenses and runtime requirements',

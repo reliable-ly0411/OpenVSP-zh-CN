@@ -18,12 +18,17 @@ def prepare_model(source):
     shutil.copyfile(source, model)
     return model
 
-def capture(root, model, output):
-    if not (root/'vsp').is_file() or not model.is_file():
+def gui_executable(root, version):
+    return root/('vsp-zh-CN' if version in ('3.51.2', '3.51.3') else 'vsp')
+
+
+def capture(root, model, output, version='3.53.0'):
+    executable = gui_executable(root, version)
+    if not executable.is_file() or not model.is_file():
         raise ValueError('Verified package or smoke model missing')
     output.mkdir(parents=True, exist_ok=True)
     screenshot = output/'linux-arm64-main-and-geometry-tree.png'
-    process = subprocess.Popen([str(root/'vsp'), model.name], cwd=model.parent,
+    process = subprocess.Popen([str(executable), model.name], cwd=model.parent,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         visible = False
@@ -66,7 +71,9 @@ def main():
         if len(roots) != 1:
             raise ValueError('Ambiguous package directory')
         model = prepare_model(workspace/'gui-input/localization-smoke.vsp3')
-        image = capture(roots[0], model, output)
+        version = os.environ['BACKFILL_VERSION']
+        image = capture(roots[0], model, output, version)
+        report['launcher'] = gui_executable(roots[0], version).name
         report['status'] = 'captured_not_reviewed'
         report['screenshot'] = image.name
     except Exception as exc:
