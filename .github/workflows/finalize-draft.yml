@@ -1,66 +1,17 @@
-name: Finalize Verified Release Draft
+name: Legacy draft maintenance (read-only)
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing unpublished release tag
-        required: true
-      source_commit:
-        description: Exact tested source commit
-        required: true
-      expected_draft_sha:
-        description: Expected current unpublished tag commit
-        required: true
-      build_run_id:
-        description: Run containing successful Linux and Windows build jobs
-        required: true
-      linux_sha256:
-        description: SHA-256 of the locally accepted Linux ZIP
-        required: true
-      windows_sha256:
-        description: SHA-256 of the VM-accepted Windows ZIP
-        required: true
-      validation_note:
-        description: Actual desktop acceptance results for the release notes
-        required: true
-      publish:
-        description: Publish after backup and downloaded-asset verification
-        type: boolean
-        default: false
 permissions:
-  contents: write
-  actions: read
-concurrency:
-  group: finalize-release-${{ inputs.tag }}
-  cancel-in-progress: false
+  contents: read
 jobs:
-  finalize:
+  retired:
     runs-on: ubuntu-24.04
-    env:
-      GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: ${{ inputs.tag }}
-      SOURCE_COMMIT: ${{ inputs.source_commit }}
-      EXPECTED_DRAFT_SHA: ${{ inputs.expected_draft_sha }}
-      BUILD_RUN_ID: ${{ inputs.build_run_id }}
-      LINUX_SHA256: ${{ inputs.linux_sha256 }}
-      WINDOWS_SHA256: ${{ inputs.windows_sha256 }}
-      VALIDATION_NOTE: ${{ inputs.validation_note }}
-      PUBLISH: ${{ inputs.publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          path: maintenance
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.source_commit }}
-          path: source
-      - name: Check draft, successful builds, accepted hashes and make backup
-        run: python3 maintenance/scripts/finalize_release_draft.py prepare
-      - name: Preserve unpublished draft and assets before changes
-        uses: actions/upload-artifact@v4
-        with:
-          name: unpublished-draft-backup
-          path: draft-work/backup
-          retention-days: 30
-      - name: Update only the guarded draft and verify assets before publication
-        run: python3 maintenance/scripts/finalize_release_draft.py apply
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify historical guards
+        run: python3 -m unittest discover -s scripts -p test_finalize_release_draft.py -v
+      - name: Explain immutable replacement flow
+        run: echo 'Historical draft/tag writes are retired. Use Build five-platform localized prerelease with an exact source_sha and a NEW -zh-CN.rc.N tag. No old tags or assets were changed.' >> "$GITHUB_STEP_SUMMARY"

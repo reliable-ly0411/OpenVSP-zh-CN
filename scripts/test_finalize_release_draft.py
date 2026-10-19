@@ -45,6 +45,23 @@ class DraftGuards(unittest.TestCase):
             self.assertEqual(module.find_release(), release)
             self.assertEqual(api.call_args_list[1].args[0], 'releases?per_page=100&page=2')
 
+    def test_even_unchanged_historical_draft_cannot_move_tag_or_replace_assets(self):
+        import json
+        release = {'id': 1, 'draft': True, 'prerelease': True, 'tag_name': module.TAG, 'assets': []}
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, 'plan.json').write_text(json.dumps(module.snapshot(release)))
+            with patch.object(module, 'WORK', Path(folder)), patch.object(module, 'guarded_draft', return_value=release), patch.object(module, 'api') as api:
+                with self.assertRaisesRegex(ValueError, 'retired'):
+                    module.apply()
+                api.assert_not_called()
+
+    def test_acceptance_note_replacement_cannot_silently_fail(self):
+        body = module.release_body(module.TAG, '- change', 'example/repo', 'b'*40, '123', True)
+        self.assertIn('Actual desktop review', module.validation_body(body, 'Actual desktop review'))
+        for text in ('missing placeholder', body + body):
+            with self.assertRaisesRegex(ValueError, 'placeholder'):
+                module.validation_body(text, 'Actual desktop review')
+
 
 if __name__ == '__main__':
     unittest.main()

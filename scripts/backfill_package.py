@@ -6,7 +6,7 @@ import sys
 import zipfile
 
 
-def verify(archive_path, source):
+def verify(archive_path, source, runtime_resources=False):
     tracked = subprocess.check_output(['git', '-C', str(source), 'ls-files', '-z']).decode().split('\0')
     expected = {}
     for name in ('README.md', 'README_zh-CN.md', 'AGENTS.md', 'LICENSE', 'CHANGELOG.md', 'vspIcon.png'):
@@ -17,6 +17,9 @@ def verify(archive_path, source):
     for name in tracked:
         if name.startswith('examples/'):
             expected['Official_Examples/' + name.removeprefix('examples/')] = name
+            relative = name.removeprefix('examples/')
+            if runtime_resources and relative.split('/')[0] in ('airfoil', 'CustomScripts', 'scripts', 'textures', 'vspaero_ex', 'CCE', 'matlab'):
+                expected[relative] = name
         if name.startswith('src/help/images/'):
             expected[name.removeprefix('src/')] = name
         if name.startswith('src/help/html/') and name.endswith('.html'):
@@ -35,11 +38,15 @@ def verify(archive_path, source):
         if len(roots) != 1:
             raise ValueError('Expected one package root')
         prefix = roots.pop() + '/'
+        windows = prefix + 'vsp.exe' in names
         for program in ('vsp', 'vspscript', 'vspaero', 'vspviewer', 'vsploads'):
-            if prefix + program not in names:
+            if prefix + program + ('.exe' if windows else '') not in names:
                 raise ValueError(f'Missing executable: {program}')
         for destination, original in expected.items():
-            data = subprocess.check_output(['git', '-C', str(source), 'show', 'HEAD:' + original])
+            command = ['git', '-C', str(source)]
+            command += (['-c', 'core.autocrlf=true', '-c', 'core.eol=crlf', 'cat-file', '--filters', 'HEAD:' + original]
+                        if windows else ['show', 'HEAD:' + original])
+            data = subprocess.check_output(command)
             if archive.read(prefix + destination) != data:
                 raise ValueError(f'Package differs from immutable source: {destination}')
         if archive.testzip():

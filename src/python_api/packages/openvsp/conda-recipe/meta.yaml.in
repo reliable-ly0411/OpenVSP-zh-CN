@@ -15,7 +15,7 @@ requirements:
   # extension itself, which calls import_array() as it loads.
   run:
     - python
-    - numpy
+    - numpy >=1.26.4,<2
     - degen_geom
     - utilities
     - openvsp_config

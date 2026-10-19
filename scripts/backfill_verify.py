@@ -23,7 +23,7 @@ SECRET = re.compile(rb'(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,
 
 
 def run(*args, **kwargs):
-    return subprocess.check_output([str(a) for a in args], text=True, stderr=subprocess.STDOUT,
+    return subprocess.check_output([str(a) for a in args], text=True, encoding='utf-8', errors='replace', stderr=subprocess.STDOUT,
                                    timeout=120, **kwargs)
 
 
@@ -122,13 +122,15 @@ def is_inside(path, root):
     return path.resolve().is_relative_to(root.resolve())
 
 
-def bundle_mac(root):
+def bundle_mac(root, destination=None):
     """Copy the complete non-system dylib closure and use loader-relative links."""
     initial = machos(root)
     original_rpaths = {p: rpaths(p) for p in initial}
     extra_rpaths = sorted({r for rs in original_rpaths.values() for r in rs if r.startswith('/')})
-    destination = root / 'lib'
-    destination.mkdir(exist_ok=True)
+    destination = destination or root / 'lib'
+    if not is_inside(destination, root):
+        raise ValueError('Dylib destination must stay inside the package')
+    destination.mkdir(parents=True, exist_ok=True)
     seen = {}
     queue = [(p, p) for p in initial]
     graph = []
@@ -272,7 +274,8 @@ def audit_native(root, architecture, mac):
                 raise ValueError('Absolute or unknown macOS RPATH')
         else:
             header = run('readelf', '-h', p)
-            if not re.search(r'Machine:\s+AArch64', header):
+            machine = {'aarch64': 'AArch64', 'x86_64': 'Advanced Micro Devices X86-64'}.get(architecture)
+            if not machine or not re.search(r'Machine:\s+' + re.escape(machine) + r'\s*$', header, re.MULTILINE):
                 raise ValueError(f'Unexpected ELF architecture: {p.name}')
             dyn = run('readelf', '-d', p)
             record['rpaths'] = re.findall(r'\((?:RUNPATH|RPATH)\).*?\[(.*?)\]', dyn)
@@ -341,9 +344,9 @@ def minimum_macos(records, host_version, platform_name):
             'compatibility': 'No support claimed below the maximum Mach-O minimum; only this host was tested'}
 
 
-def python_smoke(root, expected_version, scratch, env):
-    extensions = sorted(p for p in root.rglob('_vsp*.so')
-                        if p.name.split('.')[0] in ('_vsp', '_vsp_g'))
+def python_smoke(root, expected_version, scratch, env, interpreter=None):
+    extensions = sorted(p for p in root.rglob('_vsp*')
+                        if p.name.split('.')[0] in ('_vsp', '_vsp_g') and p.suffix in ('.so', '.pyd'))
     modules = [p.name.split('.')[0] for p in extensions]
     if sorted(modules) != ['_vsp', '_vsp_g']:
         raise ValueError('Expected exactly one _vsp and one _vsp_g extension')
@@ -357,7 +360,7 @@ def python_smoke(root, expected_version, scratch, env):
     )
     for extension in extensions:
         module = extension.name.split('.')[0]
-        checked = json.loads(run(sys.executable, '-c', code, extension, module, cwd=scratch, env=env))
+        checked = json.loads(run(interpreter or sys.executable, '-c', code, extension, module, cwd=scratch, env=env))
         if expected_version not in checked['version']:
             raise ValueError('Packaged Python ABI/import/version smoke failed')
         checks.append(dict(file=extension.relative_to(root).as_posix(), module=module, **checked))
@@ -431,7 +434,7 @@ def main():
         'pending_review': ['GUI/font rendering on actual target platform',
                            'Third-party redistribution licenses and runtime requirements',
                            'Separate explicit release attachment approval'],
-        'source_worktree_clean': True,
+        'source_worktree_clean': not run('git', '-C', source, 'status', '--porcelain').strip(),
         'libxml_toolchain_sha256': digest(Path(__file__).with_name('backfill_libxml_toolchain.cmake')) if mac and os.environ.get('BACKFILL_LIBXML_SYSCONFDIR') == '/etc' else None,
         'libxml_sysconfdir_mode': os.environ.get('BACKFILL_LIBXML_SYSCONFDIR', 'system-library'),
         'macos_signing': 'Local ad-hoc signature only; not Developer ID signed or notarized' if mac else None,

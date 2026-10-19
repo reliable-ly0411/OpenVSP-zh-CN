@@ -2,6 +2,7 @@
 """Exercise upstream synchronization with real temporary Git repositories."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -70,8 +71,9 @@ class SyncTests(unittest.TestCase):
             self.commit('local code modification')
         return upstream
 
-    def run_sync(self, ref='official'):
-        return subprocess.run([sys.executable, str(SCRIPT), ref], cwd=self.root, text=True, capture_output=True)
+    def run_sync(self, ref='official', source_ref=''):
+        return subprocess.run([sys.executable, str(SCRIPT), ref], cwd=self.root, text=True, capture_output=True,
+                              env=dict(os.environ, UPSTREAM_SOURCE_REF=source_ref))
 
     def test_merge_keeps_both_parents_and_local_workflows(self):
         upstream = self.upstream_update()
@@ -85,12 +87,29 @@ class SyncTests(unittest.TestCase):
         notes = (self.root / 'README_zh-CN.md').read_text()
         self.assertIn('当前软件版本：OpenVSP 3.54.0', notes)
         self.assertTrue(notes.endswith(self.history))
-        self.assertIn('## 3.54.0-Codex-AI-zh-CN-auto.' + upstream[:12], notes)
+        self.assertIn('## 3.54.0-zh-CN.dev.' + upstream[:12], notes)
         self.git('commit', '-m', 'validated merge')
         self.assertEqual(self.git('rev-list', '--parents', '-n', '1', 'HEAD').split()[1:], [self.localized, upstream])
         result = self.run_sync()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)['changed'], 'false')
+
+    def test_official_release_tag_candidate_is_distinct_from_dev_snapshot(self):
+        upstream = self.upstream_update()
+        result = self.run_sync(source_ref='refs/tags/OpenVSP_3.54.0')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        metadata = json.loads((self.root / '.github/upstream.json').read_text())
+        self.assertEqual(metadata['source_kind'], 'official-release')
+        self.assertEqual(metadata['source_ref'], 'refs/tags/OpenVSP_3.54.0')
+        notes = (self.root / 'README_zh-CN.md').read_text()
+        self.assertIn('3.54.0-zh-CN.candidate.' + upstream[:12], notes)
+        self.assertTrue(notes.endswith(self.history))
+
+    def test_official_release_tag_version_mismatch_stops(self):
+        self.upstream_update()
+        result = self.run_sync(source_ref='OpenVSP_3.99.0')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('version disagree', result.stderr)
 
     def test_workflow_delete_conflict_keeps_local_policy(self):
         self.upstream_update(workflow_delete=True)
