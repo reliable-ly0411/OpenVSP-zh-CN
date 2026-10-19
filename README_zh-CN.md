@@ -98,6 +98,9 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 3.51.3-zh-CN.rc.1
 
+- 当前离线帮助首页改为非官方简体中文说明，去除工具宣传，保留 NASA/OpenVSP 与
+  NOSA 1.3 归属；15 项帮助测试与 6 页生成一致性通过。
+
 - 接入统一候选身份守卫，核对本族源码、文档、关于页及 rc 标签；补齐 conda 的 NumPy
   上限及 Python 模块随包动态库/许可清单。正确 rc 标签通过，错版本/修订/历史标签均拒绝。
   隔离占位文件实际生成 wheel，核实非 pure/平台 ABI 标签与扩展/依赖文件包含；这不代表
@@ -122,7 +125,7 @@ cmake --build build --target package --config Release --parallel 2
   `>=1.26.4,<2`，依赖环境固定 1.26.4，避免 NumPy 2 ABI 不兼容。
 - 主窗口与关于菜单改为“简体中文”，关于窗口使用运行时软件版本并显示本族候选标签、
   仓库和 NOSA 1.3 归属。
-- 已通过：8/8 独立 CTest（含名称/路径边界及 libxml2 文本往返）、50 项 Python 测试、
+- 已通过：8/8 独立 CTest（含名称/路径边界及 libxml2 文本往返）、51 项 Python 测试、
   帮助生成器自测及 6 页 HTML 一致性、`git diff --check`。译表守卫覆盖 833 条整句、
   255 条保护项、2055 个旧 GUI 字面量及 27 类表头；未改共享原始回归案例。
 - 仍待专业复核的术语包括 DegenGeom、Activity Factor、Flat/Round 端盖、横观各向同性、
