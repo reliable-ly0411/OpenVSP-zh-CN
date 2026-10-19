@@ -68,6 +68,18 @@ and makes no claim that a not-yet-run native build or GUI has passed.
   X11 startup error may retry in Xvfb; other nonzero exits/timeouts remain failures.
 - Model: baseline AngelScript smoke plus `localization_boundary_smoke.as` must preserve model names,
   identifiers, parameter values and special-character file paths across save/reopen.
+  The shared `backfill_smoke.as` is taken from the pinned workflow tooling, because old source families
+  predate that baseline script. Boundary and resource scripts are always taken from the exact source
+  commit. A missing tooling baseline or either missing source script remains a failure, with no fallback.
+  The slash-containing request follows upstream `ParmContainer::SetName`'s default slash removal:
+  its accepted value is `Wing  Fuselage: Export_100%`. The other 13 names remain exact originals.
+  The disk check compares accepted names; it does not redefine the upstream naming API.
+  A failure emits CI-only `diagnostics/runtime.json` with the fixed script name, exit code, marker
+  status, error categories and compile row/column numbers. Only predefined API spellings can be
+  included as missing symbols; raw output, paths and model values are never copied into this report.
+  Exact boundary failure lines preserve only six fixed reasons: `set_name`, `count`, `reloaded_name`,
+  `lookup`, `parameter` and `api_error`. Unknown suffixes or lines containing values are ignored.
+  Nonzero exit, timeout, missing success marker or any failure marker remain hard failures.
 - Runtime resources: `localization_resources_smoke.as` runs from an empty cwd and clean home, discovers
   all ten official custom types, and creates a Cone. Both upstream top-level folders and the complete
   `Official_Examples` copy are checked against source bytes.
