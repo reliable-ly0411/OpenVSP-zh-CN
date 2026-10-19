@@ -118,6 +118,35 @@ package names and the stated minimum supported system together. A successful mac
 does not establish that the same package runs on macOS 14. This patch keeps the current macOS 14 target
 and makes no claim that a not-yet-run native build or GUI has passed.
 
+### Fresh venv path containment
+
+On 2026-10-19, the second-round macOS 14 ARM64 jobs for
+[3.55.0](https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39284574504/job/118167179668)
+and [3.54.0](https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39284782580/job/118168024231)
+installed the packaged requirements successfully and logged `No broken requirements found.`
+They then stopped at `Import escaped the fresh runtime venv`. The version/NumPy import check is
+before that failing branch. These logs do not print the imported module path or the compared venv
+path. A `/var` versus `/private/var` alias mismatch is a hypothesis, not an observed original path pair.
+Neither job established successful installed-extension verification or a completed native package.
+
+The previous `Path.is_relative_to` check compared lexical paths. Python documents that this operation
+does not access the filesystem or normalize `..`; `Path.resolve(strict=True)` resolves symlinks and
+requires an existing target. See the [Python 3.11 pathlib reference](https://docs.python.org/3.11/library/pathlib.html#pathlib.Path.resolve)
+and [containment semantics](https://docs.python.org/3.11/library/pathlib.html#pathlib.PurePath.is_relative_to).
+The tool now resolves both the imported module file and venv root strictly, requires a file and a
+directory respectively, and checks that the resolved module's parent is inside the resolved venv.
+Resolving the module file before taking its parent also rejects an in-venv file symlink to an external
+module. The resolved installed directory is passed to the existing two-extension smoke test; the
+requirements installation, ABI/version check, clean runtime environment and package gates remain.
+
+Offline regression uses real temporary files and symlinks to reproduce the old false rejection in
+both alias directions. It also rejects a shared-prefix neighbor, directory/file symlinks escaping
+the venv, `..` escape, missing targets, dangling links, wrong path types and symlink loops. A mocked
+installation checks integration with `fresh_requirements`; it does not run pip or native extensions.
+This is local evidence for the path-check defect and its correction, not a reproduction of the
+original runner's unlogged module path. Native macOS reruns remain required; no frozen family source,
+platform success, GUI acceptance or public Release is changed by these tests.
+
 ### Package checks
 
 - CLI: packaged `vsp -help` must succeed and contain Chinese usage. Only the exact old 3.51.x Linux
