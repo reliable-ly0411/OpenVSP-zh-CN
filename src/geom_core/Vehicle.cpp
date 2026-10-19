@@ -3862,7 +3862,11 @@ string Vehicle::WriteSTLFile( const string & file_name, int write_set, int subsF
     }
 
     // Open File
-    FILE* fid = fopen( file_name.c_str(), "w" );
+    FILE* fid = FOpenUTF8( file_name.c_str(), "w" );
+    if ( !fid )
+    {
+        return mesh_id;
+    }
     fprintf( fid, "solid\n" );
     for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
@@ -3938,7 +3942,7 @@ string Vehicle::WriteTaggedMSSTLFile( const string & file_name, int write_set, i
         }
     }
 
-    FILE* file_id = fopen( file_name.c_str(), "w" );
+    FILE* file_id = FOpenUTF8( file_name.c_str(), "w" );
     if ( file_id )
     {
         std::vector< int > tags = SubSurfaceMgr.GetAllTags();
