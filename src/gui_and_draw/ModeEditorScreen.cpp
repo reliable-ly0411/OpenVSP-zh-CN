@@ -326,7 +326,7 @@ void ModeEditorScreen::UpdateVarPresetChoices()
         SettingGroup *sg = VarPresetMgr.FindSettingGroup( m_GroupIDs[i] );
         if ( sg )
         {
-            m_GroupChoice.AddItem( sg->GetName(), i );
+            m_GroupChoice.AddItemRaw( sg->GetName(), i );
         }
     }
     m_GroupChoice.UpdateItems();
@@ -351,7 +351,7 @@ void ModeEditorScreen::UpdateVarPresetChoices()
                 Setting *s = VarPresetMgr.FindSetting( m_SettingIDs[i] );
                 if ( s )
                 {
-                    m_SettingChoice.AddItem( s->GetName(), i );
+                    m_SettingChoice.AddItemRaw( s->GetName(), i );
                 }
             }
         }

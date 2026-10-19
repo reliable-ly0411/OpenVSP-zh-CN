@@ -488,7 +488,7 @@ void StructAssemblyScreen::UpdateStructTab()
     {
         string struct_name = structVec[i]->GetName();
 
-        m_FeaStructureChoice.AddItem( struct_name, i );
+        m_FeaStructureChoice.AddItemRaw( struct_name, i );
         m_StructIDs.push_back( structVec[i]->GetID() );
         names.push_back( struct_name );
     }
@@ -592,8 +592,8 @@ void StructAssemblyScreen::UpdateConnectionTab()
                 m_FixPtIDs.push_back( fp->GetID() );
                 m_FixPtStructIDs.push_back( fea_struct->GetID() );
 
-                m_ConnectionStartChoice.AddItem( st_name, i );
-                m_ConnectionEndChoice.AddItem( st_name, i );
+                m_ConnectionStartChoice.AddItemRaw( st_name, i );
+                m_ConnectionEndChoice.AddItemRaw( st_name, i );
             }
         }
     }

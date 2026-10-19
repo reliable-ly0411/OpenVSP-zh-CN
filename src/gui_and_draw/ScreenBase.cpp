@@ -185,6 +185,12 @@ string BasicScreen::GetTitle()
     return m_Title;
 }
 
+void BasicScreen::SetTitleRaw( const string& title )
+{
+    m_Title = title;
+    m_FL_TitleBox->copy_label( title.c_str() );
+}
+
 void BasicScreen::HelpCallBack( Fl_Widget *w )
 {
     if ( w == m_MasterHelpButton )
@@ -393,7 +399,7 @@ bool VehScreen::Update()
 
     if ( veh )
     {
-        SetTitle( veh->GetName() );
+        SetTitleRaw( veh->GetName() );
     }
 
     TabScreen::Update();
@@ -1762,9 +1768,9 @@ bool GeomScreen::Update()
     TabScreen::Update();
 
     //==== Name ===//
-    const string display_name = VSPTranslate( geom_ptr->GetName() );
+    const string display_name = geom_ptr->GetName();
     m_NameInput.Update( display_name );
-    SetTitle( m_GeomTypeName + ": " + geom_ptr->GetName() );
+    SetTitleRaw( VSPTranslate( m_GeomTypeName ) + "：" + geom_ptr->GetName() );
 
     //==== Color ====//
     m_ColorPicker.Update( geom_ptr->GetColor() );
@@ -1834,9 +1840,9 @@ bool GeomScreen::Update()
     m_SymAncestorChoice.ClearItems();
     for( int i = 0; i < (int) ancestorNames.size(); i++ )
     {
-        const string display_name = VSPTranslate( ancestorNames[i] );
+        const string display_name = i == 0 ? VSPTranslate( "GLOBAL ORIGIN" ) : ancestorNames[i];
         snprintf( str, sizeof( str ),  "%3d %s", i, display_name.c_str() );
-        m_SymAncestorChoice.AddItem( str, i );
+        m_SymAncestorChoice.AddItemRaw( str, i );
     }
     m_SymAncestorChoice.UpdateItems();
     m_SymAncestorChoice.Update( geom_ptr->m_SymAncestor.GetID() );
@@ -2036,7 +2042,7 @@ bool GeomScreen::Update()
     m_SetBrowser->clear();
     for ( int i = SET_SHOWN ; i < ( int )set_name_vec.size() ; i++ )
     {
-        const string display_name = VSPTranslate( set_name_vec[i] );
+        const string display_name = i < SET_FIRST_USER ? VSPTranslate( set_name_vec[i] ) : set_name_vec[i];
         m_SetBrowser->add( display_name.c_str(), static_cast<int>( set_flag_vec[i] ) );
     }
     m_SetBrowser->vposition( v_pos );
@@ -2777,7 +2783,7 @@ void GeomScreen::UpdateMaterialNames()
     m_MaterialChoice.AddItem( "DEFAULT" );
     for( int i = 0; i < (int) matNames.size(); i++ )
     {
-        m_MaterialChoice.AddItem( matNames[i] );
+        m_MaterialChoice.AddItemRaw( matNames[i] );
     }
 }
 
@@ -5725,13 +5731,9 @@ void SkinScreen::UpdateSpineBrowser( SkinXSec* xs )
             sym = VSPTranslate( "none" );
         }
 
-        // Localize the generated default only; an arbitrary user name is display data.
-        string display_name = sp->GetName();
-        if ( display_name.compare( 0, 6, "Spine_" ) == 0 && display_name.size() > 6 &&
-             display_name.find_first_not_of( "0123456789", 6 ) == string::npos )
-        {
-            display_name = VSPTranslate( display_name );
-        }
+        // A user can intentionally choose a default-looking name such as Spine_1.
+        // Preserve every stored name, without guessing its origin from its spelling.
+        const string display_name = sp->GetName();
         char str[256];
         snprintf( str, sizeof( str ), "%s:%6.4f:%s", display_name.c_str(), sp->m_W01(), sym.c_str() );
         m_SpineBrowser->add( str );

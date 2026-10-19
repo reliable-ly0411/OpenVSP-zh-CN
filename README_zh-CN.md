@@ -1,11 +1,11 @@
 # OpenVSP 简体中文版
 
-> **声明：**本仓库是由 OpenAI Codex AI 生成并维护汉化层的非官方简体中文版本。
+> **声明：**本仓库是 OpenVSP 的非官方简体中文版本。
 > OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，仍属于 NASA/OpenVSP
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
 - 当前软件版本：OpenVSP 3.55.0
-- 当前汉化版本：`3.55.0-Codex-AI-zh-CN-auto.5240ef210f41`
+- 当前汉化候选版本：`3.55.0-zh-CN.rc.1`
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -106,6 +106,12 @@ cmake --build build --target package --config Release --parallel 2
 自动及手动发布的标题和六段式说明统一由 `scripts/release_notes.py` 生成。
 
 ## 未发布
+
+- 修复模型名、属性名、自定义参数、集合/模式/材料名称及文件路径被当作界面标签翻译的问题。
+  英文与中文用户值保持原样，只翻译固定控件标题；文件选择标题与通配符分别处理。
+- 修复模型名含 `&` 时 XML 写入误作实体引用、重开后丢失名称的问题；原始文本由
+  libxml2 正确转义，不改变模型格式或参数 ID。增加英文/中文/同名标签/特殊字符/路径
+  回归与实际 AngelScript 保存重开检查。轻量翻译/数据边界/XML 文本共 3 项回归已通过，完整构建及 GUI 验收待完成。
 
 - Mac 第二轮验证确认残留的是 runner 路径，单独移除调试符号未解决。源码核查发现
   内置 libxml2 默认把其 CI 安装前缀编入 XML/SGML catalog 查找常量；补充构建现在仅

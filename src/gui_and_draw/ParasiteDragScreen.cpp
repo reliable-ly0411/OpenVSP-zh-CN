@@ -878,7 +878,7 @@ void ParasiteDragScreen::UpdateSrefChoice()
             m_RefWingChoice.ClearItems();
             for ( size_t i = 0; i < wingNames.size(); i++ )
             {
-                m_RefWingChoice.AddItem( wingNames[i] );
+                m_RefWingChoice.AddItemRaw( wingNames[i] );
             }
             m_RefWingChoice.UpdateItems();
         }

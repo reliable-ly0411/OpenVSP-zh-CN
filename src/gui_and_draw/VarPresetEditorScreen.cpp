@@ -326,7 +326,7 @@ void VarPresetEditorScreen::RebuildMenus()
         SettingGroup *sg = VarPresetMgr.FindSettingGroup( m_GroupIDs[i] );
         if ( sg )
         {
-            m_GroupChoice.AddItem( sg->GetName(), i );
+            m_GroupChoice.AddItemRaw( sg->GetName(), i );
 
             snprintf( str, sizeof( str ), "%s", sg->GetName().c_str() );
             m_GroupBrowser->add( str );
@@ -365,7 +365,7 @@ void VarPresetEditorScreen::RebuildMenus()
                 Setting *s = VarPresetMgr.FindSetting( m_SettingIDs[i] );
                 if ( s )
                 {
-                    m_SettingChoice.AddItem( s->GetName(), i );
+                    m_SettingChoice.AddItemRaw( s->GetName(), i );
 
                     snprintf( str, sizeof( str ), "%s", s->GetName().c_str() );
                     m_SettingBrowser->add( str );

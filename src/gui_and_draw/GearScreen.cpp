@@ -1905,8 +1905,8 @@ void GearScreen::UpdateBogieBrowser()
             string bogieName = bogies[i]->GetDesignation();
 
             m_BogieBrowser->add( bogieNamed.c_str() );
-            m_TireBogieChoice.AddItem( bogieName.c_str(), i );
-            m_RetBogieChoice.AddItem( bogieName.c_str(), i );
+            m_TireBogieChoice.AddItemRaw( bogieName.c_str(), i );
+            m_RetBogieChoice.AddItemRaw( bogieName.c_str(), i );
         }
     }
     m_TireBogieChoice.UpdateItems();

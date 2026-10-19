@@ -1058,6 +1058,18 @@ std::string VSPTranslate( const char *text )
     return text ? VSPTranslate( std::string( text ) ) : std::string();
 }
 
+std::string VSPTranslateMessage( const std::string &text )
+{
+    const auto &exact = ExactTranslations();
+    const auto found = exact.find( text );
+    return found == exact.end() ? text : found->second;
+}
+
+std::string VSPTranslateLabelAndValue( const std::string &label, const std::string &value )
+{
+    return VSPTranslate( label ) + value;
+}
+
 std::string VSPTranslateMenuPath( const std::string &path )
 {
     std::string result;
