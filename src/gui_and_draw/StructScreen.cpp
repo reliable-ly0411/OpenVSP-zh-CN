@@ -12,6 +12,7 @@
 #define _HAS_STD_BYTE 0
 #endif
 
+#include "VSPChinese.h"
 #include "StructScreen.h"
 #include "FeaMeshMgr.h"
 #include "StructureMgr.h"
@@ -2151,7 +2152,7 @@ void StructScreen::UpdateStructBrowser()
 
     char str[256];
 
-    m_StructureSelectBrowser->add( "@b@.NAME:@b@.GEOM:@b@.SURFACE" );
+    m_StructureSelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.GEOM:@b@.SURFACE" ).c_str() );
 
     string struct_name, parent_geom_name;
     int struct_surf_ind;
@@ -2207,7 +2208,7 @@ void StructScreen::UpdateFeaPartBrowser()
 
     char str[256];
 
-    m_FeaPartSelectBrowser->add( "@b@.NAME:@b@.TYPE:@b@.SHELL:@b@.PROPERTY:@b@.CAP:@b@.PROPERTY" );
+    m_FeaPartSelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.TYPE:@b@.SHELL:@b@.PROPERTY:@b@.CAP:@b@.PROPERTY" ).c_str() );
 
     string fea_name, fea_type, shell, shell_prop, cap, cap_prop;
 
@@ -2483,7 +2484,7 @@ void StructScreen::UpdateFeaPropertyBrowser()
 
     char str[256];
 
-    m_FeaPropertySelectBrowser->add( "@b@.NAME:@b@.TYPE:@b@.XSEC:@b@.MATERIAL:" );
+    m_FeaPropertySelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.TYPE:@b@.XSEC:@b@.MATERIAL:" ).c_str() );
 
     string prop_name, prop_type, prop_xsec, prop_mat;
 

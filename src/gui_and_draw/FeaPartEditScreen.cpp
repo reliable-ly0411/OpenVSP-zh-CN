@@ -8,6 +8,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "FeaPartEditScreen.h"
 #include "StructureMgr.h"
 #include "FeaMeshMgr.h"
@@ -3940,8 +3941,7 @@ void FeaPartEditScreen::UpdateTrimPartChoice()
         m_TrimPartBrowser->clear();
         m_TrimPartBrowser->column_char( ':' );
         char str[256];
-        snprintf( str, sizeof( str ),  "@b@.PART:@b@.FLIPDIR" );
-        m_TrimPartBrowser->add( str );
+        m_TrimPartBrowser->add( VSPTranslateBrowserHeader( "@b@.PART:@b@.FLIPDIR" ).c_str() );
 
         int ipart = StructureMgr.GetCurrPartIndex();
         if (  ipart < fea_struct->NumFeaParts() )
@@ -4340,8 +4340,7 @@ void FeaPartEditScreen::UpdatePolySparPointBrowser( FeaPolySpar* polyspar )
 
         m_PolySparPointBrowser->column_char( ':' );
 
-        snprintf( str, sizeof( str ),  "@b@.PT_NAME:@b@.PARM:@b@.GROUP:@b@.CONTAINER" );
-        m_PolySparPointBrowser->add( str );
+        m_PolySparPointBrowser->add( VSPTranslateBrowserHeader( "@b@.PT_NAME:@b@.PARM:@b@.GROUP:@b@.CONTAINER" ).c_str() );
         m_PolySparPointBrowser->addCopyText( "header" );
 
         vector < PolySparPoint* > pt_vec = polyspar->GetAllPt();

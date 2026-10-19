@@ -18,4 +18,8 @@ std::string VSPTranslateLabelAndValue( const std::string &label, const std::stri
 // Translate every component of an FLTK menu path while preserving '/'.
 std::string VSPTranslateMenuPath( const std::string &path );
 
+// Translate only application-owned FLTK browser headings. Never use on data rows.
+// Column separators and the recognized @b@./@b@c@. formatting are preserved.
+std::string VSPTranslateBrowserHeader( const std::string &header );
+
 #endif

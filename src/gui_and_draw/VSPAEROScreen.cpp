@@ -2007,8 +2007,7 @@ void VSPAEROScreen::UpdatePropElemBrowser()
 
     m_PropElemBrowser->column_char(':');         // use : as the column character
 
-    snprintf( str, sizeof( str ),  "@b@.INDX:@b@.NAME:@b@.DIA:@b@.HUB DIA:@b@.RPM:@b@.CP:@b@.CT:@b@.T:@b@.J:@b@.eta");
-    m_PropElemBrowser->add(str);
+    m_PropElemBrowser->add( VSPTranslateBrowserHeader( "@b@.INDX:@b@.NAME:@b@.DIA:@b@.HUB DIA:@b@.RPM:@b@.CP:@b@.CT:@b@.T:@b@.J:@b@.eta" ).c_str() );
     for (size_t i = 0; i < VSPAEROMgr.GetRotorDiskVec().size(); ++i)
     {
         RotorDisk* curr_rot = VSPAEROMgr.GetRotorDiskVec()[i];
@@ -2513,7 +2512,7 @@ void VSPAEROScreen::UpdateCpSliceBrowser()
 
     m_CpSliceBrowser->column_char( ':' );         // use : as the column character
 
-    m_CpSliceBrowser->add( "@b@.Name:@b@.Type:@b@.Position" );
+    m_CpSliceBrowser->add( VSPTranslateBrowserHeader( "@b@.Name:@b@.Type:@b@.Position" ).c_str() );
 
     for ( size_t i = 0; i < VSPAEROMgr.GetCpSliceVec().size(); ++i )
     {
@@ -2619,7 +2618,7 @@ void VSPAEROScreen::UpdateUnsteadyGroupBrowser()
     m_UnsteadyGroupBrowser->clear();
 
     m_UnsteadyGroupBrowser->column_char( ':' );         // use : as the column character
-    m_UnsteadyGroupBrowser->add( "@b@.Name:@b@.Surf:@b@.RPM" );
+    m_UnsteadyGroupBrowser->add( VSPTranslateBrowserHeader( "@b@.Name:@b@.Surf:@b@.RPM" ).c_str() );
 
     Vehicle* veh = VehicleMgr.GetVehicle();
     if ( !veh )

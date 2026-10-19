@@ -10,6 +10,7 @@
 #ifdef WIN32
 #undef _HAS_STD_BYTE
 #define _HAS_STD_BYTE 0
+#include "VSPChinese.h"
 #include <windows.h>
 #endif
 
@@ -961,8 +962,7 @@ void ParasiteDragScreen::UpdateExcresTab()
     m_ExcresBrowser->clear();
     m_ExcresBrowser->column_char( ':' );
 
-    snprintf( str, sizeof( str ),  "@b@.NAME:@b@.TYPE:@b@.VALUE" );
-    m_ExcresBrowser->add( str );
+    m_ExcresBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.TYPE:@b@.VALUE" ).c_str() );
 
     string excres_name, excres_type, formatString;
     double excres_val;

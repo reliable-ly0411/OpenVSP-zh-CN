@@ -12,6 +12,7 @@
 #define _HAS_STD_BYTE 0
 #endif
 
+#include "VSPChinese.h"
 #include "StructAssemblyScreen.h"
 #include "FeaMeshMgr.h"
 #include "StructureMgr.h"
@@ -439,7 +440,7 @@ void StructAssemblyScreen::UpdateAssemblyTab()
     m_AssemblyIDs.clear();
 
     m_AssemblySelectBrowser->column_char( ':' );
-    m_AssemblySelectBrowser->add( "@b@.NAME" );
+    m_AssemblySelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME" ).c_str() );
 
 
     vector< FeaAssembly* > assy_vec = StructureMgr.GetFeaAssemblyVec();
@@ -510,7 +511,7 @@ void StructAssemblyScreen::UpdateStructTab()
     }
 
     m_StructureSelectBrowser->column_char( ':' );
-    m_StructureSelectBrowser->add( "@b@.NAME:@b@.MESH READY:" );
+    m_StructureSelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.MESH READY:" ).c_str() );
 
     vector < string > idvec = curr_assy->m_StructIDVec;
     for ( int i = 0; i < idvec.size(); i++ )
@@ -634,7 +635,7 @@ void StructAssemblyScreen::UpdateConnectionTab()
     }
 
     m_ConnectionSelectBrowser->column_char( ':' );
-    m_ConnectionSelectBrowser->add( "@b@.START STRUCT:@b@.PT:@b@.INDEX:@b@.END STRUCT:@b@.PT:@b@.INDEX:" );
+    m_ConnectionSelectBrowser->add( VSPTranslateBrowserHeader( "@b@.START STRUCT:@b@.PT:@b@.INDEX:@b@.END STRUCT:@b@.PT:@b@.INDEX:" ).c_str() );
 
     vector < FeaConnection* > convec = curr_assy->m_ConnectionVec;
     for ( int i = 0; i < convec.size(); i++ )

@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "VarPresetEditorScreen.h"
 #include "ParmMgr.h"
 #include "StlHelper.h"
@@ -395,8 +396,7 @@ void VarPresetEditorScreen::UpdateVarBrowser()
 
     m_VarBrowser->column_char( ':' );         // use : as the column character
 
-    snprintf( str, sizeof( str ), "@b@.COMP:@b@.GROUP:@b@.PARM" );
-    m_VarBrowser->add( str );
+    m_VarBrowser->add( VSPTranslateBrowserHeader( "@b@.COMP:@b@.GROUP:@b@.PARM" ).c_str() );
 
     if ( ValidGroup() )
     {

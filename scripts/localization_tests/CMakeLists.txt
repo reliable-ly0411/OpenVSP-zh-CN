@@ -33,3 +33,18 @@ if(VSP_TEST_XML_TEXT)
   endif()
   add_test(NAME localization_xml_text_roundtrip COMMAND localization_xml_text)
 endif()
+
+add_executable(localization_catalog_driver catalog_driver.cpp ../../src/gui_and_draw/VSPChinese.cpp)
+target_include_directories(localization_catalog_driver PRIVATE ../../src/gui_and_draw)
+target_compile_features(localization_catalog_driver PRIVATE cxx_std_11)
+if(MSVC)
+  target_compile_options(localization_catalog_driver PRIVATE /utf-8)
+endif()
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(NAME localization_catalog
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../check_translation_catalog.py
+          --driver $<TARGET_FILE:localization_catalog_driver>)
+add_test(NAME localization_catalog_guard_tests
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_translation_catalog.py)
+add_test(NAME localization_help_anchors
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_help_anchors.py)
