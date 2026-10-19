@@ -1,3 +1,6 @@
 * text=auto
 *.vsp3 -text -whitespace
 .github/workflows/build.yml -text
+
+# Preserve the SHA-256-bound diagnostic patch on Windows checkouts.
+scripts/windows_unicode_stl.patch text eol=lf

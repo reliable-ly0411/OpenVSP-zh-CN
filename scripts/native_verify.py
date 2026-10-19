@@ -131,7 +131,7 @@ def run_script_smoke(executable, script, scratch, env, diagnostics):
     else:
         success_seen, failure_seen = smoke_markers(output, name)
         if success_seen and not failure_seen:
-            return
+            return output
         report = smoke_failure_report(output, name, 0)
     emit_smoke_failure(report, diagnostics)
 
@@ -202,11 +202,11 @@ def run_functional_smoke(executable, script, scratch, env, diagnostics):
         report = smoke_failure_report('', FUNCTIONAL_SCRIPT, None, 'functional-output-invalid')
         report['functional_failure_categories'] = ['workspace-not-fresh']
         emit_smoke_failure(report, diagnostics)
-    run_script_smoke(executable, script, directory, env, diagnostics)
+    output = run_script_smoke(executable, script, directory, env, diagnostics)
     try:
         result = verify_functional_outputs(directory)
     except FunctionalCheckError as error:
-        report = smoke_failure_report('\n'.join(PASS_MARKERS), FUNCTIONAL_SCRIPT, 0,
+        report = smoke_failure_report(output, FUNCTIONAL_SCRIPT, 0,
                                       'functional-output-invalid')
         report['functional_failure_categories'] = [error.category]
         emit_smoke_failure(report, diagnostics)

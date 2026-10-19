@@ -276,6 +276,23 @@ class FunctionalRuntimeTests(unittest.TestCase):
             self.assertEqual(json.loads(data)['functional_failure_categories'], ['stl-file-missing'])
             self.assertNotIn(temp, data)
 
+    def test_disk_failure_uses_actual_captured_output_without_publishing_values(self):
+        output = '\n'.join(PASS_MARKERS) + '\nActual private output 中文\n'
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch('native_verify.run', return_value=output), self.assertRaises(ValueError):
+                run_functional_smoke(root / 'vspscript', root / FUNCTIONAL_SCRIPT,
+                                     root, {}, root / 'diagnostics')
+            data = (root / 'diagnostics/runtime.json').read_text()
+            report = json.loads(data)
+            self.assertEqual(report['output_bytes'], len(output.encode('utf-8')))
+            self.assertGreater(report['output_bytes'], len('\n'.join(PASS_MARKERS)))
+            self.assertEqual(report['exit_code'], 0)
+            self.assertTrue(report['success_marker_seen'])
+            self.assertNotIn('Actual private output', data)
+            self.assertNotIn('中文', data)
+            self.assertFalse(report['contains_output_values'])
+
     def test_existing_outputs_cannot_mask_a_failed_write_or_solver(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); (root / 'functional-smoke').mkdir()
