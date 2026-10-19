@@ -1696,18 +1696,18 @@ void AuxiliaryGeomScreen::UpdateGroundPlaneChoices()
             {
                 m_BogieIDVec.push_back( bogie_vec[i]->GetID() );
 
-                m_3ptBogie1Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_3ptBogie2Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_3ptBogie3Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_2ptBogie1Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_2ptBogie2Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_1ptBogie1Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_SingleBogie1Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_SprayBogie1Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_WheelTireFailureBogie1Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_3ptCCEBogie1Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_3ptCCEBogie2Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
-                m_3ptCCEBogie3Choice.AddItem( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_3ptBogie1Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_3ptBogie2Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_3ptBogie3Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_2ptBogie1Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_2ptBogie2Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_1ptBogie1Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_SingleBogie1Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_SprayBogie1Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_WheelTireFailureBogie1Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_3ptCCEBogie1Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_3ptCCEBogie2Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
+                m_3ptCCEBogie3Choice.AddItemRaw( bogie_vec[i]->GetDesignation().c_str(), i );
             }
             m_3ptBogie1Choice.UpdateItems();
             m_3ptBogie2Choice.UpdateItems();

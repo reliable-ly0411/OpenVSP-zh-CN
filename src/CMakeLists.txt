@@ -404,9 +404,16 @@ INCLUDE( CPack )
 # the whole tree preserves relative paths between scripts, textures, airfoils,
 # and VSPAERO cases while making it obvious that these are official examples.
 INSTALL( DIRECTORY ../examples/ DESTINATION Official_Examples )
+# Runtime code resolves these folders relative to the executable, independently
+# of the caller's working directory. Keep the upstream layout as well as the
+# complete, discoverable Official_Examples copy above.
+FOREACH( RESOURCE_DIR airfoil CustomScripts scripts textures vspaero_ex CCE matlab )
+  INSTALL( DIRECTORY ../examples/${RESOURCE_DIR}/ DESTINATION ${RESOURCE_DIR} )
+ENDFOREACH()
 INSTALL( FILES ../LICENSE DESTINATION . )
 INSTALL( FILES ../README.md DESTINATION . )
 INSTALL( FILES ../README_zh-CN.md DESTINATION . )
+INSTALL( FILES ../AGENTS.md DESTINATION . )
 INSTALL( FILES ../AI_LOCALIZATION_HANDOFF.md DESTINATION . )
 INSTALL( FILES ../LOCALIZATION_CHANGELOG.md DESTINATION . )
 INSTALL( FILES ../CHANGELOG.md DESTINATION . )

@@ -1,6 +1,6 @@
 > [!IMPORTANT]
-> **简体中文翻译说明：** 本仓库是基于 OpenVSP 3.51.2、借助 OpenAI Codex AI
-> 生成并维护的非官方简体中文汉化版。翻译内容覆盖用户界面、帮助和提示文字，
+> **简体中文翻译说明：** 本仓库是基于 OpenVSP 3.51.2 的非官方简体中文汉化版，
+> 当前源码候选为 `3.51.2-zh-CN.rc.1`。翻译内容覆盖用户界面、帮助和提示文字，
 > 不改变原始 OpenVSP 软件的版权、作者归属或许可证；原始代码仍归属于
 > NASA/OpenVSP 作者和贡献者，并遵循 NOSA 1.3。
 > 中文版使用、安装、构建与发布说明请见 [`README_zh-CN.md`](README_zh-CN.md)，
@@ -8,8 +8,8 @@
 
 # Build and Installation Instructions for OpenVSP
 
-> **Simplified-Chinese localization notice:** This source copy contains an AI-generated
-> Chinese localization produced and maintained with OpenAI Codex. The localization does
+> **Simplified-Chinese localization notice:** This source copy contains the unofficial
+> `3.51.2-zh-CN.rc.1` localization candidate. The localization does
 > not change the copyright or authorship of the original OpenVSP software. Original
 > OpenVSP code remains attributed to NASA/OpenVSP authors and contributors under NOSA 1.3.
 > See `AI_LOCALIZATION_HANDOFF.md` for implementation and maintenance details.

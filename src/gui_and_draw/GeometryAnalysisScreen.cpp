@@ -5,6 +5,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "GeometryAnalysisScreen.h"
 #include "GeometryAnalysisMgr.h"
 #include "ScreenMgr.h"
@@ -1104,8 +1105,7 @@ void GeometryAnalysisScreen::UpdateGeometryAnalysisBrowser()
     m_GeometryAnalysisBrowser->clear();
     m_GeometryAnalysisBrowser->column_char( ':' );
 
-    snprintf( str, sizeof( str ),  "@b@.NAME:@b@.PRIMARY:@b@.SECONDARY:@b@.RESULT" );
-    m_GeometryAnalysisBrowser->add( str );
+    m_GeometryAnalysisBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.PRIMARY:@b@.SECONDARY:@b@.RESULT" ).c_str() );
     m_GeometryAnalysisBrowser->addCopyText( "header" );
 
     vector < GeometryAnalysisCase* > gcases = GeometryAnalysisMgr.GetAllGeometryAnalyses();

@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "FitModelScreen.h"
 #include "ParmMgr.h"
 
@@ -322,8 +323,7 @@ bool FitModelScreen::Update()
 
     m_TargetPtBrowser->column_char( ':' );         // use : as the column character
 
-    snprintf( str, sizeof( str ),  "@b@.GEOM:@b@c@.X:@b@c@.Y:@b@c@.Z:@b@c@.U:@b@c@.Type:@b@c@.W:@b@.Type" );
-    m_TargetPtBrowser->add( str );
+    m_TargetPtBrowser->add( VSPTranslateBrowserHeader( "@b@.GEOM:@b@c@.X:@b@c@.Y:@b@c@.Z:@b@c@.U:@b@c@.Type:@b@c@.W:@b@.Type" ).c_str() );
 
     int num_fix = FitModelMgr.GetNumTargetPt();
     for ( i = 0 ; i < num_fix ; i++ )
@@ -396,8 +396,7 @@ bool FitModelScreen::Update()
 
     m_VarBrowser->column_char( ':' );         // use : as the column character
 
-    snprintf( str, sizeof( str ),  "@b@.COMP_A:@b@.GROUP:@b@.PARM" );
-    m_VarBrowser->add( str );
+    m_VarBrowser->add( VSPTranslateBrowserHeader( "@b@.COMP_A:@b@.GROUP:@b@.PARM" ).c_str() );
 
     int num_vars = FitModelMgr.GetNumVars();
     for ( i = 0 ; i < num_vars ; i++ )

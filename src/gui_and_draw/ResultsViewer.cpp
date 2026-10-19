@@ -6,6 +6,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "ResultsViewer.h"
 
 #include "ScreenMgr.h"
@@ -291,8 +292,7 @@ void ResultsViewer::UpdateDataBrowser()
         {
             m_DataBrowser->column_char( '|' );
 
-            snprintf( str, sizeof( str ), "@b@.NAME|@b@.TYPE|@b@.DESCRIPTION" ); // @b@.VALUE|
-            m_DataBrowser->add( str );
+            m_DataBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME|@b@.TYPE|@b@.DESCRIPTION" ).c_str() );
 
 
             vector< string > names = res->GetAllDataNames();

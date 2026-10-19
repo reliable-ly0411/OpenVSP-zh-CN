@@ -28,6 +28,6 @@ setup(
     author='Uber Technologies',
     author_email='',
     description='OpenVSP Python Wrapper',
-    install_requires=['degen_geom', 'utilities', 'openvsp_config'],
+    install_requires=['degen_geom', 'utilities', 'openvsp_config', 'numpy>=1.26.4,<2'],
     include_package_data=True
 )
