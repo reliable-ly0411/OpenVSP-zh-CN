@@ -111,8 +111,12 @@ includes Sonoma ARM64; [LLVM 18's metadata](https://formulae.brew.sh/api/formula
 The check is performed again in each build because package availability can change.
 
 [GitHub's macOS 14 retirement notice](https://github.com/actions/runner-images/issues/13518) sets
-2026-11-02 as the final retirement date. The 2026-10-19 brownout runs from 14:00 UTC until 00:00 UTC
-on October 20; jobs scheduled in that window fail. Further windows are listed in that notice.
+2026-11-02 as the final retirement date. The notice announces a 2026-10-19 brownout from 14:00 UTC
+until 00:00 UTC on October 20 and says affected jobs will fail. This is an announced availability
+risk, not a substitute for the observed result of an individual run. The five macOS ARM64 jobs in
+[this release round](five-family-rc1-acceptance-20261019.md) actually completed successfully on
+macOS 14.8.9; the exact run logs and package checks establish those results. Further announced
+windows are listed in the notice, without inferring why this round completed during one of them.
 After this release round, upgrade the native runner and revalidate dependency deployment targets,
 package names and the stated minimum supported system together. A successful macOS 15 runtime check
 does not establish that the same package runs on macOS 14. This patch keeps the current macOS 14 target
