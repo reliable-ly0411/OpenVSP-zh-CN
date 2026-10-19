@@ -163,6 +163,34 @@ class CliHelpTests(unittest.TestCase):
                 cli_help(Path('vsp'), '3.51.2', tmp, {}, Path(tmp)/'diag', True)
 
 
+class BackfillWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        path = Path(__file__).resolve().parents[1]/'.github/workflows/backfill-platforms.yml'
+        self.workflow = path.read_text(encoding='utf-8')
+        self.plan, self.build = self.workflow.split('\n  build:\n', 1)
+
+    def test_pull_requests_keep_only_offline_regression(self):
+        self.assertIn('\n  pull_request:\n', self.workflow)
+        self.assertIn('python3 -m unittest discover -s scripts -p backfill_test.py -v', self.plan)
+        self.assertNotRegex(self.plan, r'(?m)^    if:')
+        self.assertNotIn('backfill_build.sh', self.plan)
+        self.assertNotIn('cmake --build', self.plan)
+
+    def test_native_planning_and_build_jobs_require_manual_dispatch(self):
+        # Job-level if is evaluated before matrix expansion. Guard both the
+        # matrix producer and consumer so a PR cannot allocate native runners.
+        self.assertIn("      - id: plan\n        if: github.event_name == 'workflow_dispatch'\n", self.plan)
+        self.assertTrue(self.build.startswith("    if: github.event_name == 'workflow_dispatch'\n"))
+
+    def test_manual_historical_scopes_and_read_only_permissions_remain(self):
+        self.assertIn('\n  workflow_dispatch:\n', self.workflow)
+        self.assertIn('options: [pilot, legacy-linux, all]', self.workflow)
+        self.assertIn("SCOPE: ${{ inputs.scope || 'pilot' }}", self.plan)
+        self.assertIn('permissions:\n  contents: read\n  actions: read\n', self.workflow)
+        self.assertNotIn('contents: write', self.workflow)
+        self.assertNotIn('gh release', self.workflow)
+
+
 class PlanTests(unittest.TestCase):
     def test_legacy_linux_has_only_two_fixed_targets(self):
         jobs = matrix('legacy-linux')['include']

@@ -8,7 +8,8 @@ Old tags, published files and historical checksum manifests are never repaired i
 1. Dispatch `native-prerelease.yml` at the reviewed tooling commit with `source_sha` and `new_tag`.
    The tag must be `<version>-zh-CN.rc.N`, with N a positive integer. The source must descend from
    the latest existing release in its family: 3.51.2 r7, 3.51.3 r2, 3.53.0, 3.54.0 r1, or 3.55.0 auto.
-   Exact baseline commits remain in `scripts/backfill_plan.py`; historical backfill behavior is unchanged.
+   Exact baseline commits remain in `scripts/backfill_plan.py`. Historical backfill targets and tools
+   remain available by manual dispatch; pull requests run offline regression only, never native builds.
 2. All five native jobs must succeed. The workflow never creates a tag or public Release.
 3. Download the original `native-release-assets` artifact. Run `sha256sum -c SHA256SUMS.txt` and save
    the SHA-256 of the manifest itself. Review that exact Linux AMD64 ZIP, including the main window,
