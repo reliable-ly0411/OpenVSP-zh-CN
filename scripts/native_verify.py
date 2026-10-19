@@ -72,6 +72,12 @@ def smoke_failure_report(output, script, exit_code, category=None):
                'SetParmVal', 'WriteVSPFile')
     missing = [symbol for symbol in allowed if re.search(
         r"No matching symbol\s+'" + symbol + r"'", output, re.IGNORECASE)]
+    boundary_categories = []
+    if script == 'localization_boundary_smoke.as':
+        lines = {line.strip() for line in output.splitlines()}
+        boundary_categories = [reason for reason in (
+            'set_name', 'count', 'reloaded_name', 'lookup', 'parameter', 'api_error')
+            if 'LOCALIZATION_BOUNDARIES_FAIL:' + reason in lines]
     if category is None:
         category = ('script-reported-failure' if failure in output else
                     'angelscript-compile-error' if 'compile-error' in codes else
@@ -80,7 +86,8 @@ def smoke_failure_report(output, script, exit_code, category=None):
                 exit_code=exit_code, success_marker_seen=success in output,
                 failure_marker_seen=failure in output, diagnostic_codes=codes,
                 compile_locations=[dict(row=row, column=column) for row, column in locations],
-                known_missing_symbols=missing, output_bytes=len(output.encode('utf-8')),
+                known_missing_symbols=missing, boundary_failure_categories=boundary_categories,
+                output_bytes=len(output.encode('utf-8')),
                 contains_output_values=False, binary_uploaded=False)
 
 

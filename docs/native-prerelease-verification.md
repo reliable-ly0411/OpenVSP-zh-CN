@@ -77,6 +77,8 @@ and makes no claim that a not-yet-run native build or GUI has passed.
   A failure emits CI-only `diagnostics/runtime.json` with the fixed script name, exit code, marker
   status, error categories and compile row/column numbers. Only predefined API spellings can be
   included as missing symbols; raw output, paths and model values are never copied into this report.
+  Exact boundary failure lines preserve only six fixed reasons: `set_name`, `count`, `reloaded_name`,
+  `lookup`, `parameter` and `api_error`. Unknown suffixes or lines containing values are ignored.
   Nonzero exit, timeout, missing success marker or any failure marker remain hard failures.
 - Runtime resources: `localization_resources_smoke.as` runs from an empty cwd and clean home, discovers
   all ten official custom types, and creates a Cone. Both upstream top-level folders and the complete

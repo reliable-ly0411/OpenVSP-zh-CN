@@ -52,6 +52,25 @@ class ScriptDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result['known_missing_symbols'], [])
         self.assertNotIn('private', json.dumps(result))
 
+    def test_boundary_failure_reasons_preserve_only_six_fixed_categories(self):
+        reasons = ['set_name', 'count', 'reloaded_name', 'lookup', 'parameter', 'api_error']
+        output = '\n'.join('LOCALIZATION_BOUNDARIES_FAIL:' + reason for reason in reasons)
+        output += '\n  LOCALIZATION_BOUNDARIES_FAIL:lookup  \r\n'
+        result = smoke_failure_report(output, 'localization_boundary_smoke.as', 1)
+        self.assertEqual(result['boundary_failure_categories'], reasons)
+        self.assertEqual(result['category'], 'script-reported-failure')
+
+    def test_boundary_reasons_ignore_unknown_suffixes_values_and_other_scripts(self):
+        output = ('LOCALIZATION_BOUNDARIES_FAIL:private_name\n'
+                  'LOCALIZATION_BOUNDARIES_FAIL:set_name_private\n'
+                  'LOCALIZATION_BOUNDARIES_FAIL:lookup:private_value\n'
+                  'LOCALIZATION_BOUNDARIES_FAIL:count private_value\n')
+        result = smoke_failure_report(output, 'localization_boundary_smoke.as', 1)
+        self.assertEqual(result['boundary_failure_categories'], [])
+        self.assertNotIn('private', json.dumps(result))
+        other = smoke_failure_report('LOCALIZATION_BOUNDARIES_FAIL:lookup', 'backfill_smoke.as', 1)
+        self.assertEqual(other['boundary_failure_categories'], [])
+
     def test_failure_or_absent_marker_fails_even_with_zero_exit(self):
         for output, category in (('LOCALIZATION_BOUNDARIES_FAIL', 'script-reported-failure'),
                                  ('LOCALIZATION_BOUNDARIES_PASS LOCALIZATION_BOUNDARIES_FAIL', 'script-reported-failure'),
