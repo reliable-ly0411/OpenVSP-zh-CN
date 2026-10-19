@@ -8,6 +8,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "SelectFileScreen.h"
+#include "VSPChinese.h"
 #include "FileUtil.h"
 
 #ifdef WIN32

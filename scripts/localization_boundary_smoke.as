@@ -4,6 +4,7 @@ int main()
     ClearVSPModel();
     int failures = 0;
     array<string> names = { "Wing", "Fuselage", "CG", "Pod_3", "主翼", "用户模型_7",
+                            "Export", "Cancel", "机翼", "取消", "Wing &amp; Body",
                             "Wing / Fuselage: Export_100%", "@b@.Wing|Left:Right", "Wing&Body_1" };
     array<string> ids;
     for (uint i = 0; i < names.length(); ++i)
