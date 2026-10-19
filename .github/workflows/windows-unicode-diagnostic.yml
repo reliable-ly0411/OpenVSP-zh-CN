@@ -1,0 +1,98 @@
+name: Diagnose Windows Unicode STL paths
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-unicode-diagnostic.yml'
+      - 'scripts/native_windows_unicode*'
+      - 'scripts/native_unicode_stl_smoke.as'
+      - 'scripts/windows_unicode_stl.patch'
+      - 'scripts/test_native_windows_unicode.py'
+      - 'scripts/unicode_path_tests/**'
+      - 'src/util/FileUtil.h'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  crt:
+    name: Windows CRT exact Unicode path comparison
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Build standalone CRT probe and run offline contracts
+        shell: pwsh
+        run: |
+          cmake -S scripts/unicode_path_tests -B unicode-path-build -A x64
+          if ($LASTEXITCODE -ne 0) { throw 'CRT probe configure failed' }
+          cmake --build unicode-path-build --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'CRT probe build failed' }
+          python -X utf8 -m unittest discover -s scripts -p test_native_windows_unicode.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic contract regression failed' }
+      - name: Compare native narrow CRT with explicit UTF-8 paths
+        shell: pwsh
+        run: |
+          python -X utf8 scripts/native_windows_unicode.py crt --executable unicode-path-build/Release/unicode_path_probe.exe --output unicode-evidence/crt.json
+          if ($LASTEXITCODE -ne 0) { throw 'UTF-8 path regression failed' }
+      - name: Preserve generated-fixture diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-unicode-crt
+          path: unicode-evidence/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  native:
+    needs: crt
+    name: OpenVSP 3.55.0 baseline then patched Windows package
+    runs-on: windows-2022
+    timeout-minutes: 180
+    env:
+      NATIVE_RELEASE: 'true'
+      BACKFILL_VERSION: '3.55.0'
+      BACKFILL_TAG: '3.55.0-zh-CN.rc.1'
+      BACKFILL_SHA: '1d6b0b6078716db5854ff04a92610aa58956a0c6'
+      BACKFILL_PLATFORM: win64
+      BACKFILL_ARCH: x86_64
+      BACKFILL_LLVM: ''
+      BACKFILL_PYTHON: '3.11'
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout exact workflow tooling and SHA-256-bound source patch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout original immutable 3.55 source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: '1d6b0b6078716db5854ff04a92610aa58956a0c6'
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Build original package, diagnose, patch incrementally, and require exact gates
+        shell: pwsh
+        run: ./tooling/scripts/native_windows_unicode.ps1
+      - name: Preserve bounded actual generated-fixture evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-unicode-native-comparison
+          path: unicode-evidence/*.json
+          if-no-files-found: warn
+          retention-days: 14

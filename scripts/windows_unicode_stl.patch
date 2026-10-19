@@ -1,0 +1,68 @@
+diff --git a/src/geom_core/Vehicle.cpp b/src/geom_core/Vehicle.cpp
+index 77429615e2..a2d6b51919 100644
+--- a/src/geom_core/Vehicle.cpp
++++ b/src/geom_core/Vehicle.cpp
+@@ -3862,7 +3862,11 @@ string Vehicle::WriteSTLFile( const string & file_name, int write_set, int subsF
+     }
+ 
+     // Open File
+-    FILE* fid = fopen( file_name.c_str(), "w" );
++    FILE* fid = FOpenUTF8( file_name.c_str(), "w" );
++    if ( !fid )
++    {
++        return mesh_id;
++    }
+     fprintf( fid, "solid\n" );
+     for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
+     {
+@@ -3938,7 +3942,7 @@ string Vehicle::WriteTaggedMSSTLFile( const string & file_name, int write_set, i
+         }
+     }
+ 
+-    FILE* file_id = fopen( file_name.c_str(), "w" );
++    FILE* file_id = FOpenUTF8( file_name.c_str(), "w" );
+     if ( file_id )
+     {
+         std::vector< int > tags = SubSurfaceMgr.GetAllTags();
+diff --git a/src/util/FileUtil.h b/src/util/FileUtil.h
+index 79ae765df6..f685b5020c 100644
+--- a/src/util/FileUtil.h
++++ b/src/util/FileUtil.h
+@@ -6,6 +6,8 @@
+ #if !defined(FILE_UTIL__INCLUDED_)
+ #define FILE_UTIL__INCLUDED_
+ 
++#include <cstdio>
++#include <cerrno>
+ #include <vector>
+ #include <string>
+ using std::vector;
+@@ -13,6 +15,28 @@ using std::string;
+ #include <filesystem>
+ namespace fs = std::filesystem;
+ 
++// OpenVSP/AngelScript paths are UTF-8. The Windows narrow CRT instead uses
++// the active ANSI code page, so use a native wide path without changing locale.
++inline FILE* FOpenUTF8( const char* filename, const char* mode )
++{
++#ifdef _WIN32
++    try
++    {
++        const fs::path path = fs::u8path( filename );
++        std::wstring wide_mode;
++        for ( const char* c = mode; *c; ++c ) wide_mode.push_back( *c );
++        return _wfopen( path.c_str(), wide_mode.c_str() );
++    }
++    catch ( const fs::filesystem_error& )
++    {
++        errno = EILSEQ;
++        return nullptr;
++    }
++#else
++    return fopen( filename, mode );
++#endif
++}
++
+ vector< string > ScanFolder( const char* dir_path );
+ int ScanFolder();
+ 

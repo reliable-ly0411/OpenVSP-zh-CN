@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.24)
+project(UnicodePathRegression LANGUAGES CXX)
+add_executable(unicode_path_probe probe.cpp)
+target_include_directories(unicode_path_probe PRIVATE ../../src/util)
+target_compile_features(unicode_path_probe PRIVATE cxx_std_17)
+if(MSVC)
+  target_compile_options(unicode_path_probe PRIVATE /utf-8)
+endif()
