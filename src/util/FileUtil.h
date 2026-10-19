@@ -6,12 +6,39 @@
 #if !defined(FILE_UTIL__INCLUDED_)
 #define FILE_UTIL__INCLUDED_
 
+#include <cstdio>
+#include <cerrno>
+#include <system_error>
 #include <vector>
 #include <string>
 using std::vector;
 using std::string;
 #include <filesystem>
 namespace fs = std::filesystem;
+
+// OpenVSP/AngelScript paths are UTF-8. The Windows narrow CRT instead uses
+// the active ANSI code page, so use a native wide path without changing locale.
+inline FILE* FOpenUTF8( const char* filename, const char* mode )
+{
+#ifdef _WIN32
+    try
+    {
+        const fs::path path = fs::u8path( filename );
+        std::wstring wide_mode;
+        for ( const char* c = mode; *c; ++c ) wide_mode.push_back( *c );
+        return _wfopen( path.c_str(), wide_mode.c_str() );
+    }
+    // MSVC u8path reports conversion failures as system_error, the base of
+    // filesystem_error. Keep invalid UTF-8 on the normal fopen failure path.
+    catch ( const std::system_error& )
+    {
+        errno = EILSEQ;
+        return nullptr;
+    }
+#else
+    return fopen( filename, mode );
+#endif
+}
 
 vector< string > ScanFolder( const char* dir_path );
 int ScanFolder();
