@@ -6,8 +6,16 @@ TOOLS="$ROOT/tooling/scripts"
 cd "$SOURCE"
 test "$(uname -m)" = "$BACKFILL_ARCH"
 if [[ $(uname) == Darwin ]]; then
+  if [[ ${NATIVE_RELEASE:-false} == true ]]; then
+    python "$TOOLS/native_macos_toolchain.py" preflight --report "$ROOT/macos-toolchain.json"
+  fi
   brew install swig libomp doxygen graphviz pandoc zstd
-  brew install "llvm@$BACKFILL_LLVM" --ignore-dependencies
+  if [[ ${NATIVE_RELEASE:-false} == true ]]; then
+    brew install "llvm@$BACKFILL_LLVM" --force-bottle --ignore-dependencies
+    python "$TOOLS/native_macos_toolchain.py" verify --report "$ROOT/macos-toolchain.json"
+  else
+    brew install "llvm@$BACKFILL_LLVM" --ignore-dependencies
+  fi
   export CC="$(brew --prefix "llvm@$BACKFILL_LLVM")/bin/clang"
   export CXX="$(brew --prefix "llvm@$BACKFILL_LLVM")/bin/clang++"
   python -m venv "$ROOT/venv"
@@ -77,6 +85,9 @@ if [[ ! -f "$package_root/AGENTS.md" ]]; then
 fi
 if [[ ${NATIVE_RELEASE:-false} == true ]]; then
   python "$TOOLS/native_verify.py" "$ROOT/stage" "$SOURCE" "$ROOT/deliverables"
+  if [[ $(uname) == Darwin ]]; then
+    cp "$ROOT/macos-toolchain.json" "$ROOT/deliverables/toolchain.json"
+  fi
 else
   python "$TOOLS/backfill_verify.py" "$ROOT/stage" "$SOURCE" "$ROOT/deliverables"
 fi

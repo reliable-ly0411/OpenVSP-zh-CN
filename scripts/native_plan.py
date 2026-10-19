@@ -14,7 +14,7 @@ PLATFORMS = (
     dict(platform='Ubuntu-24.04_amd64', runner='ubuntu-24.04', arch='x86_64', python='3.12', llvm=''),
     dict(platform='Ubuntu-24.04_arm64-Python3.12', runner='ubuntu-24.04-arm', arch='aarch64', python='3.12', llvm=''),
     dict(platform='win64', runner='windows-2022', arch='x86_64', python='3.11', llvm=''),
-    dict(platform='macOS-14-arm64-Python3.11', runner='macos-14', arch='arm64', python='3.11', llvm='18'),
+    dict(platform='macOS-14-arm64-Python3.11', runner='macos-14', arch='arm64', python='3.11', llvm='16'),
     dict(platform='macOS-15-x86_64-Python3.11', runner='macos-15-intel', arch='x86_64', python='3.11', llvm='16'),
 )
 REQUIRED_CHECKS = {

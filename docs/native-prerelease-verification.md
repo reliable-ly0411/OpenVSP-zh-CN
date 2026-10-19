@@ -39,6 +39,31 @@ but the add-only recovery never damages an earlier asset. Repository protection 
 | macos-14 | ARM64 | 3.11 | 1.26.4 |
 | macos-15-intel | x86_64 | 3.11 | 1.26.4 |
 
+### macOS compiler and runner boundary
+
+The current native matrix uses Homebrew LLVM 16 on both macOS targets. Before installation,
+`native_macos_toolchain.py` requires the official `homebrew/core` formula to contain a bottle for the
+actual named OS and CPU (`arm64_sonoma` or `sequoia`). Installation uses `--force-bottle`; the post-check
+requires a bottled-install receipt, the planned keg version, and matching actual `clang` / `clang++`
+versions and Mach-O architectures. Compiler hashes and host details go to the job summary and the
+CI-only `toolchain.json`, not public Release assets. Historical backfill matrix/compiler choices are
+unchanged. Other bundled dependencies still undergo the package-wide Mach-O minimum-OS check; a
+dependency requiring a newer system fails the named target rather than silently raising compatibility.
+
+As checked on 2026-10-19, [LLVM 16's official bottle metadata](https://formulae.brew.sh/api/formula/llvm@16.json)
+includes Sonoma ARM64; [LLVM 18's metadata](https://formulae.brew.sh/api/formula/llvm@18.json) does not.
+The check is performed again in each build because package availability can change.
+
+[GitHub's macOS 14 retirement notice](https://github.com/actions/runner-images/issues/13518) sets
+2026-11-02 as the final retirement date. The 2026-10-19 brownout runs from 14:00 UTC until 00:00 UTC
+on October 20; jobs scheduled in that window fail. Further windows are listed in that notice.
+After this release round, upgrade the native runner and revalidate dependency deployment targets,
+package names and the stated minimum supported system together. A successful macOS 15 runtime check
+does not establish that the same package runs on macOS 14. This patch keeps the current macOS 14 target
+and makes no claim that a not-yet-run native build or GUI has passed.
+
+### Package checks
+
 - CLI: packaged `vsp -help` must succeed and contain Chinese usage. Only the exact old 3.51.x Linux
   X11 startup error may retry in Xvfb; other nonzero exits/timeouts remain failures.
 - Model: baseline AngelScript smoke plus `localization_boundary_smoke.as` must preserve model names,
@@ -66,7 +91,8 @@ but the add-only recovery never damages an earlier asset. Repository protection 
 
 ## Evidence and public contents
 
-Each native job uploads its ZIP and `verification.json`. Assembly uploads exactly five final ZIPs plus
+Each native job uploads its ZIP and `verification.json`; macOS also retains `toolchain.json` in CI.
+Assembly uploads exactly five final ZIPs plus
 `SHA256SUMS.txt` as `native-release-assets`, and keeps `release-evidence.json` in the separate
 `native-release-evidence` artifact. Optional Linux GUI screenshots have their own artifact and are not
 an automated visual pass. These original build artifacts last 14 days. Promotion's `gui-review.json`
