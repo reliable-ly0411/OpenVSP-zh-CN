@@ -5,8 +5,8 @@
 > 原作者和贡献者，并遵循 NOSA 1.3。详细架构和接力方法见
 > [`AI_LOCALIZATION_HANDOFF.md`](AI_LOCALIZATION_HANDOFF.md)。
 
-本目录是 OpenVSP 3.51.2 的简体中文版本。本地工作环境中的英文原版源码保留在相邻的
-`openvsp` 目录；GitHub 上游原版为 <https://github.com/OpenVSP/OpenVSP>。
+本目录是 OpenVSP 3.51.2 的简体中文版本；官方上游为
+<https://github.com/OpenVSP/OpenVSP>，完整上游与汉化历史保留。
 
 - 当前软件版本：OpenVSP 3.51.2
 - 当前汉化版本：`3.51.2-zh-CN.rc.1`（源码候选，尚未发布）
@@ -35,6 +35,12 @@
 
 ## 3.51.2-zh-CN.rc.1
 
+最新源码回归：Python 66/66、CTest 8/8、改动 GUI 单元语法检查 31/31。此处不代表候选包或 GUI 验收通过。
+
+- 候选分支 PR 运行轻量 Python/C++/XML 守卫；旧发布入口已退为只读提示，所有新构建/晋级统一从默认分支原生流程启动。
+
+- 补足文件选择器助手的无条件声明并扩展三类翻译助手源码守卫；增加 UI 同名/中文/XML 实体边界和只读案例校验，原始用户名称无需进入译表。新候选统一使用五平台原生构建与原始 Linux GUI 包哈希审阅流程。
+
 `3.51.2-zh-CN.rc.1` 回移界面整句译表、旧版表头和帮助锚点修复，保留 3.51.2 的
 业务逻辑与表格列数。候选使用新的不可变标签，不移动或替换历史标签和资产；具体变化及
 验证范围见 `LOCALIZATION_CHANGELOG.md` 的同名章节。
@@ -48,9 +54,9 @@ Windows 构建产物位于 `build/vsp/Release/vsp.exe`。Ubuntu 发布包解压�
 可直接运行：
 
 ```bash
-unzip OpenVSP-3.51.2-Codex-AI-zh-CN-Ubuntu-24.04-x86_64.zip
+unzip OpenVSP-3.51.2-Ubuntu-24.04_amd64-zh-CN.zip
 cd OpenVSP-3.51.2-Linux
-./vsp
+./vsp-zh-CN
 ```
 
 如需让当前用户在任意目录启动，可将解压目录保留在固定位置，再把其中的 `vsp`、
@@ -80,7 +86,7 @@ Python 包要求 NumPy `>=1.26.4,<2`，构建依赖固定使用 `1.26.4`。不�
 
 ```powershell
 cmake -S src -B build -G "Visual Studio 17 2022" -A x64 `
-  -DVSP_LIBRARY_PATH=D:\codex_vibcoding\openvsp\buildlibs
+  -DVSP_LIBRARY_PATH="$PWD\buildlibs"
 cmake --build build --target package --config Release -j 2
 ```
 
@@ -99,25 +105,16 @@ cmake --build build-linux-release --target package -j "$(nproc)"
 Linux 依赖构建会通过 `Libraries/cmake/External_FLTK.cmake` 明确启用 X11、禁用 Wayland
 后端；这是本仓库 Ubuntu 24.04 发布包所采用并完成 GUI 启动验证的配置。
 
-## 上游同步与自动发布
+## 上游同步与候选发布
 
-以下是历史发布流程说明。新候选使用 `<版本>-zh-CN.rc.<序号>`；统一五平台构建与推广
-流程另行接入，当前源码守卫通过不授权发布，也不表示已经生成任何新资产。
+上游巡检与五平台构建由仓库默认分支的统一流程维护。本族旧巡检、移植与发布写入口已退休；
+不再通过历史标签触发、覆盖附件或强制更新共享移植分支。候选源代码经轻量 PR 回归后，
+使用精确提交和新的 `3.51.2-zh-CN.rc.1` 标签运行原生构建，完成 CLI、Python、资源与实际
+Linux GUI 目视验收，再按原始产物哈希晋级；源码检查不能代替这些运行验证。
 
-仓库使用三段式 GitHub Actions 自动化，详细状态记录在 `.github/upstream.json`：
-
-1. `Watch OpenVSP Upstream` 每周检查官方 `OpenVSP/OpenVSP` 的 `main`，发现更新时只创建
-   更新计划 Issue，不直接覆盖汉化版 `main`。
-2. 人工运行 `Prepare OpenVSP Upstream Update` 后，工作流把相对已记录官方基线的汉化差异
-   三方应用到新上游，并推送 `automation/openvsp-upstream-update` 审查分支。任何冲突都会停止。
-3. 审查、补译和双平台验收完成并合并后，创建 `<版本>-Codex-AI-zh-CN` 标签；
-   `Build and Release Localized OpenVSP` 会构建 Ubuntu 24.04 与 Windows x64 包，校验中文
-   命令行和压缩包，生成 SHA-256，并发布带对应源码归档的 GitHub Release。
-
-同一 OpenVSP 版本需要修复后重新发布时，使用不可变的新标签
-`<版本>-Codex-AI-zh-CN-rN`（例如 `3.51.2-Codex-AI-zh-CN-r3`），不得移动已经发布的标签。
-
-自动化不会向官方仓库推送，也不会跳过人工汉化审查直接发布新上游版本。
+流程和验收要求见默认分支的
+[原生预发布验证说明](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/main/docs/native-prerelease-verification.md)。
+上面的包名与启动命令是候选产物约定，只有对应预发布存在时才可下载。
 
 ## 汉化维护
 

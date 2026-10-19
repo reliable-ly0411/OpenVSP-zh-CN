@@ -5,7 +5,8 @@
 int main()
 {
     const std::vector<std::string> values = {
-        "Wing", "主翼", "Wing&Body_1", "Wing &amp; Body", "<Wing> / \"Left\"",
+        "Wing", "主翼", "Export", "Cancel", "机翼", "取消",
+        "Wing&Body_1", "Wing &amp; Body", "<Wing> / \"Left\"",
         "用户模型_7 / Export_100%", "C:\\Users\\Example\\A&B.vsp3", ""
     };
     for (const std::string &value : values)

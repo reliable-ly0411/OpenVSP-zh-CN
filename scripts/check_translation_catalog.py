@@ -76,6 +76,12 @@ def has_unconditional_translation_include(source):
     return False
 
 
+def calls_display_helper(source):
+    """Detect the display-only helper calls, excluding comments and quoted examples."""
+    code = COMMENTS_OR_STRINGS.sub('', source)
+    return bool(re.search(r'\bVSPTranslate(?:BrowserHeader|LabelAndValue|Message)\s*\(', code))
+
+
 def extract_labels(source):
     labels = set()
     for match in LABEL.finditer(strip_comments(source)):
@@ -145,9 +151,9 @@ def run(driver):
         if path.name == "VSPChinese.cpp":
             continue
         contents = path.read_text(encoding='utf-8')
-        if (re.search(r'\bVSPTranslateBrowserHeader\s*\(', strip_comments(contents))
+        if (calls_display_helper(contents)
                 and not has_unconditional_translation_include(contents)):
-            errors.append(f"Browser header helper lacks unconditional VSPChinese.h include: {path.name}")
+            errors.append(f"Display helper lacks unconditional VSPChinese.h include: {path.name}")
         for label in extract_labels(contents):
             labels.setdefault(label, []).append(path.name)
         headers.update(json.loads(literal) for literal in re.findall(STRING, strip_comments(contents))
