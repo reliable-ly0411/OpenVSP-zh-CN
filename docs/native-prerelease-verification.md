@@ -29,6 +29,26 @@ conflicting tag, ambiguous draft, unexpected file or differing file causes a sto
 There is no multi-resource server transaction: failures may leave an incomplete **unpublished** draft,
 but the add-only recovery never damages an earlier asset. Repository protection settings are not changed.
 
+### Selective native-job retries
+
+When a runner outage requires retrying only failed jobs, keep the same original build run and source.
+[GitHub's jobs API](https://docs.github.com/en/rest/actions/workflow-jobs#list-jobs-for-a-workflow-run)
+defaults to `filter=latest`, which covers the most recent execution. Promotion explicitly paginates
+`filter=all`, then selects the highest `run_attempt` for each job name. Successful jobs that were not
+rerun remain eligible; a newer failure, cancellation, skipped or incomplete attempt cannot fall back
+to an older success. The original run itself and all eight required jobs must be completed successfully.
+
+Each selected job must belong to the original run and workflow SHA. Missing or out-of-range attempt
+metadata, duplicate job IDs, duplicate name/attempt pairs and missing required jobs fail closed.
+The CI-only GUI review record includes selected job IDs and attempt numbers for audit. Artifact
+uniqueness, transport digests, package reports, source/tag identity, the exact manifest and the reviewed
+Linux ZIP hash are still required; this does not rebuild or replace an accepted package.
+
+The selective-retry cases are covered by regression fixtures and the current repository's job payload
+fields have been checked. A completed real selective retry must still be inspected; offline tests do
+not establish native platform success or GUI acceptance. GitHub documents that
+[reruns retain the original `GITHUB_SHA` and `GITHUB_REF`](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
+
 ## Native targets and checks
 
 | Runner | CPU | Python | NumPy |
