@@ -10,8 +10,7 @@
 - 当前官方基线：OpenVSP 3.54.0，提交
   `db6c6fe8f4eca27d7517f4ae0b2078abdd3fd927`；同步元数据见 `.github/upstream.json`。
 - 相对官方 OpenVSP 只保留汉化、目标平台兼容、案例打包和本仓库维护所需的最小差异。
-- OpenVSP 原软件、算法及英文源码的版权和作者归属不变，并遵循 NOSA 1.3；Codex
-  是本地化和代码修改工具，不是 OpenVSP 原作者。
+- OpenVSP 原软件、算法及英文源码的版权和作者归属不变，并遵循 NOSA 1.3。
 - `upstream` 必须保持只读，不得向官方仓库推送汉化分支或自动创建拉取请求。
 
 ## 汉化架构
@@ -19,7 +18,8 @@
 汉化采用“显示时翻译”，不得改变内部数据、参数 ID、文件格式、脚本接口或用户输入。
 
 - `src/gui_and_draw/VSPChinese.h/.cpp`：统一翻译表、动态短语和边界处理，新增翻译的首选位置。
-- `VSPTranslate()`：翻译完整标签、动态短语、默认几何体名称和组合标题。
+- `VSPTranslate()`：翻译应用固定标签与已审阅短语；几何体/用户参数名称和路径是原始数据，
+  不为默认名称开翻译例外，组合标题通过标签与值分离的入口处理。
 - `VSPTranslateMenuPath()`：逐段翻译 FLTK 菜单路径。
 - `GroupLayout.cpp`、`GuiDevice.cpp`、`ScreenBase.cpp`：通用控件与参数页入口。
 - `MenuItem.cpp`、`MainVSPScreen.cpp`：菜单、主窗口和汉化“关于”。
@@ -42,6 +42,9 @@
 
 ## 上游同步与发布规则
 
+- 新候选使用 `<版本>-zh-CN.rc.<递增正整数>` 不可变预发布标签；下述历史标签仅用于
+  溯源，不再为新候选生成工具宣传标签。统一构建基础设施从精确源码 SHA 构建本族。
+
 - `Sync Build and Publish OpenVSP Upstream` 每周自动同步官方 `main`，也支持手动触发。
 - `Prepare OpenVSP Upstream Update` 作为可复用准备流程生成双父候选提交；只保留本仓库
   的工作流文件，真实代码冲突时停止，不自动选择一方。
@@ -50,10 +53,10 @@
 - 自动同步更新当前版本元数据，把待发布变化整理为自动预发布标签对应的章节。
   双平台通过并同步主分支后，自动公开预发布 Release，包含双平台包、SHA-256 和更新说明；
   Actions Artifacts 另保留 14 天。没有新上游提交时，也应补发缺失的当前自动版本。
-- 自动预发布使用 `<版本>-Codex-AI-zh-CN-auto.<上游提交前12位>` 不可变标签，保留稳定版
-  Latest 标记，明确新增界面可能含英文和 GUI 未人工验收；发布前下载并校验所有资产。
-- 审查、补译和 Linux/Windows 验收完成后，才可创建
-  `<版本>-Codex-AI-zh-CN` 标签；同版本修复使用递增的不可变 `-rN` 标签。
+- 新预发布使用 `<版本>-zh-CN.rc.<递增正整数>` 不可变标签，保留稳定版 Latest 标记，
+  明确新增界面可能含英文和 GUI 未人工验收；发布前下载并校验所有资产。
+- 审查、补译和目标平台验收完成后才可发布；同版本修复递增 rc 序号，历史
+  `-Codex-AI-zh-CN`、`-rN` 与 `-auto.<上游提交前12位>` 标签仅用于溯源，不移动或复用。
 - 每次代码、构建或发布相关修改都必须更新 `README_zh-CN.md` 的版本变化；发布前把
   “未发布”内容整理为与目标标签完全一致的 `## <标签>` 章节。
 - Release 必须包含对应更新说明、Linux/Windows 验证结论、SHA-256 清单和同一标签的
@@ -63,7 +66,7 @@
 ## 最低验收
 
 - `python3 scripts/check_localization_release.py` 通过；发布时附加 `--expected-tag <标签>`。
-- `vsp -help` 显示中文用法；“关于 Codex AI 汉化”显示运行时软件版本和汉化仓库。
+- `vsp -help` 显示中文用法；“关于简体中文汉化”显示运行时软件版本和汉化仓库。
 - 至少抽查主窗口、几何体树、常用机翼页面及本次修改涉及的专业页面。
 - `package` 成功，包内包含 `README.md`、`README_zh-CN.md`、`AGENTS.md`、完整
   `Official_Examples` 和许可来源说明。

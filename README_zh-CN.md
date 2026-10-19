@@ -1,11 +1,11 @@
 # OpenVSP 简体中文版
 
-> **声明：**本仓库是由 OpenAI Codex AI 生成并维护汉化层的非官方简体中文版本。
+> **声明：**本仓库提供非官方简体中文汉化。
 > OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，仍属于 NASA/OpenVSP
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
 - 当前软件版本：OpenVSP 3.54.0
-- 当前汉化版本：`3.54.0-Codex-AI-zh-CN-r1`
+- 当前汉化版本：`3.54.0-zh-CN.rc.1`（开发候选，尚未发布）
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -81,6 +81,9 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
+以下保留历史流程说明。新候选使用 `<版本>-zh-CN.rc.<序号>`；统一五平台构建与推广
+工作流另行接入，源码守卫通过不表示原生平台或 GUI 已经验收。
+
 1. `Sync Build and Publish OpenVSP Upstream` 每周一北京时间 11:17 检查官方 `main`（GitHub
    定时运行可能延迟），也可在 Actions 手动运行；`upstream_ref` 留空跟随配置分支，或填
    官方标签/提交，例如 `OpenVSP_3.54.0`。
@@ -102,6 +105,29 @@ cmake --build build --target package --config Release --parallel 2
 自动及手动发布的标题和六段式说明统一由 `scripts/release_notes.py` 生成。
 
 ## 未发布
+
+当前目标为 `3.54.0-zh-CN.rc.1`。以下记录源码候选的修复与验证边界；本族完整 GUI、
+原生脚本、Linux/Windows 安装包与运行时检查尚待完成，不能据此宣称已发布或全面汉化。
+候选身份守卫已整合，统一五平台构建与推广工作流另行接入。
+
+## 3.54.0-zh-CN.rc.1
+
+- 从不可变的 `3.54.0-Codex-AI-zh-CN-r1` 继续开发，保留官方 3.54.0 算法、API 与历史。
+  逐块回移共享汉化修复，保留本族参考翼列表与业务源码，未用新版 GUI 文件整份替换。
+- 几何体、用户参数、集合、材料等名称及路径按原文显示；仅翻译固定标签、内置选项和
+  明确的表头。修复 XML 文本中的 `&` 被当作实体表达式处理而损坏名称的问题。
+- 扩充整句译表与旧族标签，区分吊舱与发动机短舱、视图方向和一般方位；保护工程符号、
+  公式作者名、百分比与格式占位符。未知自然语言保持整句原文，避免按词拼接。
+- 格式化列表仅翻译已审阅表头，保护控制码、列分隔符和数据行；改善中文索引列宽。
+  修复六个离线帮助主题的锚点，首页改为非官方汉化说明并去除工具宣传。
+- 在保留 `Official_Examples` 的同时安装 `airfoil`、`CustomScripts`、`scripts`、
+  `textures`、`vspaero_ex`、`CCE` 与 `matlab` 运行时资源；帮助标记、CSS、HTML 与图片
+  正确复制到单配置和多配置可执行文件旁的 `vsp/[配置/]help` 目录。
+- Python 构建与依赖限定 NumPy `>=1.26.4,<2`，构建环境固定 1.26.4；补齐 conda 依赖
+  上限和原生模块动态库、许可清单，保留平台 ABI wheel 标记。
+- 主窗口与关于菜单使用“简体中文”，关于窗口读取运行时软件版本并显示本族 rc 标签、
+  汉化仓库及 NOSA 1.3 归属。候选身份守卫核对源码、文档、关于页与标签。
+- 真实原生运行、完整链接、双平台打包、Python 扩展导入及 GUI 验收仍待完成。
 
 ## 3.54.0-Codex-AI-zh-CN-r1
 

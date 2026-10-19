@@ -543,17 +543,32 @@ public:
     {
         m_Items.clear();
         m_Vals.clear();
+        m_RawItems.clear();
     }
     virtual void AddItem( const string& item )
     {
         m_Items.push_back( item );
         m_Vals.push_back( m_Vals.size() );
+        m_RawItems.push_back( false );
     }
 
     virtual void AddItem( const string& item, int val )
     {
         m_Items.push_back( item );
         m_Vals.push_back( val );
+        m_RawItems.push_back( false );
+    }
+
+    // Model, user and filesystem values are opaque; never feed them to localization.
+    virtual void AddItemRaw( const string& item )
+    {
+        AddItem( item );
+        m_RawItems.back() = true;
+    }
+    virtual void AddItemRaw( const string& item, int val )
+    {
+        AddItem( item, val );
+        m_RawItems.back() = true;
     }
 
     virtual void SetFlagByVal( int val, int flag );
@@ -591,6 +606,7 @@ protected:
     ParmButton m_ParmButton;
 
     vector< string > m_Items;
+    vector< bool > m_RawItems;
     vector< int > m_Flags;
     vector< int > m_Vals;
 };

@@ -1,3 +1,5 @@
+# Matches the NumPy 1.x C ABI used by the packaged _vsp / _vsp_g extensions.
+numpy==1.26.4
 vsp_airfoils/.
 utilities/.
 degen_geom/.
