@@ -5,7 +5,7 @@
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
 - 当前软件版本：OpenVSP 3.53.0
-- 当前汉化版本：`3.53.0-zh-CN.rc.1`（开发候选，尚未发布）
+- 当前汉化版本：`3.53.0-zh-CN.rc.1`（预发布候选）
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -24,8 +24,8 @@ NASA/OpenVSP 官方汉化。维护架构与强制规则统一见 [`AGENTS.md`](A
 ## 下载与运行
 
 从 [Releases](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases) 下载与系统对应的
-ZIP 和 `SHA256SUMS.txt`，校验后解压。当前候选尚未发布，以下文件名与统一发布流程一致；
-下载时必须选择目标候选对应的 Release 页面。发布包不会覆盖系统目录。
+ZIP 和 `SHA256SUMS.txt`，校验后解压。实际验收与可下载状态以对应 Release/CI 为准。
+以下保留历史安装示例；新 rc 的包名见“3.53.0-zh-CN.rc.1”章节。发布包不会覆盖系统目录。
 
 Ubuntu 24.04 x86_64：
 
@@ -102,12 +102,28 @@ cmake --build build --target package --config Release --parallel 2
 - 新增只读轻量 PR 验证，覆盖 `main`、`develop/**` 和 `dev/**`；仅运行源码守卫、
   Python 维护回归与隔离 C++ 本地化测试，不在开发 PR 内重建或发布原生安装包。
 
-当前目标为 `3.53.0-zh-CN.rc.1`。以下记录源码候选范围，完整 GUI、原生脚本、
-五平台安装包与 Python 扩展导入验收仍待完成，不能据此宣称已发布或全面汉化。
+当前目标为 `3.53.0-zh-CN.rc.1`。以下记录预发布候选范围；完整 GUI、原生脚本、
+五平台安装包与 Python 扩展导入验收的实际结果及可下载状态，以对应 Release/CI 为准。
 
 ## 3.53.0-zh-CN.rc.1
 
-- 修正原生模型边界验收对官方命名 API 的错误预期：`SetGeomName` 原本就会移除名称中的 `/`，现在显式检查这个既有规范化结果，并在保存前、重开后逐字核对其余中文、英文、`&`、字面实体、百分号和 FLTK 控制字符。文件路径中的斜杠仍作为路径分隔，不经过翻译；本次不修改命名 API。失败诊断只打印固定类别和样例索引，不打印用户名称或路径。新增 4 项源码契约回归，实际原生执行仍由新构建验证。
+本版本为预发布候选，实际验收与可下载状态以对应 Release/CI 为准；源码及离线回归
+不能代替五平台原生构建、运行时检查和原始 Linux 包的 GUI 目视验收。
+
+新五平台公开 ZIP 采用[官方命名格式](https://openvsp.org/download.php)，在扩展名前
+加 `-zh-CN`，同时如实保留本轮系统、架构、Python ABI 和 ZIP 格式：
+
+- Ubuntu 24.04 AMD64，Python 3.12：`OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip`
+- Ubuntu 24.04 ARM64，Python 3.12：`OpenVSP-3.53.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip`
+- Windows x64，Python 3.11：`OpenVSP-3.53.0-win64-Python3.11-zh-CN.zip`
+- macOS 14 ARM64，Python 3.11：`OpenVSP-3.53.0-macos-14-ARM64-Python3.11-zh-CN.zip`
+- macOS 15 Intel，Python 3.11：`OpenVSP-3.53.0-macos-15-intel-X64-Python3.11-zh-CN.zip`
+
+这是本项目的自建目标；Ubuntu ARM64 不是官方预编译包，Ubuntu ZIP 也不是官方 `.deb`。
+macOS ARM64 仍以 14 为目标；文件名中的系统版本表示实际构建目标，不承诺其他系统兼容性。
+新 rc 的 `SHA256SUMS.txt` 精确覆盖这五个文件；历史安装示例、标签和资产名称保留原样。
+
+- 修正原生模型边界验收对官方命名 API 的错误预期：`SetGeomName` 原本就会移除名称中的 `/`，现在显式检查这个既有规范化结果，并在保存前、重开后逐字核对其余中文、英文、`&`、字面实体、百分号和 FLTK 控制字符。文件路径中的斜杠仍作为路径分隔，不经过翻译；本次不修改命名 API。失败诊断只打印固定类别和样例索引，不打印用户名称或路径。新增 4 项源码契约回归，实际原生执行结果以对应 CI 为准。
 
 
 - 旧手动上游移植入口改为只读迁移提示，避免强制更新共享移植分支及发布过期标签指导；统一流程仍在默认分支运行。新增 4 项工作流隔离回归通过，既有 C++ 与模型业务逻辑不变，原生包仍需独立验收。
