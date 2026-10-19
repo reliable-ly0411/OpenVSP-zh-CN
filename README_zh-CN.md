@@ -104,13 +104,15 @@ cmake --build build --target package --config Release --parallel 2
   `Covert` 公式作者名、格式化占位符、工程符号、温度比和扩展名。未知自然语言短语保持
   整句原文，避免中英单词拼接。旧族额外补齐 13 个完整标签。
 - 翻译 27 类旧版格式化列表表头并保护控制码、分隔符和数据行；修复 6 个离线帮助主题的
-  标题锚点与目录链接。构建默认使用审定 HTML，资源复制路径改为正确的运行目录。
+  标题锚点与目录链接。构建默认使用审定 HTML；帮助标记、CSS、HTML 与图片正确复制到
+  `vsp/[配置/]help`，修复写入同名 `$` 文件、配置子目录错位及并行复制缺目录问题。
+  隔离 CMake 测试核实单配置和多配置 Release/Debug、单独目标与安装的资源字节。
 - 在保留 `Official_Examples` 的同时安装运行时需要的 `airfoil`、`CustomScripts`、
   `scripts`、`textures`、`vspaero_ex`、`CCE` 与 `matlab`；Python 构建和依赖限定 NumPy
   `>=1.26.4,<2`，依赖环境固定 1.26.4，避免 NumPy 2 ABI 不兼容。
 - 主窗口与关于菜单改为“简体中文”，关于窗口使用运行时软件版本并显示本族候选标签、
   仓库和 NOSA 1.3 归属。
-- 已通过：6/6 独立 CTest（含名称/路径边界及 libxml2 文本往返）、38 项 Python 测试、
+- 已通过：7/7 独立 CTest（含名称/路径边界及 libxml2 文本往返）、40 项 Python 测试、
   帮助生成器自测及 6 页 HTML 一致性、`git diff --check`。译表守卫覆盖 833 条整句、
   255 条保护项、2055 个旧 GUI 字面量及 27 类表头；未改共享原始回归案例。
 - 仍待专业复核的术语包括 DegenGeom、Activity Factor、Flat/Round 端盖、横观各向同性、
