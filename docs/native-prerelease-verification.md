@@ -29,6 +29,26 @@ conflicting tag, ambiguous draft, unexpected file or differing file causes a sto
 There is no multi-resource server transaction: failures may leave an incomplete **unpublished** draft,
 but the add-only recovery never damages an earlier asset. Repository protection settings are not changed.
 
+### Selective native-job retries
+
+When a runner outage requires retrying only failed jobs, keep the same original build run and source.
+[GitHub's jobs API](https://docs.github.com/en/rest/actions/workflow-jobs#list-jobs-for-a-workflow-run)
+defaults to `filter=latest`, which covers the most recent execution. Promotion explicitly paginates
+`filter=all`, then selects the highest `run_attempt` for each job name. Successful jobs that were not
+rerun remain eligible; a newer failure, cancellation, skipped or incomplete attempt cannot fall back
+to an older success. The original run itself and all eight required jobs must be completed successfully.
+
+Each selected job must belong to the original run and workflow SHA. Missing or out-of-range attempt
+metadata, duplicate job IDs, duplicate name/attempt pairs and missing required jobs fail closed.
+The CI-only GUI review record includes selected job IDs and attempt numbers for audit. Artifact
+uniqueness, transport digests, package reports, source/tag identity, the exact manifest and the reviewed
+Linux ZIP hash are still required; this does not rebuild or replace an accepted package.
+
+The selective-retry cases are covered by regression fixtures and the current repository's job payload
+fields have been checked. A completed real selective retry must still be inspected; offline tests do
+not establish native platform success or GUI acceptance. GitHub documents that
+[reruns retain the original `GITHUB_SHA` and `GITHUB_REF`](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
+
 ## Native targets and checks
 
 | Runner | CPU | Python | NumPy |
@@ -38,6 +58,42 @@ but the add-only recovery never damages an earlier asset. Repository protection 
 | windows-2022 | x64 | 3.11 | 1.26.4 |
 | macos-14 | ARM64 | 3.11 | 1.26.4 |
 | macos-15-intel | x86_64 | 3.11 | 1.26.4 |
+
+### Public archive name mapping
+
+`scripts/native_plan.py:asset_name` is the single naming source for the new five-platform rc
+packager, verification reports, release assembly, exact checksum list, promotion extraction and
+Linux GUI hash binding. Public names use `OpenVSP-<version>-<archive platform>-zh-CN.zip` for each
+supported family (3.51.2, 3.51.3, 3.53.0, 3.54.0 and 3.55.0). Internal platform/job IDs, runners,
+architectures, Python versions and compiler choices are unchanged:
+
+| Internal platform ID | Public archive platform |
+|---|---|
+| `Ubuntu-24.04_amd64` | `Ubuntu-24.04_amd64` |
+| `Ubuntu-24.04_arm64-Python3.12` | `Ubuntu-24.04_arm64-Python3.12` |
+| `win64` | `win64-Python3.11` |
+| `macOS-14-arm64-Python3.11` | `macos-14-ARM64-Python3.11` |
+| `macOS-15-x86_64-Python3.11` | `macos-15-intel-X64-Python3.11` |
+
+The [official download page](https://openvsp.org/download.php), checked on 2026-10-19, links these
+3.55.0 Python 3.11/Ubuntu 24.04 assets (the filenames below are taken from its actual link targets):
+
+- `OpenVSP-3.55.0-win64-Python3.11.zip`
+- `OpenVSP-3.55.0-macos-15-intel-X64-Python3.11.zip`
+- `OpenVSP-3.55.0-macos-15-ARM64-Python3.11.zip`
+- `OpenVSP-3.55.0-Ubuntu-24.04_amd64.deb`
+
+Only the naming convention is adopted. This round keeps its actual macOS 14 ARM64 target instead
+of claiming the official current macOS 15 target; no runner or minimum-OS upgrade is implied.
+Ubuntu AMD64 remains a ZIP rather than pretending to be the official Debian package. Ubuntu ARM64
+with Python 3.12 is an additional downstream build, not an official precompiled distribution.
+The current official spellings are applied consistently across the five supported version families;
+this does not claim that every historical upstream release provided the same target or package format.
+
+Historical `backfill_*` names and legacy dual-platform naming remain unchanged. For new rc artifacts,
+old Windows/Mac names, alternate spellings and extra files are rejected rather than normalized or
+accepted as fallbacks. The public set remains exactly five ZIPs and `SHA256SUMS.txt`; the manifest,
+reports and reviewed package hashes must bind these exact filenames and original bytes.
 
 ### macOS compiler and runner boundary
 
@@ -66,6 +122,33 @@ and makes no claim that a not-yet-run native build or GUI has passed.
 
 - CLI: packaged `vsp -help` must succeed and contain Chinese usage. Only the exact old 3.51.x Linux
   X11 startup error may retry in Xvfb; other nonzero exits/timeouts remain failures.
+- Export and CLI analysis: the packaged `vspscript` executes the pinned tooling file
+  `native_functional_smoke.as` in a new, empty scratch directory. It actually exports a pod/wing STL,
+  runs CompGeom, and executes a one-CPU, single-point VSPAERO sweep at alpha 5 degrees and Mach 0.1.
+  The original user names and the API error queue are checked. Python independently requires the
+  exact Unicode STL directory entry and parses complete ASCII or binary triangles, finite normals
+  and coordinates, and at least one nondegenerate triangle. Results CSV files must exist in that
+  fresh directory and have the expected unique result header. CompGeom requires two positive finite
+  wetted areas; every returned lift-history value must be finite and the last must have absolute
+  value greater than `1e-6`. `CLtot` is preferred, with `CL` supported only when `CLtot` is absent;
+  malformed, empty or duplicate result fields never fall back or silently skip the solver.
+  The solver's `Done` text and wrapper result ID alone are insufficient evidence. Upstream CSV writes
+  can fail without an API error, so markers alone cannot substitute for independent file checks.
+  A second phase directly runs packaged `vspaero -omp 1 <base>` (`vspaero.exe` on Windows). It creates
+  another empty directory and copies only `.vspaero`, `.vspgeom` and `.vkey` inputs. The VKEY is mandatory;
+  no earlier history, CSV, polar or other solver output is copied. These arguments and three-file input
+  requirements were checked in all five source families. A nonzero direct CLI exit, timeout or FAIL
+  text stops immediately, even if the failed process left a plausible history. After exit zero, Python
+  requires a newly generated history with the complete supported 51-column steady layout, finite
+  physical values and lift samples, and nonzero final lift. Only the two log-residual columns may contain
+  negative infinity, the upstream `log10(0)` representation; NaN and positive infinity still fail, and
+  no physical or lift field gets this exception. API and direct CLI evidence are recorded separately.
+  All three exact PASS markers are mandatory. A nonzero `vspscript` exit, timeout, any FAIL text, missing/misnamed
+  files, invalid/truncated mesh or nonfinite/empty/zero-final-lift results fail closed. Runtime JSON
+  includes only predefined failure categories, never raw solver output, file paths or model values.
+  The successful report contains counts, field/format enums and verified flags, not raw solver values;
+  assembly requires both new functional checks and this evidence. The shared script never falls back
+  to a family-source copy; the historical backfill script and tools are unchanged.
 - Model: baseline AngelScript smoke plus `localization_boundary_smoke.as` must preserve model names,
   identifiers, parameter values and special-character file paths across save/reopen.
   The shared `backfill_smoke.as` is taken from the pinned workflow tooling, because old source families
@@ -116,6 +199,22 @@ old/duplicate checksum names, wrong hashes, immutable public releases, conflicti
 uploads, add-only recovery, corruption on remote read-back, GUI hash mismatch, artifact provenance,
 safe extraction, and official-tag/development-snapshot separation. Mocked tests do not replace native
 platform runs or manual GUI review.
+
+### Functional fixture evidence and limits
+
+On 2026-10-19, the **old released 3.55 Linux baseline only** executed the new functional script through
+the new wrapper with a clean home/scratch directory. Independent parsing found 1,152 valid STL
+triangles under the exact Unicode filename, two positive finite CompGeom areas, and five finite
+`CLtot` API samples with a nonzero final sample. All three markers and zero API errors were required.
+The additional direct CLI phase returned zero and produced its own new five-sample finite lift history.
+The script uses the documented APIs also present in the five source families; source inspection is
+not a runtime pass. No new candidate or other version/platform is marked accepted by this baseline
+exercise. This small case checks executable/export/solver plumbing, not aerodynamic accuracy,
+convergence quality, broad model coverage, or GUI correctness. All existing package identity,
+manifest/read-back and GUI-review gates remain required.
+The upstream analysis API does not return the VSPAERO child-process exit code to AngelScript;
+this is why the separate direct CLI phase observes its own return code and fresh history in addition
+to the API phase and outer `vspscript` process. Neither phase infers solver success from `Done` text.
 
 ## Branch and workflow rollout
 

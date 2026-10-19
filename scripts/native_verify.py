@@ -16,6 +16,9 @@ from backfill_package import verify as verify_package
 from backfill_verify import (EXECUTABLES, audit_native, bundle_mac, cli_help, digest,
                              install_legacy_fonts, minimum_macos, privacy_scan,
                              python_smoke, run)
+from native_functional import (CLI_BASENAME, CLI_INPUT_SUFFIXES, FAILURE_REASONS,
+                               FUNCTIONAL_SCRIPT, PASS_MARKERS, FunctionalCheckError,
+                               verify_cli_history, verify_functional_outputs)
 from native_plan import REQUIRED_CHECKS, asset_name, validate_source
 
 
@@ -33,28 +36,40 @@ SMOKE_SCRIPTS = {
     'backfill_smoke.as': ('LOCALIZATION_SMOKE_PASS', 'LOCALIZATION_SMOKE_FAIL'),
     'localization_boundary_smoke.as': ('LOCALIZATION_BOUNDARIES_PASS', 'LOCALIZATION_BOUNDARIES_FAIL'),
     'localization_resources_smoke.as': ('LOCALIZATION_RESOURCES_PASS', 'LOCALIZATION_RESOURCES_FAIL'),
+    FUNCTIONAL_SCRIPT: ('NATIVE_FUNCTIONAL_PASS', 'NATIVE_FUNCTIONAL_FAIL'),
 }
+TOOLING_SMOKE_SCRIPTS = {'backfill_smoke.as', FUNCTIONAL_SCRIPT}
 
 
 def smoke_script_path(name, source, tooling_scripts):
     if name not in SMOKE_SCRIPTS:
         raise ValueError('Unknown native smoke script')
-    # The common historical API baseline belongs to the pinned workflow tooling.
-    # Older reviewed source families predate it. Family-specific checks stay source-bound.
-    directory = tooling_scripts if name == 'backfill_smoke.as' else source / 'scripts'
+    # Shared API/functional checks belong to pinned workflow tooling; older
+    # reviewed sources predate them. Family-specific checks stay source-bound.
+    directory = tooling_scripts if name in TOOLING_SMOKE_SCRIPTS else source / 'scripts'
     script = directory / name
     if not script.is_file():
-        origin = 'tooling' if name == 'backfill_smoke.as' else 'source'
+        origin = 'tooling' if name in TOOLING_SMOKE_SCRIPTS else 'source'
         raise ValueError('Missing mandatory ' + origin + ' smoke script: ' + name)
     return script
 
 
+def smoke_markers(output, script):
+    success, failure = SMOKE_SCRIPTS[script]
+    if script == FUNCTIONAL_SCRIPT:
+        lines = {line.strip() for line in output.splitlines()}
+        # All three exact markers are mandatory. Any FAIL in the captured
+        # functional output fails closed; its surrounding values are never copied.
+        return all(marker in lines for marker in PASS_MARKERS), 'FAIL' in output
+    return success in output, failure in output
+
+
 def smoke_failure_report(output, script, exit_code, category=None):
     """Classify captured output without retaining paths, model names or arbitrary text."""
-    success, failure = SMOKE_SCRIPTS[script]
     if isinstance(output, bytes):
         output = output.decode('utf-8', errors='replace')
     output = output or ''
+    success_seen, failure_seen = smoke_markers(output, script)
     codes = []
     for code, pattern in (
             ('missing-symbol', r'No matching symbol'),
@@ -69,7 +84,8 @@ def smoke_failure_report(output, script, exit_code, category=None):
     # Only fixed API spellings may be emitted; never copy a symbol supplied by output.
     allowed = ('abs', 'FindGeoms', 'FindGeomsWithName', 'GetGeomName', 'GetParm',
                'GetParmVal', 'GetNumTotalErrors', 'ReadVSPFile', 'SetGeomName',
-               'SetParmVal', 'WriteVSPFile')
+               'SetParmVal', 'WriteVSPFile', 'ExportFile', 'ComputeCompGeom',
+               'WriteResultsCSVFile', 'ExecAnalysis', 'GetDoubleResults', 'GetAllDataNames')
     missing = [symbol for symbol in allowed if re.search(
         r"No matching symbol\s+'" + symbol + r"'", output, re.IGNORECASE)]
     boundary_categories = []
@@ -78,15 +94,24 @@ def smoke_failure_report(output, script, exit_code, category=None):
         boundary_categories = [reason for reason in (
             'set_name', 'count', 'reloaded_name', 'lookup', 'parameter', 'api_error')
             if 'LOCALIZATION_BOUNDARIES_FAIL:' + reason in lines]
+    functional_categories = []
+    if script == FUNCTIONAL_SCRIPT:
+        lines = {line.strip() for line in output.splitlines()}
+        functional_categories = [reason for reason in FAILURE_REASONS
+                                 if 'NATIVE_FUNCTIONAL_FAIL:' + reason in lines]
     if category is None:
-        category = ('script-reported-failure' if failure in output else
+        category = ('script-reported-failure' if failure_seen else
                     'angelscript-compile-error' if 'compile-error' in codes else
                     'process-nonzero-exit' if exit_code else 'missing-success-marker')
     return dict(schema=1, command='vspscript', script=script, category=category,
-                exit_code=exit_code, success_marker_seen=success in output,
-                failure_marker_seen=failure in output, diagnostic_codes=codes,
+                exit_code=exit_code, success_marker_seen=success_seen,
+                failure_marker_seen=failure_seen, diagnostic_codes=codes,
                 compile_locations=[dict(row=row, column=column) for row, column in locations],
                 known_missing_symbols=missing, boundary_failure_categories=boundary_categories,
+                functional_failure_categories=functional_categories,
+                missing_functional_markers=[marker for marker in PASS_MARKERS
+                    if marker not in {line.strip() for line in output.splitlines()}]
+                    if script == FUNCTIONAL_SCRIPT else [],
                 output_bytes=len(output.encode('utf-8')),
                 contains_output_values=False, binary_uploaded=False)
 
@@ -95,7 +120,6 @@ def run_script_smoke(executable, script, scratch, env, diagnostics):
     name = script.name
     if name not in SMOKE_SCRIPTS:
         raise ValueError('Unknown native smoke script')
-    success, failure = SMOKE_SCRIPTS[name]
     try:
         output = run(executable, '-script', script, cwd=scratch, env=env)
     except subprocess.CalledProcessError as error:
@@ -105,14 +129,90 @@ def run_script_smoke(executable, script, scratch, env, diagnostics):
     except OSError:
         report = smoke_failure_report('', name, None, 'launcher-unavailable')
     else:
-        if success in output and failure not in output:
+        success_seen, failure_seen = smoke_markers(output, name)
+        if success_seen and not failure_seen:
             return
         report = smoke_failure_report(output, name, 0)
+    emit_smoke_failure(report, diagnostics)
+
+
+def emit_smoke_failure(report, diagnostics):
     diagnostics.mkdir(parents=True, exist_ok=True)
     (diagnostics / 'runtime.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print('Native smoke diagnosis: ' + json.dumps(report, sort_keys=True))
-    raise ValueError('Packaged AngelScript smoke failed: ' + name + '; ' + report['category']
+    raise ValueError('Packaged ' + report['command'] + ' smoke failed: ' + report['script'] + '; ' + report['category']
                      + '; see value-free runtime.json') from None
+
+
+def emit_solver_failure(output, exit_code, category, diagnostics, disk_reason=None):
+    report = smoke_failure_report(output, FUNCTIONAL_SCRIPT, exit_code, category)
+    report.update(command='vspaero', phase='direct-cli')
+    # The direct solver has no fixture PASS protocol. Its exit status and fresh
+    # on-disk history are separate from the AngelScript/API markers and CSV.
+    report.pop('success_marker_seen')
+    report.pop('missing_functional_markers')
+    report['functional_failure_categories'] = [disk_reason] if disk_reason else []
+    emit_smoke_failure(report, diagnostics)
+
+
+def run_solver_cli(executable, api_directory, scratch, env, diagnostics):
+    directory = scratch / 'functional-cli'
+    try:
+        directory.mkdir()
+    except OSError:
+        emit_solver_failure('', None, 'functional-output-invalid', diagnostics, 'cli-workspace-not-fresh')
+    # Never reuse a positive history from ExecAnalysis. Copy only the three
+    # documented inputs, including the VKEY required by all five source families.
+    for suffix in CLI_INPUT_SUFFIXES:
+        filename = CLI_BASENAME + suffix
+        source = api_directory / filename
+        if source.is_symlink() or not source.is_file():
+            emit_solver_failure('', None, 'functional-output-invalid', diagnostics, 'cli-input-file-missing')
+        try:
+            shutil.copyfile(source, directory / filename)
+        except OSError:
+            emit_solver_failure('', None, 'functional-output-invalid', diagnostics, 'cli-input-file-invalid')
+    try:
+        output = run(executable, '-omp', '1', directory / CLI_BASENAME,
+                     cwd=directory, env=dict(env, OMP_NUM_THREADS='1'))
+    except subprocess.CalledProcessError as error:
+        emit_solver_failure(error.output, error.returncode, 'process-nonzero-exit', diagnostics)
+    except subprocess.TimeoutExpired as error:
+        emit_solver_failure(error.output, None, 'timeout', diagnostics)
+    except OSError:
+        emit_solver_failure('', None, 'launcher-unavailable', diagnostics)
+    if 'FAIL' in output:
+        emit_solver_failure(output, 0, 'solver-reported-failure', diagnostics)
+    try:
+        result = verify_cli_history(directory)
+    except FunctionalCheckError as error:
+        emit_solver_failure('', 0, 'functional-output-invalid', diagnostics, error.category)
+    return dict(result, exit_code=0)
+
+
+def run_functional_smoke(executable, script, scratch, env, diagnostics):
+    if script.name != FUNCTIONAL_SCRIPT:
+        raise ValueError('Functional check requires the pinned functional script')
+    # Results/CSV writes can fail without an API error in upstream. A fresh
+    # directory plus independent file validation prevents stale result acceptance.
+    directory = scratch / 'functional-smoke'
+    try:
+        directory.mkdir()
+    except OSError:
+        report = smoke_failure_report('', FUNCTIONAL_SCRIPT, None, 'functional-output-invalid')
+        report['functional_failure_categories'] = ['workspace-not-fresh']
+        emit_smoke_failure(report, diagnostics)
+    run_script_smoke(executable, script, directory, env, diagnostics)
+    try:
+        result = verify_functional_outputs(directory)
+    except FunctionalCheckError as error:
+        report = smoke_failure_report('\n'.join(PASS_MARKERS), FUNCTIONAL_SCRIPT, 0,
+                                      'functional-output-invalid')
+        report['functional_failure_categories'] = [error.category]
+        emit_smoke_failure(report, diagnostics)
+    solver = executable.with_name('vspaero.exe' if executable.suffix.lower() == '.exe' else 'vspaero')
+    result['vspaero_cli'] = run_solver_cli(solver, directory, scratch, env, diagnostics)
+    return result
 
 
 def verify_boundary_output(directory):
@@ -236,9 +336,13 @@ def main():
         suffix = '.exe' if windows else ''
         cli = cli_help(root / ('vsp' + suffix), version, scratch, env, diagnostics, not (mac or windows))
         for name in SMOKE_SCRIPTS:
+            if name == FUNCTIONAL_SCRIPT:
+                continue
             script = smoke_script_path(name, source, Path(__file__).parent)
             run_script_smoke(root / ('vspscript' + suffix), script, scratch, env, diagnostics)
         boundary_file = verify_boundary_output(scratch)
+        functional = run_functional_smoke(root / ('vspscript' + suffix),
+            smoke_script_path(FUNCTIONAL_SCRIPT, source, Path(__file__).parent), scratch, env, diagnostics)
         extensions = python_smoke(root, version, scratch, env)
         installed = fresh_requirements(root, version, scratch, env)
         if not (mac or windows):
@@ -267,6 +371,7 @@ def main():
                   checks=sorted(REQUIRED_CHECKS), native=records, third_party_licenses=notices,
                   cli_help=cli, python_extensions=extensions, requirements_install=installed,
                   filesystem_boundary=boundary_file,
+                  functional_smoke=functional,
                   macos_minimum=minimum, legacy_gui_fonts=fonts, verified_source_files=source_files,
                   source_tracked_files_clean=clean,
                   source_worktree_clean=not run('git', '-C', source, 'status', '--porcelain').strip(),

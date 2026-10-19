@@ -15,8 +15,9 @@ from native_release import GitHub, publish, validate_gui_review, validate_report
 
 def paginated(api, path, key):
     rows, page = [], 1
+    separator = '&' if '?' in path else '?'
     while True:
-        result = api(f'{path}?per_page=100&page={page}')[key]
+        result = api(f'{path}{separator}per_page=100&page={page}')[key]
         rows.extend(result)
         if len(result) < 100:
             return rows
@@ -33,11 +34,37 @@ def validate_run(run, jobs, repository):
     return run['head_sha']
 
 
+def latest_jobs(jobs, run_id, workflow_sha, run_attempt):
+    """Keep each named job's latest attempt, including successful non-rerun jobs."""
+    if type(run_attempt) is not int or run_attempt < 1:
+        raise ValueError('Original build has no valid run attempt')
+    selected, identities, job_ids = {}, set(), set()
+    for job in jobs:
+        name, attempt, job_id = job.get('name'), job.get('run_attempt'), job.get('id')
+        if (not isinstance(name, str) or not name
+                or type(attempt) is not int or not 1 <= attempt <= run_attempt
+                or type(job_id) is not int or job_id < 1
+                or str(job.get('run_id')) != str(run_id)
+                or job.get('head_sha') != workflow_sha):
+            raise ValueError('Job provenance differs from the original build')
+        identity = (name, attempt)
+        if identity in identities or job_id in job_ids:
+            raise ValueError('Duplicate job identity in original build history')
+        identities.add(identity)
+        job_ids.add(job_id)
+        if name not in selected or attempt > selected[name]['run_attempt']:
+            selected[name] = job
+    if not any(job['run_attempt'] == run_attempt for job in selected.values()):
+        raise ValueError('Original build job history is missing its latest attempt')
+    return [selected[name] for name in sorted(selected)]
+
+
 def validate_jobs(jobs, version):
     expected = {f'{version} / {p["platform"]}' for p in PLATFORMS} | {'regression', 'plan', 'assemble'}
     for name in expected:
         matching = [job for job in jobs if job.get('name') == name]
-        if len(matching) != 1 or matching[0].get('conclusion') != 'success':
+        if (len(matching) != 1 or matching[0].get('status') != 'completed'
+                or matching[0].get('conclusion') != 'success'):
             raise ValueError('Original native job is missing, duplicated or unsuccessful: ' + name)
 
 
@@ -99,8 +126,12 @@ def main():
         raise ValueError('build_run_id must be numeric')
     client = GitHub(os.environ['GITHUB_REPOSITORY'])
     run = client.api(f'actions/runs/{run_id}')
-    jobs = paginated(client.api, f'actions/runs/{run_id}/jobs', 'jobs')
-    workflow_sha = validate_run(run, jobs, client.repository)
+    # GitHub's default filter=latest can omit earlier successful jobs when only
+    # failed jobs were rerun. Read all history, but never fall back from a later
+    # unsuccessful attempt to an earlier success.
+    history = paginated(client.api, f'actions/runs/{run_id}/jobs?filter=all', 'jobs')
+    workflow_sha = validate_run(run, history, client.repository)
+    jobs = latest_jobs(history, run_id, workflow_sha, run.get('run_attempt'))
     validate_jobs(jobs, version)
     artifacts = paginated(client.api, f'actions/runs/{run_id}/artifacts', 'artifacts')
     workspace = Path('promotion-work'); workspace.mkdir()
@@ -120,7 +151,9 @@ def main():
                   validation_note=os.environ['VALIDATION_NOTE'])
     validate_gui_review(directory, version, review)
     # User-provided review details remain CI-only, separate from public assets.
-    record = dict(source_sha=source, tag=tag, build_run_id=run_id, workflow_sha=workflow_sha, **review)
+    record = dict(source_sha=source, tag=tag, build_run_id=run_id, workflow_sha=workflow_sha,
+                  build_jobs=[dict(name=job['name'], id=job['id'], run_attempt=job['run_attempt'])
+                              for job in jobs], **review)
     Path('gui-review.json').write_text(json.dumps(record, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     result = publish(client, directory, source, tag, review=review)
     print('Original reviewed artifacts published without rebuilding: ' + result['html_url'])

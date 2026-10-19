@@ -115,6 +115,26 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- 预发布晋级核对同一次原生构建的全部作业尝试：只重跑失败平台后，保留其他平台原有成功
+  记录，同时要求每个必需作业的最新尝试成功；不能用旧成功掩盖较新的失败或取消。原包、
+  源码、清单及 GUI 审阅哈希约束不变，所选作业编号和尝试次数仅记录在 CI。
+- 新五平台 rc 的公开 ZIP 名称采用官方命名格式并在扩展名前加 `-zh-CN`，明确保留实际
+  系统、架构和 Python ABI。例如 Windows 为 `OpenVSP-3.55.0-win64-Python3.11-zh-CN.zip`，
+  Mac ARM 为 `OpenVSP-3.55.0-macos-14-ARM64-Python3.11-zh-CN.zip`，Intel Mac 为
+  `OpenVSP-3.55.0-macos-15-intel-X64-Python3.11-zh-CN.zip`。Ubuntu AMD64 与 ARM64 分别为
+  `OpenVSP-3.55.0-Ubuntu-24.04_amd64-zh-CN.zip` 和
+  `OpenVSP-3.55.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip`。
+  本轮仍为 ZIP，Mac ARM 仍以 macOS 14 为目标；Ubuntu ARM64 是本项目自建目标。
+  与官方当前预编译包的系统、格式差异及来源见[技术映射](docs/native-prerelease-verification.md#public-archive-name-mapping)。
+  旧标签、旧附件、历史补包名称和旧记录不变；新流程不兼容旧 Windows/Mac 名称。
+  离线回归覆盖五版本族共 25 个精确名称及清单、报告、GUI 哈希绑定，不代表原生构建或 GUI 已通过。
+
+- 原生门禁补齐实际 STL 导出、CompGeom、VSPAERO API 求解及独立单 CPU CLI 求解，不再仅以命令行帮助和
+  模型读写代表功能验收。固定工作流脚本检查用户名称和 API 错误；Python 独立核对实际中文
+  STL 文件名、非空合法三角形及有限坐标、两个正有限面积、非空有限升力历史和末值非零。
+  直接 CLI 在另一个新目录只复制三项输入，单独检查退出码和新 history，旧 API 结果不能代替。
+  非零退出、超时、缺任一通过标记、任何失败标记或输出缺失均停止。仅旧 3.55 Linux 基线
+  已实际跑通此新增脚本及包装器；新候选、其他版本及平台仍须各自实跑，不宣称气动数值精度。
 - 首轮原生构建在模型边界脚本返回非零时缺少有效诊断；新验收包装器保留退出码、
   通过/失败标记、编译行列及固定错误类别（含六种白名单模型边界原因），仅上传不含原始输出或路径的 CI 诊断。
   非零退出、超时或缺少通过标记仍失败，不放宽实际模型边界验收。
