@@ -87,7 +87,7 @@ bool IGESStructureOptionsScreen::Update()
         vector < FeaStructure * > fea_struct_vec = StructureMgr.GetAllFeaStructs();
         for ( int i = 0; i < fea_struct_vec.size(); i++ )
         {
-            m_StructureChoice.AddItem( fea_struct_vec[i]->GetName() );
+            m_StructureChoice.AddItemRaw( fea_struct_vec[i]->GetName() );
         }
         m_StructureChoice.UpdateItems();
         m_StructureChoice.SetVal( veh->m_IGESStructureExportIndex() );
