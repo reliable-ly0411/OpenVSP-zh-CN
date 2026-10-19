@@ -59,6 +59,23 @@ def read_catalogs(source):
     return tables, errors
 
 
+def has_unconditional_translation_include(source):
+    """Require header users to declare the helper on every build platform."""
+    depth = 0
+    for line in strip_comments(source).splitlines():
+        directive = re.match(r'\s*#\s*(if|ifdef|ifndef|endif|include)\b(.*)', line)
+        if not directive:
+            continue
+        kind, value = directive.groups()
+        if kind in ("if", "ifdef", "ifndef"):
+            depth += 1
+        elif kind == "endif":
+            depth = max(0, depth - 1)
+        elif depth == 0 and value.strip() == '"VSPChinese.h"':
+            return True
+    return False
+
+
 def extract_labels(source):
     labels = set()
     for match in LABEL.finditer(strip_comments(source)):
@@ -128,6 +145,9 @@ def run(driver):
         if path.name == "VSPChinese.cpp":
             continue
         contents = path.read_text(encoding='utf-8')
+        if (re.search(r'\bVSPTranslateBrowserHeader\s*\(', strip_comments(contents))
+                and not has_unconditional_translation_include(contents)):
+            errors.append(f"Browser header helper lacks unconditional VSPChinese.h include: {path.name}")
         for label in extract_labels(contents):
             labels.setdefault(label, []).append(path.name)
         headers.update(json.loads(literal) for literal in re.findall(STRING, strip_comments(contents))

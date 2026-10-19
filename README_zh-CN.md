@@ -119,6 +119,9 @@ cmake --build build --target package --config Release --parallel 2
 - Python 构建与随包 requirements/conda 环境统一使用 NumPy 1.26.4；子包约束 NumPy <2，
   配置时拒绝不兼容 ABI。新预发布会在全新 venv 中按随包 requirements 安装再导入。
   本次已验证离线回归；原生平台执行结果由对应 Actions 记录，未运行平台不算通过。
+- 将寄生阻力页的表头翻译声明移到跨平台包含区，并增加源码守卫，防止新表头调用只在
+  Windows 条件编译块中包含声明而遗漏 Linux 编译。
+
 - 补齐 3.51.2/3.51.3 旧界面的 13 个完整标签（网格着色、距离度量、正反向位移等），
   保护 `.curv` / `.p3d` / `.srf` 及 `Te/Tw` / `Taw/Tw`。两旧族保留原控件与参数接口，
   这些回归只核实译表及静态源码，不代表旧族 GUI 已完成验收。

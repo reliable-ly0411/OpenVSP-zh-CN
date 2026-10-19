@@ -2,7 +2,8 @@
 """Regression tests for the translation guard, independent of the C++ driver."""
 import unittest
 
-from check_translation_catalog import extract_labels, read_catalogs, strip_comments
+from check_translation_catalog import (extract_labels, has_unconditional_translation_include,
+                                       read_catalogs, strip_comments)
 
 
 def table_source(exact, phrase):
@@ -11,6 +12,20 @@ def table_source(exact, phrase):
 
 
 class CatalogGuardTests(unittest.TestCase):
+    def test_unconditional_helper_include(self):
+        self.assertTrue(has_unconditional_translation_include('#include "VSPChinese.h"\n'))
+
+    def test_windows_only_helper_include_is_not_sufficient(self):
+        self.assertFalse(has_unconditional_translation_include(
+            '#ifdef WIN32\n#include "VSPChinese.h"\n#endif\n'))
+
+    def test_helper_include_after_conditional_is_valid(self):
+        self.assertTrue(has_unconditional_translation_include(
+            '#if defined(WIN32)\n#if X\n#endif\n#else\n#endif\n#include "VSPChinese.h"\n'))
+
+    def test_commented_helper_include_is_not_sufficient(self):
+        self.assertFalse(has_unconditional_translation_include('// #include "VSPChinese.h"\n'))
+
     def test_duplicates_fail_even_with_same_translation(self):
         _, errors = read_catalogs(table_source('{"Name", "名称"}, {"Name", "名称"}', ''))
         self.assertTrue(any('duplicate key' in error for error in errors))
