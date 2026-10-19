@@ -229,8 +229,7 @@ bool ParmLinkScreen::Update()
     m_LinkBrowser->clear();
     m_LinkBrowser->column_char( ':' );        // use : as the column character
 
-    snprintf( str, sizeof( str ),  "@b@.COMP_A:@b@.GROUP:@b@.PARM:->:@b@.COMP_B:@b@.GROUP:@b@.PARM" );
-    m_LinkBrowser->add( str );
+    m_LinkBrowser->add( VSPTranslateBrowserHeader( "@b@.COMP_A:@b@.GROUP:@b@.PARM:->:@b@.COMP_B:@b@.GROUP:@b@.PARM" ).c_str() );
 
     int num_links = LinkMgr.GetNumLinks();
     for ( i = 0 ; i < num_links ; i++ )

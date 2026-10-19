@@ -12,6 +12,7 @@
 #define _HAS_STD_BYTE 0
 #endif
 
+#include "VSPChinese.h"
 #include "StructScreen.h"
 #include "FeaMeshMgr.h"
 #include "StructureMgr.h"
@@ -2139,7 +2140,7 @@ void StructScreen::LoadGeomChoice()
             if ( geom_vec[i]->isSurfaceType() )
             {
                 string disp_geom_name = std::to_string( icomp + 1 ) + ". " + geom_vec[i]->GetName();
-                m_GeomChoice.AddItem( disp_geom_name );
+                m_GeomChoice.AddItemRaw( disp_geom_name );
                 CompIDMap[geom_vec[i]->GetID()] = icomp;
                 m_GeomIDVec.push_back( geom_vec[i]->GetID() );
                 icomp++;
@@ -2182,7 +2183,7 @@ void StructScreen::UpdateStructBrowser()
 
     char str[256];
 
-    m_StructureSelectBrowser->add( "@b@.NAME:@b@.GEOM:@b@.SURFACE" );
+    m_StructureSelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.GEOM:@b@.SURFACE" ).c_str() );
 
     string struct_name, parent_geom_name;
     int struct_surf_ind;
@@ -2204,7 +2205,7 @@ void StructScreen::UpdateStructBrowser()
 
             snprintf( str, sizeof( str ),  "%s:%s:Surf_%d", struct_name.c_str(), parent_geom_name.c_str(), struct_surf_ind );
             m_StructureSelectBrowser->add( str );
-            m_CurrFeaMeshChoice.AddItem( struct_name, i );
+            m_CurrFeaMeshChoice.AddItemRaw( struct_name, i );
 
             m_StructIDs.push_back( structVec[i]->GetID() );
         }
@@ -2238,7 +2239,7 @@ void StructScreen::UpdateFeaPartBrowser()
 
     char str[256];
 
-    m_FeaPartSelectBrowser->add( "@b@.NAME:@b@.TYPE:@b@.SHELL:@b@.PROPERTY:@b@.CAP:@b@.PROPERTY" );
+    m_FeaPartSelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.TYPE:@b@.SHELL:@b@.PROPERTY:@b@.CAP:@b@.PROPERTY" ).c_str() );
 
     string fea_name, fea_type, shell, shell_prop, cap, cap_prop;
 
@@ -2514,7 +2515,7 @@ void StructScreen::UpdateFeaPropertyBrowser()
 
     char str[256];
 
-    m_FeaPropertySelectBrowser->add( "@b@.NAME:@b@.TYPE:@b@.XSEC:@b@.MATERIAL:" );
+    m_FeaPropertySelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.TYPE:@b@.XSEC:@b@.MATERIAL:" ).c_str() );
 
     string prop_name, prop_type, prop_xsec, prop_mat;
 
@@ -2606,19 +2607,19 @@ void StructScreen::UpdateFeaMaterialChoice()
             fltk_unicode_subscripts( mat_name );
             fltk_unicode_plusminus( mat_name );
 
-            m_FeaShellMaterialChoice.AddItem( mat_name, i );
+            m_FeaShellMaterialChoice.AddItemRaw( mat_name, i );
             m_FeaMaterialIDVec.push_back( material_vec[i]->GetID() );
 
-            m_LayerChoice.AddItem( mat_name, i );
+            m_LayerChoice.AddItemRaw( mat_name, i );
 
             if ( material_vec[i]->m_FeaMaterialType() == vsp::FEA_ISOTROPIC )
             {
-                m_FeaBeamMaterialChoice.AddItem( mat_name, i );
+                m_FeaBeamMaterialChoice.AddItemRaw( mat_name, i );
             }
 
             if ( material_vec[i]->m_FeaMaterialType() == FEA_LAMINATE )
             {
-                m_LaminateChoice.AddItem( mat_name, i );
+                m_LaminateChoice.AddItemRaw( mat_name, i );
             }
         }
         m_FeaShellMaterialChoice.UpdateItems();
@@ -2710,7 +2711,7 @@ void StructScreen::UpdateBCPartChoice()
         // Loop over all parts in current structure
         for ( size_t i = 0; i < feaprt_vec.size(); i++ )
         {
-            m_FeaBCPartChoice.AddItem( string( feaprt_vec[ i ]->GetName() ) );
+            m_FeaBCPartChoice.AddItemRaw( string( feaprt_vec[ i ]->GetName() ) );
             m_FeaBCPartChoiceIDVec.push_back( feaprt_vec[ i ]->GetID() );
         }
 
@@ -2735,7 +2736,7 @@ void StructScreen::UpdateBCSubSurfChoice()
         // Loop over all parts in current structure
         for ( size_t i = 0; i < subsurf_vec.size(); i++ )
         {
-            m_FeaBCSubSurfChoice.AddItem( string( subsurf_vec[ i ]->GetName() ) );
+            m_FeaBCSubSurfChoice.AddItemRaw( string( subsurf_vec[ i ]->GetName() ) );
             m_FeaBCSubSurfChoiceIDVec.push_back( subsurf_vec[ i ]->GetID() );
         }
 

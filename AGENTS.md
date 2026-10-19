@@ -10,8 +10,8 @@
 - 当前官方基线：OpenVSP 3.53.0，提交
   `fbf9afc31d3bf337a75253e403423cb8c8dd86dc`；同步元数据见 `.github/upstream.json`。
 - 相对官方 OpenVSP 只保留汉化、目标平台兼容、案例打包和本仓库维护所需的最小差异。
-- OpenVSP 原软件、算法及英文源码的版权和作者归属不变，并遵循 NOSA 1.3；Codex
-  是本地化和代码修改工具，不是 OpenVSP 原作者。
+- OpenVSP 原软件、算法及英文源码的版权和作者归属不变，并遵循 NOSA 1.3；本仓库
+  仅维护非官方本地化修改。
 - `upstream` 必须保持只读，不得向官方仓库推送汉化分支或自动创建拉取请求。
 
 ## 汉化架构
@@ -19,7 +19,8 @@
 汉化采用“显示时翻译”，不得改变内部数据、参数 ID、文件格式、脚本接口或用户输入。
 
 - `src/gui_and_draw/VSPChinese.h/.cpp`：统一翻译表、动态短语和边界处理，新增翻译的首选位置。
-- `VSPTranslate()`：翻译完整标签、动态短语、默认几何体名称和组合标题。
+- `VSPTranslate()`：翻译应用固定标签与已审阅短语；几何体/用户参数名称和路径是原始数据，
+  不为默认名称开翻译例外，组合标题通过标签与值分离的入口处理。
 - `VSPTranslateMenuPath()`：逐段翻译 FLTK 菜单路径。
 - `GroupLayout.cpp`、`GuiDevice.cpp`、`ScreenBase.cpp`：通用控件与参数页入口。
 - `MenuItem.cpp`、`MainVSPScreen.cpp`：菜单、主窗口和汉化“关于”。
@@ -44,18 +45,19 @@
 
 - `Watch OpenVSP Upstream` 只创建更新计划 Issue；不得直接覆盖 `main`。
 - `Prepare OpenVSP Upstream Update` 将汉化差异移植到新上游并生成双父审查提交；冲突时停止。
-- 审查、补译和 Linux/Windows 验收完成后，才可创建
-  `<版本>-Codex-AI-zh-CN` 标签；同版本修复使用递增的不可变 `-rN` 标签。
+- 审查、补译、五平台原生验收和指定原始包的 GUI 审阅完成后，才可创建
+  `<版本>-zh-CN.rc.<递增正整数>` 预发布标签；历史 `-Codex-AI-zh-CN` / `-rN` 只用于溯源。
 - 每次代码、构建或发布相关修改都必须更新 `README_zh-CN.md` 的版本变化；发布前把
   “未发布”内容整理为与目标标签完全一致的 `## <标签>` 章节。
-- Release 必须包含对应更新说明、Linux/Windows 验证结论、SHA-256 清单和同一标签的
+- Release 必须包含对应更新说明、各平台原生与 GUI 验证结论（注明未覆盖项）、SHA-256
+  清单和同一标签的
   源码归档；发布后必须核对页面、标签和资产。
 - 不得移动、复用或覆盖已经发布的标签和资产来掩盖历史。
 
 ## 最低验收
 
 - `python3 scripts/check_localization_release.py` 通过；发布时附加 `--expected-tag <标签>`。
-- `vsp -help` 显示中文用法；“关于 Codex AI 汉化”显示运行时软件版本和汉化仓库。
+- `vsp -help` 显示中文用法；“关于简体中文汉化”显示运行时软件版本和汉化仓库。
 - 至少抽查主窗口、几何体树、常用机翼页面及本次修改涉及的专业页面。
 - `package` 成功，包内包含 `README.md`、`README_zh-CN.md`、`AGENTS.md`、完整
   `Official_Examples` 和许可来源说明。
