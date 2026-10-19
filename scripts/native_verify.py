@@ -26,8 +26,86 @@ BOUNDARY_MODEL_FILENAME = 'Wing Design 100% 中文.vsp3'
 BOUNDARY_MODEL_NAMES = (
     'Wing', 'Fuselage', 'CG', 'Pod_3', '主翼', '用户模型_7',
     'Export', 'Cancel', '机翼', '取消', 'Wing &amp; Body',
-    'Wing / Fuselage: Export_100%', '@b@.Wing|Left:Right', 'Wing&Body_1',
+    # ParmContainer::SetName removes '/' by default, before any persistence occurs.
+    'Wing  Fuselage: Export_100%', '@b@.Wing|Left:Right', 'Wing&Body_1',
 )
+SMOKE_SCRIPTS = {
+    'backfill_smoke.as': ('LOCALIZATION_SMOKE_PASS', 'LOCALIZATION_SMOKE_FAIL'),
+    'localization_boundary_smoke.as': ('LOCALIZATION_BOUNDARIES_PASS', 'LOCALIZATION_BOUNDARIES_FAIL'),
+    'localization_resources_smoke.as': ('LOCALIZATION_RESOURCES_PASS', 'LOCALIZATION_RESOURCES_FAIL'),
+}
+
+
+def smoke_script_path(name, source, tooling_scripts):
+    if name not in SMOKE_SCRIPTS:
+        raise ValueError('Unknown native smoke script')
+    # The common historical API baseline belongs to the pinned workflow tooling.
+    # Older reviewed source families predate it. Family-specific checks stay source-bound.
+    directory = tooling_scripts if name == 'backfill_smoke.as' else source / 'scripts'
+    script = directory / name
+    if not script.is_file():
+        origin = 'tooling' if name == 'backfill_smoke.as' else 'source'
+        raise ValueError('Missing mandatory ' + origin + ' smoke script: ' + name)
+    return script
+
+
+def smoke_failure_report(output, script, exit_code, category=None):
+    """Classify captured output without retaining paths, model names or arbitrary text."""
+    success, failure = SMOKE_SCRIPTS[script]
+    if isinstance(output, bytes):
+        output = output.decode('utf-8', errors='replace')
+    output = output or ''
+    codes = []
+    for code, pattern in (
+            ('missing-symbol', r'No matching symbol'),
+            ('missing-signature', r'No matching signatures?'),
+            ('compile-error', r'\b(?:ERR|Error)\s*:'),
+            ('script-exception', r'\b(?:exception|execution aborted)\b'),
+            ('xml-entity-error', r'unterminated entity reference')):
+        if re.search(pattern, output, re.IGNORECASE):
+            codes.append(code)
+    locations = sorted({(int(row), int(column)) for row, column in re.findall(
+        r'\((\d+),\s*(\d+)\)\s*:\s*(?:ERR|Error)\b', output, re.IGNORECASE)})[:20]
+    # Only fixed API spellings may be emitted; never copy a symbol supplied by output.
+    allowed = ('abs', 'FindGeoms', 'FindGeomsWithName', 'GetGeomName', 'GetParm',
+               'GetParmVal', 'GetNumTotalErrors', 'ReadVSPFile', 'SetGeomName',
+               'SetParmVal', 'WriteVSPFile')
+    missing = [symbol for symbol in allowed if re.search(
+        r"No matching symbol\s+'" + symbol + r"'", output, re.IGNORECASE)]
+    if category is None:
+        category = ('script-reported-failure' if failure in output else
+                    'angelscript-compile-error' if 'compile-error' in codes else
+                    'process-nonzero-exit' if exit_code else 'missing-success-marker')
+    return dict(schema=1, command='vspscript', script=script, category=category,
+                exit_code=exit_code, success_marker_seen=success in output,
+                failure_marker_seen=failure in output, diagnostic_codes=codes,
+                compile_locations=[dict(row=row, column=column) for row, column in locations],
+                known_missing_symbols=missing, output_bytes=len(output.encode('utf-8')),
+                contains_output_values=False, binary_uploaded=False)
+
+
+def run_script_smoke(executable, script, scratch, env, diagnostics):
+    name = script.name
+    if name not in SMOKE_SCRIPTS:
+        raise ValueError('Unknown native smoke script')
+    success, failure = SMOKE_SCRIPTS[name]
+    try:
+        output = run(executable, '-script', script, cwd=scratch, env=env)
+    except subprocess.CalledProcessError as error:
+        report = smoke_failure_report(error.output, name, error.returncode)
+    except subprocess.TimeoutExpired as error:
+        report = smoke_failure_report(error.output, name, None, 'timeout')
+    except OSError:
+        report = smoke_failure_report('', name, None, 'launcher-unavailable')
+    else:
+        if success in output and failure not in output:
+            return
+        report = smoke_failure_report(output, name, 0)
+    diagnostics.mkdir(parents=True, exist_ok=True)
+    (diagnostics / 'runtime.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    print('Native smoke diagnosis: ' + json.dumps(report, sort_keys=True))
+    raise ValueError('Packaged AngelScript smoke failed: ' + name + '; ' + report['category']
+                     + '; see value-free runtime.json') from None
 
 
 def verify_boundary_output(directory):
@@ -150,18 +228,9 @@ def main():
         env.update(HOME=str(clean_home), USERPROFILE=str(clean_home))
         suffix = '.exe' if windows else ''
         cli = cli_help(root / ('vsp' + suffix), version, scratch, env, diagnostics, not (mac or windows))
-        scripts = (
-            ('backfill_smoke.as', 'LOCALIZATION_SMOKE_PASS', 'LOCALIZATION_SMOKE_FAIL'),
-            ('localization_boundary_smoke.as', 'LOCALIZATION_BOUNDARIES_PASS', 'LOCALIZATION_BOUNDARIES_FAIL'),
-            ('localization_resources_smoke.as', 'LOCALIZATION_RESOURCES_PASS', 'LOCALIZATION_RESOURCES_FAIL'),
-        )
-        for name, success, failure in scripts:
-            script = source / 'scripts' / name
-            if not script.is_file():
-                raise ValueError('Missing mandatory release smoke script: ' + name)
-            text = run(root / ('vspscript' + suffix), '-script', script, cwd=scratch, env=env)
-            if success not in text or failure in text:
-                raise ValueError('Packaged smoke failed: ' + name)
+        for name in SMOKE_SCRIPTS:
+            script = smoke_script_path(name, source, Path(__file__).parent)
+            run_script_smoke(root / ('vspscript' + suffix), script, scratch, env, diagnostics)
         boundary_file = verify_boundary_output(scratch)
         extensions = python_smoke(root, version, scratch, env)
         installed = fresh_requirements(root, version, scratch, env)
