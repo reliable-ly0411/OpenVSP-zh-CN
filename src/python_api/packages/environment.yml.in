@@ -4,6 +4,6 @@ channels:
   - defaults
 dependencies:
   - python=@PYTHON_VERSION_SHORT@
-  - numpy!=1.19.4
+  - numpy=1.26.4
   - matplotlib
   - pathlib

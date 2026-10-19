@@ -159,7 +159,7 @@ void AttributeTree::RebuildTree()
                 string id = tree_id_vecs[i][j];
                 string coll_id = tree_coll_vecs[i][j];
 
-                string row_str = VSPTranslate( AttributeMgr.GetName( id ) );
+                string row_str = AttributeMgr.GetName( id );
 
                 id_vec.push_back( id );
 

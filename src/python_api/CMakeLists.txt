@@ -16,6 +16,12 @@ IF( SWIG_FOUND AND PYTHONLIBS_FOUND AND IS_NUMPY_FOUND )
             OUTPUT_VARIABLE NUMPY_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE
     )
 
+    # The bundled SWIG typemaps use the NumPy 1.x C ABI. Never produce a package
+    # whose build ABI disagrees with its runtime dependency declarations.
+    if( NUMPY_VERSION VERSION_LESS "1.26.4" OR NOT NUMPY_VERSION VERSION_LESS "2.0" )
+        message( FATAL_ERROR "Localized Python packages require NumPy >=1.26.4,<2 (CI pins 1.26.4)." )
+    endif()
+
     execute_process(
             COMMAND ${PYTHON_EXECUTABLE} -c "import numpy; print(numpy.get_include())"
             OUTPUT_VARIABLE NUMPY_INCLUDE_PATH OUTPUT_STRIP_TRAILING_WHITESPACE

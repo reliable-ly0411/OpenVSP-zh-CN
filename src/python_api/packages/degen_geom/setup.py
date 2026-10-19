@@ -26,6 +26,6 @@ setup(
     packages=['degen_geom'],
     license='MIT',
     author='Uber Technologies, Inc.',
-    install_requires=['utilities', 'numpy'],
+    install_requires=['utilities', 'numpy>=1.26.4,<2'],
     description='Defines common data structures for degenerate geometry types'
 )

@@ -10,8 +10,8 @@
 - 当前官方基线：OpenVSP 3.51.3，提交
   `51bdec01d9a50fa4bdbc960b0def21dcd6330f72`；同步元数据见 `.github/upstream.json`。
 - 相对官方 OpenVSP 只保留汉化、目标平台兼容、案例打包和本仓库维护所需的最小差异。
-- OpenVSP 原软件、算法及英文源码的版权和作者归属不变，并遵循 NOSA 1.3；Codex
-  是本地化和代码修改工具，不是 OpenVSP 原作者。
+- OpenVSP 原软件、算法及英文源码的版权和作者归属不变，并遵循 NOSA 1.3；本项目是
+  非官方简体中文本地化，不改变原作者归属。
 - `upstream` 必须保持只读，不得向官方仓库推送汉化分支或自动创建拉取请求。
 
 ## 汉化架构
@@ -19,7 +19,7 @@
 汉化采用“显示时翻译”，不得改变内部数据、参数 ID、文件格式、脚本接口或用户输入。
 
 - `src/gui_and_draw/VSPChinese.h/.cpp`：统一翻译表、动态短语和边界处理，新增翻译的首选位置。
-- `VSPTranslate()`：翻译完整标签、动态短语、默认几何体名称和组合标题。
+- `VSPTranslate()`：翻译完整固定标签、动态界面短语和组合标题；用户模型名称及路径必须绕过翻译。
 - `VSPTranslateMenuPath()`：逐段翻译 FLTK 菜单路径。
 - `GroupLayout.cpp`、`GuiDevice.cpp`、`ScreenBase.cpp`：通用控件与参数页入口。
 - `MenuItem.cpp`、`MainVSPScreen.cpp`：菜单、主窗口和汉化“关于”。
@@ -42,24 +42,38 @@
 
 ## 上游同步与发布规则
 
-- `Watch OpenVSP Upstream` 只创建更新计划 Issue；不得直接覆盖 `main`。
-- `Prepare OpenVSP Upstream Update` 将汉化差异移植到新上游并生成双父审查提交；冲突时停止。
-- 审查、补译和 Linux/Windows 验收完成后，才可创建
-  `<版本>-Codex-AI-zh-CN` 标签；同版本修复使用递增的不可变 `-rN` 标签。
-- 每次代码、构建或发布相关修改都必须更新 `README_zh-CN.md` 的版本变化；发布前把
-  “未发布”内容整理为与目标标签完全一致的 `## <标签>` 章节。
-- Release 必须包含对应更新说明、Linux/Windows 验证结论、SHA-256 清单和同一标签的
-  源码归档；发布后必须核对页面、标签和资产。
-- 不得移动、复用或覆盖已经发布的标签和资产来掩盖历史。
+- `Prepare and validate OpenVSP upstream candidates` 每周检查最新官方 `OpenVSP_x.y.z` 标签，
+  也支持手动指定上游 ref；只创建双父候选分支和 CI 产物，不自动推进 `main` 或公开 Release。
+- 官方已发布标签的候选使用 `<版本>-zh-CN.candidate.<上游提交前12位>`；手动跟踪 `main`
+  或未标记提交时使用 `<版本>-zh-CN.dev.<提交前12位>`，不得冒充官方已发布版本。
+- 真实代码冲突停止，不自动选择一方。修复提交 → 开发分支 → 新预发布均保留完整历史；
+  普通 push/merge，不强推、不压平、不移动任何旧标签。
+- 新预发布使用 SemVer `<版本>-zh-CN.rc.<递增正整数>`，例如 `3.51.3-zh-CN.rc.1`。
+  历史 `-Codex-AI-zh-CN*` 名称只用于溯源及历史校验，不修改历史记录，不用于新产物。
+- `Build five-platform localized prerelease` 输入精确 40 位 `source_sha` 与 `new_tag`；必须
+  继承该版本族最新已发布修订，并通过 Linux AMD64/ARM64、Windows x64、macOS ARM64/Intel
+  五个原生构建和验收。此流程只生成 CI 产物，任一目标未运行/失败均不得视为通过。
+- GUI 截图是待目视证据。先下载原始包，至少逐族检查 Linux 主界面、机翼页、模型名称及
+  特殊字符路径回归，再用 `Promote GUI-reviewed native prerelease` 指定原构建 run、源码 SHA、
+  标签、SHA256SUMS 文件哈希、目视通过的 Linux ZIP 哈希及真实审阅说明；不得重编译替代已审包。
+- 公开资产仅五个官方风格 `OpenVSP-<版本>-<平台>-zh-CN.zip` 和精确覆盖它们的
+  `SHA256SUMS.txt`；最多另附一份简介。技术验证 JSON、日志和截图仅存 CI 或 `docs/`。
+- 发布先创建新标签和未公开草稿，下载全部资产，校验原构建哈希及实际文件名清单后才公开。
+  草稿恢复只允许补缺项及验证相同字节，不删除/覆盖资产；已公开 Release 始终拒绝修改。
+  旧草稿维护入口只读。保留稳定版 Latest。仓库级保护设置需另行授权，不由本流程改动。
+- 每次代码、构建或发布修改都更新 `README_zh-CN.md`“未发布”；发布前整理为与目标标签
+  一致的章节。新规范、界面与产物不含工具宣传；既有版权、许可、历史变更记录保持原样。
 
 ## 最低验收
 
 - `python3 scripts/check_localization_release.py` 通过；发布时附加 `--expected-tag <标签>`。
-- `vsp -help` 显示中文用法；“关于 Codex AI 汉化”显示运行时软件版本和汉化仓库。
+- `vsp -help` 显示中文用法；本地化“关于”显示运行时软件版本和汉化仓库。
 - 至少抽查主窗口、几何体树、常用机翼页面及本次修改涉及的专业页面。
 - `package` 成功，包内包含 `README.md`、`README_zh-CN.md`、`AGENTS.md`、完整
-  `Official_Examples` 和许可来源说明。
+  `Official_Examples`、上游顶层运行资源目录和许可来源说明。
 - Linux 包不得存在未解析动态库，也不得意外依赖系统 `libcminpack.so`。
+- Python 构建与 requirements 使用 NumPy 1.26.4，子包依赖约束 `<2`；从全新 venv 按随包
+  requirements 安装后导入两个扩展并核对软件/Python 版本。
 - 工作流 YAML、文档链接和目标标签对应的版本更新说明必须通过校验。
 
 不要宣称汉化“绝对完整”。发现漏译时记录具体页面、显示路径和验证结果，让后续维护从

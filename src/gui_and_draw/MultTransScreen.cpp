@@ -186,6 +186,6 @@ void MultTransScreen::UpdateMaterialNames()
     m_MaterialChoice.AddItem( "DEFAULT" );
     for ( int i = 0; i < (int)matNames.size(); i++ )
     {
-        m_MaterialChoice.AddItem( matNames[i] );
+        m_MaterialChoice.AddItemRaw( matNames[i] );
     }
 }

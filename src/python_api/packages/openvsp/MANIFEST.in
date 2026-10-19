@@ -6,6 +6,9 @@ include openvsp/vsploads*
 include openvsp/vspviewer*
 
 graft openvsp/help_vsp
+graft openvsp/lib
+graft openvsp/third-party-licenses
+include openvsp/third-party-dependencies.json
 
 recursive-include openvsp *.py
 

@@ -1,11 +1,11 @@
 # OpenVSP 简体中文版
 
-> **声明：**本仓库是由 OpenAI Codex AI 生成并维护汉化层的非官方简体中文版本。
+> **声明：**本仓库提供非官方简体中文汉化。
 > OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，仍属于 NASA/OpenVSP
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
 - 当前软件版本：OpenVSP 3.51.3
-- 当前汉化版本：`3.51.3-Codex-AI-zh-CN-r2`
+- 当前汉化版本：`3.51.3-zh-CN.rc.1`（开发候选，尚未发布）
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -78,14 +78,67 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
-1. `Watch OpenVSP Upstream` 每周检查官方 `main`，发现更新时只创建计划 Issue。
-2. 人工启动 `Prepare OpenVSP Upstream Update` 后，工作流把汉化差异移植到新上游，生成
-   同时继承旧汉化与新上游的审查提交；发生冲突即停止。
-3. 人工完成补译、审查和双平台验收后，创建 `<版本>-Codex-AI-zh-CN` 不可变标签；
-   `Build and Release Localized OpenVSP` 构建 Linux/Windows ZIP、校验中文命令行和依赖、
-   生成 SHA-256，并发布标签对应的源码归档。
+本版本族的旧 `upstream-watch.yml` 与 `prepare-upstream-update.yml` 入口只显示迁移提示；
+不再创建 Issue、改写分支、创建标签或发布 Release。`release-localized.yml` 仅保留本族原有
+双平台构建与 CI 附件步骤，只能由其他工作流以精确提交和新 rc 标签调用，没有公开发布权限。
 
-同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
+1. 从默认分支运行 `Prepare and validate OpenVSP upstream candidates`，为官方新版本准备
+   保留双父继承关系的候选；冲突即停止，不自动推进 `main`。
+2. 候选 PR 先通过轻量 Python/C++/XML 检查，再以普通 merge 合入对应开发分支。
+3. 默认分支的 `Build five-platform localized prerelease` 对精确源码提交执行五平台原生构建。
+   原始 Linux ZIP 完成真实 GUI 审阅后，使用 `Promote GUI-reviewed native prerelease`
+   核对构建 run、源码 SHA、清单及已审原包哈希后创建新的 rc 预发布。
+
+新标签使用 `<版本>-zh-CN.rc.<递增序号>`，不移动旧标签，不替换旧附件；源码或语法检查通过
+不代表原生包、Python 扩展或真实 GUI 已通过验收。
+
+## 未发布
+
+当前目标为 `3.51.3-zh-CN.rc.1`。以下仅记录源码候选的已验证结果；本族完整 GUI、
+原生脚本、五平台安装包与运行时检查尚待完成，不能据此宣称已发布或全面汉化。
+候选身份与入口隔离守卫已整合；五平台构建和审阅推广统一从默认分支启动。
+
+## 3.51.3-zh-CN.rc.1
+
+- 候选 PR 运行轻量 Python/C++/XML 守卫；新增 3 项入口隔离测试，防止旧工作流重新获得
+  公开写入路径。本族旧双平台构建步骤保持原样，新发布统一使用默认分支的五平台流程。
+
+- 补足文件选择器助手的无条件声明并扩展三类翻译助手源码守卫；增加 14 类 UI 同名、
+  中文及 XML 实体名称边界。只读校验 8 个整机案例的 210 项原始几何名称，
+  用户名称无需进入译表，不改写模型字节。
+
+- 当前离线帮助首页改为非官方简体中文说明，去除工具宣传，保留 NASA/OpenVSP 与
+  NOSA 1.3 归属；15 项帮助测试与 6 页生成一致性通过。
+
+- 接入统一候选身份守卫，核对本族源码、文档、关于页及 rc 标签；补齐 conda 的 NumPy
+  上限及 Python 模块随包动态库/许可清单。正确 rc 标签通过，错版本/修订/历史标签均拒绝。
+  隔离占位文件实际生成 wheel，核实非 pure/平台 ABI 标签与扩展/依赖文件包含；这不代表
+  原生 Python 扩展已导入验收。仅调整打包元数据，Python API 不变。
+- 本轮修改涉及的 30/30 个 GUI 源文件通过本族头文件下的 C++ 语法编译，覆盖文件选择器、
+  通用控件、几何树及专业页面；不等同完整链接或真实 GUI 验收。
+
+- 从不可变的 `3.51.3-Codex-AI-zh-CN-r2` 继续开发，保留官方 3.51.3 算法、API 和历史。
+  回移共享汉化修复，按本族旧几何树、参考翼列表、设计变量与拟合表头逐块适配；没有引入
+  3.55 的克隆、脊线或额外表格列。
+- 几何体、用户参数、集合、材料等自定义名称及路径按原文显示；仅翻译固定标签、内置
+  选项与明确的表头。修复 XML 文本中 `&` 被当作实体表达式处理导致名称损坏的问题。
+- 统一吊舱（Pod）与发动机短舱（Nacelle）、百分比标签、视图方向和一般方位；保留
+  `Covert` 公式作者名、格式化占位符、工程符号、温度比和扩展名。未知自然语言短语保持
+  整句原文，避免中英单词拼接。旧族额外补齐 13 个完整标签。
+- 翻译 27 类旧版格式化列表表头并保护控制码、分隔符和数据行；修复 6 个离线帮助主题的
+  标题锚点与目录链接。构建默认使用审定 HTML；帮助标记、CSS、HTML 与图片正确复制到
+  `vsp/[配置/]help`，修复写入同名 `$` 文件、配置子目录错位及并行复制缺目录问题。
+  隔离 CMake 测试核实单配置和多配置 Release/Debug、单独目标与安装的资源字节。
+- 在保留 `Official_Examples` 的同时安装运行时需要的 `airfoil`、`CustomScripts`、
+  `scripts`、`textures`、`vspaero_ex`、`CCE` 与 `matlab`；Python 构建和依赖限定 NumPy
+  `>=1.26.4,<2`，依赖环境固定 1.26.4，避免 NumPy 2 ABI 不兼容。
+- 主窗口与关于菜单改为“简体中文”，关于窗口使用运行时软件版本并显示本族候选标签、
+  仓库和 NOSA 1.3 归属。
+- 已通过：8/8 独立 CTest（含名称/路径边界及 libxml2 文本往返）、65 项 Python 测试、
+  帮助生成器自测及 6 页 HTML 一致性、`git diff --check`。译表守卫覆盖 833 条整句、
+  255 条保护项、2055 个旧 GUI 字面量及 27 类表头；未改共享原始回归案例。
+- 仍待专业复核的术语包括 DegenGeom、Activity Factor、Flat/Round 端盖、横观各向同性、
+  转子碎片和轮胎喷溅包络。动态说明、第三方控件、显示宽度及本族真实 GUI 验收尚未完成。
 
 ## 3.51.3-Codex-AI-zh-CN-r2
 

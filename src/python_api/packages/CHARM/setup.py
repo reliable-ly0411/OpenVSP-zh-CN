@@ -44,7 +44,7 @@ setup(
     license='Apache 2.0',
     author='National Aeronautics and Space Administration',
     author_email='jason.r.welstead@nasa.gov',
-    install_requires=['utilities', 'scipy', 'numpy', 'matplotlib', 'pandas',
+    install_requires=['utilities', 'scipy', 'numpy>=1.26.4,<2', 'matplotlib', 'pandas',
                       'pyautogui', 'opencv-python', 'fortranformat', 'multiprocessing-logging', 'Pillow'],
     description='Python package to automate working with CHARM'
 )

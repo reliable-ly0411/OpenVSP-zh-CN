@@ -20,7 +20,7 @@ from setuptools import setup
 
 setup_parameters = dict(
     name = "vsp_airfoils",
-    install_requires = ['numpy>=1.7', 'matplotlib'],
+    install_requires = ['numpy>=1.26.4,<2', 'matplotlib'],
     packages = ['vsp_airfoils'],
 )
 
