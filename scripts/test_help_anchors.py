@@ -86,6 +86,16 @@ def check_help_anchors(html_dir):
 
 
 class BundledHelpTests(unittest.TestCase):
+    def test_current_help_identity_preserves_original_attribution(self):
+        for path in (HELP / "index.md", HELP / "html/index.html"):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertIn("非官方简体中文界面与帮助文档", text)
+                self.assertIn("NASA/OpenVSP", text)
+                self.assertIn("NOSA 1.3", text)
+                self.assertNotIn("OpenAI", text)
+                self.assertNotIn("Codex", text)
+
     def test_every_markdown_page_has_generated_html(self):
         sources = {path.stem for path in HELP.glob("*.md")}
         outputs = {path.stem for path in (HELP / "html").glob("*.html")}

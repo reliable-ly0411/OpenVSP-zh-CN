@@ -119,6 +119,9 @@ cmake --build build --target package --config Release --parallel 2
 - Python 构建与随包 requirements/conda 环境统一使用 NumPy 1.26.4；子包约束 NumPy <2，
   配置时拒绝不兼容 ABI。新预发布会在全新 venv 中按随包 requirements 安装再导入。
   本次已验证离线回归；原生平台执行结果由对应 Actions 记录，未运行平台不算通过。
+- 当前离线帮助首页使用非官方简体中文说明，去除工具宣传文字，保留 NASA/OpenVSP
+  原作者与 NOSA 1.3 归属；Markdown 与重新生成的 HTML 加入身份回归检查。
+
 - 修复构建树离线帮助的标记与 CSS 被写成同名 `$` 文件的问题；帮助资源统一放在
   可执行文件旁的 `help` 目录，单配置与多配置 Release/Debug 路径均验证，独立目标可
   并行创建目录。安装包中的 `help` 布局保持不变，新增隔离 CMake 资源字节回归。
