@@ -128,8 +128,8 @@ cmake --build build --target package --config Release --parallel 2
   本轮本地复验：Python 86/86、精确 rc 发布守卫及 CTest 10/10
   （含本地化、XML 文本与原始名称边界）通过；严格 C++17 探针编译实际源码提取的
   匹配函数，核对 ASCII、中文目录与中文匹配模式的精确结果及文件内容不变。
-  本地 Linux 检查不能证明 Windows 已修复；每个预发布候选仍须按精确源码与产物
-  完成原生 Windows 微探针、基线/修补版各 15 项生产验收、五平台包与 GUI 审阅。
+  本地 Linux 检查不能证明 Windows 已修复；候选须结合原生 Windows 编码对照证据，
+  按本族精确源码与产物完成五平台各 15 项生产验收，并审阅原始 Linux 包 GUI。
 
 - 回移 Windows 单实体与多实体 STL 导出的 UTF-8 路径兼容修复：转换为宽字符路径后
   调用文件接口，避免中文文件名被系统 ANSI 代码页解释；单实体导出打开失败时
