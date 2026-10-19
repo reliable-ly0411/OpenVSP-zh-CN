@@ -96,6 +96,9 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- 旧双平台发布入口已退役为只读 exact-SHA 可复用构建，移除旧标签/PR 自动触发、手动
+  `publish` 和公开 Release 写入；所有新发布只由默认分支统一的五平台原生与 GUI 门槛执行。
+
 - 新增只读轻量 PR 验证，覆盖 `main`、`develop/**` 和 `dev/**`；仅运行源码守卫、
   Python 维护回归与隔离 C++ 本地化测试，不在开发 PR 内重建或发布原生安装包。
 
