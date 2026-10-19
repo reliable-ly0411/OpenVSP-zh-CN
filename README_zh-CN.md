@@ -96,6 +96,9 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- 新增只读轻量 PR 验证，覆盖 `main`、`develop/**` 和 `dev/**`；仅运行源码守卫、
+  Python 维护回归与隔离 C++ 本地化测试，不在开发 PR 内重建或发布原生安装包。
+
 当前目标为 `3.53.0-zh-CN.rc.1`。以下记录源码候选范围，完整 GUI、原生脚本、
 五平台安装包与 Python 扩展导入验收仍待完成，不能据此宣称已发布或全面汉化。
 
