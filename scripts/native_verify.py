@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 import zipfile
 
 from backfill_package import verify as verify_package
@@ -16,6 +17,31 @@ from backfill_verify import (EXECUTABLES, audit_native, bundle_mac, cli_help, di
                              install_legacy_fonts, minimum_macos, privacy_scan,
                              python_smoke, run)
 from native_plan import REQUIRED_CHECKS, asset_name, validate_source
+
+
+# Cross-process contract for the version-independent AngelScript boundary smoke.
+# Python checks the actual Unicode directory entry, so a legacy Windows code-page
+# roundtrip cannot hide a file created under a different, mojibake filename.
+BOUNDARY_MODEL_FILENAME = 'Wing Design 100% 中文.vsp3'
+BOUNDARY_MODEL_NAMES = (
+    'Wing', 'Fuselage', 'CG', 'Pod_3', '主翼', '用户模型_7',
+    'Export', 'Cancel', '机翼', '取消', 'Wing &amp; Body',
+    'Wing / Fuselage: Export_100%', '@b@.Wing|Left:Right', 'Wing&Body_1',
+)
+
+
+def verify_boundary_output(directory):
+    model = Path(directory) / BOUNDARY_MODEL_FILENAME
+    if not model.is_file() or model.is_symlink():
+        raise ValueError('Native model did not preserve the exact Unicode filename')
+    try:
+        root = ET.fromstring(model.read_bytes())
+    except ET.ParseError as error:
+        raise ValueError('Native boundary model is not valid XML') from error
+    names = [node.text or '' for node in root.findall('Vehicle/Geom/ParmContainer/Name')]
+    if sorted(names) != sorted(BOUNDARY_MODEL_NAMES):
+        raise ValueError('Persisted model names differ from the boundary smoke contract')
+    return dict(unicode_filename='verified', persisted_names=len(names), xml='verified')
 
 
 def audit_windows(root, architecture):
@@ -136,6 +162,7 @@ def main():
             text = run(root / ('vspscript' + suffix), '-script', script, cwd=scratch, env=env)
             if success not in text or failure in text:
                 raise ValueError('Packaged smoke failed: ' + name)
+        boundary_file = verify_boundary_output(scratch)
         extensions = python_smoke(root, version, scratch, env)
         installed = fresh_requirements(root, version, scratch, env)
         if not (mac or windows):
@@ -163,6 +190,7 @@ def main():
                   archive=name, sha256=digest(archive), bytes=archive.stat().st_size,
                   checks=sorted(REQUIRED_CHECKS), native=records, third_party_licenses=notices,
                   cli_help=cli, python_extensions=extensions, requirements_install=installed,
+                  filesystem_boundary=boundary_file,
                   macos_minimum=minimum, legacy_gui_fonts=fonts, verified_source_files=source_files,
                   source_tracked_files_clean=clean,
                   source_worktree_clean=not run('git', '-C', source, 'status', '--porcelain').strip(),
