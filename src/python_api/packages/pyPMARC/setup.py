@@ -29,5 +29,5 @@ setup(
     author='Rob McDonald',
     author_email='rob.a.mcdonald@gmail.com',
     description='Python tools for parsing PMARC12 files.',
-    install_requires=['numpy', 'matplotlib', 'pydantic', 'f90nml'],
+    install_requires=['numpy>=1.26.4,<2', 'matplotlib', 'pydantic', 'f90nml'],
 )

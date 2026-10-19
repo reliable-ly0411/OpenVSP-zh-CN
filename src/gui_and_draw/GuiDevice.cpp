@@ -1237,7 +1237,8 @@ void ParmButton::Update( const string& parm_id )
         Parm* parm_ptr = SetParmID( parm_id );
         if ( parm_ptr )
         {
-            m_Button->copy_label( VSPTranslate( parm_ptr->GetName() ).c_str() );
+            const string label = LinkMgr.GetUserParmIndex( parm_id ) >= 0 ? parm_ptr->GetName() : VSPTranslate( parm_ptr->GetName() );
+            m_Button->copy_label( label.c_str() );
             DebugLabelSize( m_Button );
         }
     }
@@ -1258,7 +1259,8 @@ void ParmButton::Update( const string& parm_id )
 //==== Update Name ====//
 void ParmButton::UpdateButtonName( const string & name )
 {
-    m_Button->copy_label( VSPTranslate( name ).c_str() );
+    const string label = LinkMgr.GetUserParmIndex( m_ParmID ) >= 0 ? name : VSPTranslate( name );
+    m_Button->copy_label( label.c_str() );
     DebugLabelSize( m_Button );
 }
 
@@ -2028,7 +2030,8 @@ void Choice::UpdateItems( bool keepsetting )
             // The first step contains the safeties for special characters, duplicates, etc.  The two-step
             // short circuits that.
             m_Choice->add( dummymenuentry.c_str(), 0, 0, 0, m_Flags[i] );
-            m_Choice->replace( i, VSPTranslate( m_Items[i] ).c_str() );
+            const string label = m_RawItems[i] ? m_Items[i] : VSPTranslate( m_Items[i] );
+            m_Choice->replace( i, label.c_str() );
         }
 
         if( keepsetting )
@@ -3083,7 +3086,8 @@ void ParmTreePicker::AddParmEntry( const string &ParmID, ContainerTreeData &cont
     td.m_Flag = false;
 
     td.m_Button = new Fl_Check_Button( 1, 1, 100, 20 );
-    td.m_Button->copy_label( VSPTranslate( p->GetName() ).c_str() );
+    const string label = LinkMgr.GetUserParmIndex( ParmID ) >= 0 ? p->GetName() : VSPTranslate( p->GetName() );
+    td.m_Button->copy_label( label.c_str() );
     td.m_Button->callback( StaticDeviceCB, this );
     td.m_TreeItemPtr->widget( td.m_Button );
 

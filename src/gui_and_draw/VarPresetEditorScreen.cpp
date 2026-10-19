@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "VarPresetEditorScreen.h"
 #include "ParmMgr.h"
 #include "StlHelper.h"
@@ -326,7 +327,7 @@ void VarPresetEditorScreen::RebuildMenus()
         SettingGroup *sg = VarPresetMgr.FindSettingGroup( m_GroupIDs[i] );
         if ( sg )
         {
-            m_GroupChoice.AddItem( sg->GetName(), i );
+            m_GroupChoice.AddItemRaw( sg->GetName(), i );
 
             snprintf( str, sizeof( str ), "%s", sg->GetName().c_str() );
             m_GroupBrowser->add( str );
@@ -365,7 +366,7 @@ void VarPresetEditorScreen::RebuildMenus()
                 Setting *s = VarPresetMgr.FindSetting( m_SettingIDs[i] );
                 if ( s )
                 {
-                    m_SettingChoice.AddItem( s->GetName(), i );
+                    m_SettingChoice.AddItemRaw( s->GetName(), i );
 
                     snprintf( str, sizeof( str ), "%s", s->GetName().c_str() );
                     m_SettingBrowser->add( str );
@@ -395,8 +396,7 @@ void VarPresetEditorScreen::UpdateVarBrowser()
 
     m_VarBrowser->column_char( ':' );         // use : as the column character
 
-    snprintf( str, sizeof( str ), "@b@.COMP:@b@.GROUP:@b@.PARM" );
-    m_VarBrowser->add( str );
+    m_VarBrowser->add( VSPTranslateBrowserHeader( "@b@.COMP:@b@.GROUP:@b@.PARM" ).c_str() );
 
     if ( ValidGroup() )
     {

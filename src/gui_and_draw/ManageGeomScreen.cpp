@@ -302,7 +302,7 @@ void ManageGeomScreen::LoadBrowser()
             if ( vPtr )
             {
                 string vstr = vPtr->GetName();
-                geom_tree_item->label( VSPTranslate( vstr ).c_str() );
+                geom_tree_item->label( vstr.c_str() );
                 if ( vPtr->GetAttrCollection()->GetAttrDataFlag() )
                 {
                     geom_tree_item->labelcolor( FL_DARK_MAGENTA );
@@ -429,7 +429,7 @@ void ManageGeomScreen::LoadBrowser()
                 // Set icons of tree based on geom's show/surf state (to be shown if not indeterminate)
                 geom_tree_item->SetShowState( gPtr->GetSetFlag( vsp::SET_SHOWN ) );
                 geom_tree_item->SetSurfState( gPtr->m_GuiDraw.GetDrawType() );
-                geom_tree_item->label( VSPTranslate( label_str ).c_str() );
+                geom_tree_item->label( label_str.c_str() );
 
                 // Set label color if it has attributes or is orphaned
                 int label_color = has_attr ? FL_DARK_MAGENTA : FL_FOREGROUND_COLOR;
@@ -502,16 +502,14 @@ void ManageGeomScreen::LoadActiveGeomOutput()
     vector< string > activeVec = m_VehiclePtr->GetActiveGeomVec();
     if ( m_VehSelected )
     {
-        const string display_name = VSPTranslate( m_VehiclePtr->GetName() );
-        m_ActiveGeomInput.Update( display_name.c_str() );
+        m_ActiveGeomInput.Update( m_VehiclePtr->GetName().c_str() );
     }
     else if ( activeVec.size() == 1 )
     {
         Geom* gptr = m_VehiclePtr->FindGeom( activeVec[0] );
         if ( gptr )
         {
-            const string display_name = VSPTranslate( gptr->GetName() );
-            m_ActiveGeomInput.Update( display_name.c_str() );
+            m_ActiveGeomInput.Update( gptr->GetName().c_str() );
         }
     }
     else if ( activeVec.size() > 1 )
