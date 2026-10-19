@@ -59,6 +59,42 @@ not establish native platform success or GUI acceptance. GitHub documents that
 | macos-14 | ARM64 | 3.11 | 1.26.4 |
 | macos-15-intel | x86_64 | 3.11 | 1.26.4 |
 
+### Public archive name mapping
+
+`scripts/native_plan.py:asset_name` is the single naming source for the new five-platform rc
+packager, verification reports, release assembly, exact checksum list, promotion extraction and
+Linux GUI hash binding. Public names use `OpenVSP-<version>-<archive platform>-zh-CN.zip` for each
+supported family (3.51.2, 3.51.3, 3.53.0, 3.54.0 and 3.55.0). Internal platform/job IDs, runners,
+architectures, Python versions and compiler choices are unchanged:
+
+| Internal platform ID | Public archive platform |
+|---|---|
+| `Ubuntu-24.04_amd64` | `Ubuntu-24.04_amd64` |
+| `Ubuntu-24.04_arm64-Python3.12` | `Ubuntu-24.04_arm64-Python3.12` |
+| `win64` | `win64-Python3.11` |
+| `macOS-14-arm64-Python3.11` | `macos-14-ARM64-Python3.11` |
+| `macOS-15-x86_64-Python3.11` | `macos-15-intel-X64-Python3.11` |
+
+The [official download page](https://openvsp.org/download.php), checked on 2026-10-19, links these
+3.55.0 Python 3.11/Ubuntu 24.04 assets (the filenames below are taken from its actual link targets):
+
+- `OpenVSP-3.55.0-win64-Python3.11.zip`
+- `OpenVSP-3.55.0-macos-15-intel-X64-Python3.11.zip`
+- `OpenVSP-3.55.0-macos-15-ARM64-Python3.11.zip`
+- `OpenVSP-3.55.0-Ubuntu-24.04_amd64.deb`
+
+Only the naming convention is adopted. This round keeps its actual macOS 14 ARM64 target instead
+of claiming the official current macOS 15 target; no runner or minimum-OS upgrade is implied.
+Ubuntu AMD64 remains a ZIP rather than pretending to be the official Debian package. Ubuntu ARM64
+with Python 3.12 is an additional downstream build, not an official precompiled distribution.
+The current official spellings are applied consistently across the five supported version families;
+this does not claim that every historical upstream release provided the same target or package format.
+
+Historical `backfill_*` names and legacy dual-platform naming remain unchanged. For new rc artifacts,
+old Windows/Mac names, alternate spellings and extra files are rejected rather than normalized or
+accepted as fallbacks. The public set remains exactly five ZIPs and `SHA256SUMS.txt`; the manifest,
+reports and reviewed package hashes must bind these exact filenames and original bytes.
+
 ### macOS compiler and runner boundary
 
 The current native matrix uses Homebrew LLVM 16 on both macOS targets. Before installation,
