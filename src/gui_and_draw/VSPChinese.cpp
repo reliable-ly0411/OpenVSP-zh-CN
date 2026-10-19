@@ -974,6 +974,8 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Cobra", "眼镜蛇进气道" }, { "Comp Geom - Mesh, Intersect, Trim", "组合几何——网格、求交与修剪" },
         { "Conformal", "共形几何" }, { "Edit Curve", "编辑曲线" },
         { "Export Custom Script", "导出自定义脚本" }, { "Custom", "自定义几何体" },
+        // Material action, distinct from the custom-geometry screen title.
+        { "Customize Material", "自定义" },
         { "Degen Geom - Compute Models, File IO", "简化几何——计算模型与文件输入输出" },
         { "Design Variables", "设计变量" }, { "DXF Options", "DXF 选项" },
         { "Ellipsoid", "椭球体" }, { "Export", "导出" }, { "FEA Part Edit", "FEA 部件编辑" },
