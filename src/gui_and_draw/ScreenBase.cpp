@@ -490,7 +490,8 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_GenLayout.AddChoice( m_MaterialChoice, "Material:", m_GenLayout.GetButtonWidth() );
 
     m_GenLayout.SetFitWidthFlag( false );
-    m_GenLayout.AddButton( m_CustomMaterialButton, "Custom" );
+    // A display-only action key: keep the stored material name "Custom" unchanged.
+    m_GenLayout.AddButton( m_CustomMaterialButton, "Customize Material" );
     m_GenLayout.ForceNewLine();
 
     m_GenLayout.SetFitWidthFlag( true );
