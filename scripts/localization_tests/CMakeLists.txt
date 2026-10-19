@@ -48,3 +48,5 @@ add_test(NAME localization_catalog_guard_tests
   COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_translation_catalog.py)
 add_test(NAME localization_help_anchors
   COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_help_anchors.py)
+add_test(NAME localization_help_build_layout
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_help_build_layout.py)
