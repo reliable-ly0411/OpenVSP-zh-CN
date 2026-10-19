@@ -26,19 +26,23 @@ NASA/OpenVSP 官方汉化。维护架构与强制规则统一见 [`AGENTS.md`](A
 从 [Releases](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases) 下载与系统对应的
 ZIP 和 `SHA256SUMS.txt`，校验后解压。发布包不会覆盖系统目录。
 
+历史 Release 的原始 SHA-256 清单可能仍记载旧文件名，名称对应关系及不变校验值见该 Release 正文。
+后续新发布的清单使用新文件名。
+
 以下命令以已发布的 3.53.0 为例；自动同步构建的下载方式见“上游更新与发布”。
 
 Ubuntu 24.04 x86_64：
 
 ```bash
 sudo apt-get install fonts-noto-cjk
-sha256sum -c SHA256SUMS.txt --ignore-missing
-unzip OpenVSP-3.53.0-Codex-AI-zh-CN-Ubuntu-24.04-x86_64.zip
+sha256sum OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip
+# 将输出与该 Release 正文公布的 SHA-256 比对一致后再解压
+unzip OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip
 cd OpenVSP-3.53.0-Linux
 ./vsp
 ```
 
-Windows x64：解压 `OpenVSP-3.53.0-Codex-AI-zh-CN-Windows-x64.zip`，运行目录中的
+Windows x64：解压 `OpenVSP-3.53.0-win64-zh-CN.zip`，运行目录中的
 `vsp.exe`。如 Windows 阻止从网络下载的程序，先在 ZIP 文件属性中解除锁定再解压。
 
 Ubuntu 图形构建固定采用 FLTK X11 后端，在 Wayland 会话中通过 XWayland 运行，以规避
@@ -81,34 +85,43 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
-以下保留历史流程说明。新候选使用 `<版本>-zh-CN.rc.<序号>`；统一五平台构建与推广
-工作流另行接入，源码守卫通过不表示原生平台或 GUI 已经验收。
+统一入口由默认分支的发布基础设施提供；先完成基础设施审查，再按下列步骤构建本族候选。
+源码守卫通过不表示原生平台或 GUI 已经验收。
 
-1. `Sync Build and Publish OpenVSP Upstream` 每周一北京时间 11:17 检查官方 `main`（GitHub
-   定时运行可能延迟），也可在 Actions 手动运行；`upstream_ref` 留空跟随配置分支，或填
-   官方标签/提交，例如 `OpenVSP_3.54.0`。
-2. 发现更新后自动合并并保留旧汉化与官方上游的双父历史，同步当前版本字段及“未发布”
-   说明；本仓库工作流单独保留。实际代码冲突会停止并在 Actions 中报告。
-3. 自动调用 Linux/Windows 构建，执行本地化守卫、翻译回归、模型冒烟、中文 CLI、
-   动态库及压缩包检查；只有两平台均通过才快进 `main`。并发更新不会被强制覆盖。
-4. 同步成功后自动公开到 [Releases](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases)，
-   使用 `<版本>-Codex-AI-zh-CN-auto.<上游提交前12位>` 不可变预发布标签，附带双平台
-   ZIP、SHA-256 和对应更新说明；正式版本的 Latest 标记保留。自动构建可能含新增英文界面，
-   GUI 未人工验收。Actions Artifacts 另保留 14 天，候选分支用于排查和回滚。
-   即使没有新的上游提交，尚未发布的当前自动构建也会被构建并补发；已发布版本不会覆盖。
-5. 正式发布仍需完成补译与 GUI 验收、整理与标签一致的更新说明，再创建
-   `<版本>-Codex-AI-zh-CN` 标签；现有发布流程生成双平台 ZIP、SHA-256 及更新说明。
+1. `Prepare and validate OpenVSP upstream candidates` 每周一北京时间 11:17 检查最新官方
+   `OpenVSP_x.y.z` 标签（GitHub 定时任务可能延迟），自动保留双父历史并生成可验收候选。
+   发现真实代码冲突即停止。此阶段只输出候选分支与轻量源代码检查结果。
+2. 手动填写 `upstream_ref=main` 或未标记提交时，版本明确带 `-zh-CN.dev.<sha>`；官方
+   已发布标签的候选带 `-zh-CN.candidate.<sha>`。二者均不自动推进 main、创建公开 Release
+   或替换历史资产；完成补译及检查后，通过保留历史的合并进入开发分支。
+3. 新预发布统一为 `<版本>-zh-CN.rc.<递增序号>`，例如 `3.54.0-zh-CN.rc.1`。
+   `Build five-platform localized prerelease` 只需精确 40 位 `source_sha` 与 `new_tag`，
+   从该版本族最新已发布修订的后继提交构建 Ubuntu 24.04 AMD64/ARM64、Windows x64、
+   macOS 14 ARM64 与 macOS 15 Intel 五个原生平台。Linux Python 3.12，Windows/macOS
+   Python 3.11，统一 NumPy 1.26.4。源码必须已有与新标签完全一致的更新说明。
+4. 五平台分别验证中文 CLI、模型保存重开、用户名称及路径边界、空目录启动时的自定义
+   几何体、动态依赖、包资源、全新 Python venv 安装及哈希。任一平台失败均不进入发布。
+   截图只是待目视证据，至少逐族人工检查原始 Linux 包的主界面、机翼页和名称/路径回归。
+5. 人工检查后运行 `Promote GUI-reviewed native prerelease`，填写原 `build_run_id`、
+   `source_sha`、`new_tag`、原 `SHA256SUMS.txt` 的 SHA-256、目视通过的 Linux ZIP 的
+   SHA-256 及真实审阅说明。它下载并校验原 run 的原始产物，不重新编译；创建新草稿、
+   逐项下载复核后才公开预发布。其他平台未做的 GUI 验收会明确说明，不推断为已通过。
 
-同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
-手动运行构建发布流程时可填写精确的 40 位 `source_commit`；两平台通过后才创建新标签。
-选中 `prerelease` 保留稳定版 Latest，选中 `draft` 则在下载校验后保留草稿供桌面验收。
-自动及手动发布的标题和六段式说明统一由 `scripts/release_notes.py` 生成。
+新 Release 资产仅保留五个官方风格 ZIP 和完整 `SHA256SUMS.txt`，正文简述成果与边界；
+技术报告、截图及审阅说明放在 CI 或 [默认分支的技术验收说明](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/main/docs/native-prerelease-verification.md)。
+下载到同一目录后可用 `sha256sum -c SHA256SUMS.txt` 校验全部 ZIP，Windows 使用
+`Get-FileHash 文件名.zip -Algorithm SHA256` 比对对应清单条目。
+
+旧标签、旧公开资产及旧清单保持原样。草稿恢复仅补缺失资产，已存在的资产必须与原构建
+逐字节相同；冲突时保留草稿并停止，改用新 rc 标签。不会修改仓库安全设置，稳定版 Latest
+不变。CI 原始产物保留 14 天，GUI 审阅记录保留 30 天；过期后需要新构建、新验收与新标签。
 
 ## 未发布
 
 当前目标为 `3.54.0-zh-CN.rc.1`。以下记录源码候选的修复与验证边界；本族完整 GUI、
-原生脚本、Linux/Windows 安装包与运行时检查尚待完成，不能据此宣称已发布或全面汉化。
-候选身份守卫已整合，统一五平台构建与推广工作流另行接入。
+原生脚本、五平台安装包与运行时检查尚待完成，不能据此宣称已发布或全面汉化。
+候选身份守卫已整合；以默认分支统一流程对精确源码 SHA 构建，人工验收后晋级同一 run 的原始产物。
+本次维护规则已与五平台手动构建、固定哈希 GUI 审阅和不覆盖历史发布的门槛对齐。
 
 ## 3.54.0-zh-CN.rc.1
 
@@ -142,7 +155,7 @@ cmake --build build --target package --config Release --parallel 2
   回归；完整模型保存重开和 CustomScripts 原生脚本已随源码提供，仍需本族运行验收。
 - 隔离占位文件实际生成 `cp312-cp312-linux_x86_64` 非 pure wheel，核实 NumPy 上限、
   原生扩展文件名、动态库和许可清单包含；这仅验证打包元数据，不代表原生扩展可导入。
-- 真实原生运行、完整链接、双平台打包、Python 扩展导入及 GUI 验收仍待完成。
+- 真实原生运行、完整链接、五平台打包、Python 扩展导入及 GUI 验收仍待完成。
 
 ## 3.54.0-Codex-AI-zh-CN-r1
 
