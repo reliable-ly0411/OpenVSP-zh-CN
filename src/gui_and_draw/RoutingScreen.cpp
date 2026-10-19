@@ -5,6 +5,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "RoutingScreen.h"
 #include "ScreenMgr.h"
 #include "RoutingGeom.h"
@@ -471,8 +472,7 @@ void RoutingScreen::UpdateBrowser()
 
         m_RoutingPointBrowser->column_char( ':' );
 
-        snprintf( str, sizeof( str ),  "@b@.NAME:@b@.PARENT:@b@.SURF" );
-        m_RoutingPointBrowser->add( str );
+        m_RoutingPointBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.PARENT:@b@.SURF" ).c_str() );
         m_RoutingPointBrowser->addCopyText( "header" );
 
         vector < RoutingPoint* > pt_vec = routing_ptr->GetAllPt();

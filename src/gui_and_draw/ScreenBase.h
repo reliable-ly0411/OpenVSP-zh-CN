@@ -132,6 +132,8 @@ public:
     virtual ~BasicScreen();
 
     virtual void SetTitle( const string& title );
+    // Already translated labels and opaque model values must bypass translation.
+    virtual void SetTitleRaw( const string& title );
     string GetTitle();
 
     virtual bool Update()

@@ -5,6 +5,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "GearScreen.h"
 #include "ScreenMgr.h"
 #include "GearGeom.h"
@@ -1890,8 +1891,7 @@ void GearScreen::UpdateBogieBrowser()
 
     m_BogieBrowser->column_char( ':' );
 
-    snprintf( str, sizeof( str ),  "@b@.NAME:@b@.CONFIGURATION:@b@.TIRE" );
-    m_BogieBrowser->add( str );
+    m_BogieBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.CONFIGURATION:@b@.TIRE" ).c_str() );
 
     m_TireBogieChoice.ClearItems();
     m_TireBogieChoice.AddItem( "None Selected", -1 );
@@ -1905,8 +1905,8 @@ void GearScreen::UpdateBogieBrowser()
             string bogieName = bogies[i]->GetDesignation();
 
             m_BogieBrowser->add( bogieNamed.c_str() );
-            m_TireBogieChoice.AddItem( bogieName.c_str(), i );
-            m_RetBogieChoice.AddItem( bogieName.c_str(), i );
+            m_TireBogieChoice.AddItemRaw( bogieName.c_str(), i );
+            m_RetBogieChoice.AddItemRaw( bogieName.c_str(), i );
         }
     }
     m_TireBogieChoice.UpdateItems();

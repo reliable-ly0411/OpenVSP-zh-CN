@@ -191,7 +191,7 @@ MainVSPScreen::MainVSPScreen( ScreenMgr* mgr ) : ActionScreen( mgr )
 
 
     // m_AboutMenuItem.Init( mgr, m_MenuBar, "Help/About...", ScreenMgr:: );
-    m_LocalizationAboutMenuItem.Init( this, m_MenuBar, "Help/About Codex AI Localization..." );
+    m_LocalizationAboutMenuItem.Init( this, m_MenuBar, "Help/About Chinese Localization..." );
     m_OnlineHelpMenuItem.Init( this, m_MenuBar, "Help/Help..." );
     // m_VersionMenuItem.Init( mgr, m_MenuBar, "Help/Check Latest Version...", ScreenMgr:: );
 
@@ -228,7 +228,7 @@ MainVSPScreen::MainVSPScreen( ScreenMgr* mgr ) : ActionScreen( mgr )
     m_GenLayout.AddX( filew );
 
     m_TitleBox = new Fl_Box(m_GenLayout.GetX(), m_GenLayout.GetY(), m_GenLayout.GetRemainX(), 20, VSPVERSION3 );
-    const string localized_version = string( VSPVERSION3 ) + " | Codex AI 生成汉化版";
+    const string localized_version = string( VSPVERSION3 ) + " | 简体中文";
     m_TitleBox->copy_label( localized_version.c_str() );
     m_TitleBox->box(FL_EMBOSSED_BOX);
     m_TitleBox->labeltype(FL_EMBOSSED_LABEL);
@@ -373,19 +373,19 @@ void MainVSPScreen::CloseCallBack( Fl_Widget *w )
 void MainVSPScreen::SetFileLabel( const string &fname )
 {
     // In status bar at bottom of screen, full path to file.
-    string label = "File Name: ";
-    label.append( fname );
-    m_FileNameBox->copy_label( VSPTranslate( label ).c_str() );
+    const string label = VSPTranslateLabelAndValue( "File Name:", fname );
+    m_FileNameBox->copy_label( label.c_str() );
 
     // In menu bar, file name only.
-    string title = string( VSPVERSION2 ) + " [Codex AI 汉化版]     " + GetFilename( fname );
+    string title = string( VSPVERSION2 ) + " [简体中文]     " + GetFilename( fname );
     m_FLTK_Window->copy_label( title.c_str() );
 }
 
 void MainVSPScreen::NewModel()
 {
-    switch( fl_choice( VSPTranslate( "New will lose any changes.  Do you want to proceed (discarding changes) or save?" ).c_str(),
-                       VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "Discard" ).c_str(), VSPTranslate( "Save" ).c_str() ) )
+    switch( fl_choice( "%s", VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "Discard" ).c_str(),
+                       VSPTranslate( "Save" ).c_str(),
+                       VSPTranslate( "New will lose any changes.  Do you want to proceed (discarding changes) or save?" ).c_str() ) )
     {
         case(0):  // Cancel
             return;
@@ -415,8 +415,9 @@ void MainVSPScreen::NewModel()
 
 void MainVSPScreen::ExitVSP()
 {
-    switch( fl_choice( VSPTranslate( "VSP is exiting. Save or discard your changes." ).c_str(),
-                       VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "Discard" ).c_str(), VSPTranslate( "Save" ).c_str() ) )
+    switch( fl_choice( "%s", VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "Discard" ).c_str(),
+                       VSPTranslate( "Save" ).c_str(),
+                       VSPTranslate( "VSP is exiting. Save or discard your changes." ).c_str() ) )
     {
         case(0):
             return;
@@ -698,16 +699,18 @@ void MainVSPScreen::ActionCB( void * data )
     }
     else if ( data == &m_LocalizationAboutMenuItem )
     {
-        fl_message_title( "关于 Codex AI 汉化" );
-        fl_message(
-            "%s",
-            "OpenVSP 简体中文汉化版\n\n"
-            "【声明】本中文本地化由 OpenAI Codex AI 生成并维护。\n"
+        const string localization_about =
+            string( "OpenVSP 简体中文汉化版\n" ) +
+            "软件版本：" + VSPVERSION4 + "\n"
+            "汉化版本：3.51.2-zh-CN.rc.1\n"
+            "汉化仓库：https://github.com/reliable-ly0411/OpenVSP-zh-CN\n\n"
             "汉化内容包括界面、动态标签、命令行帮助及离线帮助文档。\n\n"
             "OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，\n"
             "仍属于 NASA/OpenVSP 原作者与贡献者，并遵循 NOSA 1.3。\n"
-            "Codex 是本地化与代码修改工具，不是 OpenVSP 原作者。\n\n"
-            "接力维护说明：AI_LOCALIZATION_HANDOFF.md" );
+            "维护架构与规则：AGENTS.md";
+
+        fl_message_title( "关于简体中文汉化" );
+        fl_message( "%s", localization_about.c_str() );
     }
     else if ( data == &m_OnlineHelpMenuItem )
     {

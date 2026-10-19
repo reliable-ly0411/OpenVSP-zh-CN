@@ -1,11 +1,14 @@
-include openvsp/_vsp.so 
-include openvsp/_vsp_g.so
+include openvsp/_vsp*
+include openvsp/_vsp_g*
 
 include openvsp/vspaero*
 include openvsp/vsploads*
 include openvsp/vspviewer*
 
 graft openvsp/help_vsp
+graft openvsp/lib
+graft openvsp/third-party-licenses
+include openvsp/third-party-dependencies.json
 
 recursive-include openvsp *.py
 

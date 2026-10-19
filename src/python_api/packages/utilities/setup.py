@@ -28,6 +28,6 @@ setup(
     license='MIT',
     author='Uber Technologies, Inc.',
     author_email='',
-    install_requires=["numpy", "matplotlib","scipy"],
+    install_requires=["numpy>=1.26.4,<2", "matplotlib","scipy"],
     include_package_data=True
 )

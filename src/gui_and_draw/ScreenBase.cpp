@@ -185,6 +185,12 @@ string BasicScreen::GetTitle()
     return m_Title;
 }
 
+void BasicScreen::SetTitleRaw( const string& title )
+{
+    m_Title = title;
+    m_FL_TitleBox->copy_label( title.c_str() );
+}
+
 void BasicScreen::HelpCallBack( Fl_Widget *w )
 {
     if ( w == m_MasterHelpButton )
@@ -393,7 +399,7 @@ bool VehScreen::Update()
 
     if ( veh )
     {
-        SetTitle( veh->GetName() );
+        SetTitleRaw( veh->GetName() );
     }
 
     TabScreen::Update();
@@ -1739,9 +1745,9 @@ bool GeomScreen::Update()
     TabScreen::Update();
 
     //==== Name ===//
-    const string display_name = VSPTranslate( geom_ptr->GetName() );
+    const string display_name = geom_ptr->GetName();
     m_NameInput.Update( display_name );
-    SetTitle( m_GeomTypeName + ": " + geom_ptr->GetName() );
+    SetTitleRaw( VSPTranslate( m_GeomTypeName ) + "：" + geom_ptr->GetName() );
 
     //==== Color ====//
     m_ColorPicker.Update( geom_ptr->GetColor() );
@@ -1811,9 +1817,9 @@ bool GeomScreen::Update()
     m_SymAncestorChoice.ClearItems();
     for( int i = 0; i < (int) ancestorNames.size(); i++ )
     {
-        const string display_name = VSPTranslate( ancestorNames[i] );
+        const string display_name = i == 0 ? VSPTranslate( "GLOBAL ORIGIN" ) : ancestorNames[i];
         snprintf( str, sizeof( str ),  "%3d %s", i, display_name.c_str() );
-        m_SymAncestorChoice.AddItem( str, i );
+        m_SymAncestorChoice.AddItemRaw( str, i );
     }
     m_SymAncestorChoice.UpdateItems();
     m_SymAncestorChoice.Update( geom_ptr->m_SymAncestor.GetID() );
@@ -2010,7 +2016,7 @@ bool GeomScreen::Update()
     m_SetBrowser->clear();
     for ( int i = SET_SHOWN ; i < ( int )set_name_vec.size() ; i++ )
     {
-        const string display_name = VSPTranslate( set_name_vec[i] );
+        const string display_name = i < SET_FIRST_USER ? VSPTranslate( set_name_vec[i] ) : set_name_vec[i];
         m_SetBrowser->add( display_name.c_str(), static_cast<int>( set_flag_vec[i] ) );
     }
     m_SetBrowser->vposition( v_pos );
@@ -2661,7 +2667,7 @@ bool GeomScreen::Update()
     m_SubSurfBrowser->column_char( ':' );
 
     snprintf( str, sizeof( str ),  "@b@.NAME:@b@.TYPE:@b@.SURF" );
-    m_SubSurfBrowser->add( str );
+    m_SubSurfBrowser->add( VSPTranslateBrowserHeader( str ).c_str() );
 
     string ss_name, ss_type;
     int ss_surf_ind;
@@ -2751,7 +2757,7 @@ void GeomScreen::UpdateMaterialNames()
     m_MaterialChoice.AddItem( "DEFAULT" );
     for( int i = 0; i < (int) matNames.size(); i++ )
     {
-        m_MaterialChoice.AddItem( matNames[i] );
+        m_MaterialChoice.AddItemRaw( matNames[i] );
     }
 }
 
@@ -5464,8 +5470,8 @@ void SkinScreen::GuiDeviceCallBack( GuiDevice* gui_device )
     }
     else if ( gui_device == &m_ClearAllSkinningButton )
     {
-        switch ( fl_choice( VSPTranslate( "Disable and clear all skinning values from stack?" ).c_str(),
-                            VSPTranslate( "Cancel" ).c_str(), "清除蒙皮", 0 ) )
+        switch ( fl_choice( "%s", VSPTranslate( "Cancel" ).c_str(), "清除蒙皮", 0,
+                            VSPTranslate( "Disable and clear all skinning values from stack?" ).c_str() ) )
         {
             case (0):
             {

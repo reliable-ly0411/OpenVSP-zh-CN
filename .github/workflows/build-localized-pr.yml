@@ -1,0 +1,35 @@
+name: Validate localized candidate source
+
+on:
+  pull_request:
+    branches: [main, 'develop/**', 'dev/**']
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact candidate commit for lightweight source checks
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - name: Source localization and Python maintenance regressions
+        run: |
+          python3 scripts/check_localization_release.py
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          git diff --check
+      - name: Lightweight C++ localization and model-name regressions
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential libxml2-dev
+          cmake -S scripts/localization_tests -B localization-tests -DVSP_TEST_XML_TEXT=ON
+          cmake --build localization-tests --parallel 2
+          ctest --test-dir localization-tests --output-on-failure

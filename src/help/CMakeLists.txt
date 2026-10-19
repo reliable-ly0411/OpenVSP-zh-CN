@@ -1,7 +1,10 @@
 CMAKE_MINIMUM_REQUIRED ( VERSION 3.24 )
 
+get_property( is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG )
 if ( is_multi_config )
     SET( conf_suffix "$<CONFIG>/" )
+else()
+    SET( conf_suffix "" )
 endif()
 
 INSTALL( DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/images/ DESTINATION help/images )
@@ -9,7 +12,7 @@ INSTALL( DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/images/ DESTINATION help/images )
 ADD_CUSTOM_TARGET ( copy_images ALL
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/images/
-        ${CMAKE_BINARY_DIR}/src/vsp/help/images/
+        ${VSP_BINARY_DIR}/vsp/${conf_suffix}help/images/
 
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/images/
@@ -18,16 +21,22 @@ ADD_CUSTOM_TARGET ( copy_images ALL
 INSTALL( FILES ${CMAKE_CURRENT_SOURCE_DIR}/github-pandoc.css DESTINATION help )
 
 ADD_CUSTOM_TARGET ( copy_css ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${VSP_BINARY_DIR}/vsp/${conf_suffix}help/
+
         COMMAND ${CMAKE_COMMAND} -E copy
         ${CMAKE_CURRENT_SOURCE_DIR}/github-pandoc.css
-        ${CMAKE_BINARY_DIR}/src/vsp/help/${conf_suffix}$ )
+        ${VSP_BINARY_DIR}/vsp/${conf_suffix}help/github-pandoc.css )
 
 INSTALL( FILES ${CMAKE_CURRENT_SOURCE_DIR}/vsp_help DESTINATION help )
 
 ADD_CUSTOM_TARGET ( copy_help_marker ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${VSP_BINARY_DIR}/vsp/${conf_suffix}help/
+
         COMMAND ${CMAKE_COMMAND} -E copy
         ${CMAKE_CURRENT_SOURCE_DIR}/vsp_help
-        ${CMAKE_BINARY_DIR}/src/vsp/help/${conf_suffix}$ )
+        ${VSP_BINARY_DIR}/vsp/${conf_suffix}help/vsp_help )
 
 IF( SWIG_FOUND AND PYTHONLIBS_FOUND )
     INSTALL( DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/images/ DESTINATION python/openvsp/openvsp/help_vsp/images )
@@ -64,6 +73,8 @@ IF( SWIG_FOUND AND PYTHONLIBS_FOUND )
 ENDIF( SWIG_FOUND AND PYTHONLIBS_FOUND )
 
 
+OPTION( VSP_USE_PREGENERATED_HELP "Use reviewed bundled HTML help without regenerating source files" ON )
+
 INCLUDE ( pandocology )
 
 FILE ( GLOB_RECURSE HELP_FILES *.md )
@@ -72,7 +83,7 @@ FOREACH ( hpath ${HELP_FILES} )
     CMAKE_PATH ( GET hpath STEM hbase )
 
     # Pandoc 3.1.9 required for tex_math_gfm
-    IF ( EXISTS "${PANDOC_EXECUTABLE}" AND "${PANDOC_VERSION}" VERSION_GREATER_EQUAL 3.1.9 )
+    IF ( NOT VSP_USE_PREGENERATED_HELP AND EXISTS "${PANDOC_EXECUTABLE}" AND "${PANDOC_VERSION}" VERSION_GREATER_EQUAL 3.1.9 )
         ADD_DOCUMENT ( TARGET ${hbase}
                        OUTPUT_FILE ${hbase}.html
                        SOURCES ${hbase}.md
@@ -86,9 +97,12 @@ FOREACH ( hpath ${HELP_FILES} )
         INSTALL ( FILES ${CMAKE_CURRENT_BINARY_DIR}/${hbase}.html DESTINATION help )
 
         ADD_CUSTOM_COMMAND ( TARGET ${hbase} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                ${VSP_BINARY_DIR}/vsp/${conf_suffix}help/
+
                 COMMAND ${CMAKE_COMMAND} -E copy
                 ${hbase}.html
-                ${CMAKE_BINARY_DIR}/src/vsp/help/${conf_suffix}${hbase}.html )
+                ${VSP_BINARY_DIR}/vsp/${conf_suffix}help/${hbase}.html )
 
         ADD_CUSTOM_COMMAND ( TARGET ${hbase} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy
@@ -110,9 +124,12 @@ FOREACH ( hpath ${HELP_FILES} )
             INSTALL ( FILES ${CMAKE_CURRENT_SOURCE_DIR}/html/${hbase}.html DESTINATION help )
 
             ADD_CUSTOM_TARGET ( copy_html_${hbase} ALL
+                    COMMAND ${CMAKE_COMMAND} -E make_directory
+                    ${VSP_BINARY_DIR}/vsp/${conf_suffix}help/
+
                     COMMAND ${CMAKE_COMMAND} -E copy
                     ${CMAKE_CURRENT_SOURCE_DIR}/html/${hbase}.html
-                    ${CMAKE_BINARY_DIR}/src/vsp/help/${conf_suffix}${hbase}.html )
+                    ${VSP_BINARY_DIR}/vsp/${conf_suffix}help/${hbase}.html )
 
             IF( SWIG_FOUND AND PYTHONLIBS_FOUND )
                 INSTALL ( FILES ${CMAKE_CURRENT_SOURCE_DIR}/html/${hbase}.html DESTINATION python/openvsp/openvsp/help_vsp )
