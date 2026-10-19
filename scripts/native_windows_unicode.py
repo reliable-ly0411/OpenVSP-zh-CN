@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 """Bounded Windows Unicode diagnostics, using generated fixtures only."""
 import argparse
+import base64
 import ctypes
 import errno
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 
-from native_functional import (CLI_BASENAME, CLI_INPUT_SUFFIXES, PASS_MARKERS,
+from native_functional import (CLI_BASENAME, CLI_INPUT_SUFFIXES, COMPGEOM_FILENAME, HISTORY_FILENAME, PASS_MARKERS,
                                STL_FILENAME, FunctionalCheckError, validate_stl,
                                verify_cli_history, verify_functional_outputs)
 from native_verify import BOUNDARY_MODEL_FILENAME, verify_boundary_output
 
 SOURCE_BASELINE = '1d6b0b6078716db5854ff04a92610aa58956a0c6'
-SOURCE_PATCH_SHA256 = '9c41e5bf1fb22b04d2d4aed18700d15f920a74053cd22985dfc8d3cc826e916b'
+SOURCE_PATCH_SHA256 = '0580036c4836c2958e99bb760c09cfe31247e5a2cc949ce2f94cdae8d9594e3e'
+RAW_FIXTURE_NAMES = (STL_FILENAME, COMPGEOM_FILENAME, HISTORY_FILENAME, CLI_BASENAME + '.history',
+                     'Tagged 100% 中文.stl', '目录 100%/Export 中文.stl', 'Export 100%.stl')
+
 EXPECTED = dict(ascii='Export 100% &.stl', unicode=STL_FILENAME,
                 nonbmp='Export 🚀 100% &.stl', absolute='目录 100%/Absolute 中文.stl', blocked='blocked.stl',
                 directory='目录 100%/Export 中文.stl', missing='not-created/export.stl')
@@ -71,6 +76,101 @@ def capture(command, directory, roots=()):
                              truncated=len(data) > 16384,
                              text=redact(data.decode('utf-8', errors='replace'), roots)[:16384])
     return record, stdout.decode('utf-8', errors='replace') + stderr.decode('utf-8', errors='replace')
+
+
+
+def fixture_bytes(directory, names, roots=()):
+    """Preserve only bounded, named generated outputs; never rewrite their bytes."""
+    records = []
+    roots = (*roots, directory, Path.home(), os.environ.get('GITHUB_WORKSPACE'),
+             os.environ.get('TEMP'), os.environ.get('TMP'))
+    if len(names) > len(RAW_FIXTURE_NAMES) or any(n not in RAW_FIXTURE_NAMES for n in names):
+        raise ValueError('Only the fixed generated-file whitelist may be retained')
+    for name in names:
+        path = Path(directory) / name
+        record = path_record(directory, name)
+        if path.is_symlink():
+            record['omitted'] = 'symlink'
+        elif not record.get('file'):
+            record['omitted'] = 'missing-or-nonregular'
+        else:
+            if not 0 < record['bytes'] <= 1024 * 1024:
+                record['omitted'] = 'size-limit'
+            else:
+                try:
+                    data = path.read_bytes()
+                except OSError:
+                    record['omitted'] = 'read-error'
+                    records.append(record)
+                    continue
+                record['sha256'] = hashlib.sha256(data).hexdigest()
+                try:
+                    decoded = data.decode('utf-8')
+                    # These fixtures are text. Refuse paths, including unexpected
+                    # drive/UNC/POSIX roots, before publishing the original bytes.
+                    unsafe = redact(decoded, roots) != decoded or re.search(
+                        r'(?:[A-Za-z]:[\\/]|\\\\|(?:^|[\s,=\"\'])/)', decoded)
+                    if unsafe:
+                        record['omitted'] = 'machine-path'
+                    else:
+                        record.update(encoding='base64-original-bytes',
+                                      base64=base64.b64encode(data).decode('ascii'))
+                except UnicodeError:
+                    record['omitted'] = 'non-utf8-fixture'
+        records.append(record)
+    return records
+
+
+def pattern_probe(executable):
+    report = dict(schema=1, kind='native-file-pattern-comparison',
+                  source_baseline=SOURCE_BASELINE, environment=codepages(), cases=[])
+    for mode in ('baseline', 'patched'):
+        for case in ('ascii', 'unicode', 'nonbmp', 'directory', 'unicode-pattern'):
+            with tempfile.TemporaryDirectory(prefix='vsp-unicode-pattern-') as name:
+                work = Path(name)
+                directory = work / '目录 100%' if case == 'directory' else work
+                directory.mkdir(exist_ok=True)
+                stl = ('Export 中文.stl' if case in ('unicode', 'unicode-pattern') else
+                       'Export 🚀.stl' if case == 'nonbmp' else 'Export 100% &.stl')
+                target = 'native-中文.1.tag' if case == 'unicode-pattern' else 'native-analysis.1.tag'
+                # Include an unrelated tag and a directory that matches the glob.
+                fixtures = {stl: b'unchanged-stl-fixture\n', target: b'target-tag\n',
+                            'unrelated.tag': b'unrelated-tag\n'}
+                for filename, data in fixtures.items(): (directory / filename).write_bytes(data)
+                (directory / 'native-analysis.directory.tag').mkdir()
+                result, _ = capture([executable, mode, case], work, [executable.parent])
+                try:
+                    unchanged = all((directory / n).read_bytes() == d for n, d in fixtures.items())
+                except OSError:
+                    unchanged = False
+                result.update(mode=mode, case=case, files=directory_records(work), files_unchanged=unchanged)
+                try:
+                    result['scan'] = json.loads(result['stdout']['text'])
+                    scan = result['scan']
+                    result['transport_passed'] = (result['error'] is None and isinstance(scan, dict)
+                        and isinstance(scan.get('source_sha256'), str)
+                        and re.fullmatch('[0-9a-f]{64}', scan['source_sha256']) is not None)
+                except (ValueError, TypeError):
+                    result['transport_passed'] = False
+                result['scan_passed'] = (result['transport_passed'] and result['exit_code'] == 0
+                    and scan.get('exception') is None and type(scan.get('matched')) is int
+                    and scan['matched'] == 1 and scan.get('exact_target') is True
+                    and result['files_unchanged'])
+                report['cases'].append(result)
+    fixed = [r for r in report['cases'] if r['mode'] == 'patched']
+    old = {r['case']: r for r in report['cases'] if r['mode'] == 'baseline'}
+    # On the measured Windows ACP1252 runner, the original function must expose
+    # its actual conversion exception. A different environment is not equivalent.
+    windows = report['environment']['platform'] == 'Windows'
+    report['baseline_exception_reproduced'] = all(
+        old[c]['transport_passed'] and old[c]['exit_code'] == 3
+        and old[c]['scan'].get('exception') == 'system_error'
+        and old[c]['scan'].get('error_code') == 1113
+        and old[c]['files_unchanged'] for c in ('unicode', 'nonbmp', 'unicode-pattern'))
+    report['passed'] = (all(r['scan_passed'] for r in fixed) and old['ascii']['scan_passed']
+        and (not windows or (report['environment']['acp'] == 1252
+                             and report['baseline_exception_reproduced'])))
+    return report
 
 
 def codepages():
@@ -195,6 +295,19 @@ def package(package_root, source, phase):
                 else:
                     result['passed'] = False
                     result['direct_solver'] = dict(passed=False, reason='input-missing')
+            names = ([STL_FILENAME, COMPGEOM_FILENAME, HISTORY_FILENAME, CLI_BASENAME + '.history']
+                     if case == 'functional' else
+                     ['Tagged 100% 中文.stl', '目录 100%/Export 中文.stl', 'Export 100%.stl']
+                     if case == 'stl-variants' else [])
+            result['fixture_bytes'] = fixture_bytes(work, names, [exe.parent, source, scripts])
+            if case == 'functional' and 'direct_solver' in result:
+                result['direct_solver']['fixture_bytes'] = fixture_bytes(
+                    cli, [CLI_BASENAME + '.history'], [exe.parent, source, scripts])
+            result['fixture_evidence_complete'] = not any(r.get('omitted') for r in result['fixture_bytes'])
+            if case == 'functional':
+                result['fixture_evidence_complete'] &= not any(
+                    r.get('omitted') for r in result['direct_solver']['fixture_bytes'])
+            result['passed'] = result['passed'] and result['fixture_evidence_complete']
             report['cases'].append(result)
     report['passed'] = all(case['passed'] for case in report['cases'])
     return report
@@ -212,7 +325,7 @@ def apply_patch(source, tooling):
     subprocess.run(['git', '-C', str(source), 'apply', '--check', '-'], input=patch, check=True)
     subprocess.run(['git', '-C', str(source), 'apply', '-'], input=patch, check=True)
     subprocess.run(['git', '-C', str(source), 'diff', '--check'], check=True)
-    paths = ['src/geom_core/Vehicle.cpp', 'src/util/FileUtil.h']
+    paths = ['src/geom_core/Vehicle.cpp', 'src/util/FileUtil.cpp', 'src/util/FileUtil.h']
     changed = subprocess.check_output(['git', '-C', str(source), 'diff', '--name-only'], text=True).splitlines()
     if sorted(changed) != paths:
         raise ValueError('Unexpected source file changed')
@@ -257,7 +370,8 @@ def compare(baseline, patched):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
-    p = sub.add_parser('crt'); p.add_argument('--executable', type=Path, required=True)
+    for command in ('crt', 'patterns'):
+        p = sub.add_parser(command); p.add_argument('--executable', type=Path, required=True)
     p = sub.add_parser('package'); p.add_argument('--package', type=Path, required=True)
     p.add_argument('--source', type=Path, required=True); p.add_argument('--phase', choices=('baseline', 'patched'), required=True)
     p = sub.add_parser('apply'); p.add_argument('--source', type=Path, required=True); p.add_argument('--tooling', type=Path, required=True)
@@ -265,6 +379,7 @@ def main():
     for p in sub.choices.values(): p.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if args.command == 'crt': report = probe(args.executable.resolve())
+    elif args.command == 'patterns': report = pattern_probe(args.executable.resolve())
     elif args.command == 'package': report = package(args.package.resolve(), args.source.resolve(), args.phase)
     elif args.command == 'apply': report = apply_patch(args.source.resolve(), args.tooling.resolve())
     else: report = compare(json.loads(args.baseline.read_text()), json.loads(args.patched.read_text()))
@@ -274,7 +389,7 @@ def main():
     if args.command == 'crt':
         for failure in report['failed_cases']:
             print('CRT failure: ' + json.dumps(failure, ensure_ascii=True, sort_keys=True))
-    if args.command == 'crt' or (args.command == 'package' and args.phase == 'patched'):
+    if args.command in ('crt', 'patterns') or (args.command == 'package' and args.phase == 'patched'):
         if not report['passed']: raise SystemExit(1)
 
 

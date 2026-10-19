@@ -1,4 +1,5 @@
 """Offline contracts for the single-family generated-fixture diagnosis."""
+import base64
 import copy
 import errno
 import hashlib
@@ -12,7 +13,7 @@ from unittest import mock
 
 from native_windows_unicode import (EXPECTED, SOURCE_BASELINE, SOURCE_PATCH_SHA256, STL_FILENAME,
                                     apply_patch, capture, compare, directory_records, path_record,
-                                    probe, probe_case_passed, redact)
+                                    probe, probe_case_passed, redact, fixture_bytes, pattern_probe)
 
 
 def reports():
@@ -46,11 +47,11 @@ def successful_probe_capture(command, directory, roots=()):
 
 
 class WindowsUnicodeDiagnosticTests(unittest.TestCase):
-    def test_patch_is_exact_and_only_changes_two_source_files(self):
+    def test_patch_is_exact_and_only_changes_three_source_files(self):
         patch = Path(__file__).with_name('windows_unicode_stl.patch').read_bytes()
         self.assertEqual(hashlib.sha256(patch).hexdigest(), SOURCE_PATCH_SHA256)
         names = [line.split()[2] for line in patch.decode().splitlines() if line.startswith('diff --git ')]
-        self.assertEqual(sorted(names), ['a/src/geom_core/Vehicle.cpp', 'a/src/util/FileUtil.h'])
+        self.assertEqual(sorted(names), ['a/src/geom_core/Vehicle.cpp', 'a/src/util/FileUtil.cpp', 'a/src/util/FileUtil.h'])
         self.assertIn('FOpenUTF8', patch.decode())
         self.assertIn('#include <system_error>', patch.decode())
         self.assertIn('catch ( const std::system_error& )', patch.decode())
@@ -209,6 +210,97 @@ class WindowsUnicodeDiagnosticTests(unittest.TestCase):
             self.assertGreater(failed['stderr']['bytes'], 0)
             self.assertIn('CRT failure:', result.stdout.decode())
 
+    def test_pattern_command_saves_failed_native_evidence_before_exiting(self):
+        with tempfile.TemporaryDirectory() as d:
+            output = Path(d) / 'patterns.json'
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name('native_windows_unicode.py')),
+                                     'patterns', '--executable', sys.executable, '--output', str(output)],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertEqual(result.returncode, 1)
+            report = json.loads(output.read_text())
+            self.assertFalse(report['passed'])
+            self.assertEqual(len(report['cases']), 10)
+            self.assertEqual(report['cases'][0]['exit_code'], 2)
+            self.assertFalse(report['cases'][0]['transport_passed'])
+            self.assertGreater(report['cases'][0]['stderr']['bytes'], 0)
+
+    def test_fixture_bytes_preserve_original_crlf_hash_and_reject_other_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            data = 'solid 用户\r\nendsolid\r\n'.encode('utf-8')
+            (root / STL_FILENAME).write_bytes(data)
+            record = fixture_bytes(root, [STL_FILENAME])[0]
+            self.assertEqual(base64.b64decode(record['base64']), data)
+            self.assertEqual(record['sha256'], hashlib.sha256(data).hexdigest())
+            self.assertEqual(record['bytes'], len(data))
+            self.assertEqual(record['encoding'], 'base64-original-bytes')
+            with self.assertRaises(ValueError): fixture_bytes(root, ['unexpected.txt'])
+            with self.assertRaises(ValueError): fixture_bytes(root, ['../private.stl'])
+
+    def test_fixture_bytes_refuse_machine_paths_limits_and_missing_outputs(self):
+        samples = (b'C:\\private\\fixture', b'O:/source/fixture', b'\\\\host\\share',
+                   b'name,/unexpected/private/file', b'bad-\xff')
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            for data in (*samples, b'x' * (1024 * 1024 + 1), str(root).encode()):
+                with self.subTest(data=data[:40]):
+                    (root / STL_FILENAME).write_bytes(data)
+                    record = fixture_bytes(root, [STL_FILENAME])[0]
+                    self.assertIn('omitted', record)
+                    self.assertNotIn('base64', record)
+                    if len(data) <= 1024 * 1024:
+                        self.assertEqual(record['sha256'], hashlib.sha256(data).hexdigest())
+            (root / STL_FILENAME).unlink()
+            self.assertEqual(fixture_bytes(root, [STL_FILENAME])[0]['omitted'], 'missing-or-nonregular')
+            (root / STL_FILENAME).mkdir()
+            self.assertEqual(fixture_bytes(root, [STL_FILENAME])[0]['omitted'], 'missing-or-nonregular')
+
+    def test_pattern_comparison_requires_actual_baseline_exception_and_exact_fixed_match(self):
+        def good_capture(command, directory, roots=()):
+            _, mode, case = command
+            scan = dict(source_sha256='a' * 64, exception=None, matched=1, exact_target=True)
+            code = 0
+            if mode == 'baseline' and case in ('unicode', 'nonbmp', 'unicode-pattern'):
+                scan = dict(source_sha256='b' * 64, exception='system_error', error_code=1113)
+                code = 3
+            if mode == 'baseline' and case == 'directory': scan.update(matched=0, exact_target=False)
+            output = json.dumps(scan)
+            return dict(exit_code=code, error=None, stdout=dict(text=output)), output
+        with mock.patch('native_windows_unicode.codepages', return_value=dict(platform='Windows', acp=1252, oem=437)):
+            with mock.patch('native_windows_unicode.capture', side_effect=good_capture):
+                report = pattern_probe(Path('probe'))
+            self.assertTrue(report['passed'])
+            self.assertTrue(report['baseline_exception_reproduced'])
+            self.assertEqual(len(report['cases']), 10)
+            for failure in ('unexpected-success', 'bad-match', 'deleted-stl', 'wrong-code', 'malformed'):
+                def bad_capture(command, directory, roots=()):
+                    record, output = good_capture(command, directory, roots)
+                    if failure == 'unexpected-success' and command[1:] == ['baseline', 'unicode']:
+                        record['exit_code'] = 0
+                    if failure == 'bad-match' and command[1:] == ['patched', 'unicode']:
+                        record['stdout']['text'] = json.dumps(dict(source_sha256='a' * 64, exception=None, matched=2, exact_target=False))
+                    if failure == 'deleted-stl' and command[1:] == ['patched', 'unicode']:
+                        (directory / 'Export 中文.stl').unlink()
+                    if failure == 'wrong-code' and command[1:] == ['baseline', 'unicode']:
+                        record['stdout']['text'] = json.dumps(dict(source_sha256='b' * 64, exception='system_error', error_code=5))
+                    if failure == 'malformed': record['stdout']['text'] = '[]'
+                    return record, output
+                with self.subTest(failure=failure), mock.patch('native_windows_unicode.capture', side_effect=bad_capture):
+                    self.assertFalse(pattern_probe(Path('probe'))['passed'])
+
+    def test_pattern_probe_compiles_actual_pinned_and_patched_source_bodies(self):
+        root = Path(__file__).resolve().parents[1]
+        cmake = (root / 'scripts/unicode_path_tests/CMakeLists.txt').read_text()
+        self.assertIn(SOURCE_BASELINE, cmake)
+        self.assertIn('git show', cmake)
+        self.assertIn('file(READ', cmake)
+        self.assertIn('src/util/FileUtil.cpp', cmake)
+        self.assertIn('string(SUBSTRING', cmake)
+        source = (root / 'src/util/FileUtil.cpp').read_text()
+        self.assertIn('get_files_matching_pattern( fs::u8path( base_path ), base_fname )', source)
+        self.assertIn('std::regex_match( entry.path().filename().u8string(), re )', source)
+        self.assertNotIn('std::regex_match( entry.path().filename().string(), re )', source)
+
     def test_comparison_requires_actual_mojibake_directory_entry(self):
         old, new = reports()
         self.assertTrue(compare(old, new)['patched_all_gates_passed'])
@@ -238,7 +330,7 @@ class WindowsUnicodeDiagnosticTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             source = Path(d)
             subprocess.run(['git', 'init', '-q', str(source)], check=True)
-            for name in ('src/geom_core/Vehicle.cpp', 'src/util/FileUtil.h'):
+            for name in ('src/geom_core/Vehicle.cpp', 'src/util/FileUtil.cpp', 'src/util/FileUtil.h'):
                 content = (tooling / name).read_bytes()
                 path = source / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(content)
             subprocess.run(['git', '-C', d, 'apply', '--reverse', str(tooling / 'scripts/windows_unicode_stl.patch')], check=True)

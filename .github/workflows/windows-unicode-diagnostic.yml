@@ -10,6 +10,7 @@ on:
       - 'scripts/test_native_windows_unicode.py'
       - 'scripts/unicode_path_tests/**'
       - 'src/util/FileUtil.h'
+      - 'src/util/FileUtil.cpp'
       - 'src/geom_core/Vehicle.cpp'
       - '.gitattributes'
   workflow_dispatch:
@@ -26,6 +27,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.11'
@@ -44,6 +46,8 @@ jobs:
         run: |
           python -X utf8 scripts/native_windows_unicode.py crt --executable unicode-path-build/Release/unicode_path_probe.exe --output unicode-evidence/crt.json
           if ($LASTEXITCODE -ne 0) { throw 'UTF-8 path regression failed' }
+          python -X utf8 scripts/native_windows_unicode.py patterns --executable unicode-path-build/Release/unicode_pattern_probe.exe --output unicode-evidence/patterns.json
+          if ($LASTEXITCODE -ne 0) { throw 'UTF-8 directory pattern regression failed' }
       - name: Preserve generated-fixture diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
