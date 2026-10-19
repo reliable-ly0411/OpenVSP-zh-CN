@@ -50,3 +50,14 @@ add_test(NAME localization_help_anchors
   COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_help_anchors.py)
 add_test(NAME localization_help_build_layout
   COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_help_build_layout.py)
+
+# Keep the material action distinct from custom geometry and opaque user names.
+add_executable(localization_material_context material_label_context.cpp ../../src/gui_and_draw/VSPChinese.cpp)
+target_include_directories(localization_material_context PRIVATE ../../src/gui_and_draw)
+target_compile_features(localization_material_context PRIVATE cxx_std_11)
+if(MSVC)
+  target_compile_options(localization_material_context PRIVATE /utf-8)
+endif()
+add_test(NAME localization_material_label_context COMMAND localization_material_context)
+add_test(NAME localization_material_source_contract
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_material_label_context.py)
