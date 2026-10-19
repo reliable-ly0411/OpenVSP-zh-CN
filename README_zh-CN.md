@@ -115,6 +115,10 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- Windows 单实体与多实体 STL 导出通过 UTF-8 路径转换后调用宽字符文件接口，
+  避免中文文件名被系统 ANSI 代码页解释；其他平台仍使用原文件接口，模型 XML
+  读写仍由原 libxml2 处理。保留空格、百分号和中文精确文件名验收；原生验证待完成。
+
 - 第二轮 3.55.0、3.54.0 的 macOS 14 ARM64 原生作业已完成 requirements 安装和
   `pip check`，随后在全新 venv 的导入路径判定停止。现对实际模块文件及 venv 根目录
   严格解析符号链接后再核对包含关系，避免同一临时目录的不同路径别名被误拒绝；实际
