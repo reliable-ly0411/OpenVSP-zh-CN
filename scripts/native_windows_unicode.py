@@ -2,6 +2,7 @@
 """Bounded Windows Unicode diagnostics, using generated fixtures only."""
 import argparse
 import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -16,7 +17,7 @@ from native_functional import (CLI_BASENAME, CLI_INPUT_SUFFIXES, PASS_MARKERS,
 from native_verify import BOUNDARY_MODEL_FILENAME, verify_boundary_output
 
 SOURCE_BASELINE = '1d6b0b6078716db5854ff04a92610aa58956a0c6'
-SOURCE_PATCH_SHA256 = 'ec82cf9335c8d75943884b263b47affe91394fa8539f523e9daa8f40fe134048'
+SOURCE_PATCH_SHA256 = '9c41e5bf1fb22b04d2d4aed18700d15f920a74053cd22985dfc8d3cc826e916b'
 EXPECTED = dict(ascii='Export 100% &.stl', unicode=STL_FILENAME,
                 nonbmp='Export 🚀 100% &.stl', absolute='目录 100%/Absolute 中文.stl', blocked='blocked.stl',
                 directory='目录 100%/Export 中文.stl', missing='not-created/export.stl')
@@ -79,28 +80,60 @@ def codepages():
                 oem=ctypes.windll.kernel32.GetOEMCP())
 
 
+def probe_case_passed(result):
+    if not result['transport_passed']:
+        return False
+    if result['mode'] == 'narrow':
+        return True  # Comparison evidence; narrow Unicode opens may fail or misname.
+    crt = result['crt']
+    if result['case'] in ('ascii', 'unicode', 'directory', 'absolute', 'nonbmp'):
+        expected = result['expected']
+        return (expected['exists'] and expected['file'] and expected['bytes'] > 0
+                and crt['opened'] and crt['write_ok'] and crt['close_result'] == 0)
+    if result['case'] == 'invalid':
+        return (not crt['opened'] and crt['open_errno'] == errno.EILSEQ
+                and not any(f.get('file') for f in result['files']))
+    return not crt['opened'] and crt['open_errno'] != 0
+
+
 def probe(executable):
-    report = dict(schema=1, kind='crt-path-comparison', environment=codepages(), cases=[])
+    report = dict(schema=2, kind='crt-path-comparison', environment=codepages(), cases=[])
+    windows = report['environment']['platform'] == 'Windows'
     for mode in ('narrow', 'utf8'):
-        for case in ('ascii', 'unicode', 'directory', 'absolute', 'nonbmp', 'blocked', 'missing') + (('invalid',) if os.name == 'nt' else ()):
+        for case in ('ascii', 'unicode', 'directory', 'absolute', 'nonbmp', 'blocked', 'missing') + (('invalid',) if windows else ()):
             with tempfile.TemporaryDirectory(prefix='vsp-unicode-crt-') as name:
                 work = Path(name)
                 (work / '目录 100%').mkdir()
                 (work / 'blocked.stl').mkdir()
-                result, output = capture([executable, mode, case], work, [executable.parent])
+                result, _ = capture([executable, mode, case], work, [executable.parent])
                 result.update(mode=mode, case=case, files=directory_records(work))
-                if result['exit_code'] != 0:
-                    raise ValueError('CRT probe process did not finish')
-                result['crt'] = json.loads(output)
                 if case in EXPECTED:
                     result['expected'] = path_record(work, EXPECTED[case])
+                # Always retain the exact case, status and actual bounded output.
+                # One broken subprocess must not suppress its or later evidence.
+                errors = []
+                if result['error'] is not None:
+                    errors.append('subprocess-error')
+                if result['exit_code'] != 0:
+                    errors.append('process-exit')
+                try:
+                    crt = json.loads(result['stdout']['text'])
+                    result['crt'] = crt
+                    fields = dict(opened=bool, open_errno=int, dos_error=int, last_error=int,
+                                  acp=int, oem=int, write_ok=bool, close_result=int)
+                    if (not isinstance(crt, dict) or
+                            any(type(crt.get(key)) is not kind for key, kind in fields.items())):
+                        errors.append('invalid-crt-record')
+                except (ValueError, TypeError):
+                    errors.append('invalid-json')
+                result['transport_errors'] = errors
+                result['transport_passed'] = not errors
+                result['passed'] = probe_case_passed(result)
                 report['cases'].append(result)
-    fixed = [r for r in report['cases'] if r['mode'] == 'utf8']
-    report['passed'] = all(
-        (r['expected']['exists'] and r['crt']['write_ok'] and r['crt']['close_result'] == 0)
-        if r['case'] in ('ascii', 'unicode', 'directory', 'absolute', 'nonbmp') else
-        (not r['crt']['opened'] and r['crt']['open_errno'] != 0)
-        if r['case'] in ('missing', 'blocked') or os.name == 'nt' else True for r in fixed)
+    report['passed'] = all(r['passed'] for r in report['cases'])
+    report['failed_cases'] = [dict(mode=r['mode'], case=r['case'], exit_code=r['exit_code'],
+                                 transport_errors=r['transport_errors'])
+                              for r in report['cases'] if not r['passed']]
     return report
 
 
@@ -238,6 +271,9 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=True, indent=2) + '\n', encoding='utf-8')
     print(args.command + ': evidence saved; all required gates ' + ('passed' if report.get('passed', True) else 'did not pass'))
+    if args.command == 'crt':
+        for failure in report['failed_cases']:
+            print('CRT failure: ' + json.dumps(failure, ensure_ascii=True, sort_keys=True))
     if args.command == 'crt' or (args.command == 'package' and args.phase == 'patched'):
         if not report['passed']: raise SystemExit(1)
 

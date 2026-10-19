@@ -25,19 +25,20 @@ index 77429615e2..a2d6b51919 100644
      {
          std::vector< int > tags = SubSurfaceMgr.GetAllTags();
 diff --git a/src/util/FileUtil.h b/src/util/FileUtil.h
-index 79ae765df6..f685b5020c 100644
+index 79ae765df6..bf8730e2c8 100644
 --- a/src/util/FileUtil.h
 +++ b/src/util/FileUtil.h
-@@ -6,6 +6,8 @@
+@@ -6,6 +6,9 @@
  #if !defined(FILE_UTIL__INCLUDED_)
  #define FILE_UTIL__INCLUDED_
  
 +#include <cstdio>
 +#include <cerrno>
++#include <system_error>
  #include <vector>
  #include <string>
  using std::vector;
-@@ -13,6 +15,28 @@ using std::string;
+@@ -13,6 +16,30 @@ using std::string;
  #include <filesystem>
  namespace fs = std::filesystem;
  
@@ -53,7 +54,9 @@ index 79ae765df6..f685b5020c 100644
 +        for ( const char* c = mode; *c; ++c ) wide_mode.push_back( *c );
 +        return _wfopen( path.c_str(), wide_mode.c_str() );
 +    }
-+    catch ( const fs::filesystem_error& )
++    // MSVC u8path reports conversion failures as system_error, the base of
++    // filesystem_error. Keep invalid UTF-8 on the normal fopen failure path.
++    catch ( const std::system_error& )
 +    {
 +        errno = EILSEQ;
 +        return nullptr;

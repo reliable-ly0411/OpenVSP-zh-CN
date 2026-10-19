@@ -8,6 +8,7 @@
 
 #include <cstdio>
 #include <cerrno>
+#include <system_error>
 #include <vector>
 #include <string>
 using std::vector;
@@ -27,7 +28,9 @@ inline FILE* FOpenUTF8( const char* filename, const char* mode )
         for ( const char* c = mode; *c; ++c ) wide_mode.push_back( *c );
         return _wfopen( path.c_str(), wide_mode.c_str() );
     }
-    catch ( const fs::filesystem_error& )
+    // MSVC u8path reports conversion failures as system_error, the base of
+    // filesystem_error. Keep invalid UTF-8 on the normal fopen failure path.
+    catch ( const std::system_error& )
     {
         errno = EILSEQ;
         return nullptr;

@@ -7,9 +7,12 @@
 
 // This program writes only known fixtures in an isolated working directory.
 // Python independently inspects the native directory entries, not a CRT reopen.
-int main( int argc, char** argv )
+static const char* stage = "arguments";
+
+static int RunProbe( int argc, char** argv )
 {
     if ( argc != 3 ) return 2;
+    stage = "prepare-path";
     const char* filename = nullptr;
     std::string absolute_filename;
     if ( !strcmp( argv[2], "ascii" ) ) filename = "Export 100% &.stl";
@@ -30,6 +33,7 @@ int main( int argc, char** argv )
     _set_doserrno( 0 );
     SetLastError( 0 );
 #endif
+    stage = "open";
     FILE* file = !strcmp( argv[1], "narrow" ) ? fopen( filename, "wb" ) : FOpenUTF8( filename, "wb" );
     const int open_errno = errno;
 #ifdef _WIN32
@@ -43,6 +47,7 @@ int main( int argc, char** argv )
     int written = 0, closed = -1;
     if ( file )
     {
+        stage = "write-close";
         written = fputs( "unicode-path-fixture\n", file ) >= 0;
         closed = fclose( file );
     }
@@ -51,4 +56,37 @@ int main( int argc, char** argv )
             file ? "true" : "false", open_errno, dos_error, last_error, acp, oem,
             written ? "true" : "false", closed );
     return 0; // Diagnostic transport succeeded; the Python caller applies gates.
+}
+
+static int ReportException( const char* category, const char* message, int code = 0 )
+{
+    // Fixed JSON fields plus a bounded actual message. Python redacts fixture
+    // roots before persisting stderr. An exception is never a successful probe.
+    printf( "{\"exception\":\"%s\",\"stage\":\"%s\",\"error_code\":%d}\n", category, stage, code );
+    fprintf( stderr, "CRT probe exception (%s): %.2048s\n", stage, message );
+    return 3;
+}
+
+int main( int argc, char** argv )
+{
+    try
+    {
+        return RunProbe( argc, argv );
+    }
+    catch ( const fs::filesystem_error& error )
+    {
+        return ReportException( "filesystem_error", error.what(), error.code().value() );
+    }
+    catch ( const std::system_error& error )
+    {
+        return ReportException( "system_error", error.what(), error.code().value() );
+    }
+    catch ( const std::exception& error )
+    {
+        return ReportException( "std_exception", error.what() );
+    }
+    catch ( ... )
+    {
+        return ReportException( "unknown", "non-standard exception" );
+    }
 }

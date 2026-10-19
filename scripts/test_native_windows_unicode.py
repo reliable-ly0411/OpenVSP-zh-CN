@@ -1,5 +1,6 @@
 """Offline contracts for the single-family generated-fixture diagnosis."""
 import copy
+import errno
 import hashlib
 import json
 from pathlib import Path
@@ -9,8 +10,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-from native_windows_unicode import (SOURCE_BASELINE, SOURCE_PATCH_SHA256, STL_FILENAME, apply_patch,
-                                    capture, compare, directory_records, path_record, redact)
+from native_windows_unicode import (EXPECTED, SOURCE_BASELINE, SOURCE_PATCH_SHA256, STL_FILENAME,
+                                    apply_patch, capture, compare, directory_records, path_record,
+                                    probe, probe_case_passed, redact)
 
 
 def reports():
@@ -27,6 +29,22 @@ def reports():
     return old, new
 
 
+def successful_probe_capture(command, directory, roots=()):
+    _, mode, case = command
+    opened = case not in ('blocked', 'missing', 'invalid')
+    if opened:
+        (directory / EXPECTED[case]).write_bytes(b'fixture')
+    crt = dict(opened=opened, open_errno=0 if opened else errno.EILSEQ if case == 'invalid' else errno.EACCES,
+               dos_error=0, last_error=0, acp=1252, oem=437,
+               write_ok=opened, close_result=0 if opened else -1)
+    output = json.dumps(crt) + '\n'
+    record = dict(exit_code=0, error=None, output_origin='actual subprocess capture')
+    for label, text in (('stdout', output), ('stderr', '')):
+        data = text.encode()
+        record[label] = dict(text=text, bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), truncated=False)
+    return record, output
+
+
 class WindowsUnicodeDiagnosticTests(unittest.TestCase):
     def test_patch_is_exact_and_only_changes_two_source_files(self):
         patch = Path(__file__).with_name('windows_unicode_stl.patch').read_bytes()
@@ -34,6 +52,9 @@ class WindowsUnicodeDiagnosticTests(unittest.TestCase):
         names = [line.split()[2] for line in patch.decode().splitlines() if line.startswith('diff --git ')]
         self.assertEqual(sorted(names), ['a/src/geom_core/Vehicle.cpp', 'a/src/util/FileUtil.h'])
         self.assertIn('FOpenUTF8', patch.decode())
+        self.assertIn('#include <system_error>', patch.decode())
+        self.assertIn('catch ( const std::system_error& )', patch.decode())
+        self.assertNotIn('catch ( const fs::filesystem_error& )', patch.decode())
         attributes = (Path(__file__).parents[1] / '.gitattributes').read_text()
         self.assertIn('scripts/windows_unicode_stl.patch text eol=lf', attributes)
         self.assertIn('1d6b0b6078716db5854ff04a92610aa58956a0c6', SOURCE_BASELINE)
@@ -94,6 +115,99 @@ class WindowsUnicodeDiagnosticTests(unittest.TestCase):
             record, _ = capture(['fixture'], Path('.'))
         self.assertEqual(record['error']['errno'], 2)
         self.assertEqual(record['stdout']['bytes'], 0)
+
+    def test_probe_keeps_failed_process_and_runs_remaining_cases(self):
+        def capture_failure(*args):
+            record, output = successful_probe_capture(*args)
+            if args[0][1:] == ['narrow', 'ascii']:
+                record['exit_code'] = 3221226505
+                record['stderr']['text'] = 'actual crash output'
+            return record, output
+        with mock.patch('native_windows_unicode.capture', side_effect=capture_failure):
+            report = probe(Path('probe'))
+        self.assertFalse(report['passed'])
+        failed = report['cases'][0]
+        self.assertEqual((failed['mode'], failed['case']), ('narrow', 'ascii'))
+        self.assertEqual(failed['exit_code'], 3221226505)
+        self.assertEqual(failed['stderr']['text'], 'actual crash output')
+        self.assertIn('process-exit', failed['transport_errors'])
+        self.assertTrue(all(r['passed'] for r in report['cases'][1:]))
+        self.assertEqual(report['failed_cases'][0]['exit_code'], 3221226505)
+        self.assertEqual(len(report['cases']), 16 if sys.platform == 'win32' else 14)
+
+    def test_probe_keeps_invalid_json_and_wrong_record_shape(self):
+        for output, error in (('not JSON', 'invalid-json'), ('', 'invalid-json'),
+                              ('[]', 'invalid-crt-record'), ('{}', 'invalid-crt-record')):
+            with self.subTest(output=output):
+                def malformed(*args):
+                    record, _ = successful_probe_capture(*args)
+                    record['stdout']['text'] = output
+                    return record, output
+                with mock.patch('native_windows_unicode.capture', side_effect=malformed):
+                    report = probe(Path('probe'))
+                self.assertFalse(report['passed'])
+                self.assertTrue(all(error in r['transport_errors'] for r in report['cases']))
+                self.assertTrue(all(r['exit_code'] == 0 for r in report['cases']))
+                self.assertEqual(report['cases'][0]['stdout']['text'], output)
+
+    def test_probe_keeps_exception_category_for_windows_invalid_utf8(self):
+        def exception(*args):
+            record, output = successful_probe_capture(*args)
+            if args[0][1:] == ['utf8', 'invalid']:
+                record['exit_code'] = 3
+                record['stdout']['text'] = json.dumps(dict(exception='system_error', stage='open', error_code=1113))
+                record['stderr']['text'] = 'CRT probe exception (open): conversion failed'
+            return record, output
+        with mock.patch('native_windows_unicode.codepages', return_value=dict(platform='Windows', acp=1252, oem=437)), \
+                mock.patch('native_windows_unicode.capture', side_effect=exception):
+            report = probe(Path('probe'))
+        self.assertEqual(len(report['cases']), 16)
+        self.assertFalse(report['passed'])
+        failed = report['cases'][-1]
+        self.assertEqual(failed['case'], 'invalid')
+        self.assertEqual(failed['crt']['exception'], 'system_error')
+        self.assertEqual(failed['exit_code'], 3)
+        self.assertEqual(failed['transport_errors'], ['process-exit', 'invalid-crt-record'])
+
+    def test_probe_success_and_failure_guards_are_not_weakened(self):
+        with mock.patch('native_windows_unicode.codepages', return_value=dict(platform='Windows', acp=1252, oem=437)), \
+                mock.patch('native_windows_unicode.capture', side_effect=successful_probe_capture):
+            report = probe(Path('probe'))
+        self.assertTrue(report['passed'])
+        fixed = {r['case']: r for r in report['cases'] if r['mode'] == 'utf8'}
+        for mutate in (
+                lambda r: r['expected'].update(exists=False),
+                lambda r: r['expected'].update(file=False),
+                lambda r: r['expected'].update(bytes=0),
+                lambda r: r['crt'].update(opened=False),
+                lambda r: r['crt'].update(write_ok=False),
+                lambda r: r['crt'].update(close_result=-1)):
+            broken = copy.deepcopy(fixed['unicode']); mutate(broken)
+            self.assertFalse(probe_case_passed(broken))
+        for case in ('blocked', 'missing', 'invalid'):
+            broken = copy.deepcopy(fixed[case]); broken['crt']['open_errno'] = 0
+            self.assertFalse(probe_case_passed(broken))
+            broken = copy.deepcopy(fixed[case]); broken['crt']['opened'] = True
+            self.assertFalse(probe_case_passed(broken))
+        broken = copy.deepcopy(fixed['invalid']); broken['files'].append(dict(file=True))
+        self.assertFalse(probe_case_passed(broken))
+
+    def test_crt_command_saves_failed_evidence_then_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as d:
+            output = Path(d) / 'evidence' / 'crt.json'
+            # Python is a real failing fixture executable: it cannot open a script
+            # named "narrow" or "utf8" in each generated isolated directory.
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name('native_windows_unicode.py')),
+                                     'crt', '--executable', sys.executable, '--output', str(output)],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertEqual(result.returncode, 1)
+            report = json.loads(output.read_text())
+            self.assertFalse(report['passed'])
+            self.assertTrue(report['failed_cases'])
+            failed = report['cases'][0]
+            self.assertEqual((failed['mode'], failed['case'], failed['exit_code']), ('narrow', 'ascii', 2))
+            self.assertGreater(failed['stderr']['bytes'], 0)
+            self.assertIn('CRT failure:', result.stdout.decode())
 
     def test_comparison_requires_actual_mojibake_directory_entry(self):
         old, new = reports()

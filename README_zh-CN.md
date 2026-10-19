@@ -115,6 +115,13 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- Windows CRT 诊断即使进程异常退出或输出无效 JSON，也保存具体测试项、退出码、真实
+  限长输出和后续测试结果，再以失败退出；C++ 异常另记录阶段、类别与错误码，不视为通过。
+  UTF-8 文件打开兼容 MSVC 转换错误的 `std::system_error` 类型，非法 UTF-8 必须返回空
+  指针与 `EILSEQ`。首轮诊断未保留失败测试项，不能据此确认其具体原因；修正依据为
+  [Microsoft STL 转换错误处理](https://github.com/microsoft/STL/blob/vs-2022-17.14/stl/inc/chrono#L46-L51)。
+  本地离线回归与 Linux 独立探针已验证，Windows 原生重跑仍待完成。
+
 - 功能脚本成功而落盘验证失败时，CI 的标记与输出长度现从实际捕获输出计算，
   不再用拼接的 PASS 标记代替；仍只报告固定错误类别，不公开进程输出中的值。
   定向诊断的源码补丁固定为 LF 字节，避免 Windows 自动换行转换改变校验哈希。
