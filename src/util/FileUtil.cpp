@@ -479,7 +479,7 @@ std::vector< fs::path > get_files_matching_pattern( const std::string& full_patt
     string base_path, base_fname;
     GetPathFile( full_pattern, base_path, base_fname );
 
-    return get_files_matching_pattern( base_path, base_fname );
+    return get_files_matching_pattern( fs::u8path( base_path ), base_fname );
 }
 
 // Function to get a list of files matching a wildcard pattern
@@ -518,7 +518,7 @@ std::vector < fs::path > get_files_matching_pattern( const fs::path &directory, 
     {
         for ( const auto &entry: fs::directory_iterator( directory ) )
         {
-            if ( fs::is_regular_file( entry ) && std::regex_match( entry.path().filename().string(), re ) )
+            if ( fs::is_regular_file( entry ) && std::regex_match( entry.path().filename().u8string(), re ) )
             {
                 matching_files.push_back( entry.path() );
             }
