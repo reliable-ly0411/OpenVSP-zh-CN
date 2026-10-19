@@ -13,6 +13,7 @@ import native_release
 import native_verify
 import release_asset_names
 from backfill_verify import digest
+from test_native_functional import functional_summary
 
 
 # Independent literal expectations: five supported families, five targets each.
@@ -140,7 +141,8 @@ class NativeAssetGateTests(unittest.TestCase):
                           platform=target['platform'], architecture=target['arch'], python=target['python'],
                           workflow_sha=WORKFLOW, run_id=RUN, archive=name, bytes=package.stat().st_size,
                           sha256=digest(package), source_tracked_files_clean=True,
-                          checks=sorted(native_plan.REQUIRED_CHECKS), requirements_install={'numpy': '1.26.4'})
+                          checks=sorted(native_plan.REQUIRED_CHECKS), requirements_install={'numpy': '1.26.4'},
+                          functional_smoke=functional_summary())
             reports.append(report)
             (folder / 'verification.json').write_text(json.dumps(report), encoding='utf-8')
         return tag, artifacts, output, reports

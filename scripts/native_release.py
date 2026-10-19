@@ -16,6 +16,7 @@ from urllib.parse import quote
 import zipfile
 
 from backfill_verify import digest
+from native_functional import validate_functional_summary
 from native_plan import PLATFORMS, REQUIRED_CHECKS, asset_name, validate_inputs
 
 
@@ -33,6 +34,7 @@ def validate_report(report, package, source_sha, tag, run_id, workflow_sha):
         raise ValueError('Verification report source/platform/run does not match')
     if set(report.get('checks', [])) != REQUIRED_CHECKS:
         raise ValueError('Required native checks are missing or unknown')
+    validate_functional_summary(report.get('functional_smoke'))
     if report.get('requirements_install', {}).get('numpy') != '1.26.4':
         raise ValueError('Fresh runtime NumPy ABI was not verified')
     if not package.is_file() or package.stat().st_size != report.get('bytes') or digest(package) != report.get('sha256'):

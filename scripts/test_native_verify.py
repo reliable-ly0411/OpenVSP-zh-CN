@@ -11,9 +11,12 @@ import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 from backfill_verify import audit_native
+from native_functional import CLI_BASENAME, CLI_INPUT_SUFFIXES, FUNCTIONAL_SCRIPT, PASS_MARKERS
 from native_verify import (BOUNDARY_MODEL_FILENAME, BOUNDARY_MODEL_NAMES,
-                           audit_windows, run_script_smoke, smoke_failure_report, smoke_script_path,
+                           audit_windows, run_functional_smoke, run_script_smoke, run_solver_cli,
+                           smoke_failure_report, smoke_script_path,
                            verify_boundary_output)
+from test_native_functional import cli_summary, functional_summary, write_cli_history, write_outputs
 
 
 class ScriptDiagnosticsTests(unittest.TestCase):
@@ -101,6 +104,18 @@ class ScriptDiagnosticsTests(unittest.TestCase):
 
 
 class SmokeOriginTests(unittest.TestCase):
+    def test_functional_smoke_is_mandatory_tooling_and_never_borrowed_from_source(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); source = root / 'source'; (source / 'scripts').mkdir(parents=True)
+            tooling = root / 'tooling'; tooling.mkdir()
+            (source / 'scripts' / FUNCTIONAL_SCRIPT).write_text('wrong source fixture')
+            with self.assertRaisesRegex(ValueError, 'Missing mandatory tooling'):
+                smoke_script_path(FUNCTIONAL_SCRIPT, source, tooling)
+            expected = tooling / FUNCTIONAL_SCRIPT; expected.write_text('pinned tooling fixture')
+            self.assertEqual(smoke_script_path(FUNCTIONAL_SCRIPT, source, tooling), expected)
+            (source / 'scripts' / FUNCTIONAL_SCRIPT).unlink()
+            self.assertEqual(smoke_script_path(FUNCTIONAL_SCRIPT, source, tooling), expected)
+
     def test_common_tooling_script_executes_when_old_source_has_no_copy(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -130,6 +145,146 @@ class SmokeOriginTests(unittest.TestCase):
                     smoke_script_path(name, source, tooling)
                 expected = source / 'scripts' / name; expected.write_text('source fixture')
                 self.assertEqual(smoke_script_path(name, source, tooling), expected)
+
+
+class FunctionalRuntimeTests(unittest.TestCase):
+    def execute(self, root, **mock):
+        with patch('native_verify.run', **mock):
+            return run_script_smoke(root / 'vspscript', root / FUNCTIONAL_SCRIPT,
+                                    root, {}, root / 'diagnostics')
+
+    def test_all_three_exact_markers_are_required(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.execute(Path(temp), return_value='\n'.join(PASS_MARKERS))
+        for missing in PASS_MARKERS:
+            output = '\n'.join(marker for marker in PASS_MARKERS if marker != missing)
+            for bad in (output, output + '\n' + missing + '_NOT_REAL'):
+                with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temp:
+                    root = Path(temp)
+                    with self.assertRaisesRegex(ValueError, 'missing-success-marker'):
+                        self.execute(root, return_value=bad)
+                    self.assertEqual(json.loads((root / 'diagnostics/runtime.json').read_text())[
+                        'missing_functional_markers'], [missing])
+
+    def test_any_fail_or_nonzero_or_timeout_stops_even_with_all_pass_markers(self):
+        markers = '\n'.join(PASS_MARKERS)
+        cases = [dict(return_value=markers + '\nNATIVE_FUNCTIONAL_FAIL:private_value'),
+                 dict(return_value=markers + '\nNATIVE_UNEXPECTED_FAIL:private_value'),
+                 dict(side_effect=subprocess.CalledProcessError(2, ['private_path'], output=markers)),
+                 dict(side_effect=subprocess.TimeoutExpired(['private_path'], 120, output=markers.encode())),
+                 dict(side_effect=FileNotFoundError('private_path'))]
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                with self.assertRaises(ValueError): self.execute(root, **case)
+                self.assertNotIn('private_', (root / 'diagnostics/runtime.json').read_text())
+
+    def test_functional_reasons_are_fixed_whole_line_categories_only(self):
+        result = smoke_failure_report('NATIVE_FUNCTIONAL_FAIL:vspaero_lift_zero\n'
+            'NATIVE_FUNCTIONAL_FAIL:names\nNATIVE_FUNCTIONAL_FAIL:vspaero_api private_value\n'
+            'NATIVE_FUNCTIONAL_FAIL:private_value\n', FUNCTIONAL_SCRIPT, 1)
+        self.assertEqual(result['functional_failure_categories'], ['names', 'vspaero_lift_zero'])
+        self.assertNotIn('private_value', json.dumps(result))
+        self.assertEqual(smoke_failure_report('NATIVE_FUNCTIONAL_FAIL:names', 'backfill_smoke.as', 1)[
+            'functional_failure_categories'], [])
+
+    def test_wrapper_checks_fresh_files_after_solver_pass(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            def solver(*args, **kwargs):
+                if args[0].name == 'vspscript':
+                    self.assertEqual(args[2], root / FUNCTIONAL_SCRIPT)
+                    self.assertEqual(kwargs['cwd'], root / 'functional-smoke')
+                    self.assertEqual(list(kwargs['cwd'].iterdir()), [])
+                    write_outputs(kwargs['cwd'])
+                    return '\n'.join(PASS_MARKERS)
+                self.assertEqual(args, (root / 'vspaero', '-omp', '1', root / 'functional-cli' / CLI_BASENAME))
+                self.assertEqual(kwargs['cwd'], root / 'functional-cli')
+                self.assertEqual(kwargs['env']['OMP_NUM_THREADS'], '1')
+                self.assertEqual({p.name for p in kwargs['cwd'].iterdir()},
+                                 {CLI_BASENAME + suffix for suffix in CLI_INPUT_SUFFIXES})
+                write_cli_history(kwargs['cwd'])
+                return 'solver text is not a PASS protocol'
+            with patch('native_verify.run', side_effect=solver):
+                result = run_functional_smoke(root / 'vspscript', root / FUNCTIONAL_SCRIPT,
+                                               root, {}, root / 'diagnostics')
+            self.assertEqual(result, functional_summary())
+            self.assertFalse((root / 'diagnostics').exists())
+
+    def test_windows_wrapper_selects_the_packaged_solver_exe(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            def command(*args, **kwargs):
+                if args[0].name == 'vspscript.exe':
+                    write_outputs(kwargs['cwd']); return '\n'.join(PASS_MARKERS)
+                self.assertEqual(args[0], root / 'vspaero.exe')
+                write_cli_history(kwargs['cwd']); return ''
+            with patch('native_verify.run', side_effect=command):
+                self.assertEqual(run_functional_smoke(root / 'vspscript.exe', root / FUNCTIONAL_SCRIPT,
+                    root, {}, root / 'diagnostics')['vspaero_cli'], cli_summary())
+
+    def test_direct_cli_nonzero_and_timeout_cannot_be_hidden_by_positive_leftover_history(self):
+        for error, category in ((subprocess.CalledProcessError(2, ['private-path'], output='private-output'), 'process-nonzero-exit'),
+                                (subprocess.TimeoutExpired(['private-path'], 120, output=b'private-output'), 'timeout')):
+            with self.subTest(category=category), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); api = root / 'api'; api.mkdir(); write_outputs(api)
+                def command(*args, **kwargs):
+                    write_cli_history(kwargs['cwd'])
+                    raise error
+                with patch('native_verify.run', side_effect=command), self.assertRaisesRegex(ValueError, category):
+                    run_solver_cli(root / 'vspaero', api, root, {}, root / 'diagnostics')
+                data = (root / 'diagnostics/runtime.json').read_text()
+                report = json.loads(data)
+                self.assertEqual(report['command'], 'vspaero')
+                self.assertEqual(report['phase'], 'direct-cli')
+                self.assertNotIn('private-', data)
+                self.assertNotIn('success_marker_seen', report)
+                self.assertTrue((root / 'functional-cli' / (CLI_BASENAME + '.history')).is_file())
+
+    def test_direct_cli_done_without_new_history_or_fail_with_valid_history_is_rejected(self):
+        for create_history in (False, True):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); api = root / 'api'; api.mkdir(); write_outputs(api)
+                def command(*args, **kwargs):
+                    if create_history: write_cli_history(kwargs['cwd'])
+                    return 'FAIL:private-message' if create_history else 'Done'
+                with patch('native_verify.run', side_effect=command), self.assertRaises(ValueError):
+                    run_solver_cli(root / 'vspaero', api, root, {}, root / 'diagnostics')
+                self.assertNotIn('private-message', (root / 'diagnostics/runtime.json').read_text())
+
+    def test_direct_cli_requires_vkey_and_refuses_a_reused_directory(self):
+        for missing_input in (True, False):
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); api = root / 'api'; api.mkdir(); write_outputs(api)
+                if missing_input:
+                    (api / (CLI_BASENAME + '.vkey')).unlink()
+                else:
+                    (root / 'functional-cli').mkdir(); write_cli_history(root / 'functional-cli')
+                with patch('native_verify.run') as command, self.assertRaises(ValueError):
+                    run_solver_cli(root / 'vspaero', api, root, {}, root / 'diagnostics')
+                command.assert_not_called()
+
+    def test_success_markers_without_files_fail_with_value_free_disk_category(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch('native_verify.run', return_value='\n'.join(PASS_MARKERS)):
+                with self.assertRaisesRegex(ValueError, 'functional-output-invalid'):
+                    run_functional_smoke(root / 'vspscript', root / FUNCTIONAL_SCRIPT,
+                                         root, {}, root / 'diagnostics')
+            data = (root / 'diagnostics/runtime.json').read_text()
+            self.assertEqual(json.loads(data)['functional_failure_categories'], ['stl-file-missing'])
+            self.assertNotIn(temp, data)
+
+    def test_existing_outputs_cannot_mask_a_failed_write_or_solver(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); (root / 'functional-smoke').mkdir()
+            write_outputs(root / 'functional-smoke')
+            with patch('native_verify.run') as command, self.assertRaises(ValueError):
+                run_functional_smoke(root / 'vspscript', root / FUNCTIONAL_SCRIPT,
+                                     root, {}, root / 'diagnostics')
+            command.assert_not_called()
+            self.assertEqual(json.loads((root / 'diagnostics/runtime.json').read_text())[
+                'functional_failure_categories'], ['workspace-not-fresh'])
 
 
 class FilesystemBoundaryTests(unittest.TestCase):

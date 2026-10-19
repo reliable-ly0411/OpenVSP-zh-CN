@@ -31,6 +31,7 @@ REQUIRED_CHECKS = {
     'native architecture', 'dependency closure / RPATH', 'Chinese CLI help',
     'AngelScript model smoke', 'model-name roundtrip', 'Unicode filename and persisted names',
     'custom geometry from empty cwd',
+    'Unicode STL export and triangle validation', 'CompGeom and VSPAERO CLI analysis',
     'Python extension import/version', 'fresh requirements install/import',
     'source examples/help/documents byte equality', 'ZIP integrity', 'privacy scan',
     'unchanged tracked source',
