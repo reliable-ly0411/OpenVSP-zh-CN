@@ -75,4 +75,8 @@ test -n "$package_root"
 if [[ ! -f "$package_root/AGENTS.md" ]]; then
   git show HEAD:AGENTS.md > "$package_root/AGENTS.md"
 fi
-python "$TOOLS/backfill_verify.py" "$ROOT/stage" "$SOURCE" "$ROOT/deliverables"
+if [[ ${NATIVE_RELEASE:-false} == true ]]; then
+  python "$TOOLS/native_verify.py" "$ROOT/stage" "$SOURCE" "$ROOT/deliverables"
+else
+  python "$TOOLS/backfill_verify.py" "$ROOT/stage" "$SOURCE" "$ROOT/deliverables"
+fi

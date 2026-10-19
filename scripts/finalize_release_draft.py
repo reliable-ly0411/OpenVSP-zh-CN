@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replace an unpublished candidate only after exact-build desktop acceptance."""
+"""Read-only historical draft audit; legacy tag/asset write operations are retired."""
 import hashlib
 import json
 import os
@@ -7,7 +7,6 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-from urllib.parse import quote
 import zipfile
 from release_asset_names import PLATFORMS, asset_name, asset_candidates
 from release_notes import release_body, release_title, update_notes
@@ -127,50 +126,31 @@ def prepare():
     # Use the maintenance naming renderer even when the accepted source predates it.
     changes = update_notes(Path('source/README_zh-CN.md').read_text(), TAG)
     body = release_body(TAG, changes, REPO, SOURCE, RUN, prerelease=True)
-    note = os.environ['VALIDATION_NOTE'].strip()
-    if not note or len(note) > 6000:
-        raise ValueError('Missing or excessive desktop acceptance note')
-    body = body.replace('GUI 抽查范围以本次更新及发布页后续记录为准；自动构建成功不代表 GUI 全面验收。', note)
+    body = validation_body(body, os.environ['VALIDATION_NOTE'])
     (WORK / 'body.md').write_text(body)
     (WORK / 'title.txt').write_text(release_title(TAG, True))
     (WORK / 'plan.json').write_text(json.dumps(snapshot(release)))
     print('Draft backed up; build source and both accepted package hashes match')
 
 
+def validation_body(body, note):
+    note = note.strip()
+    if not note or len(note) > 6000:
+        raise ValueError('Missing or excessive desktop acceptance note')
+    placeholder = 'GUI 抽查范围以本次更新及发布页后续记录为准；自动构建成功不代表 GUI 全面验收。'
+    if body.count(placeholder) != 1:
+        raise ValueError('Desktop acceptance placeholder is missing or ambiguous')
+    return body.replace(placeholder, note)
+
+
 def apply():
     release = guarded_draft()
     if json.loads(json.dumps(snapshot(release))) != json.loads((WORK / 'plan.json').read_text()):
         raise ValueError('Draft changed after backup')
-    api(f'git/refs/tags/{TAG}', 'PATCH', {'sha': SOURCE, 'force': False})
-    files = sorted((WORK / 'accepted').iterdir())
-    for asset in release['assets']:
-        api(f'releases/assets/{asset["id"]}', 'DELETE')
-    upload_url = release['upload_url'].split('{')[0]
-    for path in files:
-        gh('api', upload_url + '?name=' + quote(path.name, safe=''), '--method', 'POST',
-           '--header', 'Content-Type: application/octet-stream', '--input', str(path))
-    check = WORK / 'downloaded'
-    check.mkdir()
-    uploaded = api(f'releases/{release["id"]}')
-    for asset in uploaded['assets']:
-        if asset['name'] not in {p.name for p in files}:
-            raise ValueError('Unexpected uploaded asset name')
-        download_asset(asset, check / asset['name'])
-    if {p.name for p in check.iterdir()} != {p.name for p in files}:
-        raise ValueError('Unexpected uploaded asset set')
-    for p in files:
-        if sha(p) != sha(check / p.name):
-            raise ValueError('Uploaded asset download mismatch')
-    final = api(f'releases/{release["id"]}')
-    if not final['draft'] or final['id'] != release['id']:
-        raise ValueError('Release changed before publication')
-    if api(f'git/ref/tags/{TAG}')['object']['sha'] != SOURCE:
-        raise ValueError('Tag changed before publication')
-    api(f'releases/{release["id"]}', 'PATCH', {
-        'name': (WORK / 'title.txt').read_text(), 'body': (WORK / 'body.md').read_text(),
-        'draft': os.environ['PUBLISH'] != 'true', 'prerelease': True, 'make_latest': 'false',
-    })
-    print('Final package hashes and source tag verified; prerelease state applied')
+    # Retained as a guarded diagnostic entry point for historical tooling/tests.
+    # Old tags/assets are no longer edited, including unpublished old candidates.
+    raise ValueError('Historical draft writes are retired; use a new -zh-CN.rc.N tag with native-prerelease.yml')
+
 
 
 if __name__ == '__main__':

@@ -48,7 +48,7 @@ setup(
     # numpy is needed by the _vsp extension itself, which calls import_array() as it loads.
     # Without it the module fails at import with an unreported exception rather than anything
     # that names numpy.
-    install_requires=['degen_geom', 'utilities', 'openvsp_config', 'numpy'],
+    install_requires=['degen_geom', 'utilities', 'openvsp_config', 'numpy>=1.26.4,<2'],
     include_package_data=True,
     distclass=BinaryDistribution
 )

@@ -1,4 +1,4 @@
-name: Build and Release Localized OpenVSP
+name: Build localized candidate (legacy two-platform checks)
 
 on:
   workflow_call:
@@ -7,45 +7,13 @@ on:
         description: Exact candidate commit to build without creating a release
         required: true
         type: string
-  push:
-    tags:
-      - "*.*.*-Codex-AI-zh-CN*"
-      - "!*-auto.*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Localized tag (<version>-Codex-AI-zh-CN or <version>-Codex-AI-zh-CN-rN)
-        required: true
-        type: string
-      publish:
-        description: Publish a new GitHub Release after both builds pass
-        required: true
-        default: false
-        type: boolean
-
-      source_commit:
-        description: Exact 40-character commit for a new tag; empty builds an existing tag
-        required: false
-        default: ''
-        type: string
-      prerelease:
-        description: Keep this revision a prerelease and preserve the stable Latest
-        required: true
-        default: false
-        type: boolean
-      draft:
-        description: Leave the verified release as a draft for desktop acceptance
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
 env:
-  SOURCE_REF: ${{ inputs.source_ref || inputs.source_commit || (github.event_name == 'workflow_dispatch' && inputs.tag) || github.sha }}
-  VERIFY_RELEASE_TAG: ${{ !inputs.source_ref && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) }}
-  RELEASE_TAG: ${{ inputs.source_ref || github.event_name == 'workflow_dispatch' && inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || github.sha }}
+  SOURCE_REF: ${{ inputs.source_ref }}
+  RELEASE_TAG: ${{ inputs.source_ref }}
 
 concurrency:
   group: localized-${{ github.event_name }}-${{ github.ref }}
@@ -72,36 +40,26 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.SOURCE_REF }}
+          persist-credentials: false
 
-      - name: Verify explicitly requested source commit
-        if: github.event_name == 'workflow_dispatch' && inputs.source_commit != ''
+      - name: Verify exact candidate source commit
         shell: bash
         env:
-          REQUESTED_COMMIT: ${{ inputs.source_commit }}
+          REQUESTED_COMMIT: ${{ inputs.source_ref }}
         run: |
           set -euo pipefail
           [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$REQUESTED_COMMIT"
 
-      - name: Verify tag and localization guard on Linux
+      - name: Verify candidate localization guard on Linux
         if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          if [[ "$VERIFY_RELEASE_TAG" != true ]]; then
-            python3 scripts/check_localization_release.py
-          else
-            python3 scripts/check_localization_release.py --expected-tag "$RELEASE_TAG"
-          fi
+        run: python3 scripts/check_localization_release.py
 
-      - name: Verify tag and localization guard on Windows
+      - name: Verify candidate localization guard on Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          if ($env:VERIFY_RELEASE_TAG -ne 'true') {
-            python -X utf8 scripts/check_localization_release.py
-          } else {
-            python -X utf8 scripts/check_localization_release.py --expected-tag "$env:RELEASE_TAG"
-          }
+          python -X utf8 scripts/check_localization_release.py
           if ($LASTEXITCODE -ne 0) { throw 'Localization guard failed' }
 
       - name: Upstream synchronization regression tests
@@ -184,13 +142,20 @@ jobs:
           grep -q '/AGENTS.md$' package-files.txt
           python3 scripts/check_localized_package.py "artifacts/OpenVSP-${RELEASE_TAG}-Ubuntu-24.04-x86_64.zip"
 
+      - name: Fixed Windows Python ABI
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+          architecture: x64
+
       - name: Install Windows build dependencies
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           choco install --yes swig pandoc
           if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
-          python -m pip install "numpy<3"
+          python -m pip install "numpy==1.26.4"
           if ($LASTEXITCODE -ne 0) { throw 'NumPy installation failed' }
 
       - name: Build Windows package
@@ -238,74 +203,3 @@ jobs:
           path: artifacts/*.zip
           if-no-files-found: error
           retention-days: 14
-
-  release:
-    name: Publish GitHub Release
-    needs: build
-    if: ${{ !inputs.source_ref && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && inputs.publish == true)) }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ env.SOURCE_REF }}
-
-      - name: Download verified packages
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: localized-*
-          path: release-assets
-          merge-multiple: true
-
-      - name: Generate checksums and consistent release notes
-        env:
-          PRERELEASE: ${{ inputs.prerelease }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/release_asset_names.py normalize --tag "$RELEASE_TAG" --directory release-assets
-          (cd release-assets && sha256sum -- ./*.zip | tee SHA256SUMS.txt)
-          note_flags=()
-          if [[ "$PRERELEASE" == true || "$RELEASE_TAG" == *-auto.* ]]; then
-            note_flags=(--prerelease)
-          fi
-          python3 scripts/release_notes.py --tag "$RELEASE_TAG" \
-            --source-sha "$(git rev-parse HEAD)" "${note_flags[@]}"
-
-      - name: Create a new immutable release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PRERELEASE: ${{ inputs.prerelease }}
-          KEEP_DRAFT: ${{ inputs.draft }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'Release already exists; refusing to replace notes or assets. Inspect and resume manually.' >&2
-            exit 1
-          fi
-          # A new tag is created only after both packages pass; never move an existing tag.
-          source_sha=$(git rev-parse HEAD)
-          remote_tag=$(git ls-remote origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}")
-          if [[ -z "$remote_tag" ]]; then
-            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$source_sha"
-          else
-            git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
-            test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$source_sha"
-          fi
-          release_flags=(--latest)
-          if [[ "$PRERELEASE" == true || "$RELEASE_TAG" == *-auto.* ]]; then
-            release_flags=(--prerelease --latest=false)
-          fi
-          title=$(cat release-title.txt)
-          gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --title "$title" --notes-file release-notes.md --draft "${release_flags[@]}"
-          mkdir downloaded-release
-          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir downloaded-release
-          (cd downloaded-release && sha256sum -c SHA256SUMS.txt)
-          if [[ "$KEEP_DRAFT" != true ]]; then
-            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${release_flags[@]}"
-          fi
-

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "src" / "cmake" / "VSP_Version.cmake"
 RELEASE_NOTES_FILE = ROOT / "README_zh-CN.md"
 TAG_RE = re.compile(
-    r"^(?P<version>\d+\.\d+\.\d+)-Codex-AI-zh-CN(?:-r[1-9]\d*|-auto\.(?P<upstream>[0-9a-f]{12}))?$"
+    r"^(?P<version>\d+\.\d+\.\d+)(?:-Codex-AI-zh-CN(?:-r[1-9]\d*|-auto\.(?P<upstream>[0-9a-f]{12}))?|-zh-CN\.rc\.[1-9]\d*|-zh-CN\.(?:dev|candidate)\.[0-9a-f]{12})$"
 )
 
 
@@ -35,28 +35,31 @@ def require_text(path: str, needle: str) -> None:
         raise SystemExit(f"本地化守卫失败：{path} 缺少 {needle!r}")
 
 
-def verify_bundled_geometry_names() -> int:
-    translation_source = (ROOT / "src" / "gui_and_draw" / "VSPChinese.cpp").read_text(
-        encoding="utf-8"
-    )
-    translation_keys = set(
-        re.findall(r'\{\s*"((?:\\.|[^"])*)"\s*,\s*"', translation_source)
-    )
-
-    geometry_names: set[str] = set()
+def verify_bundled_model_data() -> tuple[int, int]:
+    """Read the bundled models without translating or rewriting their names."""
     examples_dir = ROOT / "examples" / "Complete_Aircraft"
-    for model_path in sorted(examples_dir.glob("*.vsp3")):
-        root = ET.parse(model_path).getroot()
-        for node in root.findall(".//Geom/ParmContainer/Name"):
-            if node.text:
-                geometry_names.add(node.text)
-
-    missing_names = sorted(geometry_names - translation_keys)
-    if missing_names:
-        raise SystemExit(
-            "整机案例几何体名称缺少显示翻译：" + ", ".join(missing_names)
-        )
-    return len(geometry_names)
+    models = sorted(examples_dir.glob("*.vsp3"))
+    if not models:
+        raise SystemExit("整机案例缺失：没有可校验的 .vsp3 模型")
+    geometry_count = 0
+    for model_path in models:
+        try:
+            root = ET.parse(model_path).getroot()
+        except (ET.ParseError, OSError) as error:
+            raise SystemExit(f"整机案例 XML 不可读：{model_path.name}: {error}") from error
+        # Vehicle's direct Geom children own the model names. Nested Geom nodes
+        # hold implementation details such as set membership and have no name.
+        geoms = root.findall("./Vehicle/Geom")
+        if not geoms:
+            raise SystemExit(f"整机案例缺少几何体：{model_path.name}")
+        for index, geom in enumerate(geoms, 1):
+            name = geom.find("ParmContainer/Name")
+            if name is None or len(name):
+                raise SystemExit(f"整机案例缺少纯文本名称：{model_path.name}，几何体 {index}")
+            # Empty names, whitespace, literal entities and UI-looking strings
+            # are opaque model data. No dictionary lookup or normalization.
+            geometry_count += 1
+    return len(models), geometry_count
 
 
 def verify_release_notes(tag: str) -> None:
@@ -103,7 +106,6 @@ def main() -> None:
     require_text("README_zh-CN.md", f"当前软件版本：OpenVSP {version}\n")
     require_text("AGENTS.md", f"当前官方基线：OpenVSP {version}，")
 
-    require_text("src/gui_and_draw/MainVSPScreen.cpp", "【声明】本中文本地化")
     require_text("src/gui_and_draw/MainVSPScreen.cpp", "VSPVERSION4")
     require_text(
         "src/gui_and_draw/MainVSPScreen.cpp",
@@ -115,14 +117,14 @@ def main() -> None:
     if "【显著声明】" in about:
         raise SystemExit("本地化守卫失败：关于窗口仍包含旧的【显著声明】")
 
-    bundled_geometry_name_count = verify_bundled_geometry_names()
+    bundled_model_count, bundled_geometry_count = verify_bundled_model_data()
 
     if args.expected_tag:
         match = TAG_RE.fullmatch(args.expected_tag)
         if not match:
             raise SystemExit(
-                "发布标签必须为 <版本>-Codex-AI-zh-CN、-rN 重发版或 -auto.<上游提交前12位>，"
-                f"例如 {version}-Codex-AI-zh-CN-r2"
+                "新预发布标签必须为 <版本>-zh-CN.rc.<递增序号>；历史标签只用于校验，"
+                f"例如 {version}-zh-CN.rc.1"
             )
         if match.group("version") != version:
             raise SystemExit(f"标签版本 {match.group('version')} 与源码版本 {version} 不一致")
@@ -130,6 +132,7 @@ def main() -> None:
         if match.group("upstream") and match.group("upstream") != metadata["base_commit"][:12]:
             raise SystemExit("自动预发布标签与官方基线提交不一致")
         verify_release_notes(args.expected_tag)
+        require_text("README_zh-CN.md", f"当前汉化版本：`{args.expected_tag}`")
         require_text("src/gui_and_draw/MainVSPScreen.cpp", f"汉化版本：{args.expected_tag}\\n")
 
     if args.print_version:
@@ -137,7 +140,7 @@ def main() -> None:
     else:
         print(
             f"本地化发布守卫通过：OpenVSP {version}，"
-            f"整机案例几何体名称 {bundled_geometry_name_count} 项"
+            f"整机案例 {bundled_model_count} 个，原始几何名称 {bundled_geometry_count} 项（只读校验）"
         )
 
 

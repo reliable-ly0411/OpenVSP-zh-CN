@@ -142,9 +142,8 @@ bool ParmScreen::Update()
     m_LinkFromBrowser->column_char( ':' );        // use : as the column character
 
     char str[256];
-    snprintf( str, sizeof( str ),  "@b@.COMP:@b@.GROUP:@b@.PARM:" );
-    m_LinkToBrowser->add( str );
-    m_LinkFromBrowser->add( str );
+    m_LinkToBrowser->add( VSPTranslateBrowserHeader( "@b@.COMP:@b@.GROUP:@b@.PARM:" ).c_str() );
+    m_LinkFromBrowser->add( VSPTranslateBrowserHeader( "@b@.COMP:@b@.GROUP:@b@.PARM:" ).c_str() );
 
     for ( int i = 0 ; i < (int)b_link_vec.size() ; i++ )
     {

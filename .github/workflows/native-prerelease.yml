@@ -1,0 +1,195 @@
+name: Build five-platform localized prerelease
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/native-prerelease.yml'
+      - '.github/workflows/native-promote.yml'
+      - 'scripts/native_*'
+      - 'scripts/test_native_*'
+      - 'scripts/backfill_*'
+      - 'scripts/test_python_abi_policy.py'
+      - 'src/python_api/**'
+      - 'src/CMakeLists.txt'
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact 40-character source commit, descended from the latest release in its family
+        required: true
+        type: string
+      new_tag:
+        description: NEW SemVer prerelease tag, for example 3.55.0-zh-CN.rc.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-prerelease-${{ inputs.new_tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: ${{ inputs.source_sha }}
+  NEW_TAG: ${{ inputs.new_tag }}
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: All release and historical-tool regression tests
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          python3 -m unittest discover -s scripts -p backfill_test.py -v
+          git diff --check
+
+  plan:
+    if: github.event_name == 'workflow_dispatch'
+    needs: regression
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - name: Checkout exact workflow tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          persist-credentials: false
+      - name: Checkout exact source with family ancestry
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+      - id: plan
+        run: python3 tooling/scripts/native_plan.py --source source
+      - name: Require versioned source release notes and localization guard
+        working-directory: source
+        run: python3 scripts/check_localization_release.py --expected-tag "$NEW_TAG"
+
+  build:
+    needs: plan
+    name: ${{ matrix.version }} / ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    env:
+      NATIVE_RELEASE: 'true'
+      BACKFILL_VERSION: ${{ matrix.version }}
+      BACKFILL_TAG: ${{ matrix.tag }}
+      BACKFILL_SHA: ${{ matrix.sha }}
+      BACKFILL_PLATFORM: ${{ matrix.platform }}
+      BACKFILL_ARCH: ${{ matrix.arch }}
+      BACKFILL_LLVM: ${{ matrix.llvm }}
+      BACKFILL_PYTHON: ${{ matrix.python }}
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout exact workflow tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          persist-credentials: false
+      - name: Checkout immutable source with family ancestry
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.sha }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+      - name: Matching Python ABI on Windows and macOS
+        if: runner.os != 'Linux'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.arch == 'arm64' && 'arm64' || 'x64' }}
+      - name: Verify exact source and release guard
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$BACKFILL_SHA"
+          python -X utf8 scripts/check_localization_release.py --expected-tag "$BACKFILL_TAG"
+      - name: Build and verify native Linux/macOS package
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash tooling/scripts/backfill_build.sh
+      - name: Build and verify native Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tooling/scripts/native_build_windows.ps1
+      - name: Upload verified ZIP and CI-only evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-package-${{ matrix.platform }}
+          path: deliverables/*
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+      - name: Capture optional Linux GUI evidence, pending visual review
+        if: runner.os == 'Linux'
+        timeout-minutes: 5
+        continue-on-error: true
+        shell: bash
+        run: |
+          sudo apt-get install --yes xvfb x11-utils imagemagick
+          xvfb-run -a --server-args="-screen 0 1600x1000x24" python3 tooling/scripts/backfill_gui.py
+      - name: Upload optional screenshots separately from release assets
+        if: runner.os == 'Linux' && hashFiles('gui-evidence/*.png') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-gui-${{ matrix.platform }}
+          path: |
+            gui-evidence/*.png
+            gui-evidence/status.json
+          retention-days: 14
+      - name: Upload value-free failure diagnostics
+        if: failure() && (hashFiles('diagnostics/privacy.json') != '' || hashFiles('diagnostics/runtime.json') != '')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-diagnostics-${{ matrix.platform }}
+          path: |
+            diagnostics/privacy.json
+            diagnostics/runtime.json
+          retention-days: 14
+
+  assemble:
+    needs: [plan, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: native-package-*
+          path: native-artifacts
+      - name: Validate all five reports and exact final checksum filenames
+        run: |
+          python3 scripts/native_release.py prepare --artifacts native-artifacts --output public-assets --evidence release-evidence.json
+          (cd public-assets && sha256sum -c SHA256SUMS.txt)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-release-assets
+          path: public-assets/*
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve original build evidence for later hash-bound promotion
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-release-evidence
+          path: release-evidence.json
+          if-no-files-found: error
+          retention-days: 14
