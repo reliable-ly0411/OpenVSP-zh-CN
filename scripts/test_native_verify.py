@@ -5,10 +5,54 @@ from types import SimpleNamespace
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 from backfill_verify import audit_native
-from native_verify import audit_windows
+from native_verify import (BOUNDARY_MODEL_FILENAME, BOUNDARY_MODEL_NAMES,
+                           audit_windows, verify_boundary_output)
+
+
+class FilesystemBoundaryTests(unittest.TestCase):
+    def write_model(self, directory, names=BOUNDARY_MODEL_NAMES, filename=BOUNDARY_MODEL_FILENAME):
+        root = ET.Element('Vsp_Geometry')
+        vehicle = ET.SubElement(root, 'Vehicle')
+        for name in names:
+            geom = ET.SubElement(vehicle, 'Geom')
+            container = ET.SubElement(geom, 'ParmContainer')
+            ET.SubElement(container, 'Name').text = name
+        path = Path(directory) / filename
+        ET.ElementTree(root).write(path, encoding='utf-8', xml_declaration=True)
+        return path
+
+    def test_unicode_filename_and_all_persisted_names_are_read_only(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = self.write_model(temp)
+            before = path.read_bytes()
+            result = verify_boundary_output(temp)
+            self.assertEqual(result['persisted_names'], 14)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertIn(b'&amp;amp;', before)
+
+    def test_lossy_filename_is_not_accepted_as_a_roundtrip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.write_model(temp, filename='Wing Design 100% ??.vsp3')
+            with self.assertRaisesRegex(ValueError, 'Unicode filename'):
+                verify_boundary_output(temp)
+
+    def test_rewritten_missing_or_duplicate_names_fail(self):
+        for names in (['机翼'] + list(BOUNDARY_MODEL_NAMES[1:]),
+                      BOUNDARY_MODEL_NAMES[:-1], BOUNDARY_MODEL_NAMES + ('Wing',)):
+            with self.subTest(names=names), tempfile.TemporaryDirectory() as temp:
+                self.write_model(temp, names=names)
+                with self.assertRaisesRegex(ValueError, 'Persisted model names'):
+                    verify_boundary_output(temp)
+
+    def test_malformed_xml_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / BOUNDARY_MODEL_FILENAME).write_text('<broken>', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'not valid XML'):
+                verify_boundary_output(temp)
 
 
 class NativeInspectionTests(unittest.TestCase):
