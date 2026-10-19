@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "DesignVarScreen.h"
 #include "ParmMgr.h"
 
@@ -129,8 +130,7 @@ bool DesignVarScreen::Update()
 
     m_VarBrowser->column_char( ':' );         // use : as the column character
 
-    snprintf( str, sizeof( str ),  "@b@.COMP_A:@b@.GROUP:@b@.PARM:@b@.V/C" );
-    m_VarBrowser->add( str );
+    m_VarBrowser->add( VSPTranslateBrowserHeader( "@b@.COMP_A:@b@.GROUP:@b@.PARM:@b@.V/C" ).c_str() );
 
     int num_vars = DesignVarMgr.GetNumVars();
     for ( i = 0 ; i < num_vars ; i++ )

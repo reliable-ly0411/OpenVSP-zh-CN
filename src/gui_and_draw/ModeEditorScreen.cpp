@@ -5,6 +5,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "ModeEditorScreen.h"
 
 #include "ModeMgr.h"
@@ -210,8 +211,7 @@ void ModeEditorScreen::UpdateModeBrowser()
 
     m_ModeBrowser->column_char( ':' );
 
-    snprintf( str, sizeof( str ),  "@b@.NAME:@b@.NORMAL SET:@b@.DEGEN SET:@b@.SETTINGS" );
-    m_ModeBrowser->add( str );
+    m_ModeBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.NORMAL SET:@b@.DEGEN SET:@b@.SETTINGS" ).c_str() );
 
 
     int nmode = ModeMgr.GetNumModes();
@@ -276,8 +276,7 @@ void ModeEditorScreen::UpdateSettingBrowser()
 
     m_SettingBrowser->column_char( ':' );
 
-    snprintf( str, sizeof( str ),  "@b@.SETTING GROUP:@b@.SETTING" );
-    m_SettingBrowser->add( str );
+    m_SettingBrowser->add( VSPTranslateBrowserHeader( "@b@.SETTING GROUP:@b@.SETTING" ).c_str() );
 
     Mode *mod = ModeMgr.GetMode( m_SelectedModeIndex );
 
@@ -326,7 +325,7 @@ void ModeEditorScreen::UpdateVarPresetChoices()
         SettingGroup *sg = VarPresetMgr.FindSettingGroup( m_GroupIDs[i] );
         if ( sg )
         {
-            m_GroupChoice.AddItem( sg->GetName(), i );
+            m_GroupChoice.AddItemRaw( sg->GetName(), i );
         }
     }
     m_GroupChoice.UpdateItems();
@@ -351,7 +350,7 @@ void ModeEditorScreen::UpdateVarPresetChoices()
                 Setting *s = VarPresetMgr.FindSetting( m_SettingIDs[i] );
                 if ( s )
                 {
-                    m_SettingChoice.AddItem( s->GetName(), i );
+                    m_SettingChoice.AddItemRaw( s->GetName(), i );
                 }
             }
         }

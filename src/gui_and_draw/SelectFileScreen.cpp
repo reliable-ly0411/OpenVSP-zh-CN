@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "SelectFileScreen.h"
 #include "FileUtil.h"
 
@@ -334,7 +335,7 @@ string SelectFileScreen::FileChooser( const string &title, const string &filter,
     char filter_str[256];
     snprintf( filter_str, sizeof( filter_str ), "   (%s)", filter.c_str() );
 
-    SetTitle( title + filter_str );
+    SetTitleRaw( VSPTranslateLabelAndValue( title, filter_str ) );
 
     m_FilterString = filter;
 

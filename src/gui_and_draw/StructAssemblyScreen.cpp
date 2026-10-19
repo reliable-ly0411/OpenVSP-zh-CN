@@ -12,6 +12,7 @@
 #define _HAS_STD_BYTE 0
 #endif
 
+#include "VSPChinese.h"
 #include "StructAssemblyScreen.h"
 #include "FeaMeshMgr.h"
 #include "StructureMgr.h"
@@ -151,7 +152,7 @@ StructAssemblyScreen::StructAssemblyScreen( ScreenMgr* mgr ) : TabScreen( mgr, 5
 
     m_ConnectionsTabLayout.AddDividerBox( "Connection Selection" );
 
-    static int con_col_widths[] = { 100, 75, 25, 100, 75, 25, 0 }; // widths for each column
+    static int con_col_widths[] = { 100, 60, 40, 100, 60, 40, 0 }; // Keep total width; allow two Chinese index characters.
 
     m_ConnectionSelectBrowser = m_ConnectionsTabLayout.AddColResizeBrowser( con_col_widths, 6, browser_h );
     m_ConnectionSelectBrowser->callback( staticScreenCB, this );
@@ -439,7 +440,7 @@ void StructAssemblyScreen::UpdateAssemblyTab()
     m_AssemblyIDs.clear();
 
     m_AssemblySelectBrowser->column_char( ':' );
-    m_AssemblySelectBrowser->add( "@b@.NAME" );
+    m_AssemblySelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME" ).c_str() );
 
 
     vector< FeaAssembly* > assy_vec = StructureMgr.GetFeaAssemblyVec();
@@ -488,7 +489,7 @@ void StructAssemblyScreen::UpdateStructTab()
     {
         string struct_name = structVec[i]->GetName();
 
-        m_FeaStructureChoice.AddItem( struct_name, i );
+        m_FeaStructureChoice.AddItemRaw( struct_name, i );
         m_StructIDs.push_back( structVec[i]->GetID() );
         names.push_back( struct_name );
     }
@@ -510,7 +511,7 @@ void StructAssemblyScreen::UpdateStructTab()
     }
 
     m_StructureSelectBrowser->column_char( ':' );
-    m_StructureSelectBrowser->add( "@b@.NAME:@b@.MESH READY:" );
+    m_StructureSelectBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.MESH READY:" ).c_str() );
 
     vector < string > idvec = curr_assy->m_StructIDVec;
     for ( int i = 0; i < idvec.size(); i++ )
@@ -592,8 +593,8 @@ void StructAssemblyScreen::UpdateConnectionTab()
                 m_FixPtIDs.push_back( fp->GetID() );
                 m_FixPtStructIDs.push_back( fea_struct->GetID() );
 
-                m_ConnectionStartChoice.AddItem( st_name, i );
-                m_ConnectionEndChoice.AddItem( st_name, i );
+                m_ConnectionStartChoice.AddItemRaw( st_name, i );
+                m_ConnectionEndChoice.AddItemRaw( st_name, i );
             }
         }
     }
@@ -634,7 +635,7 @@ void StructAssemblyScreen::UpdateConnectionTab()
     }
 
     m_ConnectionSelectBrowser->column_char( ':' );
-    m_ConnectionSelectBrowser->add( "@b@.START STRUCT:@b@.PT:@b@.INDEX:@b@.END STRUCT:@b@.PT:@b@.INDEX:" );
+    m_ConnectionSelectBrowser->add( VSPTranslateBrowserHeader( "@b@.START STRUCT:@b@.PT:@b@.INDEX:@b@.END STRUCT:@b@.PT:@b@.INDEX:" ).c_str() );
 
     vector < FeaConnection* > convec = curr_assy->m_ConnectionVec;
     for ( int i = 0; i < convec.size(); i++ )

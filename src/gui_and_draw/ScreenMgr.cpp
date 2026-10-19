@@ -279,7 +279,7 @@ void ScreenMgr::MessageCallback( const MessageBase* from, const MessageData& dat
             message.append( data.m_StringVec[i] );
         }
 
-        const string translated_message = VSPTranslate( message );
+        const string translated_message = VSPTranslateMessage( message );
         const char* msg = translated_message.c_str();
         fl_message( "%s", ( char* )msg );
     }
@@ -830,7 +830,8 @@ void ScreenMgr::LoadSetChoice( const vector < Choice* > &choicevec, const vector
 
         for ( int i = istart; i < ( int )set_name_vec.size(); ++i )
         {
-            c->AddItem( set_name_vec[i], i - (int) includeNone );
+            const int set_index = i - (int) includeNone;
+            c->AddItemRaw( set_index < vsp::SET_FIRST_USER ? VSPTranslate( set_name_vec[i] ) : set_name_vec[i], set_index );
         }
 
         c->UpdateItems();
@@ -850,7 +851,8 @@ void ScreenMgr::LoadSetChoice( const vector < Choice* > &choicevec, const vector
 
         for ( int i = istart; i < ( int )set_name_vec.size(); ++i )
         {
-            c->AddItem( set_name_vec[i], i - (int) includeNone );
+            const int set_index = i - (int) includeNone;
+            c->AddItemRaw( set_index < vsp::SET_FIRST_USER ? VSPTranslate( set_name_vec[i] ) : set_name_vec[i], set_index );
         }
 
         c->UpdateItems();
@@ -867,7 +869,7 @@ void ScreenMgr::LoadModeChoice( Choice & choice, vector < string > &modeIDVec, i
 
     for ( int i = 0; i < modeIDVec.size(); i++ )
     {
-        choice.AddItem( ModeMgr.GetMode( modeIDVec[i] )->GetName(), i );
+        choice.AddItemRaw( ModeMgr.GetMode( modeIDVec[i] )->GetName(), i );
     }
     choice.UpdateItems();
 
@@ -883,7 +885,7 @@ void ScreenMgr::LoadModeChoice( Choice & choice, vector < string > &modeIDVec, c
 
     for ( int i = 0; i < modeIDVec.size(); i++ )
     {
-        choice.AddItem( ModeMgr.GetMode( modeIDVec[i] )->GetName(), i );
+        choice.AddItemRaw( ModeMgr.GetMode( modeIDVec[i] )->GetName(), i );
     }
     choice.UpdateItems();
 
@@ -912,7 +914,7 @@ void ScreenMgr::LoadModeChoice( const vector < Choice* > &choicevec, vector < st
 
         for ( int i = 0; i < modeIDVec.size(); i++ )
         {
-            c->AddItem( ModeMgr.GetMode( modeIDVec[i] )->GetName(), i );
+            c->AddItemRaw( ModeMgr.GetMode( modeIDVec[i] )->GetName(), i );
         }
 
         c->UpdateItems();
@@ -1254,7 +1256,7 @@ void MessageBox( void * data )
 //==== Create Pop-Up Message Window ====//
 void ScreenMgr::Alert( const string &message )
 {
-    const string translated_message = VSPTranslate( message );
+    const string translated_message = VSPTranslateMessage( message );
     char *buf = new char[ translated_message.size() + 1 ];
     memcpy( buf, translated_message.data(), translated_message.size() );
     buf[translated_message.size()] = '\0';

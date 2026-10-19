@@ -13,6 +13,7 @@
 #include <windows.h>
 #endif
 
+#include "VSPChinese.h"
 #include "ParasiteDragScreen.h"
 #include "ParasiteDragMgr.h"
 #include "StlHelper.h"
@@ -859,7 +860,7 @@ void ParasiteDragScreen::UpdateSrefChoice()
 
                 if ( geom->GetType().m_Type == MS_WING_GEOM_TYPE )
                 {
-                    m_RefWingChoice.AddItem( str );
+                    m_RefWingChoice.AddItemRaw( str );
                     WingCompIDMap[g_IDs[i]] = iwing;
                     m_WingGeomVec.push_back( g_IDs[i] );
                     iwing++;
@@ -946,8 +947,7 @@ void ParasiteDragScreen::UpdateExcresTab()
     m_ExcresBrowser->clear();
     m_ExcresBrowser->column_char( ':' );
 
-    snprintf( str, sizeof( str ),  "@b@.NAME:@b@.TYPE:@b@.VALUE" );
-    m_ExcresBrowser->add( str );
+    m_ExcresBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.TYPE:@b@.VALUE" ).c_str() );
 
     string excres_name, excres_type, formatString;
     double excres_val;

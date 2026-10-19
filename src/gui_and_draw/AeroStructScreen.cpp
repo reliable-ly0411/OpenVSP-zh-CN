@@ -310,7 +310,7 @@ bool AeroStructScreen::Update()
             {
                 string assy_name = fea_assy->GetName();
 
-                m_StructureChoice.AddItem( assy_name );
+                m_StructureChoice.AddItemRaw( assy_name );
             }
         }
     }

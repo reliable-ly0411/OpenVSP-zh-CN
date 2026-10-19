@@ -1,11 +1,11 @@
 # OpenVSP 简体中文版
 
-> **声明：**本仓库是由 OpenAI Codex AI 生成并维护汉化层的非官方简体中文版本。
+> **声明：**本仓库提供非官方简体中文汉化。
 > OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，仍属于 NASA/OpenVSP
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
 - 当前软件版本：OpenVSP 3.53.0
-- 当前汉化版本：`3.53.0-Codex-AI-zh-CN`
+- 当前汉化版本：`3.53.0-zh-CN.rc.1`（开发候选，尚未发布）
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -24,19 +24,20 @@ NASA/OpenVSP 官方汉化。维护架构与强制规则统一见 [`AGENTS.md`](A
 ## 下载与运行
 
 从 [Releases](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases) 下载与系统对应的
-ZIP 和 `SHA256SUMS.txt`，校验后解压。发布包不会覆盖系统目录。
+ZIP 和 `SHA256SUMS.txt`，校验后解压。当前候选尚未发布，以下文件名与统一发布流程一致；
+下载时必须选择目标候选对应的 Release 页面。发布包不会覆盖系统目录。
 
 Ubuntu 24.04 x86_64：
 
 ```bash
 sudo apt-get install fonts-noto-cjk
 sha256sum -c SHA256SUMS.txt --ignore-missing
-unzip OpenVSP-3.53.0-Codex-AI-zh-CN-Ubuntu-24.04-x86_64.zip
+unzip OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip
 cd OpenVSP-3.53.0-Linux
 ./vsp
 ```
 
-Windows x64：解压 `OpenVSP-3.53.0-Codex-AI-zh-CN-Windows-x64.zip`，运行目录中的
+Windows x64：解压 `OpenVSP-3.53.0-win64-zh-CN.zip`，运行目录中的
 `vsp.exe`。如 Windows 阻止从网络下载的程序，先在 ZIP 文件属性中解除锁定再解压。
 
 Ubuntu 图形构建固定采用 FLTK X11 后端，在 Wayland 会话中通过 XWayland 运行，以规避
@@ -79,14 +80,51 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
-1. `Watch OpenVSP Upstream` 每周检查官方 `main`，发现更新时只创建计划 Issue。
-2. 人工启动 `Prepare OpenVSP Upstream Update` 后，工作流把汉化差异移植到新上游，生成
-   同时继承旧汉化与新上游的审查提交；发生冲突即停止。
-3. 人工完成补译、审查和双平台验收后，创建 `<版本>-Codex-AI-zh-CN` 不可变标签；
-   `Build and Release Localized OpenVSP` 构建 Linux/Windows ZIP、校验中文命令行和依赖、
-   生成 SHA-256，并发布标签对应的源码归档。
+新候选使用 `<版本>-zh-CN.rc.<序号>`，历史标签不移动、不覆盖。构建与推广由 `main`
+分支的统一工作流执行，旧族源码树不复制整套工作流：
 
-同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
+1. `Watch OpenVSP Upstream` 只创建更新计划；上游迁移保留历史继承关系，冲突时停止。
+2. `Build five-platform localized prerelease` 明确指定本族完整 `source_sha` 与新 `new_tag`，
+   构建 Ubuntu 24.04 AMD64/ARM64、Windows x64、macOS 14 ARM64 和 macOS 15 Intel。
+   五个平台分别检查原生架构、资源、名称往返、Python ABI 与依赖闭合，并产生校验清单。
+3. 人工实际审阅该次构建的 Linux GUI 与名称/路径往返后，才使用
+   `Promote GUI-reviewed native prerelease` 推广原始包，并记录未验收平台或其他边界。
+   源码守卫、语法编译或隔离测试通过均不代替原生包与 GUI 验收。
+
+同一 OpenVSP 版本后续候选使用递增的 `.rc.<序号>` 标签。不可变的旧标签、源码与资产
+保持原样，不能用替换旧资产来掩盖历史。
+
+## 未发布
+
+当前目标为 `3.53.0-zh-CN.rc.1`。以下记录源码候选范围，完整 GUI、原生脚本、
+五平台安装包与 Python 扩展导入验收仍待完成，不能据此宣称已发布或全面汉化。
+
+## 3.53.0-zh-CN.rc.1
+
+- 从不可变的 `3.53.0-Codex-AI-zh-CN` 继续开发，保留官方 3.53.0 算法、API 和完整历史。
+  逐块回移共享汉化修复，保留本族四列设计变量表头、旧参考翼列表与几何体命名逻辑。
+- 几何体、用户参数、集合、材料等名称和路径按原文显示；仅翻译固定标签、内置选项与
+  表头。修复 XML 文本中 `&` 被当作实体表达式解释导致名称丢失的问题。
+- 回移审阅过的完整标签、吊舱/发动机短舱术语、马赫数与索引列宽、视图方向及旧版词条。
+  格式化占位符、工程符号、公式作者名与扩展名保留；未知短语保持整句原文。
+- 格式化表头通过专用入口翻译并保留控制码、分隔符和数据行；修复六个离线帮助主题
+  的目录与锚点，构建默认使用审阅 HTML，单配置和多配置资源放在可执行文件旁。
+- 恢复 `airfoil`、`CustomScripts`、`scripts`、`textures`、`vspaero_ex`、`CCE`、`matlab`
+  运行资源，同时保留完整 `Official_Examples`。Python 构建固定 NumPy 1.26.4，运行依赖
+  限定 `>=1.26.4,<2`，保留平台 ABI 元数据并纳入随包动态库与许可文件。
+- 主窗、关于页、离线帮助及当前文档去除工具宣传；关于页使用运行时 `VSPVERSION4`，
+  当前候选标签与两份 README 的软件版本一致；历史发布日志及标签原样保留。
+- 候选身份守卫与隔离 CTest 8/8 通过；55 项 Python 回归通过，覆盖正确/错误候选标签、
+  Windows 检出字节、运行资源缺失、帮助锚点和单/多配置路径、NumPy 与包清单。
+  译表守卫覆盖 833 个审阅用例、255 个保护词条、2062 个 GUI 字面量与 28 类表头。
+  帮助生成器自测及六页生成一致性通过，包含中文/英文标题、重复锚点和跨页链接。
+- 30 个改动 GUI 翻译单元逐一进行 C++ 语法编译且全部通过；补齐文件选择器的跨平台翻译声明，
+  守卫同时检查表头、标签/值分离和消息三种专用入口的无条件 include。主窗另用本族
+  `main.h` 验证运行时版本宏；语法检查不等同完整链接或 GUI 验收。
+- 使用隔离占位文件实际生成 wheel，验证非 pure 的平台 ABI 标签、扩展与依赖/许可包含；
+  这仅验证打包元数据，不代表原生 Python 扩展导入成功。名称/路径单元回归和 XML
+  序列化重开测试覆盖与 `Export`/`Cancel`/“机翼”/“取消”同名的 UI 词、特殊符号、`&` 与字面
+  `&amp;`、中文及 Windows/Linux 路径。
 
 ## 3.53.0-Codex-AI-zh-CN
 

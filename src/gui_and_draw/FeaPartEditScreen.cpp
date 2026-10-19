@@ -8,6 +8,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include "VSPChinese.h"
 #include "FeaPartEditScreen.h"
 #include "StructureMgr.h"
 #include "FeaMeshMgr.h"
@@ -3788,11 +3789,11 @@ void FeaPartEditScreen::UpdateFeaPropertyChoice()
             m_FeaPropertyIDVec.push_back( property_vec[i]->GetID() );
             if ( property_vec[i]->m_FeaPropertyType() == vsp::FEA_SHELL )
             {
-                m_ShellPropertyChoice.AddItem( string( property_vec[i]->GetName() ), i );
+                m_ShellPropertyChoice.AddItemRaw( string( property_vec[i]->GetName() ), i );
             }
             else // vsp::FEA_BEAM
             {
-                m_CapPropertyChoice.AddItem( string( property_vec[i]->GetName() ), i );
+                m_CapPropertyChoice.AddItemRaw( string( property_vec[i]->GetName() ), i );
             }
         }
 
@@ -3848,7 +3849,7 @@ void FeaPartEditScreen::UpdateFixPointParentChoice()
         {
             if ( !structVec[StructureMgr.m_CurrStructIndex()]->FeaPartIsFixPoint( i ) )
             {
-                m_FixPointParentSurfChoice.AddItem( string( feaprt_vec[i]->GetName() ) );
+                m_FixPointParentSurfChoice.AddItemRaw( string( feaprt_vec[i]->GetName() ) );
                 m_FixPointParentIDVec.push_back( feaprt_vec[i]->GetID() );
             }
         }
@@ -3923,7 +3924,7 @@ void FeaPartEditScreen::UpdateTrimPartChoice()
                  !fea_struct->FeaPartIsTrim( i ) &&
                  !fea_struct->FeaPartIsSkin( i ) ) // Possibly could be done differently
             {
-                m_TrimPartChoice.AddItem( string( feaprt_vec[ i ]->GetName() ) );
+                m_TrimPartChoice.AddItemRaw( string( feaprt_vec[ i ]->GetName() ) );
                 m_TrimPartChoiceIDVec.push_back( feaprt_vec[ i ]->GetID() );
             }
         }
@@ -3938,8 +3939,7 @@ void FeaPartEditScreen::UpdateTrimPartChoice()
         m_TrimPartBrowser->clear();
         m_TrimPartBrowser->column_char( ':' );
         char str[256];
-        snprintf( str, sizeof( str ),  "@b@.PART:@b@.FLIPDIR" );
-        m_TrimPartBrowser->add( str );
+        m_TrimPartBrowser->add( VSPTranslateBrowserHeader( "@b@.PART:@b@.FLIPDIR" ).c_str() );
 
         int ipart = StructureMgr.GetCurrPartIndex();
         if (  ipart < fea_struct->NumFeaParts() )
@@ -4020,8 +4020,8 @@ void FeaPartEditScreen::UpdatePerpendicularRibChoice()
                 {
                     if ( part_vec[i]->GetType() == vsp::FEA_SPAR )
                     {
-                        m_RibPerpendicularSparChoice.AddItem( part_vec[i]->GetName() );
-                        m_RibArrayPerpendicularSparChoice.AddItem( part_vec[i]->GetName() );
+                        m_RibPerpendicularSparChoice.AddItemRaw( part_vec[i]->GetName() );
+                        m_RibArrayPerpendicularSparChoice.AddItemRaw( part_vec[i]->GetName() );
                         m_PerpendicularEdgeVec.push_back( part_vec[i]->GetID() );
                     }
                 }
@@ -4338,8 +4338,7 @@ void FeaPartEditScreen::UpdatePolySparPointBrowser( FeaPolySpar* polyspar )
 
         m_PolySparPointBrowser->column_char( ':' );
 
-        snprintf( str, sizeof( str ),  "@b@.PT_NAME:@b@.PARM:@b@.GROUP:@b@.CONTAINER" );
-        m_PolySparPointBrowser->add( str );
+        m_PolySparPointBrowser->add( VSPTranslateBrowserHeader( "@b@.PT_NAME:@b@.PARM:@b@.GROUP:@b@.CONTAINER" ).c_str() );
         m_PolySparPointBrowser->addCopyText( "header" );
 
         vector < PolySparPoint* > pt_vec = polyspar->GetAllPt();
