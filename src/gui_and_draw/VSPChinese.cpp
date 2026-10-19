@@ -16,6 +16,21 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
     static const std::unordered_map<std::string, std::string> table = {
 
+        // Legacy 3.51 GUI wording; preserve the old version's controls and symbols.
+        { "Color Mesh", "网格着色" },
+        { "Distance Metric", "距离度量" },
+        { "Export Options", "导出选项" },
+        { "Forward Direction", "正向" },
+        { "Forward Displacement", "正向位移" },
+        { "Heat Transfer White-Christoph", "White-Christoph 传热" },
+        { "Parasite Drag Output", "寄生阻力输出" },
+        { "Point Cloud (.pts)", "点云 (.pts)" },
+        { "Reverse Direction", "反向" },
+        { "Reverse Displacement", "反向位移" },
+        { "Surface and Curve Export", "曲面与曲线导出" },
+        { "Surfaces and Intersection Curves", "曲面与交线" },
+        { "Update Distance", "更新距离" },
+
         // Reviewed complete GUI labels; keep engineering symbols and file suffixes.
         { "Mach Number", "马赫数" },
         { "Rotor RPM", "旋翼转速 (RPM)" },

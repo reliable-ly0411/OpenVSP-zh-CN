@@ -818,5 +818,18 @@
   "About Chinese Localization...": "关于简体中文汉化...",
   "Invalid inputs to least squares optimizer.\n": "最小二乘优化器的输入无效。\n",
   "Mach Number": "马赫数",
-  "Rotor RPM": "旋翼转速 (RPM)"
+  "Rotor RPM": "旋翼转速 (RPM)",
+  "Color Mesh": "网格着色",
+  "Distance Metric": "距离度量",
+  "Export Options": "导出选项",
+  "Forward Direction": "正向",
+  "Forward Displacement": "正向位移",
+  "Heat Transfer White-Christoph": "White-Christoph 传热",
+  "Parasite Drag Output": "寄生阻力输出",
+  "Point Cloud (.pts)": "点云 (.pts)",
+  "Reverse Direction": "反向",
+  "Reverse Displacement": "反向位移",
+  "Surface and Curve Export": "曲面与曲线导出",
+  "Surfaces and Intersection Curves": "曲面与交线",
+  "Update Distance": "更新距离"
 }
