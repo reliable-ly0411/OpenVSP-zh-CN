@@ -5,7 +5,7 @@
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
 - 当前软件版本：OpenVSP 3.54.0
-- 当前汉化版本：`3.54.0-zh-CN.rc.1`（开发候选，尚未发布）
+- 当前汉化版本：`3.54.0-zh-CN.rc.1`（预发布候选）
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -29,7 +29,7 @@ ZIP 和 `SHA256SUMS.txt`，校验后解压。发布包不会覆盖系统目录�
 历史 Release 的原始 SHA-256 清单可能仍记载旧文件名，名称对应关系及不变校验值见该 Release 正文。
 后续新发布的清单使用新文件名。
 
-以下命令以已发布的 3.53.0 为例；自动同步构建的下载方式见“上游更新与发布”。
+以下保留已发布 3.53.0 的历史安装示例；新 rc 的包名见“3.54.0-zh-CN.rc.1”章节。
 
 Ubuntu 24.04 x86_64：
 
@@ -124,13 +124,29 @@ cmake --build build --target package --config Release --parallel 2
 
 - 材质按钮语境修复与验证范围见下方 `3.54.0-zh-CN.rc.1` 章节，本族 GUI 仍待实测。
 
-当前目标为 `3.54.0-zh-CN.rc.1`。以下记录源码候选的修复与验证边界；本族完整 GUI、
-原生脚本、五平台安装包与运行时检查尚待完成，不能据此宣称已发布或全面汉化。
+当前目标为 `3.54.0-zh-CN.rc.1`。以下记录预发布候选的修复与验证边界；完整 GUI、
+原生脚本、五平台安装包与运行时检查的实际结果及可下载状态，以对应 Release/CI 为准。
 候选身份守卫已整合；以默认分支统一流程对精确源码 SHA 构建，人工验收后晋级同一 run 的原始产物。
 本次维护规则已与五平台手动构建、固定哈希 GUI 审阅和不覆盖历史发布的门槛对齐。
 本族 PR 对 main/develop/dev 执行只读源码、Python 和独立 C++/XML 回归，不调用旧双平台重构建或发布。
 
 ## 3.54.0-zh-CN.rc.1
+
+本版本为预发布候选，实际验收与可下载状态以对应 Release/CI 为准；源码及离线回归
+不能代替五平台原生构建、运行时检查和原始 Linux 包的 GUI 目视验收。
+
+新五平台公开 ZIP 采用[官方命名格式](https://openvsp.org/download.php)，在扩展名前
+加 `-zh-CN`，同时如实保留本轮系统、架构、Python ABI 和 ZIP 格式：
+
+- Ubuntu 24.04 AMD64，Python 3.12：`OpenVSP-3.54.0-Ubuntu-24.04_amd64-zh-CN.zip`
+- Ubuntu 24.04 ARM64，Python 3.12：`OpenVSP-3.54.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip`
+- Windows x64，Python 3.11：`OpenVSP-3.54.0-win64-Python3.11-zh-CN.zip`
+- macOS 14 ARM64，Python 3.11：`OpenVSP-3.54.0-macos-14-ARM64-Python3.11-zh-CN.zip`
+- macOS 15 Intel，Python 3.11：`OpenVSP-3.54.0-macos-15-intel-X64-Python3.11-zh-CN.zip`
+
+这是本项目的自建目标；Ubuntu ARM64 不是官方预编译包，Ubuntu ZIP 也不是官方 `.deb`。
+macOS ARM64 仍以 14 为目标；文件名中的系统版本表示实际构建目标，不承诺其他系统兼容性。
+新 rc 的 `SHA256SUMS.txt` 精确覆盖这五个文件；历史安装示例、标签和资产名称保留原样。
 
 - 回移机翼“常规 → 材质”行自定义按钮的语境修复：独立显示标签 `Customize Material`
   短译为“自定义”，自定义几何体窗口仍使用 `Custom` 的“自定义几何体”译法。问题来源
@@ -140,7 +156,7 @@ cmake --build build --target package --config Release --parallel 2
   译表覆盖 835 条整句、255 条保护项。本版本 GUI 尚待新构建实测，不能由 3.55.0
   截图代替验收。
 
-- 修正原生模型边界验收对官方命名 API 的错误预期：`SetGeomName` 原本就会移除名称中的 `/`，现在显式检查这个既有规范化结果，并在保存前、重开后逐字核对其余中文、英文、`&`、字面实体、百分号和 FLTK 控制字符。文件路径中的斜杠仍作为路径分隔，不经过翻译；本次不修改命名 API。失败诊断只打印固定类别和样例索引，不打印用户名称或路径。新增 4 项源码契约回归，实际原生执行仍由新构建验证。
+- 修正原生模型边界验收对官方命名 API 的错误预期：`SetGeomName` 原本就会移除名称中的 `/`，现在显式检查这个既有规范化结果，并在保存前、重开后逐字核对其余中文、英文、`&`、字面实体、百分号和 FLTK 控制字符。文件路径中的斜杠仍作为路径分隔，不经过翻译；本次不修改命名 API。失败诊断只打印固定类别和样例索引，不打印用户名称或路径。新增 4 项源码契约回归，实际原生执行结果以对应 CI 为准。
 
 
 - 从不可变的 `3.54.0-Codex-AI-zh-CN-r1` 继续开发，保留官方 3.54.0 算法、API 与历史。
@@ -173,7 +189,7 @@ cmake --build build --target package --config Release --parallel 2
   回归；完整模型保存重开和 CustomScripts 原生脚本已随源码提供，仍需本族运行验收。
 - 隔离占位文件实际生成 `cp312-cp312-linux_x86_64` 非 pure wheel，核实 NumPy 上限、
   原生扩展文件名、动态库和许可清单包含；这仅验证打包元数据，不代表原生扩展可导入。
-- 真实原生运行、完整链接、五平台打包、Python 扩展导入及 GUI 验收仍待完成。
+- 真实原生运行、完整链接、五平台打包、Python 扩展导入及 GUI 验收以对应 Release/CI 为准。
 
 ## 3.54.0-Codex-AI-zh-CN-r1
 
