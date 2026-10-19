@@ -2693,7 +2693,7 @@ bool GeomScreen::Update()
     m_SubSurfBrowser->column_char( ':' );
 
     snprintf( str, sizeof( str ),  "@b@.NAME:@b@.TYPE:@b@.SURF" );
-    m_SubSurfBrowser->add( str );
+    m_SubSurfBrowser->add( VSPTranslateBrowserHeader( str ).c_str() );
 
     string ss_name, ss_type;
     int ss_surf_ind;
