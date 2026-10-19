@@ -7,7 +7,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not create neutral build drive' }
 try {
     $root = 'O:\'
     Set-Location O:\source
-    choco install --yes swig pandoc
+    # Use the reviewed, bundled HTML help; Pandoc regeneration is disabled below.
+    choco install --yes swig
     if ($LASTEXITCODE -ne 0) { throw 'Build dependency installation failed' }
     python -m venv O:\venv
     if ($LASTEXITCODE -ne 0) { throw 'Build venv creation failed' }

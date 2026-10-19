@@ -115,6 +115,11 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- 第二轮五版本族的 Windows 原生作业均在编译前安装依赖时停止：Chocolatey 查询
+  Pandoc 的 V2 feed 返回 HTTP 499，SWIG 4.4.1 已安装。Windows 构建现在只安装必需的
+  SWIG，保留安装失败检测、关闭 Python 文档生成和不可用的 Pandoc 路径配置；五族帮助
+  CMake 均使用已有的中文 HTML，随包帮助与源码字节核对及全部原生验收门禁保持不变。
+  此修复只移除未使用依赖，离线回归不代表 Windows 编译、原包或 GUI 已通过。
 - 预发布晋级核对同一次原生构建的全部作业尝试：只重跑失败平台后，保留其他平台原有成功
   记录，同时要求每个必需作业的最新尝试成功；不能用旧成功掩盖较新的失败或取消。原包、
   源码、清单及 GUI 审阅哈希约束不变，所选作业编号和尝试次数仅记录在 CI。
