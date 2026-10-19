@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       upstream_ref:
-        description: Official branch, tag, or commit; empty uses upstream.json branch
+        description: Official branch, tag, or commit; empty selects latest official released tag
         required: false
         default: ''
         type: string
@@ -41,15 +41,16 @@ jobs:
         run: |
           set -euo pipefail
           repository=$(jq -r .repository .github/upstream.json)
-          upstream_ref="${UPSTREAM_REF:-$(jq -r .branch .github/upstream.json)}"
+          test "$repository" = OpenVSP/OpenVSP
+          upstream_ref=$(python3 scripts/select_official_release.py)
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git remote add official "https://github.com/${repository}.git"
           git remote set-url --push official DISABLED
           git fetch --no-tags -- official "$upstream_ref"
-          python3 scripts/sync_upstream.py FETCH_HEAD
+          UPSTREAM_SOURCE_REF="$upstream_ref" python3 scripts/sync_upstream.py FETCH_HEAD
 
-      - name: Check and push candidate for both platform builds
+      - name: Check and push candidate for source validation
         id: candidate
         if: steps.sync.outputs.changed == 'true'
         env:
@@ -61,18 +62,18 @@ jobs:
           python3 scripts/check_localization_release.py
           git diff --cached --check -- .github/upstream.json README_zh-CN.md AGENTS.md
           git commit -m "自动同步 OpenVSP ${VERSION} (${UPSTREAM_SHA:0:12})"
-          # 每次运行保留独立候选分支，主分支只在双平台成功后快进。
+          # 每次运行保留独立候选分支，仅输出候选分支，不自动推进主分支或创建 Release。
           branch="automation/upstream-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git push origin "HEAD:refs/heads/$branch"
           {
             echo "sha=$(git rev-parse HEAD)"
             echo "branch=$branch"
           } >> "$GITHUB_OUTPUT"
-          echo "候选分支：\`$branch\`；等待 Linux/Windows 验证后自动同步 main。" >> "$GITHUB_STEP_SUMMARY"
+          echo "候选分支：\`$branch\`；等待轻量源代码验证与后续手动五平台验收；不自动同步 main。" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report unchanged upstream
         if: steps.sync.outputs.changed == 'false'
-        run: echo '官方上游已包含在 main 中；继续检查是否需要补发当前自动构建。' >> "$GITHUB_STEP_SUMMARY"
+        run: echo '所选官方上游已包含在 main 中；不重复创建候选或修改已发布资产。' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report preparation failure
         if: failure()

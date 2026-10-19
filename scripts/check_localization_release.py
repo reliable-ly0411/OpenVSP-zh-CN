@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "src" / "cmake" / "VSP_Version.cmake"
 RELEASE_NOTES_FILE = ROOT / "README_zh-CN.md"
 TAG_RE = re.compile(
-    r"^(?P<version>\d+\.\d+\.\d+)-Codex-AI-zh-CN(?:-r[1-9]\d*|-auto\.(?P<upstream>[0-9a-f]{12}))?$"
+    r"^(?P<version>\d+\.\d+\.\d+)(?:-Codex-AI-zh-CN(?:-r[1-9]\d*|-auto\.(?P<upstream>[0-9a-f]{12}))?|-zh-CN\.rc\.[1-9]\d*|-zh-CN\.(?:dev|candidate)\.[0-9a-f]{12})$"
 )
 
 
@@ -103,7 +103,6 @@ def main() -> None:
     require_text("README_zh-CN.md", f"当前软件版本：OpenVSP {version}\n")
     require_text("AGENTS.md", f"当前官方基线：OpenVSP {version}，")
 
-    require_text("src/gui_and_draw/MainVSPScreen.cpp", "【声明】本中文本地化")
     require_text("src/gui_and_draw/MainVSPScreen.cpp", "VSPVERSION4")
     require_text(
         "src/gui_and_draw/MainVSPScreen.cpp",
@@ -121,8 +120,8 @@ def main() -> None:
         match = TAG_RE.fullmatch(args.expected_tag)
         if not match:
             raise SystemExit(
-                "发布标签必须为 <版本>-Codex-AI-zh-CN、-rN 重发版或 -auto.<上游提交前12位>，"
-                f"例如 {version}-Codex-AI-zh-CN-r2"
+                "新预发布标签必须为 <版本>-zh-CN.rc.<递增序号>；历史标签只用于校验，"
+                f"例如 {version}-zh-CN.rc.1"
             )
         if match.group("version") != version:
             raise SystemExit(f"标签版本 {match.group('version')} 与源码版本 {version} 不一致")

@@ -1,0 +1,66 @@
+name: Promote GUI-reviewed native prerelease
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Build five-platform localized prerelease run containing the ORIGINAL reviewed packages
+        required: true
+        type: string
+      source_sha:
+        description: Exact 40-character source commit from that original build
+        required: true
+        type: string
+      new_tag:
+        description: The same NEW <version>-zh-CN.rc.N tag used for that original build
+        required: true
+        type: string
+      manifest_sha256:
+        description: SHA-256 of the ORIGINAL downloaded SHA256SUMS.txt
+        required: true
+        type: string
+      linux_gui_sha256:
+        description: SHA-256 of original Linux AMD64 ZIP reviewed for main window, wing page and model name/path roundtrip
+        required: true
+        type: string
+      validation_note:
+        description: Actual GUI review results and any untested platforms or limitations
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: native-prerelease-${{ inputs.new_tag }}
+  cancel-in-progress: false
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      NEW_TAG: ${{ inputs.new_tag }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+      LINUX_GUI_SHA256: ${{ inputs.linux_gui_sha256 }}
+      VALIDATION_NOTE: ${{ inputs.validation_note }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate publication and original-artifact recovery regressions
+        run: |
+          python3 -m unittest discover -s scripts -p test_native_release.py -v
+          python3 -m unittest discover -s scripts -p test_native_promote.py -v
+      - name: Verify original run, all native jobs, original hashes and GUI evidence; publish without rebuilding
+        run: python3 scripts/native_promote.py
+      - name: Save GUI review separately from public Release assets
+        if: always() && hashFiles('gui-review.json') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-gui-review
+          path: gui-review.json
+          retention-days: 30
