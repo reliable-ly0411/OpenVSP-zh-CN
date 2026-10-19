@@ -78,25 +78,30 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
-以下保留历史流程说明。新候选使用 `<版本>-zh-CN.rc.<序号>`；统一五平台构建与推广
-工作流另行接入，源码守卫通过不表示原生平台或 GUI 已经验收。
+本版本族的旧 `upstream-watch.yml` 与 `prepare-upstream-update.yml` 入口只显示迁移提示；
+不再创建 Issue、改写分支、创建标签或发布 Release。`release-localized.yml` 仅保留本族原有
+双平台构建与 CI 附件步骤，只能由其他工作流以精确提交和新 rc 标签调用，没有公开发布权限。
 
-1. `Watch OpenVSP Upstream` 每周检查官方 `main`，发现更新时只创建计划 Issue。
-2. 人工启动 `Prepare OpenVSP Upstream Update` 后，工作流把汉化差异移植到新上游，生成
-   同时继承旧汉化与新上游的审查提交；发生冲突即停止。
-3. 人工完成补译、审查和双平台验收后，创建 `<版本>-Codex-AI-zh-CN` 不可变标签；
-   `Build and Release Localized OpenVSP` 构建 Linux/Windows ZIP、校验中文命令行和依赖、
-   生成 SHA-256，并发布标签对应的源码归档。
+1. 从默认分支运行 `Prepare and validate OpenVSP upstream candidates`，为官方新版本准备
+   保留双父继承关系的候选；冲突即停止，不自动推进 `main`。
+2. 候选 PR 先通过轻量 Python/C++/XML 检查，再以普通 merge 合入对应开发分支。
+3. 默认分支的 `Build five-platform localized prerelease` 对精确源码提交执行五平台原生构建。
+   原始 Linux ZIP 完成真实 GUI 审阅后，使用 `Promote GUI-reviewed native prerelease`
+   核对构建 run、源码 SHA、清单及已审原包哈希后创建新的 rc 预发布。
 
-同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
+新标签使用 `<版本>-zh-CN.rc.<递增序号>`，不移动旧标签，不替换旧附件；源码或语法检查通过
+不代表原生包、Python 扩展或真实 GUI 已通过验收。
 
 ## 未发布
 
 当前目标为 `3.51.3-zh-CN.rc.1`。以下仅记录源码候选的已验证结果；本族完整 GUI、
-原生脚本、Linux/Windows 安装包与运行时检查尚待完成，不能据此宣称已发布或全面汉化。
-候选身份守卫已整合，统一五平台构建与推广工作流另行接入。
+原生脚本、五平台安装包与运行时检查尚待完成，不能据此宣称已发布或全面汉化。
+候选身份与入口隔离守卫已整合；五平台构建和审阅推广统一从默认分支启动。
 
 ## 3.51.3-zh-CN.rc.1
+
+- 候选 PR 运行轻量 Python/C++/XML 守卫；新增 3 项入口隔离测试，防止旧工作流重新获得
+  公开写入路径。本族旧双平台构建步骤保持原样，新发布统一使用默认分支的五平台流程。
 
 - 补足文件选择器助手的无条件声明并扩展三类翻译助手源码守卫；增加 14 类 UI 同名、
   中文及 XML 实体名称边界。只读校验 8 个整机案例的 210 项原始几何名称，
@@ -129,7 +134,7 @@ cmake --build build --target package --config Release --parallel 2
   `>=1.26.4,<2`，依赖环境固定 1.26.4，避免 NumPy 2 ABI 不兼容。
 - 主窗口与关于菜单改为“简体中文”，关于窗口使用运行时软件版本并显示本族候选标签、
   仓库和 NOSA 1.3 归属。
-- 已通过：8/8 独立 CTest（含名称/路径边界及 libxml2 文本往返）、62 项 Python 测试、
+- 已通过：8/8 独立 CTest（含名称/路径边界及 libxml2 文本往返）、65 项 Python 测试、
   帮助生成器自测及 6 页 HTML 一致性、`git diff --check`。译表守卫覆盖 833 条整句、
   255 条保护项、2055 个旧 GUI 字面量及 27 类表头；未改共享原始回归案例。
 - 仍待专业复核的术语包括 DegenGeom、Activity Factor、Flat/Round 端盖、横观各向同性、
