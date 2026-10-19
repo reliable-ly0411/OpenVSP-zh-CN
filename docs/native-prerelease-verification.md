@@ -66,6 +66,33 @@ and makes no claim that a not-yet-run native build or GUI has passed.
 
 - CLI: packaged `vsp -help` must succeed and contain Chinese usage. Only the exact old 3.51.x Linux
   X11 startup error may retry in Xvfb; other nonzero exits/timeouts remain failures.
+- Export and CLI analysis: the packaged `vspscript` executes the pinned tooling file
+  `native_functional_smoke.as` in a new, empty scratch directory. It actually exports a pod/wing STL,
+  runs CompGeom, and executes a one-CPU, single-point VSPAERO sweep at alpha 5 degrees and Mach 0.1.
+  The original user names and the API error queue are checked. Python independently requires the
+  exact Unicode STL directory entry and parses complete ASCII or binary triangles, finite normals
+  and coordinates, and at least one nondegenerate triangle. Results CSV files must exist in that
+  fresh directory and have the expected unique result header. CompGeom requires two positive finite
+  wetted areas; every returned lift-history value must be finite and the last must have absolute
+  value greater than `1e-6`. `CLtot` is preferred, with `CL` supported only when `CLtot` is absent;
+  malformed, empty or duplicate result fields never fall back or silently skip the solver.
+  The solver's `Done` text and wrapper result ID alone are insufficient evidence. Upstream CSV writes
+  can fail without an API error, so markers alone cannot substitute for independent file checks.
+  A second phase directly runs packaged `vspaero -omp 1 <base>` (`vspaero.exe` on Windows). It creates
+  another empty directory and copies only `.vspaero`, `.vspgeom` and `.vkey` inputs. The VKEY is mandatory;
+  no earlier history, CSV, polar or other solver output is copied. These arguments and three-file input
+  requirements were checked in all five source families. A nonzero direct CLI exit, timeout or FAIL
+  text stops immediately, even if the failed process left a plausible history. After exit zero, Python
+  requires a newly generated history with the complete supported 51-column steady layout, finite
+  physical values and lift samples, and nonzero final lift. Only the two log-residual columns may contain
+  negative infinity, the upstream `log10(0)` representation; NaN and positive infinity still fail, and
+  no physical or lift field gets this exception. API and direct CLI evidence are recorded separately.
+  All three exact PASS markers are mandatory. A nonzero `vspscript` exit, timeout, any FAIL text, missing/misnamed
+  files, invalid/truncated mesh or nonfinite/empty/zero-final-lift results fail closed. Runtime JSON
+  includes only predefined failure categories, never raw solver output, file paths or model values.
+  The successful report contains counts, field/format enums and verified flags, not raw solver values;
+  assembly requires both new functional checks and this evidence. The shared script never falls back
+  to a family-source copy; the historical backfill script and tools are unchanged.
 - Model: baseline AngelScript smoke plus `localization_boundary_smoke.as` must preserve model names,
   identifiers, parameter values and special-character file paths across save/reopen.
   The shared `backfill_smoke.as` is taken from the pinned workflow tooling, because old source families
@@ -116,6 +143,22 @@ old/duplicate checksum names, wrong hashes, immutable public releases, conflicti
 uploads, add-only recovery, corruption on remote read-back, GUI hash mismatch, artifact provenance,
 safe extraction, and official-tag/development-snapshot separation. Mocked tests do not replace native
 platform runs or manual GUI review.
+
+### Functional fixture evidence and limits
+
+On 2026-10-19, the **old released 3.55 Linux baseline only** executed the new functional script through
+the new wrapper with a clean home/scratch directory. Independent parsing found 1,152 valid STL
+triangles under the exact Unicode filename, two positive finite CompGeom areas, and five finite
+`CLtot` API samples with a nonzero final sample. All three markers and zero API errors were required.
+The additional direct CLI phase returned zero and produced its own new five-sample finite lift history.
+The script uses the documented APIs also present in the five source families; source inspection is
+not a runtime pass. No new candidate or other version/platform is marked accepted by this baseline
+exercise. This small case checks executable/export/solver plumbing, not aerodynamic accuracy,
+convergence quality, broad model coverage, or GUI correctness. All existing package identity,
+manifest/read-back and GUI-review gates remain required.
+The upstream analysis API does not return the VSPAERO child-process exit code to AngelScript;
+this is why the separate direct CLI phase observes its own return code and fresh history in addition
+to the API phase and outer `vspscript` process. Neither phase infers solver success from `Done` text.
 
 ## Branch and workflow rollout
 

@@ -10,6 +10,7 @@ import zipfile
 from backfill_verify import digest
 from native_plan import PLATFORMS, REQUIRED_CHECKS, asset_name, matrix, validate_inputs
 from native_release import find_release, prepare_assets, publish as publish_original, verify_manifest, release_body
+from test_native_functional import functional_summary
 
 SOURCE = 'a' * 40
 WORKFLOW = 'b' * 40
@@ -112,7 +113,8 @@ class NativeReleaseTests(unittest.TestCase):
                           platform=target['platform'], architecture=target['arch'], python=target['python'],
                           workflow_sha=WORKFLOW, run_id='123', archive=name, bytes=package.stat().st_size,
                           sha256=digest(package), source_tracked_files_clean=True,
-                          checks=sorted(REQUIRED_CHECKS), requirements_install={'numpy': '1.26.4'})
+                          checks=sorted(REQUIRED_CHECKS), requirements_install={'numpy': '1.26.4'},
+                          functional_smoke=functional_summary())
             (folder / 'verification.json').write_text(json.dumps(report))
 
     def prepare(self):
@@ -137,6 +139,25 @@ class NativeReleaseTests(unittest.TestCase):
                     self.prepare()
                 self.assertFalse(self.output.exists())
         report_file.write_text(json.dumps(original))
+
+    def test_missing_export_analysis_checks_or_functional_evidence_block_assembly(self):
+        path = next(self.artifacts.rglob('verification.json'))
+        original = json.loads(path.read_text())
+        for check in ('Unicode STL export and triangle validation', 'CompGeom and VSPAERO CLI analysis'):
+            changed = copy.deepcopy(original); changed['checks'].remove(check)
+            path.write_text(json.dumps(changed))
+            with self.subTest(check=check), self.assertRaisesRegex(ValueError, 'Required native checks'):
+                self.prepare()
+        changed = copy.deepcopy(original); del changed['functional_smoke']
+        invalid = [changed, dict(original, functional_smoke={})]
+        changed = copy.deepcopy(original); changed['functional_smoke']['vspaero_api']['final_lift_nonzero'] = False
+        invalid.append(changed)
+        changed = copy.deepcopy(original); del changed['functional_smoke']['vspaero_cli']; invalid.append(changed)
+        changed = copy.deepcopy(original); changed['functional_smoke']['vspaero_cli']['exit_code'] = 1; invalid.append(changed)
+        for report in invalid:
+            path.write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, 'export/analysis evidence'): self.prepare()
+            self.assertFalse(self.output.exists())
 
     def test_missing_platform_corrupt_zip_extra_zip_and_ambiguous_reports_fail(self):
         report = next(self.artifacts.rglob('verification.json'))
