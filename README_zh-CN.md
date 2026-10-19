@@ -112,6 +112,11 @@ cmake --build build --target package --config Release --parallel 2
 - 修复模型名含 `&` 时 XML 写入误作实体引用、重开后丢失名称的问题；原始文本由
   libxml2 正确转义，不改变模型格式或参数 ID。增加英文/中文/同名标签/特殊字符/路径
   回归与实际 AngelScript 保存重开检查。轻量翻译/数据边界/XML 文本共 3 项回归已通过，完整构建及 GUI 验收待完成。
+- 恢复官方资源顶层安装（CustomScripts、textures、airfoil、scripts 等），同时保留完整
+  Official_Examples；新增从任意工作目录加载十个自定义几何体的冒烟验证，避免程序缺项。
+- Python 构建与随包 requirements/conda 环境统一使用 NumPy 1.26.4；子包约束 NumPy <2，
+  配置时拒绝不兼容 ABI。新预发布会在全新 venv 中按随包 requirements 安装再导入。
+  本次已验证离线回归；原生平台执行结果由对应 Actions 记录，未运行平台不算通过。
 
 - Mac 第二轮验证确认残留的是 runner 路径，单独移除调试符号未解决。源码核查发现
   内置 libxml2 默认把其 CI 安装前缀编入 XML/SGML catalog 查找常量；补充构建现在仅
