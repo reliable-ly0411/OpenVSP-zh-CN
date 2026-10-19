@@ -50,3 +50,5 @@ add_test(NAME localization_help_anchors
   COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_help_anchors.py)
 add_test(NAME localization_help_build_layout
   COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_help_build_layout.py)
+add_test(NAME localization_candidate_identity
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_localization_release_guard.py)

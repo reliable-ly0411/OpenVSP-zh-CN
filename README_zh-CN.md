@@ -78,6 +78,9 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
+以下保留历史流程说明。新候选使用 `<版本>-zh-CN.rc.<序号>`；统一五平台构建与推广
+工作流另行接入，源码守卫通过不表示原生平台或 GUI 已经验收。
+
 1. `Watch OpenVSP Upstream` 每周检查官方 `main`，发现更新时只创建计划 Issue。
 2. 人工启动 `Prepare OpenVSP Upstream Update` 后，工作流把汉化差异移植到新上游，生成
    同时继承旧汉化与新上游的审查提交；发生冲突即停止。
@@ -91,9 +94,16 @@ cmake --build build --target package --config Release --parallel 2
 
 当前目标为 `3.51.3-zh-CN.rc.1`。以下仅记录源码候选的已验证结果；本族完整 GUI、
 原生脚本、Linux/Windows 安装包与运行时检查尚待完成，不能据此宣称已发布或全面汉化。
-统一预发布守卫与工作流正在整合。
+候选身份守卫已整合，统一五平台构建与推广工作流另行接入。
 
 ## 3.51.3-zh-CN.rc.1
+
+- 接入统一候选身份守卫，核对本族源码、文档、关于页及 rc 标签；补齐 conda 的 NumPy
+  上限及 Python 模块随包动态库/许可清单。正确 rc 标签通过，错版本/修订/历史标签均拒绝。
+  隔离占位文件实际生成 wheel，核实非 pure/平台 ABI 标签与扩展/依赖文件包含；这不代表
+  原生 Python 扩展已导入验收。仅调整打包元数据，Python API 不变。
+- 追加 9 个关键 GUI 翻译单元的 C++ 语法编译通过（通用控件、几何树、寄生阻力、基础页、
+  设计变量、拟合、主窗、参数页与结构装配），不等同完整链接或 GUI 验收。
 
 - 从不可变的 `3.51.3-Codex-AI-zh-CN-r2` 继续开发，保留官方 3.51.3 算法、API 和历史。
   回移共享汉化修复，按本族旧几何树、参考翼列表、设计变量与拟合表头逐块适配；没有引入
@@ -112,7 +122,7 @@ cmake --build build --target package --config Release --parallel 2
   `>=1.26.4,<2`，依赖环境固定 1.26.4，避免 NumPy 2 ABI 不兼容。
 - 主窗口与关于菜单改为“简体中文”，关于窗口使用运行时软件版本并显示本族候选标签、
   仓库和 NOSA 1.3 归属。
-- 已通过：7/7 独立 CTest（含名称/路径边界及 libxml2 文本往返）、40 项 Python 测试、
+- 已通过：8/8 独立 CTest（含名称/路径边界及 libxml2 文本往返）、50 项 Python 测试、
   帮助生成器自测及 6 页 HTML 一致性、`git diff --check`。译表守卫覆盖 833 条整句、
   255 条保护项、2055 个旧 GUI 字面量及 27 类表头；未改共享原始回归案例。
 - 仍待专业复核的术语包括 DegenGeom、Activity Factor、Flat/Round 端盖、横观各向同性、
