@@ -9,6 +9,7 @@
 
 #include "SelectFileScreen.h"
 #include "FileUtil.h"
+#include "VSPChinese.h"
 
 #ifdef WIN32
 #include <direct.h>
