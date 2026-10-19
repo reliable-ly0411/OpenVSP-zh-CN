@@ -13,7 +13,8 @@ from unittest.mock import patch
 from backfill_verify import audit_native
 from native_functional import CLI_BASENAME, CLI_INPUT_SUFFIXES, FUNCTIONAL_SCRIPT, PASS_MARKERS
 from native_verify import (BOUNDARY_MODEL_FILENAME, BOUNDARY_MODEL_NAMES,
-                           audit_windows, run_functional_smoke, run_script_smoke, run_solver_cli,
+                           audit_windows, fresh_requirements, installed_module_directory,
+                           run_functional_smoke, run_script_smoke, run_solver_cli,
                            smoke_failure_report, smoke_script_path,
                            verify_boundary_output)
 from test_native_functional import cli_summary, functional_summary, write_cli_history, write_outputs
@@ -336,6 +337,118 @@ class FilesystemBoundaryTests(unittest.TestCase):
             (Path(temp) / BOUNDARY_MODEL_FILENAME).write_text('<broken>', encoding='utf-8')
             with self.assertRaisesRegex(ValueError, 'not valid XML'):
                 verify_boundary_output(temp)
+
+
+class FreshRuntimeVenvTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name).resolve(strict=True)
+        self.venv = self.root / 'runtime-venv'
+        self.venv.mkdir()
+
+    def module(self, root):
+        module = root / 'lib/site-packages/openvsp/__init__.py'
+        module.parent.mkdir(parents=True, exist_ok=True)
+        module.write_text('# inert fixture\n', encoding='utf-8')
+        return module
+
+    def test_existing_module_in_venv_is_accepted(self):
+        module = self.module(self.venv)
+        self.assertEqual(installed_module_directory(module, self.venv), module.parent)
+
+    def test_temp_root_alias_accepts_both_real_path_spellings(self):
+        alias = self.root / 'temp-alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        module = self.module(self.venv)
+        alias_venv = alias / self.venv.name
+        alias_module = alias / module.relative_to(self.root)
+        for imported, venv in ((module, alias_venv), (alias_module, self.venv)):
+            with self.subTest(imported=imported, venv=venv):
+                self.assertTrue(imported.samefile(module))
+                self.assertTrue(venv.samefile(self.venv))
+                # Reproduce the old false rejection with real filesystem aliases.
+                self.assertFalse(imported.parent.is_relative_to(venv))
+                self.assertEqual(installed_module_directory(imported, venv), module.parent)
+
+    def test_prefix_neighbor_is_rejected(self):
+        module = self.module(self.root / 'runtime-venv-neighbor')
+        self.assertTrue(str(module).startswith(str(self.venv)))
+        with self.assertRaisesRegex(ValueError, 'Import escaped'):
+            installed_module_directory(module, self.venv)
+
+    def test_internal_directory_symlink_to_external_module_is_rejected(self):
+        external = self.root / 'outside'
+        module = self.module(external)
+        alias = self.venv / 'linked'
+        alias.symlink_to(external, target_is_directory=True)
+        imported = alias / module.relative_to(external)
+        self.assertTrue(imported.parent.is_relative_to(self.venv))
+        with self.assertRaisesRegex(ValueError, 'Import escaped'):
+            installed_module_directory(imported, self.venv)
+
+    def test_internal_module_file_symlink_to_external_file_is_rejected(self):
+        module = self.module(self.root / 'outside')
+        imported = self.venv / '__init__.py'
+        imported.symlink_to(module)
+        self.assertTrue(imported.parent.resolve(strict=True).is_relative_to(self.venv))
+        with self.assertRaisesRegex(ValueError, 'Import escaped'):
+            installed_module_directory(imported, self.venv)
+
+    def test_dotdot_escape_is_rejected(self):
+        module = self.module(self.root / 'outside')
+        imported = self.venv / '..' / module.relative_to(self.root)
+        self.assertTrue(imported.parent.is_relative_to(self.venv))
+        with self.assertRaisesRegex(ValueError, 'Import escaped'):
+            installed_module_directory(imported, self.venv)
+
+    def test_missing_file_venv_and_dangling_symlinks_are_rejected(self):
+        module = self.module(self.venv)
+        dangling = self.venv / 'dangling.py'
+        dangling.symlink_to(self.root / 'absent.py')
+        dangling_venv = self.root / 'dangling-venv'
+        dangling_venv.symlink_to(self.root / 'absent-venv', target_is_directory=True)
+        for imported, venv in ((module.with_name('absent.py'), self.venv),
+                               (module, self.root / 'absent-venv'),
+                               (dangling, self.venv), (module, dangling_venv)):
+            with self.subTest(imported=imported, venv=venv):
+                with self.assertRaisesRegex(ValueError, 'cannot be resolved'):
+                    installed_module_directory(imported, venv)
+
+    def test_module_directory_and_venv_file_are_rejected(self):
+        module = self.module(self.venv)
+        for imported, venv in ((module.parent, self.venv), (module, module)):
+            with self.subTest(imported=imported, venv=venv):
+                with self.assertRaisesRegex(ValueError, 'invalid types'):
+                    installed_module_directory(imported, venv)
+
+    def test_symlink_loop_is_rejected(self):
+        loop = self.venv / 'loop.py'
+        loop.symlink_to(loop)
+        with self.assertRaisesRegex(ValueError, 'cannot be resolved'):
+            installed_module_directory(loop, self.venv)
+
+    def test_fresh_requirements_uses_canonical_directory_for_extension_smoke(self):
+        package = self.root / 'package'
+        (package / 'python').mkdir(parents=True)
+        (package / 'python/requirements.txt').write_text('numpy==1.26.4\n', encoding='utf-8')
+        module = self.module(self.venv)
+        alias = self.root / 'temp-alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        env = {'PYTHONUTF8': '1'}
+        checked = dict(version='OpenVSP 3.55.0', numpy='1.26.4', python='3.11.9', module=str(module))
+        with patch('native_verify.subprocess.run') as command, \
+                patch('native_verify.run', return_value=json.dumps(checked)) as imported, \
+                patch('native_verify.python_smoke', return_value=['_vsp', '_vsp_g']) as smoke:
+            result = fresh_requirements(package, '3.55.0', alias, env)
+        interpreter = alias / 'runtime-venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+        self.assertEqual(command.call_count, 3)
+        self.assertEqual(command.call_args_list[-1].args[0], [str(interpreter), '-m', 'pip', 'check'])
+        self.assertTrue(all(call.kwargs['check'] for call in command.call_args_list))
+        self.assertEqual(imported.call_args.kwargs, dict(cwd=alias, env=env))
+        smoke.assert_called_once_with(module.parent, '3.55.0', alias, env, interpreter=interpreter)
+        self.assertEqual(result, dict(version='OpenVSP 3.55.0', numpy='1.26.4', python='3.11.9',
+                                      pip_check='passed', extensions=['_vsp', '_vsp_g']))
 
 
 class NativeInspectionTests(unittest.TestCase):

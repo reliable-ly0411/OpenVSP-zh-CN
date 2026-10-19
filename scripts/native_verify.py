@@ -263,6 +263,23 @@ def audit_windows(root, architecture):
     return records
 
 
+def installed_module_directory(module, venv):
+    # Compare real filesystem locations, not lexical spellings of temp paths.
+    # Resolve the file itself before taking its parent: a module-file symlink
+    # inside the venv must not hide an import from outside the venv.
+    try:
+        module = Path(module).resolve(strict=True)
+        venv = Path(venv).resolve(strict=True)
+    except (OSError, RuntimeError):
+        raise ValueError('Fresh runtime venv import paths cannot be resolved') from None
+    if not module.is_file() or not venv.is_dir():
+        raise ValueError('Fresh runtime venv import paths have invalid types')
+    installed = module.parent
+    if not installed.is_relative_to(venv):
+        raise ValueError('Import escaped the fresh runtime venv')
+    return installed
+
+
 def fresh_requirements(root, version, scratch, env):
     # Building wheels is allowed to create metadata only in this disposable copy.
     installation = Path(scratch) / 'install-source'
@@ -282,9 +299,7 @@ def fresh_requirements(root, version, scratch, env):
     checked = json.loads(run(interpreter, '-c', code, cwd=scratch, env=env).strip().splitlines()[-1])
     if version not in checked['version'] or checked['numpy'] != '1.26.4':
         raise ValueError('Fresh requirements installation imports the wrong ABI/version')
-    installed = Path(checked.pop('module')).parent
-    if not installed.is_relative_to(venv):
-        raise ValueError('Import escaped the fresh runtime venv')
+    installed = installed_module_directory(checked.pop('module'), venv)
     extensions = python_smoke(installed, version, scratch, env, interpreter=interpreter)
     return dict(**checked, pip_check='passed', extensions=extensions)
 
