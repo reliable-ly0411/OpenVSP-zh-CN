@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a history-preserving upstream merge; the workflow builds before promotion."""
+"""Prepare a history-preserving isolated upstream candidate; no automatic promotion."""
 
 from __future__ import annotations
 
@@ -30,7 +30,12 @@ def update_metadata(metadata: dict, upstream: str) -> str:
         for key in ("MAJOR", "MINOR", "PATCH")
     )
     # 自动构建单独标识，不能冒充已验收的不可变 Release 标签。
-    build_name = f"{version}-Codex-AI-zh-CN-auto.{upstream[:12]}"
+    source_ref = os.environ.get("UPSTREAM_SOURCE_REF", "")
+    release_tag = re.fullmatch(r"(?:refs/tags/)?OpenVSP_(\d+\.\d+\.\d+)", source_ref)
+    if release_tag and release_tag[1] != version:
+        raise ValueError("Official tag name and source software version disagree")
+    kind = "candidate" if release_tag else "dev"
+    build_name = f"{version}-zh-CN.{kind}.{upstream[:12]}"
     replace_once("README.md", r"本仓库基于 OpenVSP \d+\.\d+\.\d+，", f"本仓库基于 OpenVSP {version}，")
     replace_once("README_zh-CN.md", r"当前软件版本：OpenVSP \d+\.\d+\.\d+\n", f"当前软件版本：OpenVSP {version}\n")
     replace_once("README_zh-CN.md", r"当前汉化版本：`[^`]+`", f"当前汉化版本：`{build_name}`")
@@ -48,10 +53,12 @@ def update_metadata(metadata: dict, upstream: str) -> str:
     notes = (
         f"## 未发布\n\n## {build_name}\n\n- 自动同步官方 OpenVSP {version}：`{previous[:12]}` → `{upstream[:12]}`。\n"
         f"  [上游变更](https://github.com/{metadata['repository']}/compare/{previous}...{upstream})；\n"
-        "  保留现有汉化，新增界面可能仍含英文；双平台验证以本次 Actions 结果为准，GUI 未人工验收。\n"
+        f"  上游来源：{source_ref or '未标记开发提交'}；{'官方发布标签候选' if release_tag else '开发快照，非官方已发布版本'}。\n"
+        "  保留现有汉化，新增界面可能仍含英文；仅构建候选产物，GUI 未人工验收，不自动公开 Release。\n"
     )
     replace_once("README_zh-CN.md", r"## 未发布\n", notes)
-    metadata.update(base_commit=upstream, version=version)
+    metadata.update(base_commit=upstream, version=version, source_ref=source_ref,
+                    source_kind="official-release" if release_tag else "development-snapshot")
     Path(".github/upstream.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

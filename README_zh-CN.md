@@ -85,27 +85,43 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
-1. `Sync Build and Publish OpenVSP Upstream` 每周一北京时间 11:17 检查官方 `main`（GitHub
-   定时运行可能延迟），也可在 Actions 手动运行；`upstream_ref` 留空跟随配置分支，或填
-   官方标签/提交，例如 `OpenVSP_3.54.0`。
-2. 发现更新后自动合并并保留旧汉化与官方上游的双父历史，同步当前版本字段及“未发布”
-   说明；本仓库工作流单独保留。实际代码冲突会停止并在 Actions 中报告。
-3. 自动调用 Linux/Windows 构建，执行本地化守卫、翻译回归、模型冒烟、中文 CLI、
-   动态库及压缩包检查；只有两平台均通过才快进 `main`。并发更新不会被强制覆盖。
-4. 同步成功后自动公开到 [Releases](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases)，
-   使用 `<版本>-Codex-AI-zh-CN-auto.<上游提交前12位>` 不可变预发布标签，附带双平台
-   ZIP、SHA-256 和对应更新说明；正式版本的 Latest 标记保留。自动构建可能含新增英文界面，
-   GUI 未人工验收。Actions Artifacts 另保留 14 天，候选分支用于排查和回滚。
-   即使没有新的上游提交，尚未发布的当前自动构建也会被构建并补发；已发布版本不会覆盖。
-5. 正式发布仍需完成补译与 GUI 验收、整理与标签一致的更新说明，再创建
-   `<版本>-Codex-AI-zh-CN` 标签；现有发布流程生成双平台 ZIP、SHA-256 及更新说明。
+1. `Prepare and validate OpenVSP upstream candidates` 每周一北京时间 11:17 检查最新官方
+   `OpenVSP_x.y.z` 标签（GitHub 定时任务可能延迟），自动保留双父历史并生成可验收候选。
+   发现真实代码冲突即停止。此阶段只输出候选分支与轻量源代码检查结果。
+2. 手动填写 `upstream_ref=main` 或未标记提交时，版本明确带 `-zh-CN.dev.<sha>`；官方
+   已发布标签的候选带 `-zh-CN.candidate.<sha>`。二者均不自动推进 main、创建公开 Release
+   或替换历史资产；完成补译及检查后，通过保留历史的合并进入开发分支。
+3. 新预发布统一为 `<版本>-zh-CN.rc.<递增序号>`，例如 `3.55.0-zh-CN.rc.1`。
+   `Build five-platform localized prerelease` 只需精确 40 位 `source_sha` 与 `new_tag`，
+   从该版本族最新已发布修订的后继提交构建 Ubuntu 24.04 AMD64/ARM64、Windows x64、
+   macOS 14 ARM64 与 macOS 15 Intel 五个原生平台。Linux Python 3.12，Windows/macOS
+   Python 3.11，统一 NumPy 1.26.4。源码必须已有与新标签完全一致的更新说明。
+4. 五平台分别验证中文 CLI、模型保存重开、用户名称及路径边界、空目录启动时的自定义
+   几何体、动态依赖、包资源、全新 Python venv 安装及哈希。任一平台失败均不进入发布。
+   截图只是待目视证据，至少逐族人工检查原始 Linux 包的主界面、机翼页和名称/路径回归。
+5. 人工检查后运行 `Promote GUI-reviewed native prerelease`，填写原 `build_run_id`、
+   `source_sha`、`new_tag`、原 `SHA256SUMS.txt` 的 SHA-256、目视通过的 Linux ZIP 的
+   SHA-256 及真实审阅说明。它下载并校验原 run 的原始产物，不重新编译；创建新草稿、
+   逐项下载复核后才公开预发布。其他平台未做的 GUI 验收会明确说明，不推断为已通过。
 
-同一 OpenVSP 版本修复重发时使用递增的 `-rN` 标签，不移动已经发布的标签。
-手动运行构建发布流程时可填写精确的 40 位 `source_commit`；两平台通过后才创建新标签。
-选中 `prerelease` 保留稳定版 Latest，选中 `draft` 则在下载校验后保留草稿供桌面验收。
-自动及手动发布的标题和六段式说明统一由 `scripts/release_notes.py` 生成。
+新 Release 资产仅保留五个官方风格 ZIP 和完整 `SHA256SUMS.txt`，正文简述成果与边界；
+技术报告、截图及审阅说明放在 CI 或 [`docs/native-prerelease-verification.md`](docs/native-prerelease-verification.md)。
+下载到同一目录后可用 `sha256sum -c SHA256SUMS.txt` 校验全部 ZIP，Windows 使用
+`Get-FileHash 文件名.zip -Algorithm SHA256` 比对对应清单条目。
+
+旧标签、旧公开资产及旧清单保持原样。草稿恢复仅补缺失资产，已存在的资产必须与原构建
+逐字节相同；冲突时保留草稿并停止，改用新 rc 标签。不会修改仓库安全设置，稳定版 Latest
+不变。CI 原始产物保留 14 天，GUI 审阅记录保留 30 天；过期后需要新构建、新验收与新标签。
 
 ## 未发布
+
+- 新增精确源码/新 SemVer rc 标签的五平台原生构建与独立原产物晋级流程；公开前绑定
+  原 run、完整 manifest、实际 Linux GUI 目视包哈希，并下载全部资产校验，不重编译替换。
+- 历史发布及标签不再由旧维护流程写入；上游巡检仍自动识别新官方版本并创建候选，
+  开发快照单独标记，保留修复→开发→预发布完整历史。实际目标构建和 GUI 状态以证据为准。
+- macOS 非系统动态库闭包放入 Python 模块内，保留相对链接、去调试符号后 ad-hoc 签名
+  及许可证，避免 pip 安装移动扩展后丢失依赖。Linux 原生架构检查同时覆盖 AMD64/ARM64。
+
 
 - Mac 第二轮验证确认残留的是 runner 路径，单独移除调试符号未解决。源码核查发现
   内置 libxml2 默认把其 CI 安装前缀编入 XML/SGML catalog 查找常量；补充构建现在仅
