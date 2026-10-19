@@ -115,6 +115,17 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 未发布
 
+- 新五平台 rc 的公开 ZIP 名称采用官方命名格式并在扩展名前加 `-zh-CN`，明确保留实际
+  系统、架构和 Python ABI。例如 Windows 为 `OpenVSP-3.55.0-win64-Python3.11-zh-CN.zip`，
+  Mac ARM 为 `OpenVSP-3.55.0-macos-14-ARM64-Python3.11-zh-CN.zip`，Intel Mac 为
+  `OpenVSP-3.55.0-macos-15-intel-X64-Python3.11-zh-CN.zip`。Ubuntu AMD64 与 ARM64 分别为
+  `OpenVSP-3.55.0-Ubuntu-24.04_amd64-zh-CN.zip` 和
+  `OpenVSP-3.55.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip`。
+  本轮仍为 ZIP，Mac ARM 仍以 macOS 14 为目标；Ubuntu ARM64 是本项目自建目标。
+  与官方当前预编译包的系统、格式差异及来源见[技术映射](docs/native-prerelease-verification.md#public-archive-name-mapping)。
+  旧标签、旧附件、历史补包名称和旧记录不变；新流程不兼容旧 Windows/Mac 名称。
+  离线回归覆盖五版本族共 25 个精确名称及清单、报告、GUI 哈希绑定，不代表原生构建或 GUI 已通过。
+
 - 首轮原生构建在模型边界脚本返回非零时缺少有效诊断；新验收包装器保留退出码、
   通过/失败标记、编译行列及固定错误类别（含六种白名单模型边界原因），仅上传不含原始输出或路径的 CI 诊断。
   非零退出、超时或缺少通过标记仍失败，不放宽实际模型边界验收。

@@ -17,6 +17,16 @@ PLATFORMS = (
     dict(platform='macOS-14-arm64-Python3.11', runner='macos-14', arch='arm64', python='3.11', llvm='16'),
     dict(platform='macOS-15-x86_64-Python3.11', runner='macos-15-intel', arch='x86_64', python='3.11', llvm='16'),
 )
+# Public archive spellings follow https://openvsp.org/download.php (2026-10-19).
+# Keep actual target OS/CPU/ABI and ZIP format; internal job IDs stay unchanged.
+# Ubuntu ARM64 is a downstream target, not an official prebuilt distribution.
+ARCHIVE_PLATFORMS = {
+    'Ubuntu-24.04_amd64': 'Ubuntu-24.04_amd64',
+    'Ubuntu-24.04_arm64-Python3.12': 'Ubuntu-24.04_arm64-Python3.12',
+    'win64': 'win64-Python3.11',
+    'macOS-14-arm64-Python3.11': 'macos-14-ARM64-Python3.11',
+    'macOS-15-x86_64-Python3.11': 'macos-15-intel-X64-Python3.11',
+}
 REQUIRED_CHECKS = {
     'native architecture', 'dependency closure / RPATH', 'Chinese CLI help',
     'AngelScript model smoke', 'model-name roundtrip', 'Unicode filename and persisted names',
@@ -39,7 +49,7 @@ def validate_inputs(source_sha, new_tag):
 def asset_name(version, platform):
     if version not in {v for v, _, _ in RELEASES} or platform not in {p['platform'] for p in PLATFORMS}:
         raise ValueError('Unsupported version family or native platform')
-    return f'OpenVSP-{version}-{platform}-zh-CN.zip'
+    return f'OpenVSP-{version}-{ARCHIVE_PLATFORMS[platform]}-zh-CN.zip'
 
 
 def matrix(source_sha, new_tag):
