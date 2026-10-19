@@ -68,7 +68,7 @@ def capture(command, directory, roots=()):
     for label, data in (('stdout', stdout), ('stderr', stderr)):
         record[label] = dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(),
                              truncated=len(data) > 16384,
-                             text=redact(data[:16384].decode('utf-8', errors='replace'), roots))
+                             text=redact(data.decode('utf-8', errors='replace'), roots)[:16384])
     return record, stdout.decode('utf-8', errors='replace') + stderr.decode('utf-8', errors='replace')
 
 

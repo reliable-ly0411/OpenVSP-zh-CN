@@ -10,6 +10,8 @@ on:
       - 'scripts/test_native_windows_unicode.py'
       - 'scripts/unicode_path_tests/**'
       - 'src/util/FileUtil.h'
+      - 'src/geom_core/Vehicle.cpp'
+      - '.gitattributes'
   workflow_dispatch:
 
 permissions:

@@ -34,6 +34,8 @@ class WindowsUnicodeDiagnosticTests(unittest.TestCase):
         names = [line.split()[2] for line in patch.decode().splitlines() if line.startswith('diff --git ')]
         self.assertEqual(sorted(names), ['a/src/geom_core/Vehicle.cpp', 'a/src/util/FileUtil.h'])
         self.assertIn('FOpenUTF8', patch.decode())
+        attributes = (Path(__file__).parents[1] / '.gitattributes').read_text()
+        self.assertIn('scripts/windows_unicode_stl.patch text eol=lf', attributes)
         self.assertIn('1d6b0b6078716db5854ff04a92610aa58956a0c6', SOURCE_BASELINE)
 
     def test_directory_evidence_preserves_unicode_without_parent_paths(self):
@@ -72,6 +74,15 @@ class WindowsUnicodeDiagnosticTests(unittest.TestCase):
         self.assertIn('<fixture-root>', record['stdout']['text'])
         self.assertEqual(redact('C:/fixture/file C:\\fixture\\file', ['C:\\fixture']),
                          '<fixture-root>/file <fixture-root>\\file')
+
+    def test_redaction_precedes_truncation_at_a_path_boundary(self):
+        output = b'x' * 16380 + b'C:\\private-root\\fixture.txt'
+        process = subprocess.CompletedProcess('fixture', 0, stdout=output, stderr=b'')
+        with mock.patch('subprocess.run', return_value=process):
+            result, _ = capture(['fixture'], Path('.'), ['C:\\private-root'])
+        self.assertTrue(result['stdout']['text'].endswith('<fix'))
+        self.assertNotIn('C:', result['stdout']['text'])
+        self.assertEqual(result['stdout']['bytes'], len(output))
 
     def test_capture_preserves_timeout_and_os_error_categories(self):
         with mock.patch('subprocess.run', side_effect=subprocess.TimeoutExpired('fixture', 1, output=b'partial')):
@@ -146,6 +157,7 @@ class WindowsUnicodeDiagnosticTests(unittest.TestCase):
     def test_workflow_is_single_family_read_only_and_does_not_publish(self):
         text = (Path(__file__).parents[1] / '.github/workflows/windows-unicode-diagnostic.yml').read_text()
         self.assertIn('pull_request:', text)
+        self.assertIn("'src/geom_core/Vehicle.cpp'", text)
         self.assertIn('contents: read', text)
         self.assertIn('runs-on: windows-2022', text)
         self.assertIn(SOURCE_BASELINE, text)
