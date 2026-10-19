@@ -17,6 +17,8 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
     static const std::unordered_map<std::string, std::string> table = {
 
         // Reviewed complete GUI labels; keep engineering symbols and file suffixes.
+        { "Mach Number", "马赫数" },
+        { "Rotor RPM", "旋翼转速 (RPM)" },
         { "Invalid inputs to least squares optimizer.\n", "最小二乘优化器的输入无效。\n" },
         { "R//L", "右//左" },
         { "T//B", "上//下" },

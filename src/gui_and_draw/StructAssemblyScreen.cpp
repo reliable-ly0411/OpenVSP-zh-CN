@@ -152,7 +152,7 @@ StructAssemblyScreen::StructAssemblyScreen( ScreenMgr* mgr ) : TabScreen( mgr, 5
 
     m_ConnectionsTabLayout.AddDividerBox( "Connection Selection" );
 
-    static int con_col_widths[] = { 100, 75, 25, 100, 75, 25, 0 }; // widths for each column
+    static int con_col_widths[] = { 100, 60, 40, 100, 60, 40, 0 }; // Keep total width; allow two Chinese index characters.
 
     m_ConnectionSelectBrowser = m_ConnectionsTabLayout.AddColResizeBrowser( con_col_widths, 6, browser_h );
     m_ConnectionSelectBrowser->callback( staticScreenCB, this );
