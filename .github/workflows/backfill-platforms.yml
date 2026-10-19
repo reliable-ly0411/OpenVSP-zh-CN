@@ -39,15 +39,17 @@ jobs:
           cmake --version
           python3 -m unittest discover -s scripts -p backfill_test.py -v
       - id: plan
+        if: github.event_name == 'workflow_dispatch'
         env:
-          # PR covers legacy Linux only; common tooling changes require a manual
-          # three-platform pilot before all. Dispatch still defaults to pilot.
-          SCOPE: ${{ inputs.scope || 'legacy-linux' }}
+          # PRs run offline tests only. Native historical builds require an
+          # explicit dispatch; all still requires a reviewed successful pilot.
+          SCOPE: ${{ inputs.scope || 'pilot' }}
           PILOT_RUN_ID: ${{ inputs.pilot_run_id }}
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/backfill_plan.py
 
   build:
+    if: github.event_name == 'workflow_dispatch'
     needs: plan
     name: ${{ matrix.version }} / ${{ matrix.platform }}
     strategy:

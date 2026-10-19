@@ -128,6 +128,8 @@ cmake --build build --target package --config Release --parallel 2
   原 run、完整 manifest、实际 Linux GUI 目视包哈希，并下载全部资产校验，不重编译替换。
 - 历史发布及标签不再由旧维护流程写入；上游巡检仍自动识别新官方版本并创建候选，
   开发快照单独标记，保留修复→开发→预发布完整历史。实际目标构建和 GUI 状态以证据为准。
+- 历史补包工作流的 PR 事件只跑离线回归，矩阵规划与原生构建均要求手动触发；
+  保留 pilot、legacy-linux、all 三种手动范围及只读发布权限，避免 PR 意外启动重复重构建。
 - macOS 非系统动态库闭包放入 Python 模块内，保留相对链接、去调试符号后 ad-hoc 签名
   及许可证，避免 pip 安装移动扩展后丢失依赖。Linux 原生架构检查同时覆盖 AMD64/ARM64。
 
