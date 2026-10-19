@@ -19,7 +19,7 @@
 汉化采用“显示时翻译”，不得改变内部数据、参数 ID、文件格式、脚本接口或用户输入。
 
 - `src/gui_and_draw/VSPChinese.h/.cpp`：统一翻译表、动态短语和边界处理，新增翻译的首选位置。
-- `VSPTranslate()`：翻译完整标签、动态短语、默认几何体名称和组合标题。
+- `VSPTranslate()`：翻译完整固定标签、动态界面短语和组合标题；用户模型名称及路径必须绕过翻译。
 - `VSPTranslateMenuPath()`：逐段翻译 FLTK 菜单路径。
 - `GroupLayout.cpp`、`GuiDevice.cpp`、`ScreenBase.cpp`：通用控件与参数页入口。
 - `MenuItem.cpp`、`MainVSPScreen.cpp`：菜单、主窗口和汉化“关于”。

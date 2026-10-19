@@ -2,7 +2,7 @@
 """Regression tests for the translation guard, independent of the C++ driver."""
 import unittest
 
-from check_translation_catalog import (extract_labels, has_unconditional_translation_include,
+from check_translation_catalog import (calls_display_helper, extract_labels, has_unconditional_translation_include,
                                        read_catalogs, strip_comments)
 
 
@@ -12,6 +12,16 @@ def table_source(exact, phrase):
 
 
 class CatalogGuardTests(unittest.TestCase):
+    def test_all_display_only_helpers_are_guarded(self):
+        for helper in ('BrowserHeader', 'LabelAndValue', 'Message'):
+            with self.subTest(helper=helper):
+                self.assertTrue(calls_display_helper('VSPTranslate' + helper + ' ( value );'))
+
+    def test_commented_or_quoted_helper_calls_are_ignored(self):
+        self.assertFalse(calls_display_helper('// VSPTranslateMessage(value);'))
+        self.assertFalse(calls_display_helper('/* VSPTranslateLabelAndValue(title, value); */'))
+        self.assertFalse(calls_display_helper('"VSPTranslateBrowserHeader(value)"'))
+
     def test_unconditional_helper_include(self):
         self.assertTrue(has_unconditional_translation_include('#include "VSPChinese.h"\n'))
 

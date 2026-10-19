@@ -963,7 +963,6 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Aero Structural...", "气动结构耦合..." }, { "VSPAERO...", "VSPAERO..." },
         { "Wave Drag...", "波阻..." }, { "Parasite Drag...", "寄生阻力..." },
         { "Help...", "帮助..." },
-        { "About Codex AI Localization...", "关于 Codex AI 汉化..." },
 
         // Screen titles.
         { "Advanced Parameter Links", "高级参数链接" }, { "Rename Variable", "重命名变量" },

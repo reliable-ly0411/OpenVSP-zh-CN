@@ -5,7 +5,7 @@
 > 原作者与贡献者，并遵循 NOSA 1.3。
 
 - 当前软件版本：OpenVSP 3.55.0
-- 当前汉化候选版本：`3.55.0-zh-CN.rc.1`
+- 当前汉化版本：`3.55.0-zh-CN.rc.1`
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
@@ -113,7 +113,9 @@ cmake --build build --target package --config Release --parallel 2
 逐字节相同；冲突时保留草稿并停止，改用新 rc 标签。不会修改仓库安全设置，稳定版 Latest
 不变。CI 原始产物保留 14 天，GUI 审阅记录保留 30 天；过期后需要新构建、新验收与新标签。
 
-## 未发布
+## 3.55.0-zh-CN.rc.1
+
+本节为新候选源码变更。各平台是否完成原生构建、GUI 目视检查与发布，以对应 CI 和验证记录为准。
 
 - 通用子曲面列表标题接入格式表头翻译；行内容、用户名称与表格控制符保持原样。
 
@@ -121,7 +123,7 @@ cmake --build build --target package --config Release --parallel 2
   英文与中文用户值保持原样，只翻译固定控件标题；文件选择标题与通配符分别处理。
 - 修复模型名含 `&` 时 XML 写入误作实体引用、重开后丢失名称的问题；原始文本由
   libxml2 正确转义，不改变模型格式或参数 ID。增加英文/中文/同名标签/特殊字符/路径
-  回归与实际 AngelScript 保存重开检查。轻量翻译/数据边界/XML 文本共 3 项回归已通过，完整构建及 GUI 验收待完成。
+  回归与实际 AngelScript 保存重开检查。轻量翻译/数据边界/XML 文本回归已通过，完整构建及 GUI 验收待完成。
 - 新增精确源码/新 SemVer rc 标签的五平台原生构建与独立原产物晋级流程；公开前绑定
   原 run、完整 manifest、实际 Linux GUI 目视包哈希，并下载全部资产校验，不重编译替换。
 - 历史发布及标签不再由旧维护流程写入；上游巡检仍自动识别新官方版本并创建候选，
@@ -172,6 +174,10 @@ cmake --build build --target package --config Release --parallel 2
 - 仍待航空/结构专业审校的术语包括 `DegenGeom`、`Activity Factor`、`Flat/Round`
   端盖、横观各向同性材料，以及法规引用的中等/替代转子碎片、轮胎喷溅包络等译法；
   法规编号、原始英文键和公式作者名均保留，便于对照，不以文字翻译替代工程判断。
+
+## 历史维护与补包记录
+
+以下记录保留此前维护过程，不能替代当前 rc 构建及验收结果。
 
 - Mac 第二轮验证确认残留的是 runner 路径，单独移除调试符号未解决。源码核查发现
   内置 libxml2 默认把其 CI 安装前缀编入 XML/SGML catalog 查找常量；补充构建现在仅
