@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "version": "3.55.0",
+  "tag": "3.55.0-zh-CN.rc.2",
+  "reviewed_at": "2026-10-20T05:47:44Z",
+  "package_sha256": "1220a109b037681fd77f468245f3300f78878fbd96561012ff8e41b24fbb5c5b",
+  "main_window": "passed",
+  "wing_general": "passed",
+  "wing_planform": "passed",
+  "about_version_and_repository": "passed",
+  "gui_save_and_reopen_special_character_path": "passed",
+  "saved_filename": "GUI Saved  100% 中文.vsp3",
+  "disk_name_id_comparison": "passed",
+  "names": [
+    "Wing & Body_100% 中文",
+    "Fuselage"
+  ],
+  "screenshots": {
+    "main.png": "868dcd85093d20f4e631a55d3ff07526bb58e5f2f67b1d13a9ac2848143aaece",
+    "about.png": "a428dc4b49f3c7f25cc3a3b87cadf6e8fdf50ca71ebbfa940911dfc67ea6f672",
+    "save-dialog.png": "bb1ac2d5c36923d20006c61dc54f668d0e81e42a410b4acdacdcf3733d7446a6",
+    "wing-planform.png": "470cd5a0d49eea389a7615c18c837174884efea35d44c1766bffb1408ad98390",
+    "reopened-tree.png": "a0351241687eadc53ad7d99e4b37bffbf9c2a97206331dd8346090e2165d229b",
+    "reopened-main.png": "cd9660b511a309f05b30374f903e738b0489880ac04da72c4ca7a405de4a23cc",
+    "wing-general.png": "c477e2a10873cca4599661ee4a4c83892c50a51e7ee101ba015b6576f74640ee",
+    "saved-main.png": "945d9cb31d39ad8c8fd5d3330a49b7594fdb28f172350fb77ce06f7a1defb309",
+    "geometry-tree.png": "320ab1ed68532a69e4d4b0103d84b9cfa9044efc533b0afc8111fb125acdfdde"
+  },
+  "limitations": [
+    "Linux x86_64 cloud desktop only; Debian 13 runtime, Ubuntu 24.04-built original ZIP.",
+    "Other platform GUI not reviewed.",
+    "Limited display and path regression, not complete product or engineering-accuracy validation."
+  ]
+}
