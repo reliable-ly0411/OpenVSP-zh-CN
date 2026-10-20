@@ -174,7 +174,7 @@ cmake --build build --target package --config Release --parallel 2
   英文词典碰撞、空白、特殊字符和静态标签。测试使用记录标签的控件替身，不代替原生 GUI。
 - 本次源码检查与轻量回归通过；修复候选尚未进行五平台原生构建、打包和 GUI 复验。
   已发布 rc.2 包未改动，不将该源码验证称为新包验收。
-  详见[本族回归记录](docs/opaque-layout-label-regression-20261020.md)。
+  详见[本族回归记录](docs/opaque-layout-label-regression-20261020.md)，含原始 3.55.0 / 3.51.2 包的实际截图与合成模型。
 
 ## 3.55.0-zh-CN.rc.2
 
