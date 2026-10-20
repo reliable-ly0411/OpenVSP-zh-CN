@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "checked_date_utc": "2026-10-20",
+  "scope": "Current public source fields; not evidence of the historical download-day license or a legal determination.",
+  "public_license_choices_url": "https://www.airshow.openvsp.org/_nuxt/CMn6fkRq.js",
+  "public_license_choices_sha256": "d61a0b7b352070d5c381106fb9353a7d37e9f5b27b9f4cf2ab76f74f9daa3473",
+  "public_license_mapping": {
+    "3": "Attribution Share Alike (CC BY-SA)"
+  },
+  "license_help_url": "https://www.airshow.openvsp.org/_nuxt/5btKxp_0.js",
+  "license_help_sha256": "e5f2a9c5c95f878e93c3b30db6bc75fdaedc85e677cd00fb415931f2e0f5112d",
+  "models": [
+    {
+      "file": "Community_F-A-18C_Hornet.vsp3",
+      "local_file_sha256": "986a748929a6a92998701b210391643597595de984afa3ce49142789a8623e77",
+      "detail_url": "https://www.airshow.openvsp.org/vsp/UhhSt017Farl1R7v4Km3",
+      "public_record_url": "https://firestore.googleapis.com/v1/projects/openvas-0/databases/(default)/documents/models/UhhSt017Farl1R7v4Km3",
+      "observed_fields": {
+        "name": "F/A-18C Hornet",
+        "uploadedBy": "Elias GH",
+        "license": "3"
+      },
+      "source_record_update_time": "2025-12-31T02:42:03.327295Z",
+      "public_response_sha256": "efdbaa1c86115ac7df1ca69661aa2c23a54345954420da7411dd4877bb07ff8e",
+      "specific_license_version": null,
+      "specific_license_url": null,
+      "cdx_query": {
+        "url": "*airshow.openvsp.org/vsp/UhhSt017Farl1R7v4Km3",
+        "filter": "statuscode:200",
+        "collapse": "timestamp:8",
+        "response": []
+      }
+    },
+    {
+      "file": "Community_Joby_S4_eVTOL.vsp3",
+      "local_file_sha256": "f78081aa99c8859a1c6b2d91e2d67315437e3fa375b68b0b0b1ce3b9a5af71de",
+      "detail_url": "https://www.airshow.openvsp.org/vsp/LtyRrSrYXRhQlDkYwPDX",
+      "public_record_url": "https://firestore.googleapis.com/v1/projects/openvas-0/databases/(default)/documents/models/LtyRrSrYXRhQlDkYwPDX",
+      "observed_fields": {
+        "name": "JOBY S4 EVTOL",
+        "uploadedBy": "Vipul Gadekar",
+        "license": "3"
+      },
+      "source_record_update_time": "2025-12-31T02:40:31.363503Z",
+      "public_response_sha256": "177a352e69dd0b031360a5ee6242957bc6eff30add639e7072c7ef2f281556ff",
+      "specific_license_version": null,
+      "specific_license_url": null,
+      "cdx_query": {
+        "url": "*airshow.openvsp.org/vsp/LtyRrSrYXRhQlDkYwPDX",
+        "filter": "statuscode:200",
+        "collapse": "timestamp:8",
+        "response": []
+      }
+    },
+    {
+      "file": "Community_Kitty_Hawk_Heaviside_eVTOL.vsp3",
+      "local_file_sha256": "4139826e161576b491e6512fda1fe717bc65d4496a70e8c0e7f2d648bb841bc1",
+      "detail_url": "https://www.airshow.openvsp.org/vsp/V5S83k61gbka8UqusT5E",
+      "public_record_url": "https://firestore.googleapis.com/v1/projects/openvas-0/databases/(default)/documents/models/V5S83k61gbka8UqusT5E",
+      "observed_fields": {
+        "name": "Kitty Hawk Heaviside",
+        "uploadedBy": "Vipul Gadekar",
+        "license": "3"
+      },
+      "source_record_update_time": "2025-12-31T02:42:12.543743Z",
+      "public_response_sha256": "48e2b7888c5f569033f60b7f779d360904318aef4a9578c4b72f278ed276d20c",
+      "specific_license_version": null,
+      "specific_license_url": null,
+      "cdx_query": {
+        "url": "*airshow.openvsp.org/vsp/V5S83k61gbka8UqusT5E",
+        "filter": "statuscode:200",
+        "collapse": "timestamp:8",
+        "response": []
+      }
+    }
+  ],
+  "excluded_fields": "No API keys, account IDs, storage access tokens, or unrelated model metadata are retained in this excerpt."
+}
