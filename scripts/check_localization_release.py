@@ -73,10 +73,15 @@ def verify_release_notes(tag: str) -> None:
 
 
 def main() -> None:
+    global ROOT, VERSION_FILE, RELEASE_NOTES_FILE
     parser = argparse.ArgumentParser()
+    parser.add_argument("--source", type=Path, default=ROOT, help="Source tree to inspect with trusted tooling")
     parser.add_argument("--expected-tag")
     parser.add_argument("--print-version", action="store_true")
     args = parser.parse_args()
+    ROOT = args.source.resolve()
+    VERSION_FILE = ROOT / "src" / "cmake" / "VSP_Version.cmake"
+    RELEASE_NOTES_FILE = ROOT / "README_zh-CN.md"
 
     version = read_version()
     metadata = json.loads((ROOT / ".github" / "upstream.json").read_text(encoding="utf-8"))

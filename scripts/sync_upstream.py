@@ -11,6 +11,14 @@ import re
 import subprocess
 
 
+# Only downstream maintenance policy is retained; product scripts merge normally.
+TRUSTED_POLICY_PATHS = (
+    ".github/workflows", "AGENTS.md",
+    "scripts/sync_upstream.py", "scripts/select_official_release.py",
+    "scripts/check_localization_release.py",
+)
+
+
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], text=True, capture_output=True, check=check)
 
@@ -80,8 +88,11 @@ def prepare(upstream_ref: str) -> dict:
     print(merged.stdout + merged.stderr, end="")
     if merged.returncode not in (0, 1):
         raise RuntimeError("Git 合并失败")
-    # 本仓库的 CI 策略独立维护，也避免默认令牌推送上游 workflow 修改被拒绝。
-    git("restore", "--source=HEAD", "--staged", "--worktree", "--", ".github/workflows")
+    # Retain only the explicit trusted maintenance policy, not all scripts/.
+    # The running sync/guard tools are copied from main before this merge.
+    for path in TRUSTED_POLICY_PATHS:
+        if git("cat-file", "-e", f"HEAD:{path}", check=False).returncode == 0:
+            git("restore", "--source=HEAD", "--staged", "--worktree", "--", path)
     conflicts = git("diff", "--name-only", "--diff-filter=U").stdout.strip()
     if conflicts:
         raise RuntimeError(f"上游同步存在代码冲突，未创建提交或更新主分支：\n{conflicts}")

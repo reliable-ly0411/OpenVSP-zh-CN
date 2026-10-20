@@ -12,6 +12,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
+from check_source_worktree import require_clean_source
 from backfill_package import verify as verify_package
 from backfill_verify import (EXECUTABLES, audit_native, bundle_mac, cli_help, digest,
                              install_legacy_fonts, minimum_macos, privacy_scan,
@@ -379,6 +380,7 @@ def main():
     clean = not run('git', '-C', source, 'status', '--porcelain', '--untracked-files=no').strip()
     if not clean:
         raise ValueError('Package generation modified tracked source files')
+    worktree_clean = require_clean_source(source)
     report = dict(schema=2, tag=tag, source_sha=source_sha, version=version,
                   platform=native_platform, architecture=arch, python=expected_python,
                   workflow_sha=os.environ['GITHUB_SHA'], run_id=os.environ['GITHUB_RUN_ID'],
@@ -389,7 +391,7 @@ def main():
                   functional_smoke=functional,
                   macos_minimum=minimum, legacy_gui_fonts=fonts, verified_source_files=source_files,
                   source_tracked_files_clean=clean,
-                  source_worktree_clean=not run('git', '-C', source, 'status', '--porcelain').strip(),
+                  source_worktree_clean=worktree_clean,
                   gui_review='pending visual review; screenshots alone do not establish acceptance',
                   macos_signing='ad-hoc only; not Developer ID signed or notarized' if mac else None)
     (output / 'verification.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

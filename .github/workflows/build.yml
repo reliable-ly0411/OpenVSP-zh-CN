@@ -4,6 +4,9 @@ on:
   push:
     branches: build
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: ${{ matrix.os }}
@@ -29,16 +32,18 @@ jobs:
             llvm-version: 18
     steps:
     - name: Checkout
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Set up Python ${{ matrix.python-version }}
       if: runner.os != 'Linux'
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Install cmake
-      uses: jwlawson/actions-setup-cmake@v2.2.0
+      uses: jwlawson/actions-setup-cmake@0d6a7d60b009d01c9e7523be22153ff8f19460d3 # v2.2.0
 
     - name:  Install Linux
       if: runner.os == 'Linux'
@@ -203,7 +208,7 @@ jobs:
         ls pydoc.zip && (echo "PYDOC COPY SUCCESSFUL" ) || (echo "PYDOC COPY FAILED" )
 
     - name: Upload Artifacts
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
       with:
         name: artifact-${{ matrix.os }}-${{ matrix.python-version }}
         path: ${{ github.workspace }}/artifacts
@@ -213,7 +218,7 @@ jobs:
    needs: build
    steps:
      - name: Merge Artifacts
-       uses: actions/upload-artifact/merge@v7
+       uses: actions/upload-artifact/merge@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
        with:
          name: combined-artifact
          pattern: artifact-*
