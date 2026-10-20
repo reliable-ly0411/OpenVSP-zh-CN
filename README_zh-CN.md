@@ -96,8 +96,9 @@ ARM64 使用上表对应 ZIP。3.51.2/3.51.3 的 Linux 新 rc 包应使用随包
 
 官方示例在 `Official_Examples`，脚本、纹理和模型间相对路径保留；其中文索引便于查找。
 `Complete_Aircraft` 是额外汇集的整机模型，不表示全部由 OpenVSP 官方创作或适用 NOSA。
-来源、作者、字节哈希和逐文件许可见
-[`examples/Complete_Aircraft/SOURCES_AND_LICENSES.md`](examples/Complete_Aircraft/SOURCES_AND_LICENSES.md)。
+包内来源清单位于 `Official_Examples/Complete_Aircraft/SOURCES_AND_LICENSES.md`；
+来源、作者、字节哈希和逐文件许可也可查阅以下固定源码记录：
+[`examples/Complete_Aircraft/SOURCES_AND_LICENSES.md`](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/87905bc6c0ef61ac3991154e7f80ae86fc32b714/examples/Complete_Aircraft/SOURCES_AND_LICENSES.md)。
 其中 F/A-18C、Joby S4 和 Kitty Hawk Heaviside 的 CC BY-SA 具体版本尚未确认，不能以
 本项目 NOSA 许可或现有包中的文件替代该授权证据。详见[第三方内容说明](THIRD_PARTY_NOTICES.md)。
 
