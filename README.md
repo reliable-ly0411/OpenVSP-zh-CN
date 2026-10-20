@@ -38,7 +38,7 @@
   The NOSA notice above covers OpenVSP; it does not relicense independently
   supplied libraries, fonts, or community models. See
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the per-file provenance
-  in [Complete_Aircraft/SOURCES_AND_LICENSES.md](examples/Complete_Aircraft/SOURCES_AND_LICENSES.md).
+  in [Complete_Aircraft/SOURCES_AND_LICENSES.md](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/87905bc6c0ef61ac3991154e7f80ae86fc32b714/examples/Complete_Aircraft/SOURCES_AND_LICENSES.md).
   Three community models are marked CC BY-SA by their source, but the specific
   license version remains unconfirmed. The project does not assign them a
   license version or treat them as NOSA content.
