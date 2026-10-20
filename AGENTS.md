@@ -13,3 +13,7 @@
 
 - 新预发布至少逐族目视验证原始 Linux 包的主界面、机翼页、模型名及特殊字符路径，并绑定原构建与 ZIP 哈希。
 - 新 Release 仅五个官方风格 ZIP 与 SHA256SUMS.txt（最多另加一份简介）；技术证据存 docs/CI，旧标签与公开资产不可覆盖。
+
+## Release and repository maintenance
+
+Before changing versions, branches, packaging, release notes, or public issue summaries, read `docs/RELEASING.zh-CN.md` and follow its repository-specific mapping. Preserve all other instructions in this file and any narrower directory instructions. Published tags and asset bytes are immutable: fix a release through a new version, never by moving a published tag or overwriting assets. Keep upstream mirrors free of fork-only policy and localization changes. Release preparation does not itself grant permission to publish, merge, delete, or change repository settings.
