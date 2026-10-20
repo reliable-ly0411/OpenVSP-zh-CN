@@ -46,6 +46,7 @@ class LocalizedReleaseIdentityTests(unittest.TestCase):
 
     def check(self):
         with patch.object(guard, 'ROOT', self.root), \
+             patch.object(guard, 'VERSION_FILE', self.root / 'src/cmake/VSP_Version.cmake'), \
              patch.object(guard, 'RELEASE_NOTES_FILE', self.root / 'README_zh-CN.md'), \
              patch.object(guard, 'read_version', return_value='3.55.0'), \
              patch('sys.argv', ['check_localization_release.py', '--expected-tag', self.tag]), \
