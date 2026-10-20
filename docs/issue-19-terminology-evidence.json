@@ -1,0 +1,313 @@
+{
+  "review_date": "2026-10-20",
+  "base_source_sha": "55a89b4d73223951a5d9cb692bcef7b050641fb3",
+  "baseline_cpp_sha256": "989bdccb0e3f02ab5d837ce4ff8ab566a42fa5302d691f2349159d7061601096",
+  "new_cpp_sha256": "b338737517bb68cb9635e199c3371a586aaea9b68b4e9f52639b6251107ae871",
+  "method": "Both drivers compiled from production VSPChinese.cpp using g++ -std=c++11. Baseline source extracted from exact base commit; new source from this worktree. End-cap pairs compare each actual UI key, not a speculative global Flat/Round replacement.",
+  "ui_decisions": [
+    {
+      "old_ui_key": "Covert",
+      "new_ui_key": "Covert",
+      "before": "Covert",
+      "after": "Covert"
+    },
+    {
+      "old_ui_key": "DegenGeom...",
+      "new_ui_key": "DegenGeom...",
+      "before": "简化几何...",
+      "after": "退化几何..."
+    },
+    {
+      "old_ui_key": "Degen Geom - Compute Models, File IO",
+      "new_ui_key": "Degen Geom - Compute Models, File IO",
+      "before": "简化几何——计算模型与文件输入输出",
+      "after": "退化几何——计算模型与文件输入输出"
+    },
+    {
+      "old_ui_key": "Degen Set:",
+      "new_ui_key": "Degen Set:",
+      "before": "简化几何集合：",
+      "after": "退化几何集合："
+    },
+    {
+      "old_ui_key": "Surface Degen",
+      "new_ui_key": "Surface Degen",
+      "before": "曲面简化几何",
+      "after": "退化曲面模型"
+    },
+    {
+      "old_ui_key": "Plate Degen",
+      "new_ui_key": "Plate Degen",
+      "before": "退化板模型",
+      "after": "退化板模型"
+    },
+    {
+      "old_ui_key": "Camber Degen",
+      "new_ui_key": "Camber Degen",
+      "before": "弯度简化几何",
+      "after": "退化弯度面"
+    },
+    {
+      "old_ui_key": "Degen",
+      "new_ui_key": "Degen",
+      "before": "简化几何",
+      "after": "退化几何"
+    },
+    {
+      "old_ui_key": "Orthotropic w/ Transverse Isotropy",
+      "new_ui_key": "Orthotropic w/ Transverse Isotropy",
+      "before": "横向各向同性正交材料",
+      "after": "正交各向异性（横观各向同性）"
+    },
+    {
+      "old_ui_key": "Activity Factor",
+      "new_ui_key": "Activity Factor",
+      "before": "活度因子",
+      "after": "Activity Factor"
+    },
+    {
+      "old_ui_key": "Plan",
+      "new_ui_key": "Plan",
+      "before": "平面",
+      "after": "平面形"
+    },
+    {
+      "old_ui_key": "Flat",
+      "new_ui_key": "Flat End Cap",
+      "before": "平直",
+      "after": "平头端盖"
+    },
+    {
+      "old_ui_key": "Round",
+      "new_ui_key": "Round End Cap",
+      "before": "圆滑",
+      "after": "圆头端盖"
+    },
+    {
+      "old_ui_key": "To FEM",
+      "new_ui_key": "To FEM",
+      "before": "转到 FEM",
+      "after": "FEM 单位值"
+    }
+  ],
+  "context_outputs": {
+    "translate": [
+      {
+        "input": "Flat",
+        "before": "平直",
+        "after": "平直"
+      },
+      {
+        "input": "Round",
+        "before": "圆滑",
+        "after": "圆滑"
+      },
+      {
+        "input": "FLAT",
+        "before": "平直",
+        "after": "平直"
+      },
+      {
+        "input": "ROUND",
+        "before": "圆滑",
+        "after": "圆滑"
+      },
+      {
+        "input": "Plane",
+        "before": "平面",
+        "after": "平面"
+      },
+      {
+        "input": "DegenGeom",
+        "before": "DegenGeom",
+        "after": "DegenGeom"
+      },
+      {
+        "input": "CreateDegenGeom",
+        "before": "CreateDegenGeom",
+        "after": "CreateDegenGeom"
+      },
+      {
+        "input": "DegenGeom.csv",
+        "before": "DegenGeom.csv",
+        "after": "DegenGeom.csv"
+      },
+      {
+        "input": "model_DegenGeom.m",
+        "before": "model_DegenGeom.m",
+        "after": "model_DegenGeom.m"
+      },
+      {
+        "input": "FF_B_COVERT",
+        "before": "FF_B_COVERT",
+        "after": "FF_B_COVERT"
+      },
+      {
+        "input": "FF_W_COVERT",
+        "before": "FF_W_COVERT",
+        "after": "FF_W_COVERT"
+      },
+      {
+        "input": "FEA_ENG_ORTHO_TRANS_ISO",
+        "before": "FEA_ENG_ORTHO_TRANS_ISO",
+        "after": "FEA_ENG_ORTHO_TRANS_ISO"
+      },
+      {
+        "input": "FLAT_END_CAP",
+        "before": "FLAT_END_CAP",
+        "after": "FLAT_END_CAP"
+      },
+      {
+        "input": "ROUND_END_CAP",
+        "before": "ROUND_END_CAP",
+        "after": "ROUND_END_CAP"
+      },
+      {
+        "input": "TIRE_FLAT_CONTACT",
+        "before": "TIRE_FLAT_CONTACT",
+        "after": "TIRE_FLAT_CONTACT"
+      },
+      {
+        "input": "AF",
+        "before": "AF",
+        "after": "AF"
+      },
+      {
+        "input": "AFLimit",
+        "before": "AFLimit",
+        "after": "AFLimit"
+      },
+      {
+        "input": "E1",
+        "before": "E1",
+        "after": "E1"
+      },
+      {
+        "input": "E2",
+        "before": "E2",
+        "after": "E2"
+      },
+      {
+        "input": "E3",
+        "before": "E3",
+        "after": "E3"
+      },
+      {
+        "input": "G23",
+        "before": "G23",
+        "after": "G23"
+      },
+      {
+        "input": "nu23",
+        "before": "nu23",
+        "after": "nu23"
+      },
+      {
+        "input": "Hoerner",
+        "before": "Hoerner",
+        "after": "Hoerner"
+      },
+      {
+        "input": "Torenbeek",
+        "before": "Torenbeek",
+        "after": "Torenbeek"
+      },
+      {
+        "input": "Shevell",
+        "before": "Shevell",
+        "after": "Shevell"
+      },
+      {
+        "input": "Williams",
+        "before": "Williams",
+        "after": "Williams"
+      },
+      {
+        "input": "Kroo",
+        "before": "Kroo",
+        "after": "Kroo"
+      }
+    ],
+    "menu": [
+      {
+        "input": "Analysis/DegenGeom...",
+        "before": "分析/简化几何...",
+        "after": "分析/退化几何..."
+      }
+    ],
+    "header": [
+      {
+        "input": "@b@.NORMAL SET:@b@.DEGEN SET",
+        "before": "@b@.常规集合:@b@.简化几何集合",
+        "after": "@b@.常规集合:@b@.退化几何集合"
+      },
+      {
+        "input": "User:DEGEN SET",
+        "before": "User:DEGEN SET",
+        "after": "User:DEGEN SET"
+      }
+    ]
+  },
+  "cpp_regression": "Engineering terminology passed: 21 labels, 22 identifiers, 13 opaque values, 4 menu/header boundaries.",
+  "catalog_regression": "Translation catalog passed: 850 reviewed cases, 256 protected labels, 2076 scanned GUI literals, 28 browser headers.",
+  "ctest": {
+    "passed": 10,
+    "failed": 0,
+    "command": "ctest --test-dir /tmp/openvsp-issue19-terms-build --output-on-failure"
+  },
+  "release_guard": "本地化发布守卫通过：OpenVSP 3.55.0，整机案例 8 个，原始几何名称 210 项（只读校验）",
+  "scope_limit": "Focused production-function/source tests only. No native GUI or five-platform package certification is implied.",
+  "family_patch_and_function_checks": {
+    "3.55.0": {
+      "source_sha": "55a89b4d73223951a5d9cb692bcef7b050641fb3",
+      "patch_applies_cleanly": true,
+      "translated_cpp_sha256": "b338737517bb68cb9635e199c3371a586aaea9b68b4e9f52639b6251107ae871",
+      "compiler": "g++ (Debian 14.2.0-19) 14.2.0",
+      "cpp_result": "Engineering terminology passed: 21 labels, 22 identifiers, 13 opaque values, 4 menu/header boundaries.",
+      "source_contract_result": "test_activity_factor_is_the_single_blade_geometry_integral (__main__.EngineeringTermContextTests.test_activity_factor_is_the_single_blade_geometry_integral) ... ok\ntest_airfoil_edge_cap_labels_remain_in_their_original_context (__main__.EngineeringTermContextTests.test_airfoil_edge_cap_labels_remain_in_their_original_context) ... ok\ntest_covert_remains_a_formula_name_in_both_dropdowns (__main__.EngineeringTermContextTests.test_covert_remains_a_formula_name_in_both_dropdowns) ... ok\ntest_end_caps_have_context_specific_display_keys_and_unchanged_enums (__main__.EngineeringTermContextTests.test_end_caps_have_context_specific_display_keys_and_unchanged_enums) ... ok\ntest_plan_is_the_wing_planform_tab (__main__.EngineeringTermContextTests.test_plan_is_the_wing_planform_tab) ... ok\ntest_tire_flat_contact_does_not_acquire_an_end_cap_label (__main__.EngineeringTermContextTests.test_tire_flat_contact_does_not_acquire_an_end_cap_label) ... ok\ntest_to_fem_is_a_converted_value_heading_not_a_conversion_button (__main__.EngineeringTermContextTests.test_to_fem_is_a_converted_value_heading_not_a_conversion_button) ... ok\ntest_transverse_isotropy_keeps_the_orthotropic_material_enum (__main__.EngineeringTermContextTests.test_transverse_isotropy_keeps_the_orthotropic_material_enum) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 0.071s\n\nOK",
+      "native_gui_tested_here": false
+    },
+    "3.54.0": {
+      "source_sha": "6215cd8d1513cb0fffd062b1b75b1073e1379b4b",
+      "patch_applies_cleanly": true,
+      "translated_cpp_sha256": "b338737517bb68cb9635e199c3371a586aaea9b68b4e9f52639b6251107ae871",
+      "compiler": "g++ (Debian 14.2.0-19) 14.2.0",
+      "cpp_result": "Engineering terminology passed: 21 labels, 22 identifiers, 13 opaque values, 4 menu/header boundaries.",
+      "source_contract_result": "test_activity_factor_is_the_single_blade_geometry_integral (__main__.EngineeringTermContextTests.test_activity_factor_is_the_single_blade_geometry_integral) ... ok\ntest_airfoil_edge_cap_labels_remain_in_their_original_context (__main__.EngineeringTermContextTests.test_airfoil_edge_cap_labels_remain_in_their_original_context) ... ok\ntest_covert_remains_a_formula_name_in_both_dropdowns (__main__.EngineeringTermContextTests.test_covert_remains_a_formula_name_in_both_dropdowns) ... ok\ntest_end_caps_have_context_specific_display_keys_and_unchanged_enums (__main__.EngineeringTermContextTests.test_end_caps_have_context_specific_display_keys_and_unchanged_enums) ... ok\ntest_plan_is_the_wing_planform_tab (__main__.EngineeringTermContextTests.test_plan_is_the_wing_planform_tab) ... ok\ntest_tire_flat_contact_does_not_acquire_an_end_cap_label (__main__.EngineeringTermContextTests.test_tire_flat_contact_does_not_acquire_an_end_cap_label) ... ok\ntest_to_fem_is_a_converted_value_heading_not_a_conversion_button (__main__.EngineeringTermContextTests.test_to_fem_is_a_converted_value_heading_not_a_conversion_button) ... ok\ntest_transverse_isotropy_keeps_the_orthotropic_material_enum (__main__.EngineeringTermContextTests.test_transverse_isotropy_keeps_the_orthotropic_material_enum) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 0.110s\n\nOK",
+      "native_gui_tested_here": false
+    },
+    "3.53.0": {
+      "source_sha": "fd5feac3040c84c95b4f102a19010dc069515722",
+      "patch_applies_cleanly": true,
+      "translated_cpp_sha256": "b338737517bb68cb9635e199c3371a586aaea9b68b4e9f52639b6251107ae871",
+      "compiler": "g++ (Debian 14.2.0-19) 14.2.0",
+      "cpp_result": "Engineering terminology passed: 21 labels, 22 identifiers, 13 opaque values, 4 menu/header boundaries.",
+      "source_contract_result": "test_activity_factor_is_the_single_blade_geometry_integral (__main__.EngineeringTermContextTests.test_activity_factor_is_the_single_blade_geometry_integral) ... ok\ntest_airfoil_edge_cap_labels_remain_in_their_original_context (__main__.EngineeringTermContextTests.test_airfoil_edge_cap_labels_remain_in_their_original_context) ... ok\ntest_covert_remains_a_formula_name_in_both_dropdowns (__main__.EngineeringTermContextTests.test_covert_remains_a_formula_name_in_both_dropdowns) ... ok\ntest_end_caps_have_context_specific_display_keys_and_unchanged_enums (__main__.EngineeringTermContextTests.test_end_caps_have_context_specific_display_keys_and_unchanged_enums) ... ok\ntest_plan_is_the_wing_planform_tab (__main__.EngineeringTermContextTests.test_plan_is_the_wing_planform_tab) ... ok\ntest_tire_flat_contact_does_not_acquire_an_end_cap_label (__main__.EngineeringTermContextTests.test_tire_flat_contact_does_not_acquire_an_end_cap_label) ... ok\ntest_to_fem_is_a_converted_value_heading_not_a_conversion_button (__main__.EngineeringTermContextTests.test_to_fem_is_a_converted_value_heading_not_a_conversion_button) ... ok\ntest_transverse_isotropy_keeps_the_orthotropic_material_enum (__main__.EngineeringTermContextTests.test_transverse_isotropy_keeps_the_orthotropic_material_enum) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 0.072s\n\nOK",
+      "native_gui_tested_here": false
+    },
+    "3.51.3": {
+      "source_sha": "d35d66193f387f65f2d12e0bcd034a41bbe0ac84",
+      "patch_applies_cleanly": true,
+      "translated_cpp_sha256": "b338737517bb68cb9635e199c3371a586aaea9b68b4e9f52639b6251107ae871",
+      "compiler": "g++ (Debian 14.2.0-19) 14.2.0",
+      "cpp_result": "Engineering terminology passed: 21 labels, 22 identifiers, 13 opaque values, 4 menu/header boundaries.",
+      "source_contract_result": "test_activity_factor_is_the_single_blade_geometry_integral (__main__.EngineeringTermContextTests.test_activity_factor_is_the_single_blade_geometry_integral) ... ok\ntest_airfoil_edge_cap_labels_remain_in_their_original_context (__main__.EngineeringTermContextTests.test_airfoil_edge_cap_labels_remain_in_their_original_context) ... ok\ntest_covert_remains_a_formula_name_in_both_dropdowns (__main__.EngineeringTermContextTests.test_covert_remains_a_formula_name_in_both_dropdowns) ... ok\ntest_end_caps_have_context_specific_display_keys_and_unchanged_enums (__main__.EngineeringTermContextTests.test_end_caps_have_context_specific_display_keys_and_unchanged_enums) ... ok\ntest_plan_is_the_wing_planform_tab (__main__.EngineeringTermContextTests.test_plan_is_the_wing_planform_tab) ... ok\ntest_tire_flat_contact_does_not_acquire_an_end_cap_label (__main__.EngineeringTermContextTests.test_tire_flat_contact_does_not_acquire_an_end_cap_label) ... ok\ntest_to_fem_is_a_converted_value_heading_not_a_conversion_button (__main__.EngineeringTermContextTests.test_to_fem_is_a_converted_value_heading_not_a_conversion_button) ... ok\ntest_transverse_isotropy_keeps_the_orthotropic_material_enum (__main__.EngineeringTermContextTests.test_transverse_isotropy_keeps_the_orthotropic_material_enum) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 0.092s\n\nOK",
+      "native_gui_tested_here": false
+    },
+    "3.51.2": {
+      "source_sha": "296a9e7c7c7e1c6b084381f527ca3a3ab3126855",
+      "patch_applies_cleanly": true,
+      "translated_cpp_sha256": "b338737517bb68cb9635e199c3371a586aaea9b68b4e9f52639b6251107ae871",
+      "compiler": "g++ (Debian 14.2.0-19) 14.2.0",
+      "cpp_result": "Engineering terminology passed: 21 labels, 22 identifiers, 13 opaque values, 4 menu/header boundaries.",
+      "source_contract_result": "test_activity_factor_is_the_single_blade_geometry_integral (__main__.EngineeringTermContextTests.test_activity_factor_is_the_single_blade_geometry_integral) ... ok\ntest_airfoil_edge_cap_labels_remain_in_their_original_context (__main__.EngineeringTermContextTests.test_airfoil_edge_cap_labels_remain_in_their_original_context) ... ok\ntest_covert_remains_a_formula_name_in_both_dropdowns (__main__.EngineeringTermContextTests.test_covert_remains_a_formula_name_in_both_dropdowns) ... ok\ntest_end_caps_have_context_specific_display_keys_and_unchanged_enums (__main__.EngineeringTermContextTests.test_end_caps_have_context_specific_display_keys_and_unchanged_enums) ... ok\ntest_plan_is_the_wing_planform_tab (__main__.EngineeringTermContextTests.test_plan_is_the_wing_planform_tab) ... ok\ntest_tire_flat_contact_does_not_acquire_an_end_cap_label (__main__.EngineeringTermContextTests.test_tire_flat_contact_does_not_acquire_an_end_cap_label) ... ok\ntest_to_fem_is_a_converted_value_heading_not_a_conversion_button (__main__.EngineeringTermContextTests.test_to_fem_is_a_converted_value_heading_not_a_conversion_button) ... ok\ntest_transverse_isotropy_keeps_the_orthotropic_material_enum (__main__.EngineeringTermContextTests.test_transverse_isotropy_keeps_the_orthotropic_material_enum) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 0.034s\n\nOK",
+      "native_gui_tested_here": false
+    }
+  },
+  "baseline_negative_control": {
+    "expected_failure": true,
+    "exit_code": 1,
+    "stderr": "DegenGeom... -> 简化几何...; expected 退化几何...",
+    "purpose": "New engineering regression is linked to the unmodified base translator; it must detect old DegenGeom wording."
+  }
+}

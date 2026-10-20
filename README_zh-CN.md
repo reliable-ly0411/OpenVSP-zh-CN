@@ -1,62 +1,112 @@
 # OpenVSP 简体中文版
 
-> **声明：**本仓库提供非官方简体中文汉化。
-> OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，仍属于 NASA/OpenVSP
-> 原作者与贡献者，并遵循 NOSA 1.3。
+> **非官方简体中文本地化。** OpenVSP 原软件、算法及英文源码的版权和作者归属不变，
+> 仍属于 NASA/OpenVSP 原作者与贡献者，并遵循 NOSA 1.3。
+> 随包第三方库与社区模型另按各自许可处理，见 [第三方内容说明](THIRD_PARTY_NOTICES.md)。
 
 - 当前软件版本：OpenVSP 3.54.0
-- 当前汉化版本：`3.54.0-zh-CN.rc.1`（预发布候选）
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
-- 下载页面：<https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases>
 
-本仓库保留上一汉化版本与官方上游的双重 Git 继承关系。它不会向官方仓库推送，也不代表
-NASA/OpenVSP 官方汉化。维护架构与强制规则统一见 [`AGENTS.md`](AGENTS.md)。
+## 先选版本
+
+以下发布状态核对于 **2026-10-20**；`main`、开发分支和公开 Release 分别追踪，不能把
+分支上的文档或测试结果当成某个已下载包的验收结果。
+
+本分支当前为 `3.54.0-zh-CN.rc.2` 源码候选，尚未发布可下载包。下列 rc.1 下载
+与验收记录仅属于已发布 rc.1；rc.2 的本地检查不替代新原生构建或 GUI 验收。
+
+| 使用目的 | 下载入口 | 已知范围 |
+|---|---|---|
+| 需要保留既有稳定发布线 | [Latest：3.53.0 历史稳定版](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/latest) | Latest 仍指向 `3.53.0-Codex-AI-zh-CN`，未包含新 rc 的全部修复。其历史清单、资源布局和 Python 依赖限制仍适用，不能据 Latest 标记推导新门禁已通过。 |
+| 需要新修复并接受预发布性质 | [3.55.0-zh-CN.rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.1) | 五个平台均完成原生包检查；Linux AMD64 主界面、机翼页和名称/路径有有限 GUI 抽查。仍为预发布，其他平台 GUI 未作同范围验收。 |
+| 需要旧软件版本的新本地化修复 | [3.54.0 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.1)、[3.53.0 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.1)、[3.51.3 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.1)、[3.51.2 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.1) | 各族分别构建、核验和发布；不要在不同标签之间混用 ZIP 与校验清单。 |
+
+新用户若需要已发布修复，可从 3.55.0 rc.1 开始评估，并先用模型副本验证自己的工作流。
+需要稳定发布策略的用户可保留 Latest，但应先阅读其已知限制。
+[五版本族验收报告](docs/five-family-rc1-acceptance-20261019.md)列出精确源码、25 个原生包、
+清单哈希和 GUI 边界；[逐页汉化状态](docs/localization-status.md)列出尚未目视验收的页面。
 
 ## 汉化范围与兼容性
 
-中文版覆盖主菜单、窗口、标签、按钮、参数名称、动态列表、提示信息、命令行帮助和六个
-内置离线帮助主题，包含几何建模、CFD 网格、FEA、VSPAERO 与寄生阻力等专业界面。
+已有主菜单、窗口、标签、按钮、参数页、动态列表、提示信息、中文命令行帮助和六个
+离线帮助主题的本地化工作。CFD 网格、FEA、VSPAERO、寄生阻力等专业界面有静态标签
+回归，但不能据此宣称全部页面、动态文本、第三方控件或布局都已验收。
 
 文件格式、参数 ID、脚本变量、AngelScript/OpenVSP API、物理单位及通用行业缩写保持
-不变；中文版生成的 `.vsp3` 模型和分析文件与官方英文版兼容。用户输入的名称不会被改写。
+原有接口。显示翻译不应改写用户名称；名称往返检查以官方 API 接受后的值为准，例如
+上游 `SetGeomName` 本身会移除 `/`。已测模型与平台及尚未完成的检查见上述验收报告。
 
 ## 下载与运行
 
-从 [Releases](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases) 下载与系统对应的
-ZIP 和 `SHA256SUMS.txt`，校验后解压。发布包不会覆盖系统目录。
+以下示例针对 **3.54.0-zh-CN.rc.1**，不是旧 auto 包。先从同一个 Release 下载所需 ZIP
+和 `SHA256SUMS.txt`；同一软件版本不同 rc 的 ZIP 名可能相同，建议每个标签使用独立目录。
 
-历史 Release 的原始 SHA-256 清单可能仍记载旧文件名，名称对应关系及不变校验值见该 Release 正文。
-后续新发布的清单使用新文件名。
+| 系统/架构 | 3.54.0 rc.1 的实际 ZIP 文件名 |
+|---|---|
+| Ubuntu 24.04 AMD64 | `OpenVSP-3.54.0-Ubuntu-24.04_amd64-zh-CN.zip` |
+| Ubuntu 24.04 ARM64 | `OpenVSP-3.54.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip` |
+| Windows x64 | `OpenVSP-3.54.0-win64-Python3.11-zh-CN.zip` |
+| macOS 14 ARM64 | `OpenVSP-3.54.0-macos-14-ARM64-Python3.11-zh-CN.zip` |
+| macOS 15 Intel | `OpenVSP-3.54.0-macos-15-intel-X64-Python3.11-zh-CN.zip` |
 
-以下保留已发布 3.53.0 的历史安装示例；新 rc 的包名见“3.54.0-zh-CN.rc.1”章节。
+### 校验后解压
 
-Ubuntu 24.04 x86_64：
+下载全部五个 ZIP 时，在该目录执行 `sha256sum -c SHA256SUMS.txt`，五行都必须为 `OK`。
+只下载一个包时，计算该文件的 SHA-256，与清单中**同名的一行**逐字比对；不能把缺失
+其他四个文件的报错当成已验全部平台。macOS 可用 `shasum -a 256 文件名.zip`，Windows
+可用 `Get-FileHash 文件名.zip -Algorithm SHA256`。校验失败则停止解压使用，重新核对标签
+和下载完整性。
+
+旧 `3.55.0-Codex-AI-zh-CN-auto.5240ef210f41` 与部分历史 Release 的清单保留旧名且可能
+不覆盖后来补包。旧文件没有被本轮修复或替换；具体例外、逐包比对方法和新 rc 替代关系见
+[清单与路径扫描说明](docs/release-verification-policy.md)。不要对旧清单宣称五包完整校验通过。
+
+### Ubuntu
 
 ```bash
 sudo apt-get install fonts-noto-cjk
-sha256sum OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip
-# 将输出与该 Release 正文公布的 SHA-256 比对一致后再解压
-unzip OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip
-cd OpenVSP-3.53.0-Linux
+sha256sum OpenVSP-3.54.0-Ubuntu-24.04_amd64-zh-CN.zip
+# 与同一 rc.1 的 SHA256SUMS.txt 中该文件一行比对一致后继续
+unzip OpenVSP-3.54.0-Ubuntu-24.04_amd64-zh-CN.zip
+cd OpenVSP-3.54.0-Linux
 ./vsp
 ```
 
-Windows x64：解压 `OpenVSP-3.53.0-win64-zh-CN.zip`，运行目录中的
-`vsp.exe`。如 Windows 阻止从网络下载的程序，先在 ZIP 文件属性中解除锁定再解压。
+ARM64 使用上表对应 ZIP。3.51.2/3.51.3 的 Linux 新 rc 包应使用随包 `./vsp-zh-CN`
+中文启动器，并安装 `fontconfig`、`fonts-noto-cjk`；直接运行旧族 `vsp` 可能缺中文字形。
+图形构建采用 FLTK X11 后端，Wayland 会话需要 XWayland。包未意外依赖系统
+`libcminpack.so`；其他运行库仍须满足对应平台的依赖要求。
 
-Ubuntu 图形构建固定采用 FLTK X11 后端，在 Wayland 会话中通过 XWayland 运行，以规避
-部分系统上的 `libdecor-gtk` 崩溃。发布包使用内置静态 CMINPACK，不应依赖系统
-`libcminpack.so`。
+### Windows
+
+校验后完整解压 Windows ZIP，运行 `OpenVSP-3.54.0-win64` 中的 `vsp.exe`，不要只拷贝
+单个可执行文件。Python API 目标为 Python 3.11；需要使用 API 时按随包 requirements
+在新建虚拟环境安装，NumPy 为 1.26.4，未声明 NumPy 2 兼容。
+
+### macOS
+
+选择 CPU 架构对应的 ZIP，校验后解压，在 `OpenVSP-3.54.0-MacOS` 中运行 `./vsp`。
+这批包是终端可执行文件布局。ARM64 的所查 Mach-O 最低要求最大值为 14.0、实测主机
+14.8.9；Intel 为 15.0、实测主机 15.7.9，不据此推断更低系统兼容性。
+包仅使用 ad-hoc 签名，未做 Developer ID 签名或 notarization；不保证 Gatekeeper
+直接接受。macOS 包已有公开下载和原生运行检查，但尚无同范围实际 GUI 操作验收。
 
 ## 示例与随包文档
 
-官方案例安装到 `Official_Examples`，目录结构、脚本、纹理和模型之间的相对路径保持不变；
-其中的 `README_zh-CN.md` 提供中文分类索引。`Official_Examples/Complete_Aircraft` 收录
-许可和来源明确的固定翼、分布式电推进及 eVTOL/VTOL 整机模型，来源、许可、原始链接和
-SHA-256 见该目录的 `SOURCES_AND_LICENSES.md`。
+官方示例在 `Official_Examples`，脚本、纹理和模型间相对路径保留；其中文索引便于查找。
+`Complete_Aircraft` 是额外汇集的整机模型，不表示全部由 OpenVSP 官方创作或适用 NOSA。
+包内来源清单位于 `Official_Examples/Complete_Aircraft/SOURCES_AND_LICENSES.md`；
+来源、作者、字节哈希和逐文件许可也可查阅以下固定源码记录：
+[`examples/Complete_Aircraft/SOURCES_AND_LICENSES.md`](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/87905bc6c0ef61ac3991154e7f80ae86fc32b714/examples/Complete_Aircraft/SOURCES_AND_LICENSES.md)。
+其中 F/A-18C、Joby S4 和 Kitty Hawk Heaviside 的 CC BY-SA 具体版本尚未确认，不能以
+本项目 NOSA 许可或现有包中的文件替代该授权证据。详见[第三方内容说明](THIRD_PARTY_NOTICES.md)。
 
 ## 从源码构建
+
+本分支源码标识（不等于当前下载推荐）：
+
+- 当前汉化版本：`3.54.0-zh-CN.rc.2`（源码候选，尚未发布）
 
 完整依赖和通用构建说明以根目录 [`README.md`](README.md) 中保留的官方英文文档为准。
 本汉化版使用 CMake 两阶段构建，并关闭不随 ZIP 分发的 Python API 文档生成；Python API
@@ -107,7 +157,7 @@ cmake --build build --target package --config Release --parallel 2
    SHA-256 及真实审阅说明。它下载并校验原 run 的原始产物，不重新编译；创建新草稿、
    逐项下载复核后才公开预发布。其他平台未做的 GUI 验收会明确说明，不推断为已通过。
 
-新 Release 资产仅保留五个官方风格 ZIP 和完整 `SHA256SUMS.txt`，正文简述成果与边界；
+新 Release 资产仅保留五个官方风格 ZIP 和完整 `SHA256SUMS.txt`，正文保留对应上游说明全文并补充本地成果与边界；
 技术报告、截图及审阅说明放在 CI 或 [默认分支的技术验收说明](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/main/docs/native-prerelease-verification.md)。
 下载到同一目录后可用 `sha256sum -c SHA256SUMS.txt` 校验全部 ZIP，Windows 使用
 `Get-FileHash 文件名.zip -Algorithm SHA256` 比对对应清单条目。
@@ -120,7 +170,44 @@ cmake --build build --target package --config Release --parallel 2
 `upstream-watch.yml` 手动入口仅显示迁移说明，不再推进主分支或写入任何公开 Release。
 持续官方版本跟踪、五平台原生构建和目视后发布统一使用默认分支 `main` 的已审查流程。
 
-## 未发布
+## 3.54.0-zh-CN.rc.2
+
+- 新增 [发布与分支规范](docs/RELEASING.zh-CN.md) 及 AGENTS 入口，明确五族开发线、SemVer、官方风格包名、完整上游说明和原包验收顺序。
+
+2026-10-20 源码候选，尚未公开发布。本节描述相对本族已发布 rc.1 的变化。
+
+- 新构建将 `THIRD_PARTY_NOTICES.md` 和 `docs/` 一并随包安装，安装/原生验包均按对应
+  源码字节核对；旧源标签没有新增通知时沿用原校验范围。全部示例继续保留，包括许可版本
+  待核实的三份社区模型。已完成离线打包与正反例测试；实际新包以对应发布验收为准。
+  发布守卫同时核对当前汉化版本标识、该标签更新说明和关于窗口版本，防止旧标识混入新 rc。
+- 补齐打开、另存为、运行脚本、导入、导出和专业分析中的文件选择窗口标题；标题与
+  过滤器分开处理，扩展名、过滤规则和文件路径保持原样。
+- 参数窗口和属性浏览器只翻译固定标题前缀，用户参数名、属性附着对象名称及可编辑的
+  用户参数描述保持原样；内置固定参数描述仍按已有规则显示。
+- 分割与缝合导出失败提示使用中文固定格式模板，错误详情及目标路径按原内容插入。
+- 完成 [Issue #19](https://github.com/reliable-ly0411/OpenVSP-zh-CN/issues/19) 所列七项的源码上下文审校：保持公式名 Covert；统一“退化几何”及相关显示；材料类型采用“横观各向同性”；机翼 Plan 页签改为“平面形”；仅对根梢/首尾端盖使用“平头端盖 / 圆头端盖”，保留轮胎和翼型前后缘的各自含义；To FEM 按实际输出栏译为“FEM 单位值”。Activity Factor 撤掉“活度因子”，因尚无可核实中文定名来源而有意保留英文。逐项依据、决定与局限见 [术语审校报告](docs/issue-19-engineering-terminology-review.md)。
+- 术语与显示修改不改变算法、枚举、参数/API、公式、单位、文件格式和用户原始数据，
+  不增加运行依赖。补充版本选择、精确包名、校验步骤、逐页状态及第三方许可说明；
+  保留全部八个整机示例，三份 CC BY-SA 模型的具体许可版本仍未确认。
+- 本族整合候选已实测：12/12 轻量 CTest 通过（该次未启用 XML 专项）；927 条译表案例及 256 条保护项通过；
+  9 项显示调用链源码契约通过；8 项工程术语控件源码契约通过。
+  `check_localization_release.py --expected-tag 3.54.0-zh-CN.rc.2` 验证本族版本与说明一致。
+  上述结果包括真实 C++ 翻译函数、名称/路径/格式/过滤器边界及源码检查；不代表完整
+  OpenVSP 二进制、五平台原生安装包或新增界面的 GUI 目视验收。新原包与 GUI 尚待完成，
+  rc.1 的既有验收记录不能转作 rc.2 通过证明。
+
+## 历史发布与维护记录
+
+以下保留各次修订的原始开发记录。其“当前”“候选”“未完成”等措辞描述当时状态，
+不用于判断 rc.2，也不推翻 rc.1 后来完成的限定范围验收。rc.1 已于 2026-10-19 公开，
+其精确源码、25 个原生包和有限 Linux GUI 结论见
+[五版本族 rc.1 验收报告](docs/five-family-rc1-acceptance-20261019.md)。
+旧标签、旧记录、旧资产及历史许可归属保留；新的第三方许可边界以上方现行说明为准。
+
+<details>
+<summary>展开 rc.1 及更早版本的原始维护记录</summary>
+
+## rc.1 发布前开发记录（原“未发布”）
 
 - 补齐 UTF-8 目录与通配符匹配的两处边界转换：完整模式中的目录用 `fs::u8path`
   构造路径，待匹配文件名用 `.u8string()` 保持 UTF-8；通配符正则规则、删除逻辑、
@@ -318,3 +405,5 @@ macOS ARM64 仍以 14 为目标；文件名中的系统版本表示实际构建�
 - 发布流程强制读取目标标签的更新说明，并随 Linux/Windows ZIP 发布 SHA-256。
 - 新增仓库级 Agent 规则，要求后续修改和发布同步维护更新说明。
 - 验证：本地发布守卫、工作流语法、静态 CMINPACK 配置和 GitHub 托管双平台构建。
+
+</details>

@@ -2,7 +2,7 @@
 """Regression tests for the translation guard, independent of the C++ driver."""
 import unittest
 
-from check_translation_catalog import (calls_display_helper, extract_labels, has_unconditional_translation_include,
+from check_translation_catalog import (calls_display_helper, extract_file_chooser_calls, extract_labels, file_chooser_title_errors, has_unconditional_translation_include,
                                        read_catalogs, strip_comments)
 
 
@@ -81,6 +81,41 @@ class CatalogGuardTests(unittest.TestCase):
     def test_bypassed_english_labels_are_not_silently_ignored(self):
         self.assertEqual(extract_labels('AddDividerBox("New Mesh Control"); AddOutput(output, "Tip");'),
                          {'New Mesh Control', 'Tip'})
+
+    def test_file_chooser_title_is_scanned_but_not_its_filter_or_preset(self):
+        source = 'mgr->FileChooser("Save VSP File As", "*.vsp3", SAVE, "Wing.vsp3");'
+        self.assertEqual(extract_labels(source), {'Save VSP File As'})
+        self.assertEqual(extract_file_chooser_calls(source), [('Save VSP File As', '*.vsp3')])
+
+    def test_variable_file_chooser_titles_do_not_turn_filters_into_labels(self):
+        self.assertEqual(extract_labels('mgr->FileChooser(title, "*.Wing", SAVE);'), set())
+        self.assertEqual(extract_file_chooser_calls('mgr->FileChooser(title, "*.Wing", SAVE);'), [])
+        self.assertEqual(extract_file_chooser_calls('FileChooser("Title", filter);'), [('Title', None)])
+
+    def test_file_chooser_multiline_and_adjacent_literals(self):
+        source = 'FileChooser(\n /* title */ "Open " "VSP File",\n "*.vsp3");'
+        self.assertEqual(extract_labels(source), {'Open VSP File'})
+        self.assertEqual(extract_file_chooser_calls(source), [('Open VSP File', '*.vsp3')])
+        self.assertEqual(extract_file_chooser_calls('// ' + source.split('\n')[0]), [])
+        self.assertEqual(extract_file_chooser_calls('/* ' + source.replace('/* title */', '') + ' */'), [])
+
+    def test_legacy_file_chooser_titles_are_reviewed_for_backports(self):
+        import json
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        tables, errors = read_catalogs((root / 'src/gui_and_draw/VSPChinese.cpp').read_text(encoding='utf-8'))
+        reviewed = json.loads((root / 'scripts/localization_tests/catalog_cases.json').read_text(encoding='utf-8'))
+        self.assertFalse(errors)
+        self.assertFalse(file_chooser_title_errors(
+            ['Select .srf file.', 'Select GridTool .curv file.', 'Select Plot3D .p3d file.'],
+            tables['ExactTranslations'], reviewed))
+
+    def test_unreviewed_file_chooser_title_fails_even_if_fallback_can_translate_it(self):
+        titles = [title for title, _ in extract_file_chooser_calls('FileChooser("New Wing File", "*.wing");')]
+        self.assertTrue(file_chooser_title_errors(titles, {}, {}))
+        self.assertTrue(file_chooser_title_errors(titles, {}, {'New Wing File': '新机翼文件'}))
+        self.assertFalse(file_chooser_title_errors(titles, {'New Wing File': '新机翼文件'},
+                                                  {'New Wing File': '新机翼文件'}))
 
 
 if __name__ == '__main__':
