@@ -26,6 +26,16 @@
   (NOSA) version 1.3.  The complete terms of the license are specified
   in the LICENSE file.
 
+### THIRD-PARTY CONTENT IN THIS LOCALIZATION
+
+  The NOSA notice above covers OpenVSP; it does not relicense independently
+  supplied libraries, fonts, or community models. See
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the per-file provenance
+  in [Complete_Aircraft/SOURCES_AND_LICENSES.md](examples/Complete_Aircraft/SOURCES_AND_LICENSES.md).
+  Three community models are marked CC BY-SA by their source, but the specific
+  license version remains unconfirmed. The project does not assign them a
+  license version or treat them as NOSA content.
+
 ### DEPENDENCIES
 
   OpenVSP relies on a variety of libraries and code made available by
