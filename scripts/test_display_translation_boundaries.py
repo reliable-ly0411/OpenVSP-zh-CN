@@ -34,6 +34,28 @@ def file_chooser_title_is_safe(source):
         strip_comments(source)))
 
 
+def attribute_title_is_safe(source):
+    code = strip_comments(source)
+    return all(re.search(pattern, code) for pattern in (
+        r'header_str\s*=\s*VSPTranslate\(\s*"Attribute Explorer"\s*\)',
+        r'header_str\s*=\s*VSPTranslateLabelAndValue\(\s*"Attribute Explorer: "\s*,\s*'
+        r'AttributeMgr\.GetName\(\s*ac_ptr->GetAttachID\(\s*\)\s*\)\s*\)',
+        r'\bSetTitleRaw\(\s*header_str\s*\)',
+    ))
+
+
+def parm_description_is_safe(source):
+    code = strip_comments(source)
+    # 3.51.x already displays every description raw. Do not require it to add
+    # translation or a newer distinction just to satisfy this regression test.
+    if re.search(r'm_DescString\.Update\(\s*parm_ptr->GetDescript\(\s*\)\s*\)', code):
+        return True
+    return bool(re.search(
+        r'const string description\s*=\s*LinkMgr\.GetUserParmIndex\(\s*pid\s*\)\s*>=\s*0\s*\?\s*'
+        r'parm_ptr->GetDescript\(\s*\)\s*:\s*VSPTranslate\(\s*parm_ptr->GetDescript\(\s*\)\s*\)\s*;\s*'
+        r'm_DescString\.Update\(\s*description\s*\)', code))
+
+
 class DisplayTranslationBoundaryTests(unittest.TestCase):
     def test_export_alert_translates_template_before_formatting(self):
         source = (GUI / 'ExportScreen.cpp').read_text(encoding='utf-8')
@@ -91,6 +113,28 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
         for method, value in [('filter', 'filter'), ('directory', 'dir'), ('preset_file', 'preset_fname')]:
             self.assertRegex(native, rf'->{method}\(\s*{value}\.c_str\(\s*\)\s*\)')
         self.assertEqual(re.findall(r'\bVSPTranslate\w*\(\s*([^)]*)\s*\)', strip_comments(native)), ['title '])
+
+    def test_attribute_title_preserves_attached_geometry_or_collection_name(self):
+        source = (GUI / 'AttributeScreen.cpp').read_text(encoding='utf-8')
+        body = source.split('void AttributeExplorer::AttrTypeDispGroup(', 1)[1]
+        self.assertTrue(attribute_title_is_safe(body))
+        self.assertTrue(has_unconditional_translation_include(source))
+        self.assertFalse(attribute_title_is_safe(body.replace('SetTitleRaw', 'SetTitle')))
+        self.assertFalse(attribute_title_is_safe(body.replace('VSPTranslateLabelAndValue', 'VSPTranslate')))
+
+    def test_user_description_is_opaque_and_builtin_description_remains_translatable(self):
+        source = (GUI / 'ParmScreen.cpp').read_text(encoding='utf-8')
+        self.assertTrue(parm_description_is_safe(source))
+        self.assertFalse(parm_description_is_safe('m_DescString.Update(VSPTranslate(parm_ptr->GetDescript()));'))
+        self.assertTrue(parm_description_is_safe('m_DescString.Update(parm_ptr->GetDescript());'))
+        unsafe = source.replace('GetUserParmIndex( pid ) >= 0', 'GetUserParmIndex( pid ) < 0')
+        if 'const string description' in source:
+            self.assertFalse(parm_description_is_safe(unsafe))
+        device = (GUI / 'GuiDevice.cpp').read_text(encoding='utf-8')
+        raw = device.split('void StringOutput::Update(', 1)[1].split('\n}', 1)[0]
+        self.assertRegex(raw, r'm_String\s*=\s*val\s*;')
+        self.assertRegex(raw, r'm_Output->value\(\s*m_String\.c_str\(\s*\)\s*\)')
+        self.assertNotRegex(strip_comments(raw), r'\bVSPTranslate\w*\s*\(')
 
 
 if __name__ == '__main__':

@@ -906,5 +906,6 @@
   "Write Split and Stitched STEP File?": "写入分割与缝合后的 STEP 文件？",
   "Write VSPGeom Files?": "写入 VSPGeom 文件？",
   "Write X3D File?": "写入 X3D 文件？",
-  "Write XSec File?": "写入截面文件？"
+  "Write XSec File?": "写入截面文件？",
+  "Attribute Explorer: ": "属性浏览器："
 }
