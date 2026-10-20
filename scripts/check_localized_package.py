@@ -41,9 +41,17 @@ with zipfile.ZipFile(args.archive) as archive:
     for resource in ('help/vsp_help', 'help/github-pandoc.css'):
         if prefix + resource not in names:
             raise SystemExit(f'Missing resource: {resource}')
-    for name in ('README.md', 'README_zh-CN.md', 'AGENTS.md', 'LICENSE', 'vspIcon.png'):
+    for name in ('README.md', 'README_zh-CN.md', 'AGENTS.md', 'LICENSE', 'vspIcon.png',
+                 'THIRD_PARTY_NOTICES.md'):
         if archive.read(prefix + name) != source_bytes(root / name):
             raise SystemExit(f'Packaged document differs: {name}')
+    if not (root / 'docs').is_dir():
+        raise SystemExit('Missing source documentation directory: docs')
+    for source in sorted((root / 'docs').rglob('*')):
+        if source.is_file():
+            name = source.relative_to(root).as_posix()
+            if archive.read(prefix + name) != source_bytes(source):
+                raise SystemExit(f'Packaged document differs: {name}')
     examples = [p for p in (root / 'examples').rglob('*') if p.is_file()]
     for source in examples:
         name = prefix + 'Official_Examples/' + source.relative_to(root / 'examples').as_posix()

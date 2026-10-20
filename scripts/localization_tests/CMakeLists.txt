@@ -61,3 +61,17 @@ endif()
 add_test(NAME localization_material_label_context COMMAND localization_material_context)
 add_test(NAME localization_material_source_contract
   COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_material_label_context.py)
+
+add_test(NAME localization_display_source_contracts
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_display_translation_boundaries.py)
+
+# Engineering terms are reviewed in their actual UI context, not by global replacement.
+add_executable(localization_engineering_terms engineering_terms.cpp ../../src/gui_and_draw/VSPChinese.cpp)
+target_include_directories(localization_engineering_terms PRIVATE ../../src/gui_and_draw)
+target_compile_features(localization_engineering_terms PRIVATE cxx_std_11)
+if(MSVC)
+  target_compile_options(localization_engineering_terms PRIVATE /utf-8)
+endif()
+add_test(NAME localization_engineering_terminology COMMAND localization_engineering_terms)
+add_test(NAME localization_engineering_source_context
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_engineering_term_context.py)
