@@ -1,4 +1,5 @@
 #include "VSPChinese.h"
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -13,12 +14,25 @@ int main()
         "C:\\Users\\Example\\Fuselage Test\\Model Final.vsp3",
         "/模型/Left Wing 100%/#main.vsp3", "*.vsp3", ""
     };
+    const std::string export_template = VSPTranslateMessage("%s, %s not written");
+    if (export_template != "%s，未写入 %s") return 5;
+    // Check the exact formatter used by ExportScreen, including '%' in values.
     for (const std::string &value : values)
     {
         if (VSPTranslateLabelAndValue("File Name:", value) != "文件名：" + value)
         {
             std::cerr << "Opaque value was altered\n";
             return 1;
+        }
+        const std::string error = "Cannot export Wing 100% (%s, %n): " + value;
+        char rendered[4096];
+        const int size = std::snprintf(rendered, sizeof(rendered), export_template.c_str(),
+                                       error.c_str(), value.c_str());
+        if (size < 0 || static_cast<std::size_t>(size) >= sizeof(rendered) ||
+            std::string(rendered) != error + "，未写入 " + value)
+        {
+            std::cerr << "Export error/path formatter altered opaque values\n";
+            return 6;
         }
         const std::string message = "Cannot open model: " + value;
         if (VSPTranslateMessage(message) != message)
