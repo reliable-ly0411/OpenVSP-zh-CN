@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "checked_at": "2026-10-20T05:39:00Z",
+  "scope": "Original rc.2 artifact integrity and native-build provenance; interactive Linux desktop review is pending.",
+  "workflow_sha": "d85c71b5f1caedeca7be691b48a2dbe1087e179c",
+  "families": [
+    {
+      "version": "3.55.0",
+      "archive": "native-release-assets-12234389736.zip",
+      "linux": "OpenVSP-3.55.0-Ubuntu-24.04_amd64-zh-CN.zip",
+      "linux_sha256": "1220a109b037681fd77f468245f3300f78878fbd96561012ff8e41b24fbb5c5b",
+      "manifest_sha256": "08ba2bf94d1f703f99e9b3e90f2dd93f650670e77da40128e08d9b712a6c9e34",
+      "all_five_hashes_match": true,
+      "root_names": [
+        "OpenVSP-3.55.0-Linux/",
+        "OpenVSP-3.55.0-Linux/vspscript",
+        "OpenVSP-3.55.0-Linux/vspaero_opt",
+        "OpenVSP-3.55.0-Linux/CustomScripts/",
+        "OpenVSP-3.55.0-Linux/CustomScripts/PodMan.vsppart",
+        "OpenVSP-3.55.0-Linux/CustomScripts/Cone.vsppart",
+        "OpenVSP-3.55.0-Linux/CustomScripts/SeatGroup.vsppart",
+        "OpenVSP-3.55.0-Linux/CustomScripts/TransportFuse.vsppart"
+      ],
+      "source_sha": "85a1a1a2029d0ab35e1a5f685a117061fe89aa21",
+      "build_run_id": 39351908980,
+      "gui_review": "pending",
+      "native_build_status": "success",
+      "native_platform_count": 5
+    },
+    {
+      "version": "3.54.0",
+      "archive": "native-release-assets-12233924805.zip",
+      "linux": "OpenVSP-3.54.0-Ubuntu-24.04_amd64-zh-CN.zip",
+      "linux_sha256": "a0534b9c5ad5767d787d7d509abc4c988588bbc8c7841e932c7ac6387f746d01",
+      "manifest_sha256": "f9cebc1458ad820c90d6fc5fbbb6049ab7c2cb200e33b76c10285c13a653cc74",
+      "all_five_hashes_match": true,
+      "root_names": [
+        "OpenVSP-3.54.0-Linux/",
+        "OpenVSP-3.54.0-Linux/vspscript",
+        "OpenVSP-3.54.0-Linux/vspaero_opt",
+        "OpenVSP-3.54.0-Linux/CustomScripts/",
+        "OpenVSP-3.54.0-Linux/CustomScripts/PodMan.vsppart",
+        "OpenVSP-3.54.0-Linux/CustomScripts/Cone.vsppart",
+        "OpenVSP-3.54.0-Linux/CustomScripts/SeatGroup.vsppart",
+        "OpenVSP-3.54.0-Linux/CustomScripts/TransportFuse.vsppart"
+      ],
+      "source_sha": "67f00f7567296d8a1e4088a1fb32e650967af7c2",
+      "build_run_id": 39351999591,
+      "gui_review": "pending",
+      "native_build_status": "success",
+      "native_platform_count": 5
+    },
+    {
+      "version": "3.53.0",
+      "archive": "native-release-assets-12235284708.zip",
+      "linux": "OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip",
+      "linux_sha256": "8414b3751fe10976c1766483e97c6904899553463cd3b73c476e7378a8099e2a",
+      "manifest_sha256": "684933ff6a160dfd3a53d20655fec6b9197fcce01eff6fcbfb1d4881646dc2f1",
+      "all_five_hashes_match": true,
+      "root_names": [
+        "OpenVSP-3.53.0-Linux/",
+        "OpenVSP-3.53.0-Linux/vspscript",
+        "OpenVSP-3.53.0-Linux/vspaero_opt",
+        "OpenVSP-3.53.0-Linux/CustomScripts/",
+        "OpenVSP-3.53.0-Linux/CustomScripts/PodMan.vsppart",
+        "OpenVSP-3.53.0-Linux/CustomScripts/Cone.vsppart",
+        "OpenVSP-3.53.0-Linux/CustomScripts/SeatGroup.vsppart",
+        "OpenVSP-3.53.0-Linux/CustomScripts/TransportFuse.vsppart"
+      ],
+      "source_sha": "219f6c0a7857d110e69116a21f314af3fc26ff46",
+      "build_run_id": 39352445023,
+      "gui_review": "pending",
+      "native_build_status": "success",
+      "native_platform_count": 5
+    },
+    {
+      "version": "3.51.3",
+      "archive": "native-release-assets-12236300563.zip",
+      "linux": "OpenVSP-3.51.3-Ubuntu-24.04_amd64-zh-CN.zip",
+      "linux_sha256": "bc68f35be5849f19598490c169d0d6e52f80a8dd076078d2a3e698c537870cd8",
+      "manifest_sha256": "661a0aeb38a85ba9009e866764b76d9325be79f688392819a5ea93d9e07b343b",
+      "all_five_hashes_match": true,
+      "root_names": [
+        "OpenVSP-3.51.3-Linux/",
+        "OpenVSP-3.51.3-Linux/openvsp-zh-fonts.conf",
+        "OpenVSP-3.51.3-Linux/CCE/",
+        "OpenVSP-3.51.3-Linux/CCE/SD-24L.cce",
+        "OpenVSP-3.51.3-Linux/python/",
+        "OpenVSP-3.51.3-Linux/python/requirements.txt",
+        "OpenVSP-3.51.3-Linux/python/requirements-uninstall.txt",
+        "OpenVSP-3.51.3-Linux/python/README.md"
+      ],
+      "source_sha": "0262336a4c17fe0931bba234ecae99073e089cc3",
+      "build_run_id": 39352626109,
+      "gui_review": "pending",
+      "native_build_status": "success",
+      "native_platform_count": 5
+    },
+    {
+      "version": "3.51.2",
+      "archive": "native-release-assets-12236503364.zip",
+      "linux": "OpenVSP-3.51.2-Ubuntu-24.04_amd64-zh-CN.zip",
+      "linux_sha256": "3fc9417afab015607ad18c65fa09dd9ab80317d5c81cc32b9ab104db14d7c2b8",
+      "manifest_sha256": "e4ca376c977b4659633a846d5aee349262ec05879e52cd5dd9426a6d320c7e64",
+      "all_five_hashes_match": true,
+      "root_names": [
+        "OpenVSP-3.51.2-Linux/",
+        "OpenVSP-3.51.2-Linux/openvsp-zh-fonts.conf",
+        "OpenVSP-3.51.2-Linux/CCE/",
+        "OpenVSP-3.51.2-Linux/CCE/SD-24L.cce",
+        "OpenVSP-3.51.2-Linux/python/",
+        "OpenVSP-3.51.2-Linux/python/requirements.txt",
+        "OpenVSP-3.51.2-Linux/python/requirements-uninstall.txt",
+        "OpenVSP-3.51.2-Linux/python/README.md"
+      ],
+      "source_sha": "d71b88733805b87939a9a7337442d9f43125f43e",
+      "build_run_id": 39352805945,
+      "gui_review": "pending",
+      "native_build_status": "success",
+      "native_platform_count": 5
+    }
+  ],
+  "limitations": [
+    "GUI review is not established by captured_not_reviewed CI screenshots.",
+    "Windows, macOS, and Linux ARM64 interactive GUI acceptance is not included.",
+    "All eight complete-aircraft examples are retained. Three community models still lack a verified CC BY-SA version; see issue 16."
+  ]
+}

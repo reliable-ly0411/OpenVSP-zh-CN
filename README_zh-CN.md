@@ -192,6 +192,10 @@ cmake --build build --target package --config Release --parallel 2
 PR 合并不会自动改写旧 Release 页面。稳定版 Latest 不变。CI 原始产物保留 14 天，GUI 审阅记录
 保留 30 天；过期后需要新构建、新验收与新标签。
 
+## 未发布
+
+- 追加[五族 rc.2 原包验收记录](docs/five-family-rc2-acceptance-20261020.md)：25 个 ZIP 与原始清单重新校验一致；实际 Linux 桌面验收状态单独记录，未完成项目不标为通过。
+
 ## 3.55.0-zh-CN.rc.2
 
 - 新增 [发布与分支规范](docs/RELEASING.zh-CN.md) 及 AGENTS 入口，明确五族开发线、SemVer、官方风格包名、完整上游说明和原包验收顺序。
