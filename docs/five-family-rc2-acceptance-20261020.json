@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "checked_at": "2026-10-20T06:52:00Z",
+  "checked_at": "2026-10-20T08:02:00Z",
   "scope": "Original rc.2 artifact integrity and native-build provenance; scoped interactive Linux x86_64 desktop acceptance completed for all five families.",
   "workflow_sha": "d85c71b5f1caedeca7be691b48a2dbe1087e179c",
   "families": [
@@ -222,5 +222,6 @@
     "This is a limited localization, name and path regression, not complete product or engineering-accuracy validation.",
     "All eight complete-aircraft examples are retained. Three community models still lack a verified CC BY-SA version; see issue 16."
   ],
-  "publication_status": "not_yet_published"
+  "publication_status": "not_yet_published",
+  "independent_evidence_audit_at": "2026-10-20T08:02:00Z"
 }
