@@ -99,6 +99,17 @@ class CatalogGuardTests(unittest.TestCase):
         self.assertEqual(extract_file_chooser_calls('// ' + source.split('\n')[0]), [])
         self.assertEqual(extract_file_chooser_calls('/* ' + source.replace('/* title */', '') + ' */'), [])
 
+    def test_legacy_file_chooser_titles_are_reviewed_for_backports(self):
+        import json
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        tables, errors = read_catalogs((root / 'src/gui_and_draw/VSPChinese.cpp').read_text(encoding='utf-8'))
+        reviewed = json.loads((root / 'scripts/localization_tests/catalog_cases.json').read_text(encoding='utf-8'))
+        self.assertFalse(errors)
+        self.assertFalse(file_chooser_title_errors(
+            ['Select .srf file.', 'Select GridTool .curv file.', 'Select Plot3D .p3d file.'],
+            tables['ExactTranslations'], reviewed))
+
     def test_unreviewed_file_chooser_title_fails_even_if_fallback_can_translate_it(self):
         titles = [title for title, _ in extract_file_chooser_calls('FileChooser("New Wing File", "*.wing");')]
         self.assertTrue(file_chooser_title_errors(titles, {}, {}))
