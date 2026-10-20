@@ -94,11 +94,8 @@ bool ParmScreen::Update()
     }
 
     //==== Name Header of ParmScreen Tab ====//
-    if ( parm_ptr ){
-        std::string parm_name = parm_ptr->GetName();
-        std::string header_str = "Parm: " + parm_name; //QUESTION: use Dash or Hyphen?
-        SetTitle(header_str);
-    }
+    // The parameter name may be user-defined; translate only the fixed prefix.
+    SetTitleRaw( VSPTranslateLabelAndValue( "Parm: ", parm_ptr->GetName() ) );
 
 
     string pid = parm_ptr->GetID();
