@@ -26,6 +26,55 @@ class WorkflowPolicyTests(unittest.TestCase):
         text = (ROOT / '.github/workflows/build.yml').read_text()
         self.assertIn('\npermissions:\n  contents: read\n', text)
         self.assertIn('persist-credentials: false', text)
+        self.assertIn('  workflow_dispatch:', text)
+        self.assertNotIn('  push:', text)
+        self.assertNotIn('  schedule:', text)
+
+    def test_daily_and_manual_sync_can_only_call_lightweight_validation(self):
+        text = (ROOT / '.github/workflows/upstream-watch.yml').read_text()
+        self.assertIn("cron: '17 3 * * *'", text)
+        calls = set(re.findall(r'uses: (\./\.github/workflows/\S+)', text))
+        self.assertEqual(calls, {
+            './.github/workflows/prepare-upstream-update.yml',
+            './.github/workflows/build-localized-pr.yml',
+        })
+        self.assertIn("if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'", text)
+        self.assertIn("if: github.event_name == 'push'", text)
+        self.assertIn("if: needs.prepare.outputs.branch != ''", text)
+        self.assertNotIn("if: needs.prepare.outputs.changed == 'true'", text)
+        for path in ('upstream-watch.yml', 'prepare-upstream-update.yml', 'build-localized-pr.yml'):
+            source = (ROOT / '.github/workflows' / path).read_text()
+            for heavy in ('release-localized.yml', 'native-prerelease.yml', 'native-promote.yml',
+                          'backfill_build.sh', 'native_build_windows.ps1', 'native_promote.py',
+                          'auto_release.py', 'finalize_release_draft.py', 'workflow_dispatches'):
+                self.assertNotIn(heavy, source, (path, heavy))
+
+    def test_no_automatic_cascade_or_publication_adapter_is_configured(self):
+        workflows = list((ROOT / '.github/workflows').glob('*.yml'))
+        for path in workflows:
+            text = path.read_text()
+            self.assertNotIn('uses: ./.github/workflows/release-localized.yml', text)
+            self.assertNotIn('  release:', text)
+            self.assertNotIn('  repository_dispatch:', text)
+            self.assertNotIn('  workflow_run:', text)
+        native = (ROOT / '.github/workflows/native-prerelease.yml').read_text()
+        self.assertIn("    if: github.event_name == 'workflow_dispatch'\n    needs: regression", native)
+        self.assertNotIn('contents: write', native)
+        self.assertNotIn('native_promote.py', native)
+        self.assertNotIn('native_release.py publish', native)
+        promote = (ROOT / '.github/workflows/native-promote.yml').read_text()
+        triggers = promote.split('on:\n', 1)[1].split('\npermissions:', 1)[0]
+        self.assertNotRegex(triggers, r'(?m)^  (schedule|push|pull_request|workflow_call):')
+        self.assertIn('  workflow_dispatch:', triggers)
+        for field in ('build_run_id', 'source_sha', 'new_tag', 'manifest_sha256',
+                      'linux_gui_sha256', 'validation_note'):
+            self.assertRegex(triggers, rf'(?ms)^      {field}:\n.*?        required: true')
+        diagnostic = (ROOT / '.github/workflows/windows-unicode-diagnostic.yml').read_text()
+        native_job = diagnostic.split('\n  native:\n', 1)[1]
+        self.assertIn("    if: github.event_name == 'workflow_dispatch'\n    needs: crt", native_job)
+        historical = (ROOT / '.github/workflows/backfill-platforms.yml').read_text()
+        build_job = historical.split('\n  build:\n', 1)[1]
+        self.assertTrue(build_job.startswith("    if: github.event_name == 'workflow_dispatch'\n"))
 
     def test_merged_tree_cannot_supply_privileged_maintenance_code(self):
         text = (ROOT / '.github/workflows/prepare-upstream-update.yml').read_text()

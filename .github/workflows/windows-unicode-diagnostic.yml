@@ -58,6 +58,8 @@ jobs:
           retention-days: 14
 
   native:
+    # PRs retain the standalone CRT probe; historical native packages are manual.
+    if: github.event_name == 'workflow_dispatch'
     needs: crt
     name: OpenVSP 3.55.0 baseline then patched Windows package
     runs-on: windows-2022

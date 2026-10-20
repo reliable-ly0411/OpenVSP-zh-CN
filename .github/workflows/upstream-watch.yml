@@ -2,11 +2,11 @@ name: Prepare and validate OpenVSP upstream candidates
 
 on:
   schedule:
-    - cron: '17 3 * * 1'
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       upstream_ref:
-        description: Empty selects latest official OpenVSP_x.y.z tag; main/commit creates an isolated dev snapshot
+        description: Source-only sync; empty follows main as a development snapshot, or specify an upstream tag/commit
         required: false
         default: ''
         type: string
@@ -15,10 +15,13 @@ on:
     paths:
       - '.github/workflows/upstream-watch.yml'
       - '.github/workflows/prepare-upstream-update.yml'
-      - '.github/workflows/release-localized.yml'
+      - '.github/workflows/build-localized-pr.yml'
       - 'scripts/sync_upstream.py'
       - 'scripts/select_official_release.py'
       - 'scripts/test_sync_upstream.py'
+      - 'scripts/test_select_official_release.py'
+      - 'scripts/upstream_candidate.py'
+      - 'scripts/test_upstream_candidate.py'
       - 'scripts/upstream_maintenance.py'
       - 'scripts/test_upstream_maintenance.py'
       - 'scripts/test_workflow_policy.py'
@@ -33,23 +36,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  policy-checks:
+    # Deploying policy must not create a source candidate or start packaging.
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/build-localized-pr.yml
+    with:
+      source_ref: ${{ github.sha }}
   prepare:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
     uses: ./.github/workflows/prepare-upstream-update.yml
     with:
       upstream_ref: ${{ inputs.upstream_ref || '' }}
-  build:
+  validate:
+    # Lightweight Python and focused C++ regressions, never a native package.
     needs: prepare
-    if: needs.prepare.outputs.changed == 'true'
+    # A reused tree is not proof that its prior validation succeeded: rerun it.
+    if: needs.prepare.outputs.branch != ''
     permissions:
       contents: read
     uses: ./.github/workflows/build-localized-pr.yml
     with:
       source_ref: ${{ needs.prepare.outputs.sha }}
   report:
-    needs: [prepare, build]
-    if: always()
+    needs: [prepare, validate]
+    if: always() && github.event_name != 'push'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -59,7 +71,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       CANDIDATE_SHA: ${{ needs.prepare.outputs.sha }}
       CANDIDATE_BRANCH: ${{ needs.prepare.outputs.branch }}
-      BUILD_RESULT: ${{ needs.build.result }}
+      BUILD_RESULT: ${{ needs.validate.result }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -71,7 +83,8 @@ jobs:
           {
             echo "Candidate: $CANDIDATE_BRANCH ($CANDIDATE_SHA)"
             echo "Lightweight candidate validation result: $BUILD_RESULT"
-            echo 'Official release tags are distinguished from dev snapshots. Main, historical tags and public assets are unchanged.'
+            echo 'A version tag is not proof of publication. Automatic native builds/publication are disabled; no verified publication adapter is configured.'
+            echo 'Main, all version-family branches, historical tags and public assets are unchanged.'
             echo 'Integrate reviewed fixes with history, then dispatch the five-platform native prerelease workflow with a NEW rc tag.'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -86,8 +99,8 @@ jobs:
           retention-days: 90
 
   notify:
-    needs: [prepare, build]
-    if: always() && vars.OPENVSP_NOTIFY_UPSTREAM_FAILURES == 'true'
+    needs: [prepare, validate]
+    if: always() && github.event_name != 'push' && vars.OPENVSP_NOTIFY_UPSTREAM_FAILURES == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -95,7 +108,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       PREPARE_RESULT: ${{ needs.prepare.result }}
-      BUILD_RESULT: ${{ needs.build.result }}
+      BUILD_RESULT: ${{ needs.validate.result }}
       CANDIDATE_CHANGED: ${{ needs.prepare.outputs.changed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -106,11 +119,11 @@ jobs:
         run: python3 -I scripts/upstream_maintenance.py notify --apply
 
   cleanup:
-    needs: [prepare, build]
+    needs: [prepare, validate]
     if: >-
-      always() && vars.OPENVSP_CLEAN_MERGED_CANDIDATES == 'true' &&
+      always() && github.event_name != 'push' && vars.OPENVSP_CLEAN_MERGED_CANDIDATES == 'true' &&
       needs.prepare.result == 'success' &&
-      (needs.build.result == 'success' || needs.build.result == 'skipped')
+      (needs.validate.result == 'success' || needs.validate.result == 'skipped')
     runs-on: ubuntu-24.04
     permissions:
       contents: write

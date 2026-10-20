@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from sync_upstream import TRUSTED_POLICY_PATHS
 
 
 SCRIPT = Path(__file__).with_name('sync_upstream.py').resolve()
@@ -38,8 +39,9 @@ class SyncTests(unittest.TestCase):
         self.write('AGENTS.md', f'当前官方基线：OpenVSP 3.53.0，提交\n  `{self.baseline}`；其他规则\n')
         self.write('src/gui_and_draw/MainVSPScreen.cpp', 'upstream code\n"汉化版本：3.53.0-Codex-AI-zh-CN\\n"\n')
         self.write('.github/workflows/build.yml', 'localized workflow\n')
-        for script in ('sync_upstream.py', 'select_official_release.py', 'check_localization_release.py'):
-            self.write('scripts/' + script, 'trusted maintenance\n')
+        for path in TRUSTED_POLICY_PATHS:
+            if path.startswith(('scripts/', 'docs/')):
+                self.write(path, 'trusted maintenance\n')
         self.commit('localization')
         self.localized = self.git('rev-parse', 'HEAD').strip()
 
@@ -86,6 +88,8 @@ class SyncTests(unittest.TestCase):
         self.assertFalse((self.root / '.github/workflows/new-official.yml').exists())
         metadata = json.loads((self.root / '.github/upstream.json').read_text())
         self.assertEqual((metadata['version'], metadata['base_commit']), ('3.54.0', upstream))
+        self.assertEqual(metadata['source_kind'], 'development-snapshot')
+        self.assertIs(metadata['upstream_publication_verified'], False)
         notes = (self.root / 'README_zh-CN.md').read_text()
         self.assertIn('当前软件版本：OpenVSP 3.54.0', notes)
         self.assertTrue(notes.endswith(self.history))
@@ -96,16 +100,29 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)['changed'], 'false')
 
-    def test_official_release_tag_candidate_is_distinct_from_dev_snapshot(self):
+    def test_version_tag_is_not_proof_of_published_release(self):
         upstream = self.upstream_update()
         result = self.run_sync(source_ref='refs/tags/OpenVSP_3.54.0')
         self.assertEqual(result.returncode, 0, result.stderr)
         metadata = json.loads((self.root / '.github/upstream.json').read_text())
-        self.assertEqual(metadata['source_kind'], 'official-release')
+        self.assertEqual(metadata['source_kind'], 'version-tag')
+        self.assertIs(metadata['upstream_publication_verified'], False)
+        self.assertNotIn('release_id', metadata)
         self.assertEqual(metadata['source_ref'], 'refs/tags/OpenVSP_3.54.0')
         notes = (self.root / 'README_zh-CN.md').read_text()
         self.assertIn('3.54.0-zh-CN.candidate.' + upstream[:12], notes)
+        self.assertIn('未核验正式发布', notes)
+        self.assertNotIn('官方发布标签候选', notes)
         self.assertTrue(notes.endswith(self.history))
+
+    def test_main_is_explicitly_an_unpublished_development_snapshot(self):
+        self.upstream_update()
+        result = self.run_sync(source_ref='main')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        metadata = json.loads((self.root / '.github/upstream.json').read_text())
+        self.assertEqual((metadata['source_ref'], metadata['source_kind']), ('main', 'development-snapshot'))
+        self.assertIs(metadata['upstream_publication_verified'], False)
+        self.assertIn('开发快照，非官方已发布版本', (self.root / 'README_zh-CN.md').read_text())
 
     def test_official_release_tag_version_mismatch_stops(self):
         self.upstream_update()
@@ -123,16 +140,20 @@ class SyncTests(unittest.TestCase):
     def test_trusted_policy_cannot_be_replaced_but_product_scripts_merge(self):
         self.upstream_update()
         self.git('checkout', 'official')
-        for script in ('sync_upstream.py', 'select_official_release.py', 'check_localization_release.py'):
-            self.write('scripts/' + script, 'upstream maintenance collision\n')
+        for path in TRUSTED_POLICY_PATHS:
+            if path.startswith(('scripts/', 'docs/')):
+                self.write(path, 'upstream maintenance collision\n')
+        self.write('.github/upstream.json', '{"repository": "untrusted/example"}\n')
         self.write('AGENTS.md', 'upstream policy collision\n')
         self.write('scripts/product.py', 'legitimate upstream product addition\n')
         self.commit('upstream policy collisions and product addition')
         self.git('checkout', 'localized')
         result = self.run_sync()
         self.assertEqual(result.returncode, 0, result.stderr)
-        for script in ('sync_upstream.py', 'select_official_release.py', 'check_localization_release.py'):
-            self.assertEqual((self.root / 'scripts' / script).read_text(), 'trusted maintenance\n')
+        for path in TRUSTED_POLICY_PATHS:
+            if path.startswith(('scripts/', 'docs/')):
+                self.assertEqual((self.root / path).read_text(), 'trusted maintenance\n')
+        self.assertEqual(json.loads((self.root / '.github/upstream.json').read_text())['repository'], 'OpenVSP/OpenVSP')
         self.assertIn('其他规则', (self.root / 'AGENTS.md').read_text())
         self.assertEqual((self.root / 'scripts/product.py').read_text(), 'legitimate upstream product addition\n')
         self.assertEqual(self.git('diff', '--name-only', '--diff-filter=U'), '')

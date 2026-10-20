@@ -138,13 +138,15 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 上游更新与发布
 
-1. `Prepare and validate OpenVSP upstream candidates` 每周一北京时间 11:17 检查最新官方
-   `OpenVSP_x.y.z` 标签（GitHub 定时任务可能延迟），自动保留双父历史并生成可验收候选。
+1. `Prepare and validate OpenVSP upstream candidates` 每日北京时间 11:17（03:17 UTC）
+   同步上游 `main` 开发快照（GitHub 定时任务可能延迟），保留双父历史并生成独立候选。
    发现真实代码冲突即停止。此阶段只输出候选分支与轻量源代码检查结果，并记录上游
    GUI 目录新增字符串的静态清单（含非界面标识符；不替代动态翻译与目视检查）。
-2. 手动填写 `upstream_ref=main` 或未标记提交时，版本明确带 `-zh-CN.dev.<sha>`；官方
-   已发布标签的候选带 `-zh-CN.candidate.<sha>`。二者均不自动推进 main、创建公开 Release
-   或替换历史资产；完成补译及检查后，通过保留历史的合并进入开发分支。
+2. 手动同步入口可独立填写上游 tag/commit；空值或 `main` 跟踪开发快照，版本带
+   `-zh-CN.dev.<sha>`。版本标签候选带 `-zh-CN.candidate.<sha>`，元数据记为
+   `version-tag`，不将标签存在冒称正式发布。日常及手动同步均只运行轻量检查，不构建安装包、
+   不自动推进 main 或五条版本族开发线、不发布或替换资产。策略合并只触发轻量检查；
+   完成补译及审阅后，通过保留历史的合并进入正确版本族，不能用最新 main 覆盖旧族。
 3. 新预发布统一为 `<版本>-zh-CN.rc.<递增序号>`，例如 `3.55.0-zh-CN.rc.1`。
    `Build five-platform localized prerelease` 只需精确 40 位 `source_sha` 与 `new_tag`，
    从该版本族最新已发布修订的后继提交构建 Ubuntu 24.04 AMD64/ARM64、Windows x64、
@@ -161,6 +163,20 @@ cmake --build build --target package --config Release --parallel 2
    逐项下载复核后才公开预发布。其他平台未做的 GUI 验收会明确说明，不推断为已通过。
    这里的轻量门禁是独立手动派发和原包哈希确认，没有配置或声称 Environment 双人审批；
    自动上游作业不能触发晋级。只有有权派发该工作流的维护者能够执行此步骤。
+
+截至 2026-10-20，官方 GitHub Releases API 返回空列表；版本标签和 CHANGELOG 不能单独
+充当机器可核验的正式发布事件。本仓没有已验证的官网发布/下载适配器，因此自动原生构建及
+自动发布保持关闭，目前不是“上游发布即自动发包”就绪状态。未来如增加正式来源识别，须另行
+核验版本族与精确官方提交、下载产物身份、去重及初始化基线；不回放历史、不混入较新每日快照，
+且不得绕过原包哈希和人工 GUI 审阅。手动同步、五平台构建、原包晋级保持三个独立入口。
+旧 `CMake Build Matrix` 改为 `Manually build CMake matrix (no publication)`，只支持手动
+Actions 运行，普通分支 push 不再触发该完整构建矩阵；此入口同样不发布。
+Windows Unicode 诊断的 PR 保留独立 CRT 探针，旧基线和补丁包的完整原生构建仅手动运行。
+
+候选按 downstream base SHA、上游 SHA 和来源 ref 去重；可信工具版本已包含于 base SHA。
+已有候选必须与本次检查的完整源码树及双父顺序一致才可复用，仍重跑轻量检查，不把旧失败
+误报为成功。新来源创建新分支，不强推、不重置持久分支；不符即停止等待审阅。
+新的 `automation/upstream-source-*` 候选不纳入旧 run-attempt 分支的自动删除规则。
 
 上游准备使用合并前 main 的可信维护工具副本；只保留显式列出的本仓库流程/维护策略，
 产品脚本正常合并。checkout 不保存令牌，检查步骤没有写凭据，只有独立推送步骤临时使用
@@ -203,6 +219,9 @@ PR 合并不会自动改写旧 Release 页面。稳定版 Latest 不变。CI 原
 
 暂无额外产品改动。
 
+- 每日同步上游 main 开发快照，策略 push 仅做轻量检查；手动源码同步与原生构建/晋级独立。
+  版本标签不证明正式发布，未验证发布适配器前自动原生构建及发布保持关闭；不回放历史。
+  候选按精确双源和完整树去重，复用后仍跑轻量验证；保留可信维护策略及五版本族隔离。
 - 发布正文生成器增加 rc.3 的三处动态名称修复说明；保留 rc.1/rc.2 旧正文生成行为和完整上游原文。
 
 ## 3.55.0-zh-CN.rc.3
