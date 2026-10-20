@@ -26,6 +26,9 @@ class PackageCheckoutTests(unittest.TestCase):
             'vspIcon.png': b'\x89PNG\x00\r\n binary',
             'examples/model.vsp3': b'<model>\nkeep original bytes\n</model>\n',
             'examples/readme.txt': b'example\n',
+            'examples/CustomScripts/Cone.vsppart': b'void Init() {}\n',
+            'examples/textures/test.png': b'\x89PNG\x00\r\ntexture',
+            'examples/airfoil/test.af': b'0.0 1.0\n',
             'docs/status.md': b'# Coverage\nNot a complete GUI acceptance.\n',
             'docs/evidence/details.json': b'{"complete": false}\n',
             'src/help/html/index.html': b'<html>\nhelp\n</html>\n',
@@ -59,6 +62,8 @@ class PackageCheckoutTests(unittest.TestCase):
                 data = changed.get(name, self.git('-c', 'core.autocrlf=true', '-c', 'core.eol=crlf', 'cat-file', '--filters', 'HEAD:' + name))
                 target = name.replace('examples/', 'Official_Examples/').replace('src/help/html/', 'help/')
                 z.writestr('OpenVSP/' + target, data)
+                if name.startswith(('examples/CustomScripts/', 'examples/textures/', 'examples/airfoil/')):
+                    z.writestr('OpenVSP/' + name.removeprefix('examples/'), data)
         return archive
 
     def check(self, changed=None, windows=True):
@@ -87,6 +92,18 @@ class PackageCheckoutTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('vspIcon.png', result.stderr)
 
+    def test_missing_runtime_resource_fails_even_with_examples_copy(self):
+        original = self.archive()
+        stripped = self.root / 'missing-resources.zip'
+        with zipfile.ZipFile(original) as source, zipfile.ZipFile(stripped, 'w') as target:
+            for info in source.infolist():
+                if '/CustomScripts/' in info.filename and '/Official_Examples/' not in info.filename:
+                    continue
+                target.writestr(info, source.read(info.filename))
+        result = subprocess.run([sys.executable, str(self.root / 'scripts/check_localized_package.py'),
+                                 '--windows-checkout', str(stripped)], text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('runtime resource', result.stderr)
     def test_notice_mutation_is_rejected(self):
         result = self.check({'THIRD_PARTY_NOTICES.md': b'changed notice\r\n'})
         self.assertNotEqual(result.returncode, 0)

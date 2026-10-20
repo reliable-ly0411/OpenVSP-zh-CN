@@ -57,6 +57,11 @@ with zipfile.ZipFile(args.archive) as archive:
         name = prefix + 'Official_Examples/' + source.relative_to(root / 'examples').as_posix()
         if archive.read(name) != source_bytes(source):
             raise SystemExit(f'Packaged example differs: {name}')
+        relative = source.relative_to(root / 'examples')
+        if relative.parts[0] in ('airfoil', 'CustomScripts', 'scripts', 'textures', 'vspaero_ex', 'CCE', 'matlab'):
+            runtime_name = prefix + relative.as_posix()
+            if runtime_name not in names or archive.read(runtime_name) != source_bytes(source):
+                raise SystemExit(f'Missing or changed runtime resource: {runtime_name}')
     for source in (root / 'src/help/html').glob('*.html'):
         name = prefix + 'help/' + source.name
         if archive.read(name) != source_bytes(source):

@@ -9,6 +9,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "AttributeScreen.h"
+#include "VSPChinese.h"
 #include "AttributeEditor.h"
 #include "AttributeManager.h"
 #include "LinkMgr.h"
@@ -895,7 +896,7 @@ void AttributeExplorer::AttrTypeDispGroup( int attr_type, GroupLayout * group )
 
     string data_name;
 
-    string header_str = "Attribute Explorer";
+    string header_str = VSPTranslate( "Attribute Explorer" );
 
     if ( m_types_selected == 1 )
     {
@@ -953,10 +954,10 @@ void AttributeExplorer::AttrTypeDispGroup( int attr_type, GroupLayout * group )
     // set name of explorer to current attr collection
     if ( ac_ptr )
     {
-        header_str += " : ";
-        header_str += AttributeMgr.GetName( ac_ptr->GetAttachID() );
+        // The attached geometry/collection name is opaque user data.
+        header_str = VSPTranslateLabelAndValue( "Attribute Explorer: ", AttributeMgr.GetName( ac_ptr->GetAttachID() ) );
     }
-    SetTitle(header_str);
+    SetTitleRaw( header_str );
 
     // select active GUI group by datatype
     if ( m_CurAttrGroup == group && group )

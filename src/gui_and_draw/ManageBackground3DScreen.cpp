@@ -1,3 +1,4 @@
+#include "VSPChinese.h"
 #include "ManageBackground3DScreen.h"
 #include "ScreenMgr.h"
 #include "Background3DMgr.h"
@@ -280,8 +281,7 @@ bool ManageBackground3DScreen::Update()
         m_Background3DBrowser->column_char( ':' );
 
         char str[255];
-        snprintf( str, sizeof( str ),  "@b@.NAME:@b@.DIRECTION:@b@.VISIBLE" );
-        m_Background3DBrowser->add( str );
+        m_Background3DBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.DIRECTION:@b@.VISIBLE" ).c_str() );
 
         // Add probes to browser.
         for( int i = 0; i < ( int )bg3Ds.size(); i++ )

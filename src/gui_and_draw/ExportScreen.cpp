@@ -6,6 +6,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "ExportScreen.h"
+#include "VSPChinese.h"
 #include "ScreenMgr.h"
 #include "STEPOptionsScreen.h"
 #include "STEPStructureOptionsScreen.h"
@@ -323,7 +324,8 @@ void ExportScreen::ExportFile( string &newfile, int write_set, int degen_set, in
                                                                      useMode, modeID );
             if ( !err.empty() )
             {
-                fl_alert( "%s, %s not written", err.c_str(), newfile.c_str() );
+                // Translate the fixed printf template before inserting opaque error/path values.
+                fl_alert( VSPTranslateMessage( "%s, %s not written" ).c_str(), err.c_str(), newfile.c_str() );
             }
         }
         else

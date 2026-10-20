@@ -404,8 +404,7 @@ bool AdvLinkScreen::Update()
     {
         m_InputBrowser->column_char( ':' );
 
-        snprintf( str, sizeof( str ),  "@b@.VAR_NAME:@b@.PARM:@b@.GROUP:@b@.CONTAINER" );
-        m_InputBrowser->add( str );
+        m_InputBrowser->add( VSPTranslateBrowserHeader( "@b@.VAR_NAME:@b@.PARM:@b@.GROUP:@b@.CONTAINER" ).c_str() );
         m_InputBrowser->addCopyText( "header" );
 
         vector< VarDef > input_vars = edit_link->GetInputVars();
@@ -424,8 +423,7 @@ bool AdvLinkScreen::Update()
 
         m_OutputBrowser->column_char( ':' );
 
-        snprintf( str, sizeof( str ),  "@b@.VAR_NAME:@b@.PARM:@b@.GROUP:@b@.CONTAINER" );
-        m_OutputBrowser->add( str );
+        m_OutputBrowser->add( VSPTranslateBrowserHeader( "@b@.VAR_NAME:@b@.PARM:@b@.GROUP:@b@.CONTAINER" ).c_str() );
         m_OutputBrowser->addCopyText( "header" );
 
         vector< VarDef > output_vars = edit_link->GetOutputVars();

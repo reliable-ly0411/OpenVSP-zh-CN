@@ -13,6 +13,7 @@
 #include <windows.h>
 #endif
 
+#include "VSPChinese.h"
 #include "ParasiteDragScreen.h"
 #include "ParasiteDragMgr.h"
 #include "StlHelper.h"
@@ -878,7 +879,7 @@ void ParasiteDragScreen::UpdateSrefChoice()
             m_RefWingChoice.ClearItems();
             for ( size_t i = 0; i < wingNames.size(); i++ )
             {
-                m_RefWingChoice.AddItem( wingNames[i] );
+                m_RefWingChoice.AddItemRaw( wingNames[i] );
             }
             m_RefWingChoice.UpdateItems();
         }
@@ -961,8 +962,7 @@ void ParasiteDragScreen::UpdateExcresTab()
     m_ExcresBrowser->clear();
     m_ExcresBrowser->column_char( ':' );
 
-    snprintf( str, sizeof( str ),  "@b@.NAME:@b@.TYPE:@b@.VALUE" );
-    m_ExcresBrowser->add( str );
+    m_ExcresBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.TYPE:@b@.VALUE" ).c_str() );
 
     string excres_name, excres_type, formatString;
     double excres_val;
