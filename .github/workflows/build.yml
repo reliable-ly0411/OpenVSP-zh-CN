@@ -1,8 +1,7 @@
-name: CMake Build Matrix
+name: Manually build CMake matrix (no publication)
 
 on:
-  push:
-    branches: build
+  workflow_dispatch:
 
 permissions:
   contents: read

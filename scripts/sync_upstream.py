@@ -13,9 +13,19 @@ import subprocess
 
 # Only downstream maintenance policy is retained; product scripts merge normally.
 TRUSTED_POLICY_PATHS = (
-    ".github/workflows", "AGENTS.md",
+    ".github/workflows", ".github/upstream.json", "AGENTS.md", "docs/RELEASING.zh-CN.md",
     "scripts/sync_upstream.py", "scripts/select_official_release.py",
-    "scripts/check_localization_release.py",
+    "scripts/upstream_candidate.py", "scripts/check_localization_release.py",
+    "scripts/upstream_maintenance.py", "scripts/upstream_ui_report.py",
+    "scripts/test_sync_upstream.py", "scripts/test_select_official_release.py",
+    "scripts/test_upstream_candidate.py", "scripts/test_workflow_policy.py",
+    # Preserve the manual publisher's GUI, immutable-artifact and family gates
+    # (including their local imports) even if a future upstream adds same names.
+    "scripts/native_promote.py", "scripts/native_release.py", "scripts/native_plan.py",
+    "scripts/native_functional.py", "scripts/backfill_plan.py", "scripts/backfill_verify.py",
+    "scripts/backfill_diagnostics.py", "scripts/upstream_release_notes.py",
+    "scripts/test_native_promote.py", "scripts/test_native_release.py",
+    "scripts/test_upstream_release_notes.py", "docs/upstream-release-notes",
 )
 
 
@@ -37,7 +47,7 @@ def update_metadata(metadata: dict, upstream: str) -> str:
         re.search(rf"SET\(\s*VSPVER_{key}\s+(\d+)\s*\)", version_text).group(1)
         for key in ("MAJOR", "MINOR", "PATCH")
     )
-    # 自动构建单独标识，不能冒充已验收的不可变 Release 标签。
+    # Source-only identity: a version tag is not evidence of upstream publication.
     source_ref = os.environ.get("UPSTREAM_SOURCE_REF", "")
     release_tag = re.fullmatch(r"(?:refs/tags/)?OpenVSP_(\d+\.\d+\.\d+)", source_ref)
     if release_tag and release_tag[1] != version:
@@ -61,12 +71,13 @@ def update_metadata(metadata: dict, upstream: str) -> str:
     notes = (
         f"## 未发布\n\n## {build_name}\n\n- 自动同步官方 OpenVSP {version}：`{previous[:12]}` → `{upstream[:12]}`。\n"
         f"  [上游变更](https://github.com/{metadata['repository']}/compare/{previous}...{upstream})；\n"
-        f"  上游来源：{source_ref or '未标记开发提交'}；{'官方发布标签候选' if release_tag else '开发快照，非官方已发布版本'}。\n"
-        "  保留现有汉化，新增界面可能仍含英文；仅构建候选产物，GUI 未人工验收，不自动公开 Release。\n"
+        f"  上游来源：{source_ref or '未标记开发提交'}；{'上游版本标签候选，未核验正式发布' if release_tag else '开发快照，非官方已发布版本'}。\n"
+        "  保留现有汉化，新增界面可能仍含英文；仅轻量源代码验证，不构建安装包或自动公开 Release。\n"
     )
     replace_once("README_zh-CN.md", r"## 未发布\n", notes)
     metadata.update(base_commit=upstream, version=version, source_ref=source_ref,
-                    source_kind="official-release" if release_tag else "development-snapshot")
+                    source_kind="version-tag" if release_tag else "development-snapshot",
+                    upstream_publication_verified=False)
     Path(".github/upstream.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
