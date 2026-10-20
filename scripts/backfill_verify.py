@@ -434,7 +434,7 @@ def main():
         'pending_review': ['GUI/font rendering on actual target platform',
                            'Third-party redistribution licenses and runtime requirements',
                            'Separate explicit release attachment approval'],
-        'source_worktree_clean': not run('git', '-C', source, 'status', '--porcelain').strip(),
+        'source_worktree_clean': not run('git', '-C', source, 'status', '--porcelain=v1', '--untracked-files=all', '--ignored=no').strip(),
         'libxml_toolchain_sha256': digest(Path(__file__).with_name('backfill_libxml_toolchain.cmake')) if mac and os.environ.get('BACKFILL_LIBXML_SYSCONFDIR') == '/etc' else None,
         'libxml_sysconfdir_mode': os.environ.get('BACKFILL_LIBXML_SYSCONFDIR', 'system-library'),
         'macos_signing': 'Local ad-hoc signature only; not Developer ID signed or notarized' if mac else None,

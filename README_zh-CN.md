@@ -134,7 +134,8 @@ cmake --build build --target package --config Release --parallel 2
 
 1. `Prepare and validate OpenVSP upstream candidates` 每周一北京时间 11:17 检查最新官方
    `OpenVSP_x.y.z` 标签（GitHub 定时任务可能延迟），自动保留双父历史并生成可验收候选。
-   发现真实代码冲突即停止。此阶段只输出候选分支与轻量源代码检查结果。
+   发现真实代码冲突即停止。此阶段只输出候选分支与轻量源代码检查结果，并记录上游
+   GUI 目录新增字符串的静态清单（含非界面标识符；不替代动态翻译与目视检查）。
 2. 手动填写 `upstream_ref=main` 或未标记提交时，版本明确带 `-zh-CN.dev.<sha>`；官方
    已发布标签的候选带 `-zh-CN.candidate.<sha>`。二者均不自动推进 main、创建公开 Release
    或替换历史资产；完成补译及检查后，通过保留历史的合并进入开发分支。
@@ -143,6 +144,8 @@ cmake --build build --target package --config Release --parallel 2
    从该版本族最新已发布修订的后继提交构建 Ubuntu 24.04 AMD64/ARM64、Windows x64、
    macOS 14 ARM64 与 macOS 15 Intel 五个原生平台。Linux Python 3.12，Windows/macOS
    Python 3.11，统一 NumPy 1.26.4。源码必须已有与新标签完全一致的更新说明。
+   为维护旧版本族，手动预发布有意允许来自该版本族开发分支，而不要求先合入当前
+   3.55.0 的 main；源码仍须继承该族历史发布、通过五平台验收并绑定精确 SHA。
 4. 五平台分别验证中文 CLI、模型保存重开、用户名称及路径边界、空目录启动时的自定义
    几何体、动态依赖、包资源、全新 Python venv 安装及哈希。任一平台失败均不进入发布。
    截图只是待目视证据，至少逐族人工检查原始 Linux 包的主界面、机翼页和名称/路径回归。
@@ -150,6 +153,27 @@ cmake --build build --target package --config Release --parallel 2
    `source_sha`、`new_tag`、原 `SHA256SUMS.txt` 的 SHA-256、目视通过的 Linux ZIP 的
    SHA-256 及真实审阅说明。它下载并校验原 run 的原始产物，不重新编译；创建新草稿、
    逐项下载复核后才公开预发布。其他平台未做的 GUI 验收会明确说明，不推断为已通过。
+   这里的轻量门禁是独立手动派发和原包哈希确认，没有配置或声称 Environment 双人审批；
+   自动上游作业不能触发晋级。只有有权派发该工作流的维护者能够执行此步骤。
+
+上游准备使用合并前 main 的可信维护工具副本；只保留显式列出的本仓库流程/维护策略，
+产品脚本正常合并。checkout 不保存令牌，检查步骤没有写凭据，只有独立推送步骤临时使用
+内置 GITHUB_TOKEN；候选构建始终只读。构建后的源码检查同时覆盖跟踪文件与未忽略的
+未跟踪文件，构建输出目录遵循 .gitignore，测试构建放在源码目录之外。
+
+上游运行始终生成只读候选保留报告。以下仓库 Actions variables 默认为空（关闭），只有
+值精确为 `true` 才启用对应持续动作：
+
+- `OPENVSP_NOTIFY_UPSTREAM_FAILURES`：准备或验证失败时，创建或更新同一个专用机器人
+  Issue，并指派给仓库所有者；后续恢复时更新并关闭。失败信息只包含阶段结果和运行链接。
+- `OPENVSP_CLEAN_MERGED_CANDIDATES`：仅删除 `automation/upstream-<run>-<attempt>` 中
+  已合入 main、无未关闭 PR、来源运行已结束至少 7 天的候选分支；精确 SHA lease 防止并发
+  更新被删除。未合入的候选保留，不删除标签或提交。分支名、恢复 SHA 与结果写入运行摘要
+  和保留 90 天的 `candidate-cleanup-record`，对应提交也已包含于 main，可据 SHA 恢复分支。
+
+请在 [Actions 运行列表](https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/workflows/upstream-watch.yml)
+检查最近一次定时运行；公开仓库连续 60 天无活动时 GitHub 可自动停用定时流程，此时需要
+在该工作流页面重新启用。运行期间的失败通知不能替代这项定时状态检查。
 
 新 Release 资产仅保留五个官方风格 ZIP 和完整 `SHA256SUMS.txt`，正文简述成果与边界；
 技术报告、截图及审阅说明放在 CI 或 [`docs/native-prerelease-verification.md`](docs/native-prerelease-verification.md)。
@@ -157,8 +181,10 @@ cmake --build build --target package --config Release --parallel 2
 `Get-FileHash 文件名.zip -Algorithm SHA256` 比对对应清单条目。
 
 旧标签、旧公开资产及旧清单保持原样。草稿恢复仅补缺失资产，已存在的资产必须与原构建
-逐字节相同；冲突时保留草稿并停止，改用新 rc 标签。不会修改仓库安全设置，稳定版 Latest
-不变。CI 原始产物保留 14 天，GUI 审阅记录保留 30 天；过期后需要新构建、新验收与新标签。
+逐字节相同；冲突时保留草稿并停止，改用新 rc 标签。汉化发布标签禁止改指向或删除，
+仍允许新建；Release 不可变保护仅对启用后公开的新发布生效，公开后资产修正需使用
+新版本，不追溯锁定历史发布。稳定版 Latest 不变。CI 原始产物保留 14 天，GUI 审阅记录
+保留 30 天；过期后需要新构建、新验收与新标签。
 
 ## 未发布
 
@@ -166,6 +192,10 @@ cmake --build build --target package --config Release --parallel 2
   源码字节核对；旧源标签没有新增通知时沿用原校验范围。全部示例继续保留，包括许可版本
   待核实的三份社区模型。已完成离线打包与正反例测试；实际新包以对应发布验收为准。
   发布守卫同时核对当前汉化版本标识、该标签更新说明和关于窗口版本，防止旧标识混入新 rc。
+- 2026-10-20：补齐旧构建只读权限及所有外部 action 的提交固定；上游维护工具与合并代码
+  隔离、令牌仅临时用于独立推送。新增默认关闭的去重失败 Issue 和仅已合入候选回收开关，
+  新增 GUI 字符串审阅清单，源码干净检查覆盖未跟踪文件，案例索引改用当前基线链接。
+  负向回归覆盖策略冲突、错误状态、未合入/近期/有 PR 候选、并发 ref 更新及意外源码文件。
 - 2026-10-20：明确 Latest 与新 rc 的选择、五平台包名及运行边界，新增逐页汉化状态、
   历史校验清单/路径扫描例外与第三方许可说明。仅整理文档，不把历史包重新标记为已修复。
 

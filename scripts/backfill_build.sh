@@ -51,9 +51,9 @@ else
   libargs+=(-DVSP_USE_SYSTEM_LIBXML2=ON -DVSP_USE_SYSTEM_GLM=ON -DVSP_USE_SYSTEM_GLEW=ON)
 fi
 if [[ -f scripts/localization_tests/CMakeLists.txt ]]; then
-  cmake -S scripts/localization_tests -B localization-tests
-  cmake --build localization-tests --parallel 2
-  ctest --test-dir localization-tests --output-on-failure
+  cmake -S scripts/localization_tests -B "$ROOT/localization-tests"
+  cmake --build "$ROOT/localization-tests" --parallel 2
+  ctest --test-dir "$ROOT/localization-tests" --output-on-failure
 else
   echo 'Historical source has no C++ localization test target; independent package/model tests remain mandatory.'
 fi
@@ -71,6 +71,7 @@ cmake --build build --target package --parallel 2
 # Build options must not rewrite the immutable historical source.
 git diff --quiet --exit-code
 git diff --cached --quiet --exit-code
+python "$TOOLS/check_source_worktree.py" "$SOURCE"
 # Historical sources lack a common archive checker; verify the final relocated ZIP below.
 package=$(find build -maxdepth 1 -type f -name 'OpenVSP-*.zip')
 test "$(printf '%s\n' "$package" | wc -l | tr -d ' ')" = 1
