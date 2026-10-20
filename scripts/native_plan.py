@@ -9,7 +9,7 @@ import subprocess
 
 from backfill_plan import RELEASES
 
-TAG_RE = re.compile(r'^(?P<version>\d+\.\d+\.\d+)-zh-CN\.rc\.(?P<revision>[1-9]\d*)$')
+TAG_RE = re.compile(r'^(?P<version>[0-9]+\.[0-9]+\.[0-9]+)-zh-CN\.rc\.(?P<revision>[1-9][0-9]*)$')
 PLATFORMS = (
     dict(platform='Ubuntu-24.04_amd64', runner='ubuntu-24.04', arch='x86_64', python='3.12', llvm=''),
     dict(platform='Ubuntu-24.04_arm64-Python3.12', runner='ubuntu-24.04-arm', arch='aarch64', python='3.12', llvm=''),
@@ -58,14 +58,48 @@ def matrix(source_sha, new_tag):
     return {'include': [dict(version=version, tag=new_tag, sha=source_sha, **p) for p in PLATFORMS]}
 
 
+def family_revision(tag, version):
+    """Ignore other tag families, but never silently ignore a malformed family RC."""
+    if not isinstance(tag, str):
+        raise ValueError('Release tag must be a string')
+    if not tag.startswith(version + '-zh-CN.rc.'):
+        return None
+    match = TAG_RE.fullmatch(tag)
+    if not match:
+        raise ValueError('Malformed release candidate tag in this version family: ' + tag)
+    return int(match['revision'])
+
+
 def validate_source(source, source_sha, new_tag):
     version = validate_inputs(source_sha, new_tag)
     def git(*args):
         return subprocess.check_output(['git', '-C', str(source), *args], text=True).strip()
     if git('rev-parse', 'HEAD') != source_sha:
         raise ValueError('Checked-out source does not match source_sha')
+    if git('rev-parse', '--is-shallow-repository') != 'false':
+        raise ValueError('Family ancestry requires a full-history checkout with all tags')
     baseline = next(sha for v, _, sha in RELEASES if v == version)
     subprocess.run(['git', '-C', str(source), 'merge-base', '--is-ancestor', baseline, source_sha], check=True)
+    revision = family_revision(new_tag, version)
+    previous = []
+    # fetch-depth: 0 supplies all remote tags. Git cannot distinguish an unpublished
+    # draft's tag, so conservatively include other RC tags in this build-time gate.
+    # Promotion independently checks the currently published Release catalog.
+    for tag in git('tag', '--list').splitlines():
+        current = family_revision(tag, version)
+        if current is None:
+            continue
+        if tag == new_tag:
+            if git('rev-parse', f'refs/tags/{tag}^{{commit}}') != source_sha:
+                raise ValueError('Existing target tag does not match the exact source')
+            continue  # Same-SHA interrupted draft recovery; promotion checks draft state.
+        previous.append((current, tag))
+    if previous:
+        latest_revision, latest_tag = max(previous)
+        if revision <= latest_revision:
+            raise ValueError('new_tag must increment the latest revision in its version family')
+        subprocess.run(['git', '-C', str(source), 'merge-base', '--is-ancestor',
+                        f'refs/tags/{latest_tag}^{{commit}}', source_sha], check=True)
     text = (source / 'src/cmake/VSP_Version.cmake').read_text(encoding='utf-8')
     actual = '.'.join(re.search(rf'SET\(\s*VSPVER_{key}\s+(\d+)\s*\)', text)[1]
                       for key in ('MAJOR', 'MINOR', 'PATCH'))

@@ -6,11 +6,108 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from urllib.parse import quote
 import zipfile
 
+from backfill_plan import RELEASES
 from backfill_verify import digest
-from native_plan import PLATFORMS, asset_name, validate_inputs
+from native_plan import PLATFORMS, asset_name, family_revision, validate_inputs
 from native_release import GitHub, publish, validate_gui_review, validate_report, verify_manifest
+
+
+def release_catalog(api):
+    """Read every Release page and fail closed on incomplete or ambiguous metadata."""
+    releases, identities, tags, page = [], set(), set(), 1
+    while True:
+        rows = api(f'releases?per_page=100&page={page}')
+        if not isinstance(rows, list) or len(rows) > 100:
+            raise ValueError('Malformed Release catalog page')
+        for release in rows:
+            if (not isinstance(release, dict)
+                    or type(release.get('id')) is not int or release['id'] < 1
+                    or not isinstance(release.get('tag_name'), str) or not release['tag_name']
+                    or type(release.get('draft')) is not bool
+                    or type(release.get('prerelease')) is not bool):
+                raise ValueError('Malformed Release catalog entry')
+            if release['id'] in identities or release['tag_name'] in tags:
+                raise ValueError('Duplicate Release identity or tag across catalog pages')
+            identities.add(release['id'])
+            tags.add(release['tag_name'])
+            releases.append(release)
+        if len(rows) < 100:
+            return releases
+        page += 1
+
+
+def require_api_ancestor(api, ancestor, source_sha):
+    comparison = api(f'compare/{ancestor}...{source_sha}?per_page=1')
+    if not isinstance(comparison, dict):
+        raise ValueError('Malformed family ancestry comparison')
+    status, ahead, behind = (comparison.get(key) for key in ('status', 'ahead_by', 'behind_by'))
+    base, merge_base = (comparison.get(key) for key in ('base_commit', 'merge_base_commit'))
+    if (status not in ('ahead', 'identical')
+            or type(ahead) is not int or ahead < 0 or type(behind) is not int or behind != 0
+            or (status == 'identical') != (ahead == 0)
+            or (status == 'identical') != (ancestor == source_sha)
+            or not isinstance(base, dict) or base.get('sha') != ancestor
+            or not isinstance(merge_base, dict) or merge_base.get('sha') != ancestor):
+        raise ValueError('Source must descend from the latest release in its version family')
+
+
+def validate_promotion_source(api, source_sha, tag):
+    version = validate_inputs(source_sha, tag)
+    revision = family_revision(tag, version)
+    releases = release_catalog(api)
+    target = next((release for release in releases if release['tag_name'] == tag), None)
+    if target and (not target['draft'] or not target['prerelease']
+                   or target.get('target_commitish') != source_sha):
+        raise ValueError('Existing target must be an unpublished same-source prerelease draft')
+    ref = api('git/ref/tags/' + quote(tag, safe=''), missing=True)
+    if ref is not None:
+        obj = ref.get('object') if isinstance(ref, dict) else None
+        if not isinstance(obj, dict) or obj.get('type') != 'commit' or obj.get('sha') != source_sha:
+            raise ValueError('Existing target tag does not match the exact source')
+    elif target:
+        raise ValueError('Existing draft has lost its source tag')
+    published = [(family_revision(release['tag_name'], version), release['tag_name'])
+                 for release in releases if not release['draft']]
+    published = [(number, name) for number, name in published if number is not None]
+    ancestors = {next(sha for v, _, sha in RELEASES if v == version)}
+    if published:
+        latest_revision, latest_tag = max(published)
+        if revision <= latest_revision:
+            raise ValueError('new_tag must increment the latest published family revision')
+        commit = api('commits/' + quote('refs/tags/' + latest_tag, safe=''))
+        sha = commit.get('sha') if isinstance(commit, dict) else None
+        if not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{40}', sha):
+            raise ValueError('Latest family release has no valid source commit')
+        ancestors.add(sha)
+    for ancestor in sorted(ancestors):
+        require_api_ancestor(api, ancestor, source_sha)
+
+
+class FamilyGuardedClient:
+    """Keep the existing add-only publisher, with a fresh gate at its final PATCH."""
+    def __init__(self, client, source_sha, tag):
+        self.client, self.source_sha, self.tag = client, source_sha, tag
+        self.repository = client.repository
+
+    def api(self, path, method='GET', data=None, missing=False):
+        if (method == 'PATCH' and path.startswith('releases/')
+                and isinstance(data, dict) and data.get('draft') is False):
+            validate_promotion_source(self.client.api, self.source_sha, self.tag)
+        return self.client.api(path, method, data, missing)
+
+    def upload(self, release, path):
+        return self.client.upload(release, path)
+
+    def download(self, asset, path):
+        return self.client.download(asset, path)
+
+
+def publish_with_family_guard(client, directory, source_sha, tag, review):
+    validate_promotion_source(client.api, source_sha, tag)
+    return publish(FamilyGuardedClient(client, source_sha, tag), directory, source_sha, tag, review=review)
 
 
 def paginated(api, path, key):
@@ -155,7 +252,7 @@ def main():
                   build_jobs=[dict(name=job['name'], id=job['id'], run_attempt=job['run_attempt'])
                               for job in jobs], **review)
     Path('gui-review.json').write_text(json.dumps(record, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    result = publish(client, directory, source, tag, review=review)
+    result = publish_with_family_guard(client, directory, source, tag, review=review)
     print('Original reviewed artifacts published without rebuilding: ' + result['html_url'])
 
 
