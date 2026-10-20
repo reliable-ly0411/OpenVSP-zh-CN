@@ -3,8 +3,8 @@
 
 Checks exact/phrase table uniqueness and agreement, reviewed complete-label
 regressions, protected formats, View menu context, every static browser heading,
-and literal labels at common GUI entry points. This is a source-level guard, not
-an AST-complete GUI or terminology acceptance test. Dynamic strings, parameter
+literal labels at common GUI entry points, and FileChooser title/filter pairs.
+This is a source-level guard, not an AST-complete GUI or terminology acceptance test. Dynamic strings, parameter
 explanations, and third-party widgets still require separate review.
 """
 from __future__ import annotations
@@ -26,6 +26,11 @@ CALLS = (
     "Alert|fl_alert|fl_message|AddItem|SetTitle|AddTab|AddButton|AddDividerBox|"
     "AddLabel|AddSlider|AddInput|AddOutput|AddChoice|MakeTab|add"
 )
+# FileChooser needs its own first-argument scanner. Treating its first string
+# anywhere in the call as a title would accidentally collect a filter when the
+# title is a variable. Adjacent literals and multiline calls are supported.
+STRINGS = STRING + r'(?:\s*' + STRING + r')*'
+FILE_CHOOSER = re.compile(r'\bFileChooser\s*\(\s*(' + STRINGS + r')\s*,\s*(' + STRINGS + r')?')
 LABEL = re.compile(r'\b(?:' + CALLS + r')\s*\([^;"\n]*(' + STRING + r')')
 FORMAT = re.compile(r'%(?:\d+\$)?[-+ #0]*\d*(?:\.\d+)?(?:hh|h|ll|l|j|z|t|L)?[diouxXeEfFgGaAcspn%]')
 CJK = re.compile(r'[\u3400-\u9fff]')
@@ -82,8 +87,26 @@ def calls_display_helper(source):
     return bool(re.search(r'\bVSPTranslate(?:BrowserHeader|LabelAndValue|Message)\s*\(', code))
 
 
+def extract_file_chooser_calls(source):
+    """Return fixed title/filter literals; None means a nonliteral filter."""
+    def decode(value):
+        return ''.join(json.loads(part) for part in re.findall(STRING, value))
+    return [(decode(title), decode(filter_text) if filter_text else None)
+            for title, filter_text in FILE_CHOOSER.findall(strip_comments(source))]
+
+
+def file_chooser_title_errors(titles, exact, reviewed):
+    errors = []
+    for title in sorted(set(titles)):
+        if title not in reviewed:
+            errors.append(f"Unreviewed FileChooser title: {title!r}")
+        elif exact.get(title) != reviewed[title]:
+            errors.append(f"FileChooser title lacks reviewed exact translation: {title!r}")
+    return errors
+
+
 def extract_labels(source):
-    labels = set()
+    labels = {title for title, _ in extract_file_chooser_calls(source)}
     for match in LABEL.finditer(strip_comments(source)):
         label = json.loads(match[1])
         if not re.search('[A-Za-z]', label) or CJK.search(label) or label.startswith('@'):
@@ -99,12 +122,17 @@ def extract_labels(source):
 def translate(driver, labels, mode="translate"):
     if not labels:
         return []
+    if mode == "label-value" and len(labels) % 2:
+        raise ValueError("Label/value inputs must contain complete pairs")
     process = subprocess.run(
         [str(driver), mode], input=('\0'.join(labels) + '\0').encode('utf-8'),
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
     )
     output = process.stdout.decode('utf-8').split('\0')
-    if len(output) != len(labels) + 1 or output[-1] != '':
+    # label-value mode consumes alternating labels and opaque values, emitting
+    # one composed display string per pair through the real C++ helper.
+    count = len(labels) // 2 if mode == "label-value" else len(labels)
+    if len(output) != count + 1 or output[-1] != '':
         raise ValueError("Translation driver returned invalid NUL framing")
     return output[:-1]
 
@@ -147,6 +175,7 @@ def run(driver):
 
     labels = {}
     headers = set()
+    chooser_calls = []
     for path in sorted(GUI.glob('*.cpp')):
         if path.name == "VSPChinese.cpp":
             continue
@@ -154,12 +183,29 @@ def run(driver):
         if (calls_display_helper(contents)
                 and not has_unconditional_translation_include(contents)):
             errors.append(f"Display helper lacks unconditional VSPChinese.h include: {path.name}")
+        chooser_calls.extend(extract_file_chooser_calls(contents))
         for label in extract_labels(contents):
             labels.setdefault(label, []).append(path.name)
         headers.update(json.loads(literal) for literal in re.findall(STRING, strip_comments(contents))
                        if literal.startswith('"@b@.'))
     for label in sorted(labels.keys() - known - preserved.keys()):
         errors.append(f"Unreviewed GUI label in {', '.join(labels[label])}: {label!r}")
+
+    chooser_titles = {title for title, _ in chooser_calls}
+    errors.extend(file_chooser_title_errors(chooser_titles, tables.get("ExactTranslations", {}), expected))
+    # Use every actual literal filter plus an opaque stress suffix for every
+    # title. This catches a regression back to translating title + filter.
+    composed = {(title, "   (" + filter_text + ")") for title, filter_text in chooser_calls
+                if filter_text is not None}
+    composed.update((title, "   (*.{Wing,主翼,stl,100%})") for title in chooser_titles)
+    composed = sorted(composed)
+    inputs = [item for pair in composed for item in pair]
+    for (title, suffix), actual in zip(composed, translate(driver, inputs, "label-value")):
+        if title in expected and actual != expected[title] + suffix:
+            errors.append(f"FileChooser title/filter boundary changed: {title!r}, {suffix!r} -> {actual!r}")
+    for title in chooser_titles & expected.keys():
+        if re.findall(r'\.[A-Za-z][A-Za-z0-9.]*', title) != re.findall(r'\.[A-Za-z][A-Za-z0-9.]*', expected[title]):
+            errors.append(f"FileChooser title changed a file extension: {title!r}")
 
     header_symbols = {"V/C", "RPM", "CP", "CT", "T", "J", "eta", "X", "Y", "Z", "U", "W"}
     for label, actual in zip(sorted(headers), translate(driver, sorted(headers), 'header')):
@@ -183,7 +229,8 @@ def run(driver):
     if errors:
         raise SystemExit('\n'.join(errors))
     print(f"Translation catalog passed: {len(expected)} reviewed cases, {len(preserved)} protected labels, "
-          f"{len(labels)} scanned GUI literals, {len(headers)} browser headers.")
+          f"{len(labels)} scanned GUI literals, {len(headers)} browser headers, "
+          f"{len(chooser_titles)} FileChooser titles, {len(composed)} title/filter boundaries.")
 
 
 def main():

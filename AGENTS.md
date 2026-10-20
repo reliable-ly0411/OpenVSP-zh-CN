@@ -66,3 +66,7 @@
 
 不要宣称汉化“绝对完整”。发现漏译时记录具体页面、显示路径和验证结果，让后续维护从
 可证实状态继续。
+
+## Release and repository maintenance
+
+Before changing versions, branches, packaging, release notes, or public issue summaries, read `docs/RELEASING.zh-CN.md` and follow its repository-specific mapping. Preserve all other instructions in this file and any narrower directory instructions. Published tags and asset bytes are immutable: fix a release through a new version, never by moving a published tag or overwriting assets. Keep upstream mirrors free of fork-only policy and localization changes. Release preparation does not itself grant permission to publish, merge, delete, or change repository settings.
