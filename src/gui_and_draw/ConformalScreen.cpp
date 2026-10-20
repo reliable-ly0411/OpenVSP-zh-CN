@@ -156,8 +156,8 @@ ConformalScreen::ConformalScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, 
     m_TrimGroup.AddDividerBox( "U Trim Tip Treatment" );
 
     m_NoseCapTypeChoice.AddItem( "None", vsp::NO_END_CAP );
-    m_NoseCapTypeChoice.AddItem( "Flat", vsp::FLAT_END_CAP );
-    m_NoseCapTypeChoice.AddItem( "Round", vsp::ROUND_END_CAP );
+    m_NoseCapTypeChoice.AddItem( "Flat End Cap", vsp::FLAT_END_CAP );
+    m_NoseCapTypeChoice.AddItem( "Round End Cap", vsp::ROUND_END_CAP );
     m_NoseCapTypeChoice.AddItem( "Edge", vsp::EDGE_END_CAP );
     m_NoseCapTypeChoice.AddItem( "Sharp", vsp::SHARP_END_CAP );
     m_TrimGroup.AddChoice( m_NoseCapTypeChoice, "Nose Cap Type" );
@@ -170,8 +170,8 @@ ConformalScreen::ConformalScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, 
     m_TrimGroup.AddYGap();
 
     m_TailCapTypeChoice.AddItem( "None", vsp::NO_END_CAP );
-    m_TailCapTypeChoice.AddItem( "Flat", vsp::FLAT_END_CAP );
-    m_TailCapTypeChoice.AddItem( "Round", vsp::ROUND_END_CAP );
+    m_TailCapTypeChoice.AddItem( "Flat End Cap", vsp::FLAT_END_CAP );
+    m_TailCapTypeChoice.AddItem( "Round End Cap", vsp::ROUND_END_CAP );
     m_TailCapTypeChoice.AddItem( "Edge", vsp::EDGE_END_CAP );
     m_TailCapTypeChoice.AddItem( "Sharp", vsp::SHARP_END_CAP );
     m_TrimGroup.AddChoice( m_TailCapTypeChoice, "Tail Cap Type" );
