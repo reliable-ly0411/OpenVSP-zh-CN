@@ -7,7 +7,7 @@
 
 - 本族修复基线：[`0262336a4c17fe0931bba234ecae99073e089cc3`](https://github.com/reliable-ly0411/OpenVSP-zh-CN/commit/0262336a4c17fe0931bba234ecae99073e089cc3)。
 - 目标开发线：`develop/3.51.3-zh-CN`；独立修复分支，不改动已发布标签或附件。
-- 已在 3.55.0 原始 rc.2 Linux AMD64 包观察到：寄生阻力组件名 `Fuselage` 显示为
+- 已在 3.55.0 和 3.51.2 原始 rc.2 Linux AMD64 包观察到：寄生阻力组件名 `Fuselage` 显示为
   `机身`；用户参数 Adjust 页分组 `Wing` 及附加阻力条目 `Wing` 的汇总标签显示为
   `机翼`，而编辑器原值保持不变。
   其余族本轮结论来自各自精确源码及下述执行测试，不冒称已完成各族修复后的 GUI 验收。
@@ -33,10 +33,10 @@
 ## 本地检查
 
 - `python3 scripts/check_localization_release.py`：通过（原始案例名称只读检查）。
-- `python3 -m unittest discover -s scripts -p 'test_*.py' -v`：117 项，整体通过。
+- `python3 -m unittest discover -s scripts -p 'test_*.py' -v`：共 117 项，其中 114 项通过、3 项跳过，0 项失败。
 - `python3 -m unittest discover -s scripts -p backfill_test.py -v`：本族无此脚本，不适用；未计作通过。
 - `cmake -S scripts/localization_tests -B <构建目录>`、`cmake --build <构建目录> --parallel 2`：通过。
-- `ctest --test-dir <构建目录> --output-on-failure`：14 项通过。
+- `ctest --test-dir <构建目录> --output-on-failure`：14 个目标通过；目标内 Python 跳过项如下一节，不计作实际用例通过。
 - `git diff --check`：通过。
 - 工具：Linux x86_64，GCC 14.2.0，CMake 4.4.4，Python 3.12；未安装 Ninja。
 
@@ -51,3 +51,16 @@
 - 修复后真实 GUI 需复验组件折叠/展开、用户分组重建/切换和附加阻力条目创建/修改，固定专业标题与原文名称同时保留。
 - 本回归不测试 FLTK 对 `&` 助记符或 `@` 图形标记的最终绘制，不修改上游该行为。
 - 可选 XML C++ 测试未启用；不把模型源码只读检查当作新包的保存/重开结果。
+
+## 原始包实图与来源
+
+[实际 GUI 复现证据 ZIP](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/93138b90593ae1fb1b452e3238c609a4a2645075/docs/evidence/opaque-layout-labels/original-gui-reproduction-20261020.zip)
+固定链接指向 3.55.0 修复分支的文档提交，避免五族重复存储相同二进制。
+证据包含 10 张截图、2 个合成模型、XML 名称读回结果和完整清单，不是只有校验回执。
+ZIP 为 865266 字节，SHA-256 为
+`e1ec8c1d3d28594c173c5bb2bc27dfc1ca1d51153f17ebadb95354b7397f4972`。
+截图只来自修复前的原始 3.55.0 / 3.51.2 Linux AMD64 rc.2 包，不代表修复候选通过。
+其他三族本轮依据各自精确源码和可执行回归，不将这两族截图冒充其 GUI 验收。
+
+[源码来源对照](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/93138b90593ae1fb1b452e3238c609a4a2645075/docs/evidence/opaque-layout-labels/source-provenance.json)记录五族本地测试提交、
+远程审查提交、各族基线和相同的完整 Git 树哈希。本次补充只涉及文档，生产代码未变。
