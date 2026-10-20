@@ -416,6 +416,7 @@ INSTALL( FILES ../README_zh-CN.md DESTINATION . )
 INSTALL( FILES ../AGENTS.md DESTINATION . )
 INSTALL( FILES ../CHANGELOG.md DESTINATION . )
 INSTALL( FILES ../vspIcon.png DESTINATION .)
+INCLUDE( ${CMAKE_CURRENT_SOURCE_DIR}/cmake/InstallLocalizedDocumentation.cmake )
 
 # Potentially redundant, but needed if src is used as project root.
 INCLUDE( CTest )
