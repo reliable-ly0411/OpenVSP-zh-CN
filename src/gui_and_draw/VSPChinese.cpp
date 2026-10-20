@@ -16,6 +16,11 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
     static const std::unordered_map<std::string, std::string> table = {
 
+        // Legacy 3.51/3.53 file chooser titles retained by those upstream UIs.
+        { "Select .srf file.", "选择 .srf 文件" },
+        { "Select GridTool .curv file.", "选择 GridTool .curv 文件" },
+        { "Select Plot3D .p3d file.", "选择 Plot3D .p3d 文件" },
+
         // Reviewed FileChooser titles: translate before appending opaque filters.
         { "Airfoil File", "翼型文件" },
         { "Cart3D XDDM File", "Cart3D XDDM 文件" },

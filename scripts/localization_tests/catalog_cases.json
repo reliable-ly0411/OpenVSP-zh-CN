@@ -907,5 +907,8 @@
   "Write VSPGeom Files?": "写入 VSPGeom 文件？",
   "Write X3D File?": "写入 X3D 文件？",
   "Write XSec File?": "写入截面文件？",
-  "Attribute Explorer: ": "属性浏览器："
+  "Attribute Explorer: ": "属性浏览器：",
+  "Select .srf file.": "选择 .srf 文件",
+  "Select GridTool .curv file.": "选择 GridTool .curv 文件",
+  "Select Plot3D .p3d file.": "选择 Plot3D .p3d 文件"
 }
