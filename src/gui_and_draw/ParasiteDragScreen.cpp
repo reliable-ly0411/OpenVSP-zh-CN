@@ -2132,7 +2132,7 @@ void ParasiteDragScreen::SetupRowLabel( int subsurfFlag, const string &lastID, i
 {
     m_TableCompNamesLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH * 2 + 20 );
     string label = GetComponentTableLabel( subsurfFlag, lastID, index );
-    m_TableCompNamesLayout.AddButton( m_labels[index], label.c_str() );
+    m_TableCompNamesLayout.AddButtonRaw( m_labels[index], label.c_str() );
     m_labels[index].GetFlButton()->align( Fl_Align( FL_ALIGN_LEFT | FL_ALIGN_INSIDE | FL_ALIGN_WRAP ) );
 }
 
@@ -2407,7 +2407,7 @@ void ParasiteDragScreen::AddSimpleExcresToTable()
             m_TableLayout.SetSameLineFlag( true );
             m_ConstantViewLayout.SetSameLineFlag( true );
 
-            m_TableCompNamesLayout.AddLabel( excresRowVec[i].Label.c_str(), TYPICAL_INPUT_WIDTH * 2 - 15 );
+            m_TableCompNamesLayout.AddLabelRaw( excresRowVec[i].Label.c_str(), TYPICAL_INPUT_WIDTH * 2 - 15 );
         }
 
         SetupExcresType( i, excresRowVec[i].TypeString );

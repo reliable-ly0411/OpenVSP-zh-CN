@@ -95,6 +95,16 @@ class NativePlanTests(unittest.TestCase):
         self.assertNotIn('OpenAI', body)
         self.assertIn('待目视', body)
 
+    def test_rc3_names_are_revision_scoped(self):
+        for version in ('3.51.2', '3.51.3', '3.53.0', '3.54.0', '3.55.0'):
+            for revision in (1, 2, 3):
+                body = release_body(f'{version}-zh-CN.rc.{revision}', SOURCE, 'example/repo')
+                self.assertEqual('rc.3 新增：' in body, revision >= 3)
+                if revision >= 3:
+                    self.assertIn('Adjust', body)
+                    self.assertIn('固定界面标题仍正常汉化', body)
+                    self.assertIn('不修改模型数据、参数 ID 或接口', body)
+
 
 class NativeReleaseTests(unittest.TestCase):
     def setUp(self):

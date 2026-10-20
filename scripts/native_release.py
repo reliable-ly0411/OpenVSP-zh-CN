@@ -122,6 +122,11 @@ def release_body(tag, source_sha, repository, linux_gui_reviewed=False):
         ]
         if version in ('3.54.0', '3.55.0'):
             changes.append('rc.2 新增：接通分割与缝合导出失败提示的显示翻译，错误详情和文件路径保持原样。')
+    if revision >= 3:
+        changes += [
+            'rc.3 新增：寄生阻力组件表、附加阻力汇总及用户参数 Adjust 分组标题保留用户原始名称；固定界面标题仍正常汉化。',
+            'rc.3 新增：三条实际布局方法的轻量 C++ 回归，覆盖词典碰撞、中文、空白及特殊字符；不修改模型数据、参数 ID 或接口。',
+        ]
     gui = ('五个平台均经原生构建和包内 CLI、模型读写、分析、Python 导入、依赖与校验检查。'
            'Linux AMD64 原始 ZIP 的主界面、机翼页及模型名称/路径回归已人工抽查；'
            'Windows、macOS 和 Linux ARM64 GUI 未作同范围人工验收。'
