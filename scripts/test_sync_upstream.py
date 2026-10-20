@@ -38,6 +38,8 @@ class SyncTests(unittest.TestCase):
         self.write('AGENTS.md', f'当前官方基线：OpenVSP 3.53.0，提交\n  `{self.baseline}`；其他规则\n')
         self.write('src/gui_and_draw/MainVSPScreen.cpp', 'upstream code\n"汉化版本：3.53.0-Codex-AI-zh-CN\\n"\n')
         self.write('.github/workflows/build.yml', 'localized workflow\n')
+        for script in ('sync_upstream.py', 'select_official_release.py', 'check_localization_release.py'):
+            self.write('scripts/' + script, 'trusted maintenance\n')
         self.commit('localization')
         self.localized = self.git('rev-parse', 'HEAD').strip()
 
@@ -116,6 +118,23 @@ class SyncTests(unittest.TestCase):
         result = self.run_sync()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / '.github/workflows/build.yml').read_text(), 'localized workflow\n')
+        self.assertEqual(self.git('diff', '--name-only', '--diff-filter=U'), '')
+
+    def test_trusted_policy_cannot_be_replaced_but_product_scripts_merge(self):
+        self.upstream_update()
+        self.git('checkout', 'official')
+        for script in ('sync_upstream.py', 'select_official_release.py', 'check_localization_release.py'):
+            self.write('scripts/' + script, 'upstream maintenance collision\n')
+        self.write('AGENTS.md', 'upstream policy collision\n')
+        self.write('scripts/product.py', 'legitimate upstream product addition\n')
+        self.commit('upstream policy collisions and product addition')
+        self.git('checkout', 'localized')
+        result = self.run_sync()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for script in ('sync_upstream.py', 'select_official_release.py', 'check_localization_release.py'):
+            self.assertEqual((self.root / 'scripts' / script).read_text(), 'trusted maintenance\n')
+        self.assertIn('其他规则', (self.root / 'AGENTS.md').read_text())
+        self.assertEqual((self.root / 'scripts/product.py').read_text(), 'legitimate upstream product addition\n')
         self.assertEqual(self.git('diff', '--name-only', '--diff-filter=U'), '')
 
     def test_code_conflict_does_not_commit_or_advance_baseline(self):
