@@ -29,6 +29,11 @@ int main()
             std::cerr << "Parameter title altered the opaque parameter name\n";
             return 7;
         }
+        if (VSPTranslateLabelAndValue("Attribute Explorer: ", value) != "属性浏览器：" + value)
+        {
+            std::cerr << "Attribute title altered the attached name\n";
+            return 8;
+        }
         const std::string error = "Cannot export Wing 100% (%s, %n): " + value;
         char rendered[4096];
         const int size = std::snprintf(rendered, sizeof(rendered), export_template.c_str(),
@@ -48,5 +53,6 @@ int main()
     }
     if (VSPTranslateLabelAndValue("Open VSP File", "   (*.vsp3)") != "打开 VSP 文件   (*.vsp3)") return 3;
     if (VSPTranslateMessage("Cancel") != "取消") return 4;
+    if (VSPTranslate("Attribute Explorer") != "属性浏览器") return 9;
     std::cout << "Opaque name/path/message boundaries passed\n";
 }
