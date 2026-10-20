@@ -1,0 +1,277 @@
+{
+  "schema": 1,
+  "checked_at": "2026-10-20T06:56:30Z",
+  "scope": "Persisted XML parameters by exact ID; GUI Fit and viewport/screenshot dimensions are allowed to change.",
+  "families": [
+    {
+      "version": "3.55.0",
+      "parameter_count": 1945,
+      "parameter_ids_preserved": true,
+      "non_view_parameter_values_preserved": true,
+      "view_only_changes": [
+        {
+          "id": "KAUKSWDYXRS",
+          "parameter": "Screenshot/Width",
+          "before": "1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        },
+        {
+          "id": "NTSPOIWCBBM",
+          "parameter": "AdjustView/ViewportX",
+          "before": "-1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        },
+        {
+          "id": "ORWGZBDXONK",
+          "parameter": "AdjustView/Zoom",
+          "before": "1.799999999999999864e-02",
+          "after": "4.638586565852165222e-02"
+        },
+        {
+          "id": "UMFFDZIYQMS",
+          "parameter": "AdjustView/CORX",
+          "before": "0.000000000000000000e+00",
+          "after": "1.500000000000000000e+01"
+        },
+        {
+          "id": "VUYUYSHHRDI",
+          "parameter": "Screenshot/Height",
+          "before": "1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        },
+        {
+          "id": "ZDOACZDPYUA",
+          "parameter": "AdjustView/ViewportY",
+          "before": "-1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        }
+      ],
+      "files": [
+        {
+          "name": "Wing Design 100% 中文.vsp3",
+          "sha256": "00eceece1ff72857aac03d40aa66eb2a03374a50c8e50d95a6ba59b8e6217449"
+        },
+        {
+          "name": "GUI Saved  100% 中文.vsp3",
+          "sha256": "83ea81dd1cd0383c4ea4e5664f7e5cdbc1daacca6580f1104b9654abdafc38d5"
+        }
+      ]
+    },
+    {
+      "version": "3.54.0",
+      "parameter_count": 1944,
+      "parameter_ids_preserved": true,
+      "non_view_parameter_values_preserved": true,
+      "view_only_changes": [
+        {
+          "id": "AKLELUFQSDT",
+          "parameter": "AdjustView/ViewportY",
+          "before": "-1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        },
+        {
+          "id": "DAAJHXFRHOW",
+          "parameter": "Screenshot/Height",
+          "before": "1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        },
+        {
+          "id": "EYTOVUSWMWF",
+          "parameter": "AdjustView/Zoom",
+          "before": "1.799999999999999864e-02",
+          "after": "4.638586565852165222e-02"
+        },
+        {
+          "id": "LLSGRVCCUMC",
+          "parameter": "Screenshot/Width",
+          "before": "1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        },
+        {
+          "id": "WFZPWMOUNAF",
+          "parameter": "AdjustView/CORX",
+          "before": "0.000000000000000000e+00",
+          "after": "1.500000000000000000e+01"
+        },
+        {
+          "id": "ZAEBEEOZXHF",
+          "parameter": "AdjustView/ViewportX",
+          "before": "-1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        }
+      ],
+      "files": [
+        {
+          "name": "Wing Design 100% 中文.vsp3",
+          "sha256": "16be08a323e2a95cfab22f926a4107b07981aaa92e234684542f03968f0ad4b4"
+        },
+        {
+          "name": "GUI Roundtrip 100% 中文.vsp3",
+          "sha256": "acd521c6b25ef578f7a66749187bc6e4c42bc3155876abbcb8b96c84ef6a172e"
+        }
+      ]
+    },
+    {
+      "version": "3.53.0",
+      "parameter_count": 1942,
+      "parameter_ids_preserved": true,
+      "non_view_parameter_values_preserved": true,
+      "view_only_changes": [
+        {
+          "id": "AEAVKGXYLLP",
+          "parameter": "Screenshot/Height",
+          "before": "1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        },
+        {
+          "id": "DBWANACZBZP",
+          "parameter": "AdjustView/Zoom",
+          "before": "1.799999999999999864e-02",
+          "after": "4.638586565852165222e-02"
+        },
+        {
+          "id": "IRHHXWRPHXL",
+          "parameter": "Screenshot/Width",
+          "before": "1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        },
+        {
+          "id": "NBKGGEWBEMX",
+          "parameter": "AdjustView/CORX",
+          "before": "0.000000000000000000e+00",
+          "after": "1.500000000000000000e+01"
+        },
+        {
+          "id": "OWGHKJOYGCC",
+          "parameter": "AdjustView/ViewportY",
+          "before": "-1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        },
+        {
+          "id": "YPNSKQWTWZB",
+          "parameter": "AdjustView/ViewportX",
+          "before": "-1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        }
+      ],
+      "files": [
+        {
+          "name": "Wing Design 100% 中文.vsp3",
+          "sha256": "3716608a74307732bcb6836854d69aa7a6e610fac4024b9104387e4e5cee20ea"
+        },
+        {
+          "name": "GUI Roundtrip 100% 中文.vsp3",
+          "sha256": "af907653b61529b297046f10f57b713a72a2b64bd2a867087ac9b20e16f15c3b"
+        }
+      ]
+    },
+    {
+      "version": "3.51.3",
+      "parameter_count": 1931,
+      "parameter_ids_preserved": true,
+      "non_view_parameter_values_preserved": true,
+      "view_only_changes": [
+        {
+          "id": "BKAIXJRVZNX",
+          "parameter": "Screenshot/Height",
+          "before": "1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        },
+        {
+          "id": "CFFTRCATZFL",
+          "parameter": "Screenshot/Width",
+          "before": "1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        },
+        {
+          "id": "TGQTMXFJGXK",
+          "parameter": "AdjustView/ViewportX",
+          "before": "-1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        },
+        {
+          "id": "VBFGKIEIGVF",
+          "parameter": "AdjustView/ViewportY",
+          "before": "-1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        },
+        {
+          "id": "YNAAGRKXLBH",
+          "parameter": "AdjustView/Zoom",
+          "before": "1.799999999999999864e-02",
+          "after": "4.638586565852165222e-02"
+        },
+        {
+          "id": "ZMVLLYULEUQ",
+          "parameter": "AdjustView/CORX",
+          "before": "0.000000000000000000e+00",
+          "after": "1.500000000000000000e+01"
+        }
+      ],
+      "files": [
+        {
+          "name": "Wing Design 100% 中文.vsp3",
+          "sha256": "11cc2df6e039a45dace13b080529a7b2f7e0811cc615f5f844ee55d653c640ae"
+        },
+        {
+          "name": "GUI Roundtrip 100% 中文.vsp3",
+          "sha256": "2ddfb6211c973cd9b5b92c95908195ed3ab410e25613c4d5918402b9da2a19e2"
+        }
+      ]
+    },
+    {
+      "version": "3.51.2",
+      "parameter_count": 1931,
+      "parameter_ids_preserved": true,
+      "non_view_parameter_values_preserved": true,
+      "view_only_changes": [
+        {
+          "id": "IXBPQBZGHYY",
+          "parameter": "AdjustView/ViewportX",
+          "before": "-1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        },
+        {
+          "id": "QMMYDBBWDWV",
+          "parameter": "AdjustView/ViewportY",
+          "before": "-1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        },
+        {
+          "id": "RCIJLTIMHDX",
+          "parameter": "AdjustView/CORX",
+          "before": "0.000000000000000000e+00",
+          "after": "1.500000000000000000e+01"
+        },
+        {
+          "id": "RRFONUZBXYW",
+          "parameter": "Screenshot/Height",
+          "before": "1.000000000000000000e+00",
+          "after": "7.570000000000000000e+02"
+        },
+        {
+          "id": "SWHRJJXFUFG",
+          "parameter": "Screenshot/Width",
+          "before": "1.000000000000000000e+00",
+          "after": "1.180000000000000000e+03"
+        },
+        {
+          "id": "YSUHNWIWNOD",
+          "parameter": "AdjustView/Zoom",
+          "before": "1.799999999999999864e-02",
+          "after": "4.638586565852165222e-02"
+        }
+      ],
+      "files": [
+        {
+          "name": "Wing Design 100% 中文.vsp3",
+          "sha256": "3c08534c46f758efe418b3c18aa4b8cbc925ea32695373ed6665441819456dfc"
+        },
+        {
+          "name": "GUI Roundtrip 100% 中文.vsp3",
+          "sha256": "056a8195dfcfe94be2144786e1b350c120d1a0ea1bdf7d9ee103001bc5baa778"
+        }
+      ]
+    }
+  ]
+}

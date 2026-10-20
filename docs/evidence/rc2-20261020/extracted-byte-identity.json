@@ -1,0 +1,36 @@
+{
+  "checked_at": "2026-10-20T06:58:00Z",
+  "scope": "Every file from the original Linux AMD64 ZIP compared byte-for-byte by SHA-256 with the package directory used for interactive review.",
+  "families": [
+    {
+      "version": "3.55.0",
+      "archive": "OpenVSP-3.55.0-Ubuntu-24.04_amd64-zh-CN.zip",
+      "files_matched": 446,
+      "mismatches": []
+    },
+    {
+      "version": "3.54.0",
+      "archive": "OpenVSP-3.54.0-Ubuntu-24.04_amd64-zh-CN.zip",
+      "files_matched": 445,
+      "mismatches": []
+    },
+    {
+      "version": "3.53.0",
+      "archive": "OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip",
+      "files_matched": 445,
+      "mismatches": []
+    },
+    {
+      "version": "3.51.3",
+      "archive": "OpenVSP-3.51.3-Ubuntu-24.04_amd64-zh-CN.zip",
+      "files_matched": 448,
+      "mismatches": []
+    },
+    {
+      "version": "3.51.2",
+      "archive": "OpenVSP-3.51.2-Ubuntu-24.04_amd64-zh-CN.zip",
+      "files_matched": 450,
+      "mismatches": []
+    }
+  ]
+}

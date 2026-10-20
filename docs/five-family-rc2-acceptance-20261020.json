@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "checked_at": "2026-10-20T05:39:00Z",
-  "scope": "Original rc.2 artifact integrity and native-build provenance; interactive Linux desktop review is pending.",
+  "checked_at": "2026-10-20T06:52:00Z",
+  "scope": "Original rc.2 artifact integrity and native-build provenance; scoped interactive Linux x86_64 desktop acceptance completed for all five families.",
   "workflow_sha": "d85c71b5f1caedeca7be691b48a2dbe1087e179c",
   "families": [
     {
@@ -23,9 +23,28 @@
       ],
       "source_sha": "85a1a1a2029d0ab35e1a5f685a117061fe89aa21",
       "build_run_id": 39351908980,
-      "gui_review": "pending",
+      "gui_review": "passed_scoped_linux_x86_64",
       "native_build_status": "success",
-      "native_platform_count": 5
+      "native_platform_count": 5,
+      "gui_reviewed_at": "2026-10-20T05:47:44Z",
+      "gui_evidence_kind": "recovered_interactive_evidence_independently_reviewed",
+      "gui_evidence_zip": "evidence/rc2-20261020/3.55.0/recovered-desktop-acceptance.zip",
+      "gui_evidence_zip_sha256": "6f6dcf4a06115c44cd0ab3e345ff73cc4c309e257fafe9d81cc3275127137cb7",
+      "gui_evidence_zip_bytes": 495745,
+      "gui_screenshot_count": 9,
+      "names_and_ids": [
+        [
+          "VGQXDNGFEC",
+          "Wing & Body_100% 中文"
+        ],
+        [
+          "TBJJAIDBDU",
+          "Fuselage"
+        ]
+      ],
+      "gui_saved_filename": "GUI Saved  100% 中文.vsp3",
+      "parameter_roundtrip": "passed_except_expected_view_state",
+      "parameter_count": 1945
     },
     {
       "version": "3.54.0",
@@ -46,9 +65,28 @@
       ],
       "source_sha": "67f00f7567296d8a1e4088a1fb32e650967af7c2",
       "build_run_id": 39351999591,
-      "gui_review": "pending",
+      "gui_review": "passed_scoped_linux_x86_64",
       "native_build_status": "success",
-      "native_platform_count": 5
+      "native_platform_count": 5,
+      "gui_reviewed_at": "2026-10-20T05:58:30Z",
+      "gui_evidence_kind": "new_interactive_review",
+      "gui_evidence_zip": "evidence/rc2-20261020/3.54.0/desktop-acceptance.zip",
+      "gui_evidence_zip_sha256": "9e6841b9b6f98cc065e0311670864b93313ee5d21b5be60208d0d57b70334af6",
+      "gui_evidence_zip_bytes": 598222,
+      "gui_screenshot_count": 11,
+      "names_and_ids": [
+        [
+          "RGZNKWIEDK",
+          "Wing & Body_100% 中文"
+        ],
+        [
+          "CEVNAYEDZJ",
+          "Fuselage"
+        ]
+      ],
+      "gui_saved_filename": "GUI Roundtrip 100% 中文.vsp3",
+      "parameter_roundtrip": "passed_except_expected_view_state",
+      "parameter_count": 1944
     },
     {
       "version": "3.53.0",
@@ -69,9 +107,28 @@
       ],
       "source_sha": "219f6c0a7857d110e69116a21f314af3fc26ff46",
       "build_run_id": 39352445023,
-      "gui_review": "pending",
+      "gui_review": "passed_scoped_linux_x86_64",
       "native_build_status": "success",
-      "native_platform_count": 5
+      "native_platform_count": 5,
+      "gui_reviewed_at": "2026-10-20T06:44:35Z",
+      "gui_evidence_kind": "new_interactive_review",
+      "gui_evidence_zip": "evidence/rc2-20261020/3.53.0/desktop-acceptance.zip",
+      "gui_evidence_zip_sha256": "e4cbfce5ff33279fb233530501af594608ca15d89b4444ba0a23ab59fac47527",
+      "gui_evidence_zip_bytes": 472630,
+      "gui_screenshot_count": 10,
+      "names_and_ids": [
+        [
+          "BUROFMMZNH",
+          "Wing & Body_100% 中文"
+        ],
+        [
+          "FDNWFIRFBQ",
+          "Fuselage"
+        ]
+      ],
+      "gui_saved_filename": "GUI Roundtrip 100% 中文.vsp3",
+      "parameter_roundtrip": "passed_except_expected_view_state",
+      "parameter_count": 1942
     },
     {
       "version": "3.51.3",
@@ -92,9 +149,28 @@
       ],
       "source_sha": "0262336a4c17fe0931bba234ecae99073e089cc3",
       "build_run_id": 39352626109,
-      "gui_review": "pending",
+      "gui_review": "passed_scoped_linux_x86_64",
       "native_build_status": "success",
-      "native_platform_count": 5
+      "native_platform_count": 5,
+      "gui_reviewed_at": "2026-10-20T06:47:40Z",
+      "gui_evidence_kind": "new_interactive_review",
+      "gui_evidence_zip": "evidence/rc2-20261020/3.51.3/desktop-acceptance.zip",
+      "gui_evidence_zip_sha256": "2100cd1a7e3db7b7d1c7120c96e61397639016830397291d171a7325337e5a02",
+      "gui_evidence_zip_bytes": 595774,
+      "gui_screenshot_count": 11,
+      "names_and_ids": [
+        [
+          "DXQLNKVBSL",
+          "Wing & Body_100% 中文"
+        ],
+        [
+          "UYAMVFNZQT",
+          "Fuselage"
+        ]
+      ],
+      "gui_saved_filename": "GUI Roundtrip 100% 中文.vsp3",
+      "parameter_roundtrip": "passed_except_expected_view_state",
+      "parameter_count": 1931
     },
     {
       "version": "3.51.2",
@@ -115,14 +191,36 @@
       ],
       "source_sha": "d71b88733805b87939a9a7337442d9f43125f43e",
       "build_run_id": 39352805945,
-      "gui_review": "pending",
+      "gui_review": "passed_scoped_linux_x86_64",
       "native_build_status": "success",
-      "native_platform_count": 5
+      "native_platform_count": 5,
+      "gui_reviewed_at": "2026-10-20T06:50:40Z",
+      "gui_evidence_kind": "new_interactive_review",
+      "gui_evidence_zip": "evidence/rc2-20261020/3.51.2/desktop-acceptance.zip",
+      "gui_evidence_zip_sha256": "0df310d211e1611a050c6c928af0e6c7b26eed17b787fd96fe600c8dba382f7a",
+      "gui_evidence_zip_bytes": 471898,
+      "gui_screenshot_count": 10,
+      "names_and_ids": [
+        [
+          "PJJURZWQIG",
+          "Wing & Body_100% 中文"
+        ],
+        [
+          "KHCYHJWUXK",
+          "Fuselage"
+        ]
+      ],
+      "gui_saved_filename": "GUI Roundtrip 100% 中文.vsp3",
+      "parameter_roundtrip": "passed_except_expected_view_state",
+      "parameter_count": 1931
     }
   ],
   "limitations": [
-    "GUI review is not established by captured_not_reviewed CI screenshots.",
-    "Windows, macOS, and Linux ARM64 interactive GUI acceptance is not included.",
+    "Scoped Linux x86_64 interactive desktop review used Debian 13 with the original Ubuntu 24.04-built ZIPs; this is not a claim of an Ubuntu desktop session.",
+    "3.55.0 interactive evidence was recorded at 05:47:44Z, recovered without changing bytes, and independently reviewed later. Other four families were newly exercised. CI captured_not_reviewed images alone were not accepted.",
+    "Windows, macOS, and Linux ARM64 interactive GUI acceptance is not included; macOS is ad-hoc signed and not notarized.",
+    "This is a limited localization, name and path regression, not complete product or engineering-accuracy validation.",
     "All eight complete-aircraft examples are retained. Three community models still lack a verified CC BY-SA version; see issue 16."
-  ]
+  ],
+  "publication_status": "not_yet_published"
 }

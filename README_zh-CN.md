@@ -194,7 +194,7 @@ PR 合并不会自动改写旧 Release 页面。稳定版 Latest 不变。CI 原
 
 ## 未发布
 
-- 追加[五族 rc.2 原包验收记录](docs/five-family-rc2-acceptance-20261020.md)：25 个 ZIP 与原始清单重新校验一致；实际 Linux 桌面验收状态单独记录，未完成项目不标为通过。
+- 追加[五族 rc.2 原包验收记录](docs/five-family-rc2-acceptance-20261020.md)：25 个 ZIP 与原始清单重新校验一致；五族原始 Linux AMD64 包均完成主界面、机翼、名称和特殊字符文件名的 GUI 保存重开有限验收，保留 51 张实际窗口截图及合成模型。3.55.0 原证据恢复与其余四族新操作分别标记；Windows、macOS、ARM64 GUI 未作同范围验收。rc.2 是否公开发布以独立发布读回结果为准。
 
 ## 3.55.0-zh-CN.rc.2
 
@@ -219,8 +219,9 @@ PR 合并不会自动改写旧 Release 页面。稳定版 Latest 不变。CI 原
   9 项显示调用链源码契约通过；8 项工程术语控件源码契约通过。
   `check_localization_release.py --expected-tag 3.55.0-zh-CN.rc.2` 验证本族版本与说明一致。
   上述结果包括真实 C++ 翻译函数、名称/路径/格式/过滤器边界及源码检查；不代表完整
-  OpenVSP 二进制、五平台原生安装包或新增界面的 GUI 目视验收。新原包与 GUI 尚待完成，
-  rc.1 的既有验收记录不能转作 rc.2 通过证明。
+  OpenVSP 全功能或全部新增界面的 GUI 目视验收。后续五平台原包与有限 Linux GUI 的独立
+  结果已补入[rc.2 原包验收报告](docs/five-family-rc2-acceptance-20261020.md)；
+  rc.1 的既有验收记录没有转作 rc.2 通过证明。
 
 ### 共同维护流程与文档
 

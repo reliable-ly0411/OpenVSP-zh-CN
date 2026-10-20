@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "version": "3.51.2",
+  "tag": "3.51.2-zh-CN.rc.2",
+  "reviewed_at": "2026-10-20T06:50:40Z",
+  "evidence_kind": "new_interactive_review",
+  "package_sha256": "3fc9417afab015607ad18c65fa09dd9ab80317d5c81cc32b9ab104db14d7c2b8",
+  "main_window": "passed",
+  "wing_general": "passed",
+  "wing_planform": "passed",
+  "about_version_and_repository": "passed",
+  "gui_save_and_reopen_special_character_path": "passed",
+  "saved_filename": "GUI Roundtrip 100% 中文.vsp3",
+  "disk_name_id_comparison": "passed",
+  "names_and_ids": [
+    [
+      "PJJURZWQIG",
+      "Wing & Body_100% 中文"
+    ],
+    [
+      "KHCYHJWUXK",
+      "Fuselage"
+    ]
+  ],
+  "screenshots": {
+    "about.png": "2f7b2af1b7ae587a6b6aa9c553f2ee308f85ec2d9f89d4ff9df487df32893df8",
+    "geometry-tree.png": "9b2b82bf84182291d96a2661948c7179fc4900ca8a729f5a76ee1c08645fed9f",
+    "main.png": "5e0bb2f30e3a72f999dfb4e84f64a136de3377c0b6feebcb25d1749754c79d0b",
+    "open-dialog.png": "7100daa5f98e62d1a21a41e117e06c7b25757a1243e3a61c4aa009861f067b2f",
+    "reopened-main.png": "954c34451a0a8de905ce9d86e663ff4430681bc55257b184aee40fb1f62cf5c6",
+    "reopened-tree.png": "ff36f1406104f85a86aabe7a8d8a7f734b1d03aeca380010af527fde941001fb",
+    "save-dialog.png": "cfe3bd4e9f0b68bdbfe100e9184bd7c195bac55d2bd97b6e88315a9f652e1f4a",
+    "saved-main.png": "acfd9cec796fb8adf48304731264f7decf6335e9d2bbed59ed648f49e5daad9c",
+    "wing-general.png": "59052fab1eff54a04481c75b751c6e9356d136ff46a68a432ec5ac27ffb9f4a7",
+    "wing-planform.png": "186973bf87147676b6b22d54833235f8f64a011bde9af1c1b1edaeba3715badb"
+  },
+  "limitations": [
+    "Linux x86_64 Debian 13 cloud desktop running Ubuntu 24.04-built original ZIP.",
+    "Windows, macOS and ARM64 interactive GUI not reviewed.",
+    "Limited display and path regression, not complete product or engineering-accuracy validation."
+  ]
+}

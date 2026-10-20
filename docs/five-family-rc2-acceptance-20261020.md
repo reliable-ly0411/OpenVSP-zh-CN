@@ -4,9 +4,11 @@
 
 ## 当前状态
 
-五族对应的 25 个原生构建均成功。已重新核验每族原始汇总工件内五个 ZIP 与原始 `SHA256SUMS.txt`，共 25 个包全部匹配。此检查没有重编译或改写包。
+五族对应的 25 个原生构建均成功。已重新核验每族原始汇总工件内五个 ZIP 与原始 `SHA256SUMS.txt`，共 25 个包全部匹配。此检查没有重编译或改写包。另逐文件核对实际启动目录与原始 Linux ZIP 的字节，五族共 2234 个文件全部匹配，见 [解包字节核验](evidence/rc2-20261020/extracted-byte-identity.json)。
 
-Linux AMD64 交互式桌面验收尚在进行；本报告当前不构成 GUI 通过或发布结论。CI 的 `captured_not_reviewed` 图片不能替代实际操作与目视判读。
+五族原始 Linux AMD64 ZIP 均已完成下述有限交互式桌面验收。3.55.0 使用 05:47:44 UTC 已保存的真实操作证据，恢复后重新核验全部原始字节并独立目视审阅；其余四族在本轮重新操作。共保留 51 张应用窗口截图及实际保存的合成模型文件。CI 的 `captured_not_reviewed` 图片没有被当作桌面通过证明。
+
+截至本报告核验时，rc.2 尚未公开发布；桌面验收通过不等于发布成功，后续仅晋级绑定下列哈希的原包。
 
 ## 精确来源
 
@@ -28,10 +30,29 @@ Linux AMD64 交互式桌面验收尚在进行；本报告当前不构成 GUI 通
 
 完整机器可读摘要见 [验收 JSON](five-family-rc2-acceptance-20261020.json)。
 
+## 交互式证据
+
+| 版本族 | 真实操作完成时间（UTC） | PNG 数量 | 证据 ZIP SHA-256 |
+|---|---|---|---|
+| [3.55.0](evidence/rc2-20261020/3.55.0/recovered-desktop-acceptance.zip) | 2026-10-20T05:47:44Z | 9 | `6f6dcf4a06115c44cd0ab3e345ff73cc4c309e257fafe9d81cc3275127137cb7` |
+| [3.54.0](evidence/rc2-20261020/3.54.0/desktop-acceptance.zip) | 2026-10-20T05:58:30Z | 11 | `9e6841b9b6f98cc065e0311670864b93313ee5d21b5be60208d0d57b70334af6` |
+| [3.53.0](evidence/rc2-20261020/3.53.0/desktop-acceptance.zip) | 2026-10-20T06:44:35Z | 10 | `e4cbfce5ff33279fb233530501af594608ca15d89b4444ba0a23ab59fac47527` |
+| [3.51.3](evidence/rc2-20261020/3.51.3/desktop-acceptance.zip) | 2026-10-20T06:47:40Z | 11 | `2100cd1a7e3db7b7d1c7120c96e61397639016830397291d171a7325337e5a02` |
+| [3.51.2](evidence/rc2-20261020/3.51.2/desktop-acceptance.zip) | 2026-10-20T06:50:40Z | 10 | `0df310d211e1611a050c6c928af0e6c7b26eed17b787fd96fe600c8dba382f7a` |
+
+另对全部持久化 XML 参数按 ID 比较：五族分别为 1945、1944、1942、1931、1931 个参数，ID 无增删；每族仅 GUI 视图适配造成的六个视图/截图尺寸参数变化，其他参数值不变，详见 [参数往返结果](evidence/rc2-20261020/parameter-roundtrip.json)。这不声称模型文件逐字节一致。
+
+各 ZIP 包含实际应用窗口 PNG 和 GUI 保存的模型 XML，不只是哈希清单。模型仅为固定脚本生成的机翼及机身测试件，用户自定义名称 `Wing & Body_100% 中文` 与 `Fuselage` 保持原样。截图只取相关 OpenVSP 窗口，不含整屏桌面或其他应用。
+
+3.55.0 原记录及恢复说明见 [证据说明](evidence/rc2-20261020/3.55.0/README.md)；其原始时间不冒充本轮新操作时间。其他四族的 `gui-review.json` 分别列出截图哈希、实际保存文件名、模型 ID、审阅范围和未验平台。
+
+发布工具离线回归：`test_native_release.py` 15 项、`test_native_promote.py` 11 项、`test_upstream_release_notes.py` 6 项全部通过。它们验证发布守卫，不替代原生构建或 GUI 证据。
+
 ## 范围与限制
 
 - 原始五平台证据涵盖 CLI、模型边界、中文 STL、CompGeom、VSPAERO API/CLI、全新 Python 环境与依赖及包结构检查。这里记录原始构建结果，不把 Linux 本地检查扩展为其他系统的桌面结论。
-- 本次在 Linux x86_64 云桌面逐族检查主界面、机翼页、名称及含空格、百分号、中文路径保存重开；完成后追加真实结果及截图哈希。
+- 本次使用 Debian 13 Linux x86_64 云桌面运行 Ubuntu 24.04 构建的原始 ZIP，逐族检查主界面、几何体树、机翼常规与平面形页、本地化关于窗口，以及含空格、百分号、中文文件名的实际 GUI 另存为和打开。两个模型的持久化 ID 和名称在保存重开后均一致。该环境不是 Ubuntu 桌面验收。
+- 3.51.3 / 3.51.2 使用随包 `vsp-zh-CN` 启动器；其余三族使用 `vsp`。检查范围不覆盖全部专业页面或工程数值准确性。
 - Windows、macOS 和 Linux ARM64 GUI 未完成同范围人工验收。macOS 仅 ad-hoc 签名，未公证。
 - 全部八个整机示例保留，三个社区模型 CC BY-SA 版本待核实，见 [issue 16](https://github.com/reliable-ly0411/OpenVSP-zh-CN/issues/16)。
 - 发布仅可使用上述原包；新标签不得移动历史标签，旧附件字节和稳定 Latest 不变。
