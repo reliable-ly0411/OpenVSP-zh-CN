@@ -516,9 +516,15 @@ void GroupLayout::AddSlider( SliderInput& slider_input, const char* label, doubl
 //==== Add Label ====//
 void GroupLayout::AddLabel( const char* label, int width, int bgcolor )
 {
+    AddLabelRaw( VSPTranslate( label ).c_str(), width, bgcolor );
+}
+
+// User-owned table labels must not be translated as fixed captions.
+void GroupLayout::AddLabelRaw( const char* label, int width, int bgcolor )
+{
 
     Fl_Button* button = new Fl_Button( m_X, m_Y, width, m_StdHeight );
-    button->copy_label( VSPTranslate( label ).c_str() );
+    button->copy_label( label );
     button->box( FL_THIN_UP_BOX );
     button->labelfont( FL_HELVETICA_BOLD );
     button->labelsize( 12 );
@@ -608,6 +614,12 @@ void GroupLayout::AddButton( CheckButtonBit& cbutton, const char* label, int val
 //==== Create & Init Gui TriggerButton  ====//
 void GroupLayout::AddButton( TriggerButton& tbutton, const char* label, int used_w )
 {
+    AddButtonRaw( tbutton, VSPTranslate( label ).c_str(), used_w );
+}
+
+// User/model text is already formatted; do not interpret it as a UI caption.
+void GroupLayout::AddButtonRaw( TriggerButton& tbutton, const char* label, int used_w )
+{
     assert( m_Group && m_Screen );
 
     //==== Add Check Button ====//
@@ -617,7 +629,7 @@ void GroupLayout::AddButton( TriggerButton& tbutton, const char* label, int used
     flbutton->labelsize( 12 );
     flbutton->labelcolor( FL_DARK_BLUE );
     flbutton->align( FL_ALIGN_NOWRAP );
-    flbutton->copy_label( VSPTranslate( label ).c_str() );
+    flbutton->copy_label( label );
     m_Group->add( flbutton );
     DebugLabelSize( flbutton );
     AddX( bw );
@@ -678,6 +690,12 @@ void GroupLayout::AddButton( RadioButton& rbutton, const char* label, int val )
 //==== Create & Init Box Divider  ====//
 Fl_Box* GroupLayout::AddDividerBox( const string& text, int used_w )
 {
+    return AddDividerBoxRaw( VSPTranslate( text ), used_w );
+}
+
+// Preserve user-defined group names while sharing the standard divider layout.
+Fl_Box* GroupLayout::AddDividerBoxRaw( const string& text, int used_w )
+{
     assert( m_Group && m_Screen );
 
     //==== Add Divider Box ====//
@@ -689,7 +707,7 @@ Fl_Box* GroupLayout::AddDividerBox( const string& text, int used_w )
     flbox->labelfont( FL_HELVETICA_BOLD );
     flbox->labelcolor( FL_BACKGROUND2_COLOR );
     flbox->align( FL_ALIGN_NOWRAP );
-    flbox->copy_label( VSPTranslate( text ).c_str() );
+    flbox->copy_label( text.c_str() );
     m_Group->add( flbox );
     DebugLabelSize( flbox );
     AddX( dw );
