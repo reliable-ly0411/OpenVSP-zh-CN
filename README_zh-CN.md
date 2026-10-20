@@ -17,13 +17,15 @@
 25 个公开 ZIP 与 5 份清单已在发布后完整下载并逐个校验。Linux x86_64 有限 GUI 验收
 使用 Debian 13 云桌面运行 Ubuntu 24.04 构建包；Windows、macOS、ARM64 GUI 仍未作同范围验收。
 
+本分支正在准备 rc.3，已合入三处动态名称显示修复，尚无对应新发布包；rc.2 保持不变。
+
 | 使用目的 | 下载入口 | 已知范围 |
 |---|---|---|
 | 需要保留既有稳定发布线 | [Latest：3.53.0 历史稳定版](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/latest) | Latest 仍指向 `3.53.0-Codex-AI-zh-CN`，未包含新 rc 的全部修复。其历史清单、资源布局和 Python 依赖限制仍适用，不能据 Latest 标记推导新门禁已通过。 |
 | 需要新修复并接受预发布性质 | [3.55.0-zh-CN.rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.2) | 五个平台均完成原生包检查；Linux AMD64 主界面、机翼页和名称/路径有有限 GUI 抽查。仍为预发布，其他平台 GUI 未作同范围验收。 |
 | 需要旧软件版本的新本地化修复 | [3.54.0 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.2)、[3.53.0 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.2)、[3.51.3 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.2)、[3.51.2 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.2) | 各族分别构建、核验和发布；不要在不同标签之间混用 ZIP 与校验清单。 |
 
-新用户若需要已发布修复，可从 3.55.0 rc.2 开始评估，并先用模型副本验证自己的工作流。
+选择当前公开预发布请查看上面的 rc.2 验收报告与本族 Release，并先用模型副本验证自己的工作流。
 需要稳定发布策略的用户可保留 Latest，但应先阅读其已知限制。
 [五版本族验收报告](docs/five-family-rc2-acceptance-20261020.md)列出精确源码、25 个原生包、
 清单哈希和 GUI 边界；[逐页汉化状态](docs/localization-status.md)列出尚未目视验收的页面。
@@ -107,7 +109,7 @@ ARM64 使用上表对应 ZIP。3.51.2/3.51.3 的 Linux 新 rc 包应使用随包
 
 本分支源码标识（不等于当前下载推荐）：
 
-- 当前汉化版本：`3.55.0-zh-CN.rc.2`（已预发布，原包源码为 `85a1a1a2029d0ab35e1a5f685a117061fe89aa21`；main 另含后续验证文档）
+- 当前汉化版本：`3.55.0-zh-CN.rc.3`（新预发布候选；最终原包以对应 Release 及验收记录为准）
 
 完整依赖和通用构建说明以根目录 [`README.md`](README.md) 中保留的官方英文文档为准。
 本汉化版使用 CMake 两阶段构建，并关闭不随 ZIP 分发的 Python API 文档生成；Python API
@@ -196,6 +198,30 @@ PR 合并不会自动改写旧 Release 页面。稳定版 Latest 不变。CI 原
 ## 2026-10-20 rc.2 验收与发布
 
 - 追加[五族 rc.2 原包验收记录](docs/five-family-rc2-acceptance-20261020.md)：25 个 ZIP 与原始清单重新校验一致；五族原始 Linux AMD64 包均完成主界面、机翼、名称和特殊字符文件名的 GUI 保存重开有限验收，保留 51 张实际窗口截图及合成模型。3.55.0 原证据恢复与其余四族新操作分别标记；Windows、macOS、ARM64 GUI 未作同范围验收。五族均已公开预发布，30 个公开文件的独立完整下载哈希全部一致；历史标签、附件和 Latest 未变。
+
+## 未发布
+
+暂无额外产品改动。
+
+- 发布正文生成器增加 rc.3 的三处动态名称修复说明；保留 rc.1/rc.2 旧正文生成行为和完整上游原文。
+
+## 3.55.0-zh-CN.rc.3
+
+2026-10-20，新预发布候选，继承本族 rc.2；不移动旧标签或替换历史附件。
+以下源码与独立候选验证不代替最终五平台原包验收，实际发布状态以对应 Release 为准。
+
+- 修复寄生阻力组件表将用户几何体名称误当界面文字翻译的问题，保留原有展开标记、
+  上游名称处理及模型数据；固定列标题仍正常汉化。
+- 修复寄生阻力附加阻力条目名称在汇总表被翻译的问题，名称与原文编辑器保持一致。
+- 修复用户参数 Adjust 页将自定义分组名（如 `Wing`）翻译为中文的问题；预定义分组和
+  其他固定分隔标题继续汉化，不修改参数名、描述或持久化值。
+- 新增实际 `GroupLayout` 按钮/分隔框方法的轻量 C++ 回归及调用点源码契约，覆盖中文、
+  英文词典碰撞、空白、特殊字符和静态标签。测试使用记录标签的控件替身，不代替原生 GUI。
+- 本次源码检查与轻量回归通过；3.55.0 Linux AMD64 的独立 `vsp` 原生候选已完成三处名称
+  显示、固定中文标题和合成模型保存的实际 GUI 抽查。六张截图、模型读回和二进制来源见
+  [本族回归记录](docs/opaque-layout-label-regression-20261020.md)，同时保留原始包复现证据。
+  此候选不是发布包，未构建 VSPAERO、Python/API 包装层及帮助资源；五平台验收尚未完成。
+  已发布 rc.2 包未改动，不将有限的本地候选验证称为新包验收。
 
 ## 3.55.0-zh-CN.rc.2
 

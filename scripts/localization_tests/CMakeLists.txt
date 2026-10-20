@@ -75,3 +75,29 @@ endif()
 add_test(NAME localization_engineering_terminology COMMAND localization_engineering_terms)
 add_test(NAME localization_engineering_source_context
   COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_engineering_term_context.py)
+
+# Execute the real GroupLayout label paths with minimal FLTK/device doubles.
+# This is not native GUI acceptance; the source contracts bind the three callers.
+set(OPAQUE_LAYOUT_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/opaque_layout_generated")
+add_custom_command(
+  OUTPUT "${OPAQUE_LAYOUT_GENERATED}/layout_label_declarations.inc"
+         "${OPAQUE_LAYOUT_GENERATED}/layout_label_definitions.inc"
+  COMMAND ${Python3_EXECUTABLE} -X utf8 "${CMAKE_CURRENT_SOURCE_DIR}/../test_opaque_layout_labels.py"
+          --generate "${OPAQUE_LAYOUT_GENERATED}"
+  DEPENDS ../test_opaque_layout_labels.py ../check_translation_catalog.py
+          ../../src/gui_and_draw/GroupLayout.cpp ../../src/gui_and_draw/GroupLayout.h
+          ../../src/gui_and_draw/ParasiteDragScreen.cpp ../../src/gui_and_draw/UserParmScreen.cpp
+          ../../src/cmake/VSP_Version.cmake
+  VERBATIM)
+add_executable(localization_opaque_layout_labels opaque_layout_labels.cpp
+  ../../src/gui_and_draw/VSPChinese.cpp
+  "${OPAQUE_LAYOUT_GENERATED}/layout_label_declarations.inc"
+  "${OPAQUE_LAYOUT_GENERATED}/layout_label_definitions.inc")
+target_include_directories(localization_opaque_layout_labels PRIVATE ../../src/gui_and_draw "${OPAQUE_LAYOUT_GENERATED}")
+target_compile_features(localization_opaque_layout_labels PRIVATE cxx_std_11)
+if(MSVC)
+  target_compile_options(localization_opaque_layout_labels PRIVATE /utf-8)
+endif()
+add_test(NAME localization_opaque_layout_labels COMMAND localization_opaque_layout_labels)
+add_test(NAME localization_opaque_layout_source_contract
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_opaque_layout_labels.py)
