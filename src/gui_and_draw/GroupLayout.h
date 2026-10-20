@@ -136,6 +136,8 @@ public:
     // to something drawn in the same colour in the 3D view.  The label switches between light
     // and dark to stay legible against whatever is chosen.
     Fl_Box* AddDividerBox( const string& text, int used_w = 0, Fl_Color color = ( Fl_Color )12 );
+    // Opaque user/model display text; no localization.
+    Fl_Box* AddDividerBoxRaw( const string& text, int used_w = 0, Fl_Color color = ( Fl_Color )12 );
     void AddResizeBox( );
 
     Vsp_Canvas* AddCanvas( int w, int h, double xmin, double xmax, double ymin, double ymax, const char *label, const char *xlabel, const char *ylabel );
@@ -151,10 +153,14 @@ public:
                      double range, const char* format );
     void AddSlider( SliderInput & slider_input, const char* label, double range, const char* format, int used_w = 0, bool log_slider = false );
     void AddLabel( const char* label, int width, int bgcolor = FL_BACKGROUND_COLOR );
+    // Opaque user/model display text; no localization.
+    void AddLabelRaw( const char* label, int width, int bgcolor = FL_BACKGROUND_COLOR );
     void AddButton(  CheckButton& check_button, const char* label, int used_w = 0 );
     void AddButton(  ToggleButton& toggle_button, const char* label, int used_w = 0 );
     void AddButton(  CheckButtonBit& check_bit_button, const char* label, int val );
     void AddButton(  TriggerButton& trigger_button, const char* label, int used_w  = 0 );
+    // Opaque user/model display text; no localization.
+    void AddButtonRaw(  TriggerButton& trigger_button, const char* label, int used_w  = 0 );
     void AddButton(  ParmButton& parm_button, const char* label );
     void AddButton( RadioButton& radio_button, const char* label, int val = 0);
     void AddInput(  StringInput& string_input, const char* label, int used_w = 0, double nline = 1 );
