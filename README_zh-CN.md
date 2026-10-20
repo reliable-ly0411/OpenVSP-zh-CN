@@ -154,7 +154,7 @@ cmake --build build --target package --config Release --parallel 2
    SHA-256 及真实审阅说明。它下载并校验原 run 的原始产物，不重新编译；创建新草稿、
    逐项下载复核后才公开预发布。其他平台未做的 GUI 验收会明确说明，不推断为已通过。
 
-新 Release 资产仅保留五个官方风格 ZIP 和完整 `SHA256SUMS.txt`，正文简述成果与边界；
+新 Release 资产仅保留五个官方风格 ZIP 和完整 `SHA256SUMS.txt`，正文保留对应上游说明全文并补充本地成果与边界；
 技术报告、截图及审阅说明放在 CI 或 [`docs/native-prerelease-verification.md`](docs/native-prerelease-verification.md)。
 下载到同一目录后可用 `sha256sum -c SHA256SUMS.txt` 校验全部 ZIP，Windows 使用
 `Get-FileHash 文件名.zip -Algorithm SHA256` 比对对应清单条目。
@@ -164,6 +164,8 @@ cmake --build build --target package --config Release --parallel 2
 不变。CI 原始产物保留 14 天，GUI 审阅记录保留 30 天；过期后需要新构建、新验收与新标签。
 
 ## 3.55.0-zh-CN.rc.2
+
+- 新增 [发布与分支规范](docs/RELEASING.zh-CN.md) 及 AGENTS 入口，明确五族开发线、SemVer、官方风格包名、完整上游说明和原包验收顺序。
 
 2026-10-20 源码候选，尚未公开发布。本节描述相对本族已发布 rc.1 的变化。
 
