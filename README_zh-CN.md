@@ -151,6 +151,8 @@ cmake --build build --target package --config Release --parallel 2
 
 ## 3.51.3-zh-CN.rc.2
 
+- 新增 [发布与分支规范](docs/RELEASING.zh-CN.md) 及 AGENTS 入口，明确五族开发线、SemVer、官方风格包名、完整上游说明和原包验收顺序。
+
 2026-10-20 源码候选，尚未公开发布。本节描述相对本族已发布 rc.1 的变化。
 
 - 新构建将 `THIRD_PARTY_NOTICES.md` 和 `docs/` 一并随包安装，安装/原生验包均按对应
