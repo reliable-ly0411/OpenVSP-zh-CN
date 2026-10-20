@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "release_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.2",
+  "release_id": 418147383,
+  "tag": "3.53.0-zh-CN.rc.2",
+  "source_sha": "219f6c0a7857d110e69116a21f314af3fc26ff46",
+  "prerelease": true,
+  "draft": false,
+  "verification": "independent anonymous public download of every complete asset after publication",
+  "all_assets_match_original": true,
+  "assets": [
+    {
+      "name": "OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip",
+      "asset_id": 658690533,
+      "download_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/download/3.53.0-zh-CN.rc.2/OpenVSP-3.53.0-Ubuntu-24.04_amd64-zh-CN.zip",
+      "bytes_downloaded": 73679592,
+      "sha256": "8414b3751fe10976c1766483e97c6904899553463cd3b73c476e7378a8099e2a",
+      "matches_original": true,
+      "completed_at": "2026-10-20T08:12:22.289713+00:00"
+    },
+    {
+      "name": "OpenVSP-3.53.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip",
+      "asset_id": 658690642,
+      "download_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/download/3.53.0-zh-CN.rc.2/OpenVSP-3.53.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip",
+      "bytes_downloaded": 69137725,
+      "sha256": "9a412823374bcbb23672586e10814363af2374d69a745f07d9665e49770361ca",
+      "matches_original": true,
+      "completed_at": "2026-10-20T08:12:29.232917+00:00"
+    },
+    {
+      "name": "OpenVSP-3.53.0-macos-14-ARM64-Python3.11-zh-CN.zip",
+      "asset_id": 658690779,
+      "download_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/download/3.53.0-zh-CN.rc.2/OpenVSP-3.53.0-macos-14-ARM64-Python3.11-zh-CN.zip",
+      "bytes_downloaded": 62920525,
+      "sha256": "b655413dc5d039ade27c4e5568aa676ab5b50e35432de41cb1745268cb834469",
+      "matches_original": true,
+      "completed_at": "2026-10-20T08:12:22.248781+00:00"
+    },
+    {
+      "name": "OpenVSP-3.53.0-macos-15-intel-X64-Python3.11-zh-CN.zip",
+      "asset_id": 658690949,
+      "download_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/download/3.53.0-zh-CN.rc.2/OpenVSP-3.53.0-macos-15-intel-X64-Python3.11-zh-CN.zip",
+      "bytes_downloaded": 69526922,
+      "sha256": "0a8f346e6576f1a1d40c15e048fc2a94817f9d1f9a4a144d76ae790dec2846d3",
+      "matches_original": true,
+      "completed_at": "2026-10-20T08:12:22.081418+00:00"
+    },
+    {
+      "name": "OpenVSP-3.53.0-win64-Python3.11-zh-CN.zip",
+      "asset_id": 658691097,
+      "download_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/download/3.53.0-zh-CN.rc.2/OpenVSP-3.53.0-win64-Python3.11-zh-CN.zip",
+      "bytes_downloaded": 51133243,
+      "sha256": "9aef1d7ada02d82979b9e26592dcc3e4f5cf36a561c78b4a88afb45126ab0750",
+      "matches_original": true,
+      "completed_at": "2026-10-20T08:12:29.239666+00:00"
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "asset_id": 658691176,
+      "download_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/download/3.53.0-zh-CN.rc.2/SHA256SUMS.txt",
+      "bytes_downloaded": 577,
+      "sha256": "684933ff6a160dfd3a53d20655fec6b9197fcce01eff6fcbfb1d4881646dc2f1",
+      "matches_original": true,
+      "completed_at": "2026-10-20T08:12:27.098618+00:00"
+    }
+  ]
+}
