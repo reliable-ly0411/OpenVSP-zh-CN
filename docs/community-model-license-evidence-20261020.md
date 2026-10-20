@@ -40,7 +40,7 @@
 ## 分发边界与下一步
 
 根目录 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)及
-[逐文件来源](../examples/Complete_Aircraft/SOURCES_AND_LICENSES.md)明确区分 NOSA 软件、
+[逐文件来源](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/87905bc6c0ef61ac3991154e7f80ae86fc32b714/examples/Complete_Aircraft/SOURCES_AND_LICENSES.md)明确区分 NOSA 软件、
 CC0 社区模型和三份许可版本待核实模型，保留作者、原链接和字节哈希。
 
 当前收录范围保持不变：这三份模型继续随安装包提供，全部上游示例及其余五份 CC0
