@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Exercise new document installation and immutable/legacy package verification."""
 from pathlib import Path
+import posixpath
+import re
 import shutil
 import subprocess
 import tempfile
 import unittest
 import zipfile
+from urllib.parse import unquote, urlsplit
 
 from backfill_package import verify
 
@@ -139,6 +142,29 @@ class PackagedDocumentationTests(unittest.TestCase):
         self.assertGreater(verify(self.archive(), self.source), 20)
         with self.assertRaisesRegex(ValueError, 'Package differs from immutable source'):
             verify(self.archive(changed={'docs/status.md': b'uncommitted change\n'}), self.source)
+
+    def test_real_document_links_resolve_in_package_layout(self):
+        documents = [REPO / name for name in ('README.md', 'README_zh-CN.md',
+                     'THIRD_PARTY_NOTICES.md', 'examples/Complete_Aircraft/SOURCES_AND_LICENSES.md')]
+        documents.extend((REPO / 'docs').rglob('*.md'))
+        installed = {'README.md', 'README_zh-CN.md', 'AGENTS.md', 'LICENSE',
+                     'CHANGELOG.md', 'vspIcon.png', 'THIRD_PARTY_NOTICES.md'}
+        installed.update(path.relative_to(REPO).as_posix()
+                         for path in (REPO / 'docs').rglob('*') if path.is_file())
+        installed.update('Official_Examples/' + path.relative_to(REPO / 'examples').as_posix()
+                         for path in (REPO / 'examples').rglob('*') if path.is_file())
+        for source in documents:
+            relative = source.relative_to(REPO).as_posix()
+            if relative.startswith('examples/'):
+                relative = 'Official_Examples/' + relative.removeprefix('examples/')
+            for link in re.findall(r'\]\(([^)]+)\)', source.read_text(encoding='utf-8')):
+                url = urlsplit(link)
+                if url.scheme or url.netloc or not url.path:
+                    continue
+                destination = posixpath.normpath(posixpath.join(posixpath.dirname(relative),
+                                                               unquote(url.path)))
+                with self.subTest(document=relative, target=destination):
+                    self.assertIn(destination, installed)
 
     @unittest.skipUnless(shutil.which('cmake'), 'CMake is required for isolated install test')
     def test_actual_cmake_module_installs_docs_and_all_examples(self):
