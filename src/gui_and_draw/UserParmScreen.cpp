@@ -233,7 +233,7 @@ void UserParmScreen::RebuildAdjustGroup()
         if ( groupName.compare( lastGroupName ) != 0 )
         {
             lastGroupName = groupName;
-            m_AdjustLayout.AddDividerBox( groupName );
+            m_AdjustLayout.AddDividerBoxRaw( groupName );
         }
 
         if ( p->GetType() == vsp::PARM_INT_TYPE ||
