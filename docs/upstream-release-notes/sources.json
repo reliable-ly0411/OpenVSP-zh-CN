@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "github_releases_checked_at": "2026-10-20",
+  "github_releases_url": "https://api.github.com/repos/OpenVSP/OpenVSP/releases",
+  "github_release_count": 0,
+  "versions": {
+    "3.55.0": {
+      "upstream_tag": "OpenVSP_3.55.0",
+      "upstream_sha": "5240ef210f41c5d6aeed0ba7687f6fab0ca0cafb",
+      "changelog_git_blob": "178f348d947cbee593dd804e32adf3d57f7ab239",
+      "changelog_sha256": "e41c70d089159065969d62fd3e05453fb41141cd3e47ab5c2c53ae34500ba266",
+      "section_sha256": "02123ad0651029aebf6f580f5f17341d0a5448b2e443b88d19cbbaa79391418a",
+      "section_bytes": 5264,
+      "source_url": "https://github.com/OpenVSP/OpenVSP/blob/5240ef210f41c5d6aeed0ba7687f6fab0ca0cafb/CHANGELOG.md",
+      "announcement_url": "https://openvsp.org/blogs/announcements/2026/10/12/openvsp-3-55-0-released",
+      "license_url": "https://github.com/OpenVSP/OpenVSP/blob/5240ef210f41c5d6aeed0ba7687f6fab0ca0cafb/LICENSE"
+    },
+    "3.54.0": {
+      "upstream_tag": "OpenVSP_3.54.0",
+      "upstream_sha": "db6c6fe8f4eca27d7517f4ae0b2078abdd3fd927",
+      "changelog_git_blob": "26eb2c2c18a070011de1366c95b6e161b0b48a5a",
+      "changelog_sha256": "a1ad56e743f8ec3c774bcc6c4a8f68c00fd0be4fb2b9f255039af5bd0ece5156",
+      "section_sha256": "47969c1bcda13c855fbcdc39962f72b86a59634b2ba36478b8bf5db3c3293abc",
+      "section_bytes": 5661,
+      "source_url": "https://github.com/OpenVSP/OpenVSP/blob/db6c6fe8f4eca27d7517f4ae0b2078abdd3fd927/CHANGELOG.md",
+      "announcement_url": "https://openvsp.org/blogs/announcements/2026/10/06/openvsp-3-54-0-released",
+      "license_url": "https://github.com/OpenVSP/OpenVSP/blob/db6c6fe8f4eca27d7517f4ae0b2078abdd3fd927/LICENSE"
+    },
+    "3.53.0": {
+      "upstream_tag": "OpenVSP_3.53.0",
+      "upstream_sha": "fbf9afc31d3bf337a75253e403423cb8c8dd86dc",
+      "changelog_git_blob": "77c6beb7939c46bf54ccb71a5a9e2d9515ffb10c",
+      "changelog_sha256": "d95797ab18cc1aad8ae75d2394e7810012847910948c8467da8faea53909dd3e",
+      "section_sha256": "20d583e4267711aad5cbb641a58bf71cde41cf39c588be6a1516e5c76590a38f",
+      "section_bytes": 5944,
+      "source_url": "https://github.com/OpenVSP/OpenVSP/blob/fbf9afc31d3bf337a75253e403423cb8c8dd86dc/CHANGELOG.md",
+      "announcement_url": "https://openvsp.org/blogs/announcements/2026/09/25/openvsp-3-53-0-released",
+      "license_url": "https://github.com/OpenVSP/OpenVSP/blob/fbf9afc31d3bf337a75253e403423cb8c8dd86dc/LICENSE"
+    },
+    "3.51.3": {
+      "upstream_tag": "OpenVSP_3.51.3",
+      "upstream_sha": "51bdec01d9a50fa4bdbc960b0def21dcd6330f72",
+      "changelog_git_blob": "dc291abd1afd6038b2bc315f6bf21f6b27000421",
+      "changelog_sha256": "224972b615cbbc8743cb80c776214f9a4dd2042e1593e464fa203d3070104984",
+      "section_sha256": "92db7c5de09011fa09842bbf68ca9f7ec833b4fa41ff5069e79ff01215fd0d7d",
+      "section_bytes": 3692,
+      "source_url": "https://github.com/OpenVSP/OpenVSP/blob/51bdec01d9a50fa4bdbc960b0def21dcd6330f72/CHANGELOG.md",
+      "announcement_url": "https://openvsp.org/blogs/announcements/2026/08/17/openvsp-3-51-3-released",
+      "license_url": "https://github.com/OpenVSP/OpenVSP/blob/51bdec01d9a50fa4bdbc960b0def21dcd6330f72/LICENSE"
+    },
+    "3.51.2": {
+      "upstream_tag": "OpenVSP_3.51.2",
+      "upstream_sha": "052e7a98afd4c8f6855c2ec2b8849a2995e9eab1",
+      "changelog_git_blob": "c04e488ced3ae20dde2e05d858dfab6ef8a1eb6d",
+      "changelog_sha256": "48cd9ff982b6e4bae861aeb7227ef34db6daf0d48d0cdb1602571afe4a3f310a",
+      "section_sha256": "92e2091970ff12f44b8e127689c87eb812690c03b6f9a691056f1221d9eebad6",
+      "section_bytes": 2502,
+      "source_url": "https://github.com/OpenVSP/OpenVSP/blob/052e7a98afd4c8f6855c2ec2b8849a2995e9eab1/CHANGELOG.md",
+      "announcement_url": "https://openvsp.org/blogs/announcements/2026/07/26/openvsp-3-51-2-released",
+      "license_url": "https://github.com/OpenVSP/OpenVSP/blob/052e7a98afd4c8f6855c2ec2b8849a2995e9eab1/LICENSE"
+    }
+  }
+}

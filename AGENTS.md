@@ -64,7 +64,8 @@
 - 公开资产仅五个官方风格 `OpenVSP-<版本>-<平台>-zh-CN.zip` 和精确覆盖它们的
   `SHA256SUMS.txt`；最多另附一份简介。技术验证 JSON、日志和截图仅存 CI 或 `docs/`。
 - 发布先创建新标签和未公开草稿，下载全部资产，校验原构建哈希及实际文件名清单后才公开。
-  草稿恢复只允许补缺项及验证相同字节，不删除/覆盖资产；已公开 Release 始终拒绝修改。
+  草稿恢复只允许补缺项及验证相同字节，不删除/覆盖资产；本发布流程始终拒绝修改已公开 Release。
+  已明确授权的历史正文纠错可独立进行，但必须读回确认标签、附件字节、预发布及 Latest 状态未变。
   旧草稿维护入口只读。保留稳定版 Latest。仓库级保护设置需另行授权，不由本流程改动。
 - 每次代码、构建或发布修改都更新 `README_zh-CN.md`“未发布”；发布前整理为与目标标签
   一致的章节。新规范、界面与产物不含工具宣传；既有版权、许可、历史变更记录保持原样。
@@ -83,3 +84,7 @@
 
 不要宣称汉化“绝对完整”。发现漏译时记录具体页面、显示路径和验证结果，让后续维护从
 可证实状态继续。
+
+## Release and repository maintenance
+
+Before changing versions, branches, packaging, release notes, or public issue summaries, read `docs/RELEASING.zh-CN.md` and follow its repository-specific mapping. Preserve all other instructions in this file and any narrower directory instructions. Published tags and asset bytes are immutable: fix a release through a new version, never by moving a published tag or overwriting assets. Keep upstream mirrors free of fork-only policy and localization changes. Release preparation does not itself grant permission to publish, merge, delete, or change repository settings.

@@ -18,6 +18,7 @@ import zipfile
 from backfill_verify import digest
 from native_functional import validate_functional_summary
 from native_plan import PLATFORMS, REQUIRED_CHECKS, asset_name, validate_inputs
+from upstream_release_notes import upstream_release_notes
 
 
 def validate_report(report, package, source_sha, tag, run_id, workflow_sha):
@@ -105,14 +106,65 @@ def find_release(api, tag):
 
 def release_body(tag, source_sha, repository, linux_gui_reviewed=False):
     version = validate_inputs(source_sha, tag)
-    gui = ('Linux AMD64 主界面、机翼页及模型名称/路径回归已人工抽查；其他平台 GUI 未作人工验收声明。'
-           if linux_gui_reviewed else 'GUI 截图待目视复核，不代表全面 GUI 验收。')
-    return (f'OpenVSP {version} 非官方简体中文预发布。修复界面本地化、模型名称保存、运行资源布局与 Python 依赖兼容问题。\n\n'
-            '提供 Ubuntu 24.04 AMD64/ARM64、Windows x64、macOS 14 ARM64 与 macOS 15 Intel 五个平台包；'
-            '请按 SHA256SUMS.txt 校验后解压。Linux 需中文字体；macOS 使用本地 ad-hoc 签名，尚未公证。'
-            f'{gui}\n\n'
-            f'[使用说明与验证范围](https://github.com/{repository}/blob/{source_sha}/README_zh-CN.md)。'
-            'OpenVSP 原软件版权、作者归属及 NOSA 1.3 许可不变。')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
+        raise ValueError('Invalid repository')
+    upstream, original = upstream_release_notes(version)
+    revision = int(tag.rsplit('.', 1)[1])
+    source_url = f'https://github.com/{repository}/blob/{source_sha}'
+    changes = [
+        '界面显示本地化、模型名称持久化边界、中文帮助和运行资源布局修复。',
+        '固定 Python/NumPy ABI；Windows 中文 STL 导出和 VSPAERO 路径扫描修复。',
+    ]
+    if revision >= 2:
+        changes += [
+            'rc.2 新增：文件选择器标题补译并纳入静态入口扫描；参数窗口和属性对象标题保留用户原名、描述及路径。',
+            'rc.2 新增：工程术语按实际上下文审校，保留技术标识和不确定的准确英文；补齐随包来源说明、文档及链接验证。',
+        ]
+        if version in ('3.54.0', '3.55.0'):
+            changes.append('rc.2 新增：接通分割与缝合导出失败提示的显示翻译，错误详情和文件路径保持原样。')
+    gui = ('五个平台均经原生构建和包内 CLI、模型读写、分析、Python 导入、依赖与校验检查。'
+           'Linux AMD64 原始 ZIP 的主界面、机翼页及模型名称/路径回归已人工抽查；'
+           'Windows、macOS 和 Linux ARM64 GUI 未作同范围人工验收。'
+           if linux_gui_reviewed else
+           '原生构建和 GUI 截图待目视及原包复核；此准备文本本身不代表发布验收通过。')
+    family_note = ('3.51.2 源码保留早期独立导入历史；对应官方版本的 CHANGELOG 字节一致，'
+                   '尚未接续该官方标签的 Git 祖先。\n\n' if version == '3.51.2' else '')
+    mac_difference = ('官方此版本 ARM64 下载名使用 macOS 15；本仓按实际 macOS 14 原生目标命名，'
+                      '不把二者视为相同二进制。' if version in ('3.54.0', '3.55.0') else
+                      'macOS 下载名沿用对应官方版本的平台拼写。')
+    rows = '\n'.join(f'| {p["platform"]} | `{asset_name(version, p["platform"])}` |' for p in PLATFORMS)
+    return (
+        f'OpenVSP {version} 非官方简体中文预发布，汉化修订 `{tag}`。'
+        'OpenVSP 原软件版权、作者归属及 NOSA 1.3 许可不变。\n\n'
+        f'源码：[`{source_sha}`]({source_url})；官方版本参考：'
+        f'[`{upstream["upstream_tag"]}`](https://github.com/OpenVSP/OpenVSP/commit/{upstream["upstream_sha"]})。\n\n'
+        + family_note + '## 本地变化\n\n' + ''.join('- ' + change + '\n' for change in changes)
+        + '\n## 下载与校验\n\n| 实际目标 | 文件名 |\n|---|---|\n' + rows + '\n\n'
+        '附件仅五个 ZIP 和 `SHA256SUMS.txt`。同一软件版本的不同 rc 可能使用相同 ZIP 基名，'
+        '请按标签分目录保存，只与同一 Release 的清单配对。下载全部五包可运行 '
+        '`sha256sum -c SHA256SUMS.txt`；只下载一包时计算该文件 SHA-256 并与清单同名行逐字核对。'
+        'macOS 可用 `shasum -a 256`，Windows 可用 `Get-FileHash -Algorithm SHA256`。\n\n'
+        '对照[官方旧版下载页](https://openvsp.org/download_old.php)：Windows 与 Intel Mac 沿用上游文件名结构并加 `-zh-CN`；'
+        '官方 Ubuntu AMD64 为 `.deb`，本仓提供便携 ZIP；Ubuntu ARM64 是本仓新增目标。'
+        + mac_difference + '\n\n'
+        '## 安装、兼容性与限制\n\n'
+        '- 校验后完整解压，保留运行资源目录。Linux 需要中文字体；3.51.x 使用随包 `vsp-zh-CN` 启动器。\n'
+        '- Linux Python 3.12，Windows/macOS Python 3.11；NumPy 1.26.4，依赖约束 `<2`。使用 Python API 前按随包 requirements 配置独立环境。\n'
+        '- macOS 使用本地 ad-hoc 签名，尚未公证。平台名描述实际构建目标，不额外宣称未测试的旧系统兼容性。\n'
+        '- 八个整机示例全部保留。其中三个社区模型的来源标注为 CC BY-SA，具体许可版本尚未查明；再分发或商用前须另行核对，不能据本说明推断已补齐授权。\n\n'
+        '## 验证范围\n\n' + gui + '\n\n'
+        f'[使用说明与技术验证]({source_url}/README_zh-CN.md)。'
+        + (f'[第三方内容与社区模型来源]({source_url}/THIRD_PARTY_NOTICES.md)。' if revision >= 2 else
+           f'[社区模型来源记录]({source_url}/examples/Complete_Aircraft/SOURCES_AND_LICENSES.md)。')
+        + '\n\n## 上游版本说明（全文）\n\n'
+        '官方仓库在本次核查时没有 GitHub Release 条目；以下完整保留对应官方标签 `CHANGELOG.md` 的版本章节。'
+        '其中作者口吻、工具及 AI 开发叙述均为上游作者原文，不是本地化维护者的成果声明。'
+        '原文中指向不存在 GitHub Release 的历史链接也原样保留，请使用下列官网公告和固定源码链接核对。\n\n'
+        f'[官网公告]({upstream["announcement_url"]}) · '
+        f'[完整原始 CHANGELOG 与精确提交]({upstream["source_url"]}) · '
+        f'[上游 NOSA 1.3 许可]({upstream["license_url"]})\n\n'
+        '<details>\n<summary>展开上游作者原文</summary>\n\n' + original + '\n</details>\n'
+    )
 
 
 class GitHub:

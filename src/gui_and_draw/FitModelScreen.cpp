@@ -392,8 +392,7 @@ bool FitModelScreen::Update()
 
     m_TargetPtBrowser->column_char( ':' );         // use : as the column character
 
-    snprintf( str, sizeof( str ),  "@b@.几何体:@b@c@.曲面:@b@c@.距离:@b@c@.X:@b@c@.Y:@b@c@.Z:@b@c@.U:@b@c@.类型:@b@c@.W:@b@.类型" );
-    m_TargetPtBrowser->add( str );
+    m_TargetPtBrowser->add( VSPTranslateBrowserHeader( "@b@.几何体:@b@c@.曲面:@b@c@.距离:@b@c@.X:@b@c@.Y:@b@c@.Z:@b@c@.U:@b@c@.类型:@b@c@.W:@b@.类型" ).c_str() );
 
     int num_fix = FitModelMgr.GetNumTargetPt();
     for ( i = 0 ; i < num_fix ; i++ )
@@ -469,8 +468,7 @@ bool FitModelScreen::Update()
 
     m_VarBrowser->column_char( ':' );         // use : as the column character
 
-    snprintf( str, sizeof( str ),  "@b@.COMP_A:@b@.GROUP:@b@.PARM" );
-    m_VarBrowser->add( str );
+    m_VarBrowser->add( VSPTranslateBrowserHeader( "@b@.COMP_A:@b@.GROUP:@b@.PARM" ).c_str() );
 
     int num_vars = FitModelMgr.GetNumVars();
     for ( i = 0 ; i < num_vars ; i++ )

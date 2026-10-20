@@ -31,6 +31,11 @@ class LocalizedReleaseIdentityTests(unittest.TestCase):
             'src/gui_and_draw/VSPChinese.h': '',
             'src/vsp/vsp.rc.in': '',
             'src/vsp/CMakeLists.txt': 'vsp.rc.in',
+            'examples/Complete_Aircraft/identity_fixture.vsp3':
+                '<Vsp_Geometry><Vehicle><Geom><ParmContainer><Name>Wing</Name>'
+                '</ParmContainer></Geom></Vehicle></Vsp_Geometry>',
+            'src/cmake/VSP_Version.cmake':
+                'SET( VSPVER_MAJOR 3 )\nSET( VSPVER_MINOR 55 )\nSET( VSPVER_PATCH 0 )\n',
             'vspIcon.ico': '',
             'vspIcon.png': '',
         }
