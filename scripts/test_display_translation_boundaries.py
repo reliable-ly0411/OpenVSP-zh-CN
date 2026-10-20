@@ -28,6 +28,12 @@ def parm_title_is_safe(source):
         r'parm_ptr->GetName\(\s*\)\s*\)\s*\)', strip_comments(source)))
 
 
+def file_chooser_title_is_safe(source):
+    return bool(re.search(
+        r'\bSetTitleRaw\s*\(\s*VSPTranslateLabelAndValue\s*\(\s*title\s*,\s*filter_str\s*\)\s*\)',
+        strip_comments(source)))
+
+
 class DisplayTranslationBoundaryTests(unittest.TestCase):
     def test_export_alert_translates_template_before_formatting(self):
         source = (GUI / 'ExportScreen.cpp').read_text(encoding='utf-8')
@@ -59,6 +65,32 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
         self.assertFalse(parm_title_is_safe(safe.replace('SetTitleRaw', 'SetTitle')))
         self.assertFalse(parm_title_is_safe('SetTitle("Parm: " + parm_ptr->GetName());'))
         self.assertFalse(parm_title_is_safe('/* ' + safe + ' */'))
+
+    def test_file_chooser_composes_title_and_filter_without_retranslation(self):
+        source = (GUI / 'SelectFileScreen.cpp').read_text(encoding='utf-8')
+        self.assertTrue(file_chooser_title_is_safe(source))
+        self.assertRegex(source, r'snprintf\(\s*filter_str,\s*sizeof\(\s*filter_str\s*\),\s*'
+                                r'"   \(%s\)",\s*filter\.c_str\(\s*\)\s*\)')
+
+    def test_file_chooser_title_guard_rejects_merged_or_double_translation(self):
+        safe = 'SetTitleRaw(VSPTranslateLabelAndValue(title, filter_str));'
+        self.assertTrue(file_chooser_title_is_safe(safe))
+        self.assertFalse(file_chooser_title_is_safe(safe.replace('SetTitleRaw', 'SetTitle')))
+        self.assertFalse(file_chooser_title_is_safe('SetTitle(title + filter_str);'))
+        self.assertFalse(file_chooser_title_is_safe('SetTitleRaw(VSPTranslate(title + filter_str));'))
+        self.assertFalse(file_chooser_title_is_safe('/* ' + safe + ' */'))
+
+    def test_native_chooser_translates_only_title_and_preserves_filesystem_values(self):
+        source = (GUI / 'ScreenMgr.cpp').read_text(encoding='utf-8')
+        if 'string ScreenMgr::NativeFileChooser(' not in source:
+            self.skipTest('This upstream version has no native file chooser')
+        native = source.split('string ScreenMgr::NativeFileChooser(', 1)[1].split(
+            '//==== Create Message', 1)[0]
+        self.assertRegex(native, r'translated_title\s*=\s*VSPTranslate\(\s*title\s*\)')
+        self.assertRegex(native, r'title\(\s*translated_title\.c_str\(\s*\)\s*\)')
+        for method, value in [('filter', 'filter'), ('directory', 'dir'), ('preset_file', 'preset_fname')]:
+            self.assertRegex(native, rf'->{method}\(\s*{value}\.c_str\(\s*\)\s*\)')
+        self.assertEqual(re.findall(r'\bVSPTranslate\w*\(\s*([^)]*)\s*\)', strip_comments(native)), ['title '])
 
 
 if __name__ == '__main__':
