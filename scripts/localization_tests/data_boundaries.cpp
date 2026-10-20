@@ -7,7 +7,7 @@
 int main()
 {
     const std::vector<std::string> values = {
-        "Wing", "Fuselage", "CG", "Pod_3", "主翼", "用户模型_7",
+        "Wing", "Fuselage", "Center", "CG", "Pod_3", "主翼", "用户模型_7",
         "Export", "Cancel", "机翼", "取消", "Wing &amp; Body",
         "Wing / Fuselage: Export_100%", "@b@.Wing|Left:Right", "Wing&Body_1",
         "/home/test/Wing Design/Export/Mass Properties.vsp3",
@@ -23,6 +23,11 @@ int main()
         {
             std::cerr << "Opaque value was altered\n";
             return 1;
+        }
+        if (VSPTranslateLabelAndValue("Parm: ", value) != "参数：" + value)
+        {
+            std::cerr << "Parameter title altered the opaque parameter name\n";
+            return 7;
         }
         const std::string error = "Cannot export Wing 100% (%s, %n): " + value;
         char rendered[4096];

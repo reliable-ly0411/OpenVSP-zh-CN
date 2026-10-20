@@ -16,6 +16,9 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
     static const std::unordered_map<std::string, std::string> table = {
 
+        // Prefixes for display-only composition with opaque user values.
+        { "Parm: ", "参数：" },
+
         // Legacy 3.51 GUI wording; preserve the old version's controls and symbols.
         { "Color Mesh", "网格着色" },
         { "Distance Metric", "距离度量" },
