@@ -59,6 +59,7 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p test_native_release.py -v
           python3 -m unittest discover -s scripts -p test_native_promote.py -v
+          python3 -m unittest discover -s scripts -p test_upstream_release_notes.py -v
       - name: Verify original run, all native jobs, original hashes and GUI evidence; publish without rebuilding
         run: python3 scripts/native_promote.py
       - name: Save GUI review separately from public Release assets

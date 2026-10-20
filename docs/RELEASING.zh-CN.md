@@ -78,6 +78,10 @@
 | macOS Intel x86_64 | `OpenVSP-<版本>-macos-15-intel-X64-Python3.11-zh-CN.zip` | 本仓实际构建目标为 macOS 15，不冒称更低系统兼容 |
 
 Linux Python 为 3.12，Windows/macOS 为 3.11；NumPy 1.26.4、依赖约束 `<2`。
+2026-10-20 对应官方旧版清单确认：Windows 和 Intel Mac 的 Python 3.11 包采用上述结构；
+官方 Ubuntu AMD64 为 `.deb`，本仓改用便携 ZIP。官方 3.55.0/3.54.0 的 ARM64 Mac 包名为
+`macos-15-ARM64-Python3.11`，本仓实际使用 macOS 14 原生目标；其余三族官方 ARM64 包名为
+`macos-14-ARM64-Python3.11`。这些差异必须在 Release 正文写明，不仅添加语言后缀而冒称同一产物。
 同一软件版本的不同 rc 可能采用相同 ZIP 基名，下载 URL 由精确标签区分，必须分目录保存，
 并只配对同一 Release 的 `SHA256SUMS.txt`。发布资产仅五个 ZIP 和这一份完整清单；
 至多再加一个简介文本。源码自动下载入口由 GitHub 提供，不冒充已测试的二进制包。
@@ -89,6 +93,9 @@ Linux Python 为 3.12，Windows/macOS 为 3.11；NumPy 1.26.4、依赖约束 `<2
 发布正文应完整保留精确官方标签的 `CHANGELOG.md` 对应版本章节，附固定提交链接及官网公告来源，
 明确这是上游作者原文。该文档随上游源码按 [NOSA 1.3](../LICENSE) 提供，转载保留归属、许可、警告和链接。
 原文涉及开发工具或 AI 的叙述属于上游历史，不删改、不转写成汉化维护者自己的成果声明。
+已审全文与固定来源元数据保存在 `docs/upstream-release-notes/`；
+`scripts/upstream_release_notes.py` 校验版本、来源提交、许可链接和完整字节哈希，
+`scripts/native_release.py` 生成正文，相关正反例在晋级前执行。
 若源码包含官方标签之后的上游改动，单列精确提交差异；本地修复另列，不混入上游引文。
 
 本仓正文补充：本族本次变化、安装及校验方式、Python ABI、macOS 签名/公证状态、
