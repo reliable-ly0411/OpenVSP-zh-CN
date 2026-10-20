@@ -129,6 +129,7 @@ def main() -> None:
         if match.group("upstream") and match.group("upstream") != metadata["base_commit"][:12]:
             raise SystemExit("自动预发布标签与官方基线提交不一致")
         verify_release_notes(args.expected_tag)
+        require_text("README_zh-CN.md", f"当前汉化版本：`{args.expected_tag}`")
         require_text("src/gui_and_draw/MainVSPScreen.cpp", f"汉化版本：{args.expected_tag}\\n")
 
     if args.print_version:

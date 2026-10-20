@@ -20,12 +20,14 @@ class PackageCheckoutTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         (self.root / 'scripts').mkdir()
         shutil.copyfile(CHECKER, self.root / 'scripts/check_localized_package.py')
-        self.files = {name: b'text\nsecond line\n' for name in ('README.md', 'README_zh-CN.md', 'AGENTS.md', 'LICENSE')}
+        self.files = {name: b'text\nsecond line\n' for name in ('README.md', 'README_zh-CN.md', 'AGENTS.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')}
         self.files.update({
             '.gitattributes': b'* text=auto\n*.vsp3 -text\n',
             'vspIcon.png': b'\x89PNG\x00\r\n binary',
             'examples/model.vsp3': b'<model>\nkeep original bytes\n</model>\n',
             'examples/readme.txt': b'example\n',
+            'docs/status.md': b'# Coverage\nNot a complete GUI acceptance.\n',
+            'docs/evidence/details.json': b'{"complete": false}\n',
             'src/help/html/index.html': b'<html>\nhelp\n</html>\n',
         })
         for name, data in self.files.items():
@@ -51,6 +53,8 @@ class PackageCheckoutTests(unittest.TestCase):
                 z.writestr('OpenVSP/help/' + name, b'resource')
             for name in self.files:
                 if name == '.gitattributes':
+                    continue
+                if name in changed and changed[name] is None:
                     continue
                 data = changed.get(name, self.git('-c', 'core.autocrlf=true', '-c', 'core.eol=crlf', 'cat-file', '--filters', 'HEAD:' + name))
                 target = name.replace('examples/', 'Official_Examples/').replace('src/help/html/', 'help/')
@@ -82,6 +86,23 @@ class PackageCheckoutTests(unittest.TestCase):
         result = self.check({'vspIcon.png': self.files['vspIcon.png'].replace(b'\r\n', b'\n')})
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('vspIcon.png', result.stderr)
+
+    def test_notice_mutation_is_rejected(self):
+        result = self.check({'THIRD_PARTY_NOTICES.md': b'changed notice\r\n'})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('THIRD_PARTY_NOTICES.md', result.stderr)
+
+    def test_nested_document_mutation_is_rejected(self):
+        result = self.check({'docs/evidence/details.json': b'{}\r\n'})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('docs/evidence/details.json', result.stderr)
+
+    def test_missing_document_is_rejected(self):
+        for name in ('THIRD_PARTY_NOTICES.md', 'docs/status.md', 'docs/evidence/details.json'):
+            with self.subTest(name=name):
+                result = self.check({name: None})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(name, result.stderr)
 
 
 if __name__ == '__main__':
