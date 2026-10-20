@@ -64,3 +64,6 @@ endif()
 add_test(NAME localization_material_label_context COMMAND localization_material_context)
 add_test(NAME localization_material_source_contract
   COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_material_label_context.py)
+
+add_test(NAME localization_display_source_contracts
+  COMMAND ${Python3_EXECUTABLE} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/../test_display_translation_boundaries.py)
