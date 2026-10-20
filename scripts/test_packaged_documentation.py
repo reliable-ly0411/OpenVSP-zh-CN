@@ -27,6 +27,14 @@ MODELS = (
 )
 
 
+def installed_root_markdown(cmake):
+    """Recognize explicit root Markdown install rules in older version families."""
+    pattern = re.compile(
+        r'^\s*INSTALL\s*\(\s*FILES\s+(?:"\.\./([\w.-]+\.md)"|\.\./([\w.-]+\.md))'
+        r'\s+DESTINATION\s+(?:"\."|\.)\s*\)', re.MULTILINE | re.IGNORECASE)
+    return {match.group(1) or match.group(2) for match in pattern.finditer(cmake)}
+
+
 class PackagedDocumentationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -149,6 +157,9 @@ class PackagedDocumentationTests(unittest.TestCase):
         documents.extend((REPO / 'docs').rglob('*.md'))
         installed = {'README.md', 'README_zh-CN.md', 'AGENTS.md', 'LICENSE',
                      'CHANGELOG.md', 'vspIcon.png', 'THIRD_PARTY_NOTICES.md'}
+        for name in installed_root_markdown((REPO / 'src/CMakeLists.txt').read_text()):
+            self.assertTrue((REPO / name).is_file(), name)
+            installed.add(name)
         installed.update(path.relative_to(REPO).as_posix()
                          for path in (REPO / 'docs').rglob('*') if path.is_file())
         installed.update('Official_Examples/' + path.relative_to(REPO / 'examples').as_posix()
@@ -165,6 +176,16 @@ class PackagedDocumentationTests(unittest.TestCase):
                                                                unquote(url.path)))
                 with self.subTest(document=relative, target=destination):
                     self.assertIn(destination, installed)
+
+    def test_legacy_documents_need_explicit_root_install_rules(self):
+        cmake = '''
+INSTALL( FILES ../AI_LOCALIZATION_HANDOFF.md DESTINATION . )
+install( FILES "../LOCALIZATION_CHANGELOG.md" DESTINATION "." )
+# INSTALL( FILES ../NOT_INSTALLED.md DESTINATION . )
+INSTALL( FILES ../NOT_AT_ROOT.md DESTINATION docs )
+'''
+        self.assertEqual(installed_root_markdown(cmake),
+                         {'AI_LOCALIZATION_HANDOFF.md', 'LOCALIZATION_CHANGELOG.md'})
 
     @unittest.skipUnless(shutil.which('cmake'), 'CMake is required for isolated install test')
     def test_actual_cmake_module_installs_docs_and_all_examples(self):
