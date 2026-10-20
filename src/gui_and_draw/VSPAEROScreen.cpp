@@ -1425,9 +1425,8 @@ void VSPAEROScreen::GuiDeviceCallBack( GuiDevice* device )
         {
             int file_type = vsp::VSPAERO_VSPGEOM_TYPE;
             string file_ext = "*.vspgeom";
-            string message = "Select comp geom VSPGEOM output file.";
 
-            veh->setExportFileName( file_type, m_ScreenMgr->FileChooser( message, file_ext, vsp::SAVE ) );
+            veh->setExportFileName( file_type, m_ScreenMgr->FileChooser( "Select comp geom VSPGEOM output file.", file_ext, vsp::SAVE ) );
         }
         else if ( device == &m_LoadExistingResultsButton )
         {
