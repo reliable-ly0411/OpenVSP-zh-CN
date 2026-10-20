@@ -418,6 +418,7 @@ INSTALL( FILES ../AI_LOCALIZATION_HANDOFF.md DESTINATION . )
 INSTALL( FILES ../LOCALIZATION_CHANGELOG.md DESTINATION . )
 INSTALL( FILES ../CHANGELOG.md DESTINATION . )
 INSTALL( FILES ../vspIcon.png DESTINATION .)
+INCLUDE( ${CMAKE_CURRENT_SOURCE_DIR}/cmake/InstallLocalizedDocumentation.cmake )
 
 # Potentially redundant, but needed if src is used as project root.
 INCLUDE( CTest )

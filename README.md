@@ -1,19 +1,21 @@
 > [!IMPORTANT]
 > **简体中文翻译说明：** 本仓库基于 OpenVSP 3.51.2，提供非官方简体中文汉化，
-> 当前源码候选为 `3.51.2-zh-CN.rc.1`。翻译内容覆盖用户界面、帮助和提示文字，
+> 当前源码候选为 `3.51.2-zh-CN.rc.2`。翻译内容覆盖用户界面、帮助和提示文字，
 > 不改变原始 OpenVSP 软件的版权、作者归属或许可证；原始代码仍归属于
 > NASA/OpenVSP 作者和贡献者，并遵循 NOSA 1.3。
 > 中文版使用、安装、构建与发布说明请见 [`README_zh-CN.md`](README_zh-CN.md)，
-> 汉化架构与维护方法请见 [`AI_LOCALIZATION_HANDOFF.md`](AI_LOCALIZATION_HANDOFF.md)。
+> 汉化架构与维护方法请见 [`AGENTS.md`](AGENTS.md)。
 
 # Build and Installation Instructions for OpenVSP
 
 > **Simplified-Chinese localization notice:** This source copy contains the unofficial
-> `3.51.2-zh-CN.rc.1` localization candidate. The localization does
+> `3.51.2-zh-CN.rc.2` localization candidate. The localization does
 > not change the copyright or authorship of the original OpenVSP software. Original
 > OpenVSP code remains attributed to NASA/OpenVSP authors and contributors under NOSA 1.3.
-> See `AI_LOCALIZATION_HANDOFF.md` for implementation and maintenance details.
+> See `AGENTS.md` for implementation and maintenance details.
 
+
+> `AI_LOCALIZATION_HANDOFF.md` and `LOCALIZATION_CHANGELOG.md` are retained as historical references; current maintenance rules are in `AGENTS.md`.
 
 ### INTRODUCTION
 
@@ -32,6 +34,16 @@
   OpenVSP is available under the terms of the NASA Open Source Agreement
   (NOSA) version 1.3.  The complete terms of the license are specified
   in the LICENSE file.
+
+### THIRD-PARTY CONTENT IN THIS LOCALIZATION
+
+  The NOSA notice above covers OpenVSP; it does not relicense independently
+  supplied libraries, fonts, or community models. See
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the per-file provenance
+  in [Complete_Aircraft/SOURCES_AND_LICENSES.md](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/87905bc6c0ef61ac3991154e7f80ae86fc32b714/examples/Complete_Aircraft/SOURCES_AND_LICENSES.md).
+  Three community models are marked CC BY-SA by their source, but the specific
+  license version remains unconfirmed. The project does not assign them a
+  license version or treat them as NOSA content.
 
 ### DEPENDENCIES
 

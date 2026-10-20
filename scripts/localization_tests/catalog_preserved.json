@@ -253,5 +253,6 @@
   "t": "Engineering symbol, coordinate, unit, standard identifier, or abbreviation; preserve the original notation.",
   "t/mm^3": "Engineering symbol, coordinate, unit, standard identifier, or abbreviation; preserve the original notation.",
   "tonne": "Engineering symbol, coordinate, unit, standard identifier, or abbreviation; preserve the original notation.",
-  "yd": "Engineering symbol, coordinate, unit, standard identifier, or abbreviation; preserve the original notation."
+  "yd": "Engineering symbol, coordinate, unit, standard identifier, or abbreviation; preserve the original notation.",
+  "Activity Factor": "Propeller per-blade activity factor (AF), verified against PropGeom.cpp and NACA ACR L4I29 p. 7 (https://ntrs.nasa.gov/api/citations/19930093312/downloads/19930093312.pdf). Preserve the original English rather than assert an unverified Chinese standard term or use chemical 活度; see docs/issue-19-engineering-terminology-review.md."
 }
