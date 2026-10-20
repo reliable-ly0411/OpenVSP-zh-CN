@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-20",
+  "purpose": "Exact tested source to public review source mapping; subsequent evidence commits do not change production code",
+  "families": [
+    {
+      "version": "3.55.0",
+      "base_commit": "85a1a1a2029d0ab35e1a5f685a117061fe89aa21",
+      "local_tested_commit": "5379906d4c113684a17275aaed0872f91dc0a5ac",
+      "remote_source_commit": "546b71549eaf443c4e746d61d0ac0eff29f0828e",
+      "tree_sha": "4afdc4ecf9c5bf88a98a27920eff11fc4318c487",
+      "entire_tree_equal": true,
+      "production_blobs": {
+        "src/gui_and_draw/GroupLayout.cpp": "f0155f8c301465353888bed4ce73b52deb8962cc",
+        "src/gui_and_draw/GroupLayout.h": "c7ba381796045693198175136ad1bf5d585418c3",
+        "src/gui_and_draw/ParasiteDragScreen.cpp": "d6ff00fcb3c1441c343ad4326f556cb37c64410b",
+        "src/gui_and_draw/UserParmScreen.cpp": "26706cdad20c04aa47ed140ec96ef152a267bdf6"
+      }
+    },
+    {
+      "version": "3.54.0",
+      "base_commit": "67f00f7567296d8a1e4088a1fb32e650967af7c2",
+      "local_tested_commit": "b7473a85aff7436b1f55649bd306245b9ee53ec5",
+      "remote_source_commit": "7301459b02733e9b39fa96def8956e94370cc80b",
+      "tree_sha": "450a9c6b121abfe59f9d183edb849c25ec323e2b",
+      "entire_tree_equal": true,
+      "production_blobs": {
+        "src/gui_and_draw/GroupLayout.cpp": "f0155f8c301465353888bed4ce73b52deb8962cc",
+        "src/gui_and_draw/GroupLayout.h": "c7ba381796045693198175136ad1bf5d585418c3",
+        "src/gui_and_draw/ParasiteDragScreen.cpp": "9d0333d1b38edf586c68e69f9665346236d7379d",
+        "src/gui_and_draw/UserParmScreen.cpp": "26706cdad20c04aa47ed140ec96ef152a267bdf6"
+      }
+    },
+    {
+      "version": "3.53.0",
+      "base_commit": "219f6c0a7857d110e69116a21f314af3fc26ff46",
+      "local_tested_commit": "6c618e7f07d7eeef88a99283320288f60c4b689d",
+      "remote_source_commit": "019be75c3400d0a6dfed629247de2c7d3418ba84",
+      "tree_sha": "7cac03339f1fa8326dffefb853591689e76f1157",
+      "entire_tree_equal": true,
+      "production_blobs": {
+        "src/gui_and_draw/GroupLayout.cpp": "374ad8ce0e66c2810ee8c5a6e7d74469299e3c91",
+        "src/gui_and_draw/GroupLayout.h": "e0e90761675db41976c5e5963e780a2c71d47348",
+        "src/gui_and_draw/ParasiteDragScreen.cpp": "b1979310993118f51b64ca22d8093fcbbc2c7668",
+        "src/gui_and_draw/UserParmScreen.cpp": "a8f8822a5bbb2bbd6ecebf04fe0de4b5085fba41"
+      }
+    },
+    {
+      "version": "3.51.3",
+      "base_commit": "0262336a4c17fe0931bba234ecae99073e089cc3",
+      "local_tested_commit": "ec4d90c5cc91d1e419d0f85a20d2374a0b0c768b",
+      "remote_source_commit": "d98406fbb1d58081c4347912a6119e5cbd8b1005",
+      "tree_sha": "e714344581bc74f5d20d47fc722fdfea39aae362",
+      "entire_tree_equal": true,
+      "production_blobs": {
+        "src/gui_and_draw/GroupLayout.cpp": "f47c99dadbe486149d8e4fdde0430b59ed2c97ae",
+        "src/gui_and_draw/GroupLayout.h": "9135d097c60e14624770fd94eac640708d0e3212",
+        "src/gui_and_draw/ParasiteDragScreen.cpp": "b1979310993118f51b64ca22d8093fcbbc2c7668",
+        "src/gui_and_draw/UserParmScreen.cpp": "4287fbf58af2da661d641e2733e49e22dd53acf3"
+      }
+    },
+    {
+      "version": "3.51.2",
+      "base_commit": "d71b88733805b87939a9a7337442d9f43125f43e",
+      "local_tested_commit": "690c51395db1cc6f6be575d7f2eaafedfdcbcb2b",
+      "remote_source_commit": "7b762a01fa07f35ef96c6315ee62aa4e6bfe68af",
+      "tree_sha": "6fc6d94f887aacc047ed7cd22e8740533e12c6cc",
+      "entire_tree_equal": true,
+      "production_blobs": {
+        "src/gui_and_draw/GroupLayout.cpp": "f47c99dadbe486149d8e4fdde0430b59ed2c97ae",
+        "src/gui_and_draw/GroupLayout.h": "9135d097c60e14624770fd94eac640708d0e3212",
+        "src/gui_and_draw/ParasiteDragScreen.cpp": "b1979310993118f51b64ca22d8093fcbbc2c7668",
+        "src/gui_and_draw/UserParmScreen.cpp": "4287fbf58af2da661d641e2733e49e22dd53acf3"
+      }
+    }
+  ]
+}

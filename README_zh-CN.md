@@ -13,8 +13,11 @@
 以下发布状态核对于 **2026-10-20**；`main`、开发分支和公开 Release 分别追踪，不能把
 分支上的文档或测试结果当成某个已下载包的验收结果。
 
-本分支当前为 `3.55.0-zh-CN.rc.2` 源码候选，尚未发布可下载包。下列 rc.1 下载
-与验收记录仅属于已发布 rc.1；rc.2 的本地检查不替代新原生构建或 GUI 验收。
+原始 [`3.55.0-zh-CN.rc.2`](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.2)
+已公开为预发布；五族原包与发布后核验见固定提交的
+[rc.2 验收报告](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/e41379f88d5c309bd8e57d920e8ffed960dd89cf/docs/five-family-rc2-acceptance-20261020.md)。
+本分支是在原始 rc.2 之上的未合并名称修复候选，尚无包含这些新修复的发布包，未替换原始 rc.2。
+下列 rc.1 下载与验收记录作为历史参考保留，不是本次修复候选的下载或验收证明。
 
 | 使用目的 | 下载入口 | 已知范围 |
 |---|---|---|
@@ -22,7 +25,7 @@
 | 需要新修复并接受预发布性质 | [3.55.0-zh-CN.rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.1) | 五个平台均完成原生包检查；Linux AMD64 主界面、机翼页和名称/路径有有限 GUI 抽查。仍为预发布，其他平台 GUI 未作同范围验收。 |
 | 需要旧软件版本的新本地化修复 | [3.54.0 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.1)、[3.53.0 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.1)、[3.51.3 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.1)、[3.51.2 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.1) | 各族分别构建、核验和发布；不要在不同标签之间混用 ZIP 与校验清单。 |
 
-新用户若需要已发布修复，可从 3.55.0 rc.1 开始评估，并先用模型副本验证自己的工作流。
+选择当前公开预发布请查看上面的 rc.2 验收报告与本族 Release，并先用模型副本验证自己的工作流。
 需要稳定发布策略的用户可保留 Latest，但应先阅读其已知限制。
 [五版本族验收报告](docs/five-family-rc1-acceptance-20261019.md)列出精确源码、25 个原生包、
 清单哈希和 GUI 边界；[逐页汉化状态](docs/localization-status.md)列出尚未目视验收的页面。
@@ -106,7 +109,7 @@ ARM64 使用上表对应 ZIP。3.51.2/3.51.3 的 Linux 新 rc 包应使用随包
 
 本分支源码标识（不等于当前下载推荐）：
 
-- 当前汉化版本：`3.55.0-zh-CN.rc.2`（源码候选，尚未发布）
+- 当前汉化版本：`3.55.0-zh-CN.rc.2`（保留原始源码标识；本分支新增修复尚未发布）
 
 完整依赖和通用构建说明以根目录 [`README.md`](README.md) 中保留的官方英文文档为准。
 本汉化版使用 CMake 两阶段构建，并关闭不随 ZIP 分发的 Python API 文档生成；Python API
@@ -162,6 +165,21 @@ cmake --build build --target package --config Release --parallel 2
 旧标签、旧公开资产及旧清单保持原样。草稿恢复仅补缺失资产，已存在的资产必须与原构建
 逐字节相同；冲突时保留草稿并停止，改用新 rc 标签。不会修改仓库安全设置，稳定版 Latest
 不变。CI 原始产物保留 14 天，GUI 审阅记录保留 30 天；过期后需要新构建、新验收与新标签。
+
+## 未发布
+
+- 修复寄生阻力组件表将用户几何体名称误当界面文字翻译的问题，保留原有展开标记、
+  上游名称处理及模型数据；固定列标题仍正常汉化。
+- 修复寄生阻力附加阻力条目名称在汇总表被翻译的问题，名称与原文编辑器保持一致。
+- 修复用户参数 Adjust 页将自定义分组名（如 `Wing`）翻译为中文的问题；预定义分组和
+  其他固定分隔标题继续汉化，不修改参数名、描述或持久化值。
+- 新增实际 `GroupLayout` 按钮/分隔框方法的轻量 C++ 回归及调用点源码契约，覆盖中文、
+  英文词典碰撞、空白、特殊字符和静态标签。测试使用记录标签的控件替身，不代替原生 GUI。
+- 本次源码检查与轻量回归通过；3.55.0 Linux AMD64 的独立 `vsp` 原生候选已完成三处名称
+  显示、固定中文标题和合成模型保存的实际 GUI 抽查。六张截图、模型读回和二进制来源见
+  [本族回归记录](docs/opaque-layout-label-regression-20261020.md)，同时保留原始包复现证据。
+  此候选不是发布包，未构建 VSPAERO、Python/API 包装层及帮助资源；五平台验收尚未完成。
+  已发布 rc.2 包未改动，不将有限的本地候选验证称为新包验收。
 
 ## 3.55.0-zh-CN.rc.2
 
