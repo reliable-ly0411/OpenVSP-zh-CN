@@ -92,6 +92,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
 
         // Prefixes for display-only composition with opaque user values.
         { "Parm: ", "参数：" },
+        { "Attribute Explorer: ", "属性浏览器：" },
 
         // Legacy 3.51 GUI wording; preserve the old version's controls and symbols.
         { "Color Mesh", "网格着色" },
