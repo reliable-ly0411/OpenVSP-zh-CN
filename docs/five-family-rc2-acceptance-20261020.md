@@ -8,7 +8,23 @@
 
 五族原始 Linux AMD64 ZIP 均已完成下述有限交互式桌面验收。3.55.0 使用 05:47:44 UTC 已保存的真实操作证据，恢复后重新核验全部原始字节并独立目视审阅；其余四族在本轮重新操作。共保留 51 张应用窗口截图及实际保存的合成模型文件。CI 的 `captured_not_reviewed` 图片没有被当作桌面通过证明。
 
-截至本报告核验时，rc.2 尚未公开发布；桌面验收通过不等于发布成功，后续仅晋级绑定下列哈希的原包。
+五族 rc.2 均已通过原包晋级流程公开为预发布。没有重编译、移动历史标签或替换旧附件。发布后另以匿名公开下载逐个完整读取 25 个 ZIP 和 5 份清单，30 个文件的字节数及 SHA-256 全部与原始构建一致；这不是只读取 API 摘要。
+
+## 发布后读回
+
+复核时间：2026-10-20T08:16:50.734801+00:00。各版本的原始源码与构建仍采用下节列出的精确值；发布流程使用已合并的 `7a1db6f7ade9353949af1766190caa14ba1841ab`，只下载并晋级原有工件。
+
+| 版本族 | 公开预发布 | 晋级运行 | 完整公开字节读回 |
+|---|---|---|---|
+| 3.55.0 | [rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.2) | [39390946431](https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39390946431) | [6/6 一致](evidence/rc2-20261020/3.55.0/public-byte-readback.json) |
+| 3.54.0 | [rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.2) | [39391284873](https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39391284873) | [6/6 一致](evidence/rc2-20261020/3.54.0/public-byte-readback.json) |
+| 3.53.0 | [rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.2) | [39391485311](https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39391485311) | [6/6 一致](evidence/rc2-20261020/3.53.0/public-byte-readback.json) |
+| 3.51.3 | [rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.2) | [39391611353](https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39391611353) | [6/6 一致](evidence/rc2-20261020/3.51.3/public-byte-readback.json) |
+| 3.51.2 | [rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.2) | [39391815404](https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39391815404) | [6/6 一致](evidence/rc2-20261020/3.51.2/public-byte-readback.json) |
+
+各族目录同时保存晋级 CI 的原始 `promotion-gui-review.json`，其源构建、清单与 GUI 包哈希逐项核对原验收输入。实际窗口截图与模型仍保留原始记录时间，不被发布时刻覆盖。
+
+独立[发布元数据与说明审计](evidence/rc2-20261020/postpublication-metadata-audit.json)确认对应完整上游 CHANGELOG 章节及本地差异说明保持正确；17 个历史 Release 的 76 个资产在已记录的标识、名称、大小、摘要和修改时间字段中无变化，19 个历史标签引用无变化。该历史资产检查是元数据对比，不声称本轮重新下载了全部历史附件。稳定 Latest 仍为 `3.53.0-Codex-AI-zh-CN`。
 
 ## 精确来源
 

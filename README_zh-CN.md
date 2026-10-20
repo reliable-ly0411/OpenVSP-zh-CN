@@ -13,18 +13,19 @@
 以下发布状态核对于 **2026-10-20**；`main`、开发分支和公开 Release 分别追踪，不能把
 分支上的文档或测试结果当成某个已下载包的验收结果。
 
-本分支当前为 `3.55.0-zh-CN.rc.2` 源码候选，尚未发布可下载包。下列 rc.1 下载
-与验收记录仅属于已发布 rc.1；rc.2 的本地检查不替代新原生构建或 GUI 验收。
+五个版本族的 rc.2 均已公开为预发布，采用各自已核验的原始构建包，没有重新构建。
+25 个公开 ZIP 与 5 份清单已在发布后完整下载并逐个校验。Linux x86_64 有限 GUI 验收
+使用 Debian 13 云桌面运行 Ubuntu 24.04 构建包；Windows、macOS、ARM64 GUI 仍未作同范围验收。
 
 | 使用目的 | 下载入口 | 已知范围 |
 |---|---|---|
 | 需要保留既有稳定发布线 | [Latest：3.53.0 历史稳定版](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/latest) | Latest 仍指向 `3.53.0-Codex-AI-zh-CN`，未包含新 rc 的全部修复。其历史清单、资源布局和 Python 依赖限制仍适用，不能据 Latest 标记推导新门禁已通过。 |
-| 需要新修复并接受预发布性质 | [3.55.0-zh-CN.rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.1) | 五个平台均完成原生包检查；Linux AMD64 主界面、机翼页和名称/路径有有限 GUI 抽查。仍为预发布，其他平台 GUI 未作同范围验收。 |
-| 需要旧软件版本的新本地化修复 | [3.54.0 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.1)、[3.53.0 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.1)、[3.51.3 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.1)、[3.51.2 rc.1](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.1) | 各族分别构建、核验和发布；不要在不同标签之间混用 ZIP 与校验清单。 |
+| 需要新修复并接受预发布性质 | [3.55.0-zh-CN.rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.2) | 五个平台均完成原生包检查；Linux AMD64 主界面、机翼页和名称/路径有有限 GUI 抽查。仍为预发布，其他平台 GUI 未作同范围验收。 |
+| 需要旧软件版本的新本地化修复 | [3.54.0 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.2)、[3.53.0 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.2)、[3.51.3 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.2)、[3.51.2 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.2) | 各族分别构建、核验和发布；不要在不同标签之间混用 ZIP 与校验清单。 |
 
-新用户若需要已发布修复，可从 3.55.0 rc.1 开始评估，并先用模型副本验证自己的工作流。
+新用户若需要已发布修复，可从 3.55.0 rc.2 开始评估，并先用模型副本验证自己的工作流。
 需要稳定发布策略的用户可保留 Latest，但应先阅读其已知限制。
-[五版本族验收报告](docs/five-family-rc1-acceptance-20261019.md)列出精确源码、25 个原生包、
+[五版本族验收报告](docs/five-family-rc2-acceptance-20261020.md)列出精确源码、25 个原生包、
 清单哈希和 GUI 边界；[逐页汉化状态](docs/localization-status.md)列出尚未目视验收的页面。
 
 ## 汉化范围与兼容性
@@ -39,10 +40,10 @@
 
 ## 下载与运行
 
-以下示例针对 **3.55.0-zh-CN.rc.1**，不是旧 auto 包。先从同一个 Release 下载所需 ZIP
+以下示例针对 **3.55.0-zh-CN.rc.2**，不是旧 auto 包。先从同一个 Release 下载所需 ZIP
 和 `SHA256SUMS.txt`；同一软件版本不同 rc 的 ZIP 名可能相同，建议每个标签使用独立目录。
 
-| 系统/架构 | 3.55.0 rc.1 的实际 ZIP 文件名 |
+| 系统/架构 | 3.55.0 rc.2 的实际 ZIP 文件名 |
 |---|---|
 | Ubuntu 24.04 AMD64 | `OpenVSP-3.55.0-Ubuntu-24.04_amd64-zh-CN.zip` |
 | Ubuntu 24.04 ARM64 | `OpenVSP-3.55.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip` |
@@ -67,7 +68,7 @@
 ```bash
 sudo apt-get install fonts-noto-cjk
 sha256sum OpenVSP-3.55.0-Ubuntu-24.04_amd64-zh-CN.zip
-# 与同一 rc.1 的 SHA256SUMS.txt 中该文件一行比对一致后继续
+# 与同一 rc.2 的 SHA256SUMS.txt 中该文件一行比对一致后继续
 unzip OpenVSP-3.55.0-Ubuntu-24.04_amd64-zh-CN.zip
 cd OpenVSP-3.55.0-Linux
 ./vsp
@@ -106,7 +107,7 @@ ARM64 使用上表对应 ZIP。3.51.2/3.51.3 的 Linux 新 rc 包应使用随包
 
 本分支源码标识（不等于当前下载推荐）：
 
-- 当前汉化版本：`3.55.0-zh-CN.rc.2`（源码候选，尚未发布）
+- 当前汉化版本：`3.55.0-zh-CN.rc.2`（已预发布，原包源码为 `85a1a1a2029d0ab35e1a5f685a117061fe89aa21`；main 另含后续验证文档）
 
 完整依赖和通用构建说明以根目录 [`README.md`](README.md) 中保留的官方英文文档为准。
 本汉化版使用 CMake 两阶段构建，并关闭不随 ZIP 分发的 Python API 文档生成；Python API
@@ -192,15 +193,15 @@ cmake --build build --target package --config Release --parallel 2
 PR 合并不会自动改写旧 Release 页面。稳定版 Latest 不变。CI 原始产物保留 14 天，GUI 审阅记录
 保留 30 天；过期后需要新构建、新验收与新标签。
 
-## 未发布
+## 2026-10-20 rc.2 验收与发布
 
-- 追加[五族 rc.2 原包验收记录](docs/five-family-rc2-acceptance-20261020.md)：25 个 ZIP 与原始清单重新校验一致；五族原始 Linux AMD64 包均完成主界面、机翼、名称和特殊字符文件名的 GUI 保存重开有限验收，保留 51 张实际窗口截图及合成模型。3.55.0 原证据恢复与其余四族新操作分别标记；Windows、macOS、ARM64 GUI 未作同范围验收。rc.2 是否公开发布以独立发布读回结果为准。
+- 追加[五族 rc.2 原包验收记录](docs/five-family-rc2-acceptance-20261020.md)：25 个 ZIP 与原始清单重新校验一致；五族原始 Linux AMD64 包均完成主界面、机翼、名称和特殊字符文件名的 GUI 保存重开有限验收，保留 51 张实际窗口截图及合成模型。3.55.0 原证据恢复与其余四族新操作分别标记；Windows、macOS、ARM64 GUI 未作同范围验收。五族均已公开预发布，30 个公开文件的独立完整下载哈希全部一致；历史标签、附件和 Latest 未变。
 
 ## 3.55.0-zh-CN.rc.2
 
 - 新增 [发布与分支规范](docs/RELEASING.zh-CN.md) 及 AGENTS 入口，明确五族开发线、SemVer、官方风格包名、完整上游说明和原包验收顺序。
 
-2026-10-20 源码候选，尚未公开发布。本节描述相对本族已发布 rc.1 的变化。
+2026-10-20 已公开为预发布。本节描述相对本族已发布 rc.1 的变化；原包字节与原始构建一致。
 
 - 新构建将 `THIRD_PARTY_NOTICES.md` 和 `docs/` 一并随包安装，安装/原生验包均按对应
   源码字节核对；旧源标签没有新增通知时沿用原校验范围。全部示例继续保留，包括许可版本

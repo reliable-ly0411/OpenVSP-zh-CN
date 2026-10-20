@@ -1,0 +1,51 @@
+{
+  "source_sha": "85a1a1a2029d0ab35e1a5f685a117061fe89aa21",
+  "tag": "3.55.0-zh-CN.rc.2",
+  "build_run_id": "39351908980",
+  "workflow_sha": "d85c71b5f1caedeca7be691b48a2dbe1087e179c",
+  "build_jobs": [
+    {
+      "name": "3.55.0 / Ubuntu-24.04_amd64",
+      "id": 118398075448,
+      "run_attempt": 1
+    },
+    {
+      "name": "3.55.0 / Ubuntu-24.04_arm64-Python3.12",
+      "id": 118398075596,
+      "run_attempt": 1
+    },
+    {
+      "name": "3.55.0 / macOS-14-arm64-Python3.11",
+      "id": 118398075516,
+      "run_attempt": 1
+    },
+    {
+      "name": "3.55.0 / macOS-15-x86_64-Python3.11",
+      "id": 118398075451,
+      "run_attempt": 1
+    },
+    {
+      "name": "3.55.0 / win64",
+      "id": 118398075515,
+      "run_attempt": 1
+    },
+    {
+      "name": "assemble",
+      "id": 118408675449,
+      "run_attempt": 1
+    },
+    {
+      "name": "plan",
+      "id": 118397929489,
+      "run_attempt": 1
+    },
+    {
+      "name": "regression",
+      "id": 118397815684,
+      "run_attempt": 1
+    }
+  ],
+  "manifest_sha256": "08ba2bf94d1f703f99e9b3e90f2dd93f650670e77da40128e08d9b712a6c9e34",
+  "linux_gui_sha256": "1220a109b037681fd77f468245f3300f78878fbd96561012ff8e41b24fbb5c5b",
+  "validation_note": "Original ZIP reviewed on Linux x86_64 Debian 13 cloud desktop (Ubuntu 24.04-built package): Chinese main UI, geometry tree, wing General and Planform, About version/repo, actual GUI Save As and reopen of a filename with spaces, percent and Chinese passed; saved IDs/names unchanged. Recovered 2026-10-20T05:47:44Z interactive evidence independently inspected and hashes checked. Windows, macOS and ARM64 GUI not reviewed; limited display/path regression, not complete engineering validation. Evidence: https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/1563a700d6610ea213f0c0fb5da554f65e04429a/docs/five-family-rc2-acceptance-20261020.md"
+}

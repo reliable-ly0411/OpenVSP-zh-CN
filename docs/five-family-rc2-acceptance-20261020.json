@@ -44,7 +44,20 @@
       ],
       "gui_saved_filename": "GUI Saved  100% 中文.vsp3",
       "parameter_roundtrip": "passed_except_expected_view_state",
-      "parameter_count": 1945
+      "parameter_count": 1945,
+      "publication": {
+        "release_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.2",
+        "release_id": 418143933,
+        "published_at": "2026-10-20T08:07:12Z",
+        "promotion_run_id": 39390946431,
+        "promotion_run_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39390946431",
+        "promotion_conclusion": "success",
+        "promotion_workflow_sha": "7a1db6f7ade9353949af1766190caa14ba1841ab",
+        "public_asset_count": 6,
+        "all_public_asset_bytes_match_original": true,
+        "public_byte_readback": "evidence/rc2-20261020/3.55.0/public-byte-readback.json",
+        "promotion_gui_review": "evidence/rc2-20261020/3.55.0/promotion-gui-review.json"
+      }
     },
     {
       "version": "3.54.0",
@@ -86,7 +99,20 @@
       ],
       "gui_saved_filename": "GUI Roundtrip 100% 中文.vsp3",
       "parameter_roundtrip": "passed_except_expected_view_state",
-      "parameter_count": 1944
+      "parameter_count": 1944,
+      "publication": {
+        "release_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.2",
+        "release_id": 418146202,
+        "published_at": "2026-10-20T08:10:05Z",
+        "promotion_run_id": 39391284873,
+        "promotion_run_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39391284873",
+        "promotion_conclusion": "success",
+        "promotion_workflow_sha": "7a1db6f7ade9353949af1766190caa14ba1841ab",
+        "public_asset_count": 6,
+        "all_public_asset_bytes_match_original": true,
+        "public_byte_readback": "evidence/rc2-20261020/3.54.0/public-byte-readback.json",
+        "promotion_gui_review": "evidence/rc2-20261020/3.54.0/promotion-gui-review.json"
+      }
     },
     {
       "version": "3.53.0",
@@ -128,7 +154,20 @@
       ],
       "gui_saved_filename": "GUI Roundtrip 100% 中文.vsp3",
       "parameter_roundtrip": "passed_except_expected_view_state",
-      "parameter_count": 1942
+      "parameter_count": 1942,
+      "publication": {
+        "release_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.2",
+        "release_id": 418147383,
+        "published_at": "2026-10-20T08:11:24Z",
+        "promotion_run_id": 39391485311,
+        "promotion_run_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39391485311",
+        "promotion_conclusion": "success",
+        "promotion_workflow_sha": "7a1db6f7ade9353949af1766190caa14ba1841ab",
+        "public_asset_count": 6,
+        "all_public_asset_bytes_match_original": true,
+        "public_byte_readback": "evidence/rc2-20261020/3.53.0/public-byte-readback.json",
+        "promotion_gui_review": "evidence/rc2-20261020/3.53.0/promotion-gui-review.json"
+      }
     },
     {
       "version": "3.51.3",
@@ -170,7 +209,20 @@
       ],
       "gui_saved_filename": "GUI Roundtrip 100% 中文.vsp3",
       "parameter_roundtrip": "passed_except_expected_view_state",
-      "parameter_count": 1931
+      "parameter_count": 1931,
+      "publication": {
+        "release_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.2",
+        "release_id": 418148440,
+        "published_at": "2026-10-20T08:12:56Z",
+        "promotion_run_id": 39391611353,
+        "promotion_run_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39391611353",
+        "promotion_conclusion": "success",
+        "promotion_workflow_sha": "7a1db6f7ade9353949af1766190caa14ba1841ab",
+        "public_asset_count": 6,
+        "all_public_asset_bytes_match_original": true,
+        "public_byte_readback": "evidence/rc2-20261020/3.51.3/public-byte-readback.json",
+        "promotion_gui_review": "evidence/rc2-20261020/3.51.3/promotion-gui-review.json"
+      }
     },
     {
       "version": "3.51.2",
@@ -212,7 +264,20 @@
       ],
       "gui_saved_filename": "GUI Roundtrip 100% 中文.vsp3",
       "parameter_roundtrip": "passed_except_expected_view_state",
-      "parameter_count": 1931
+      "parameter_count": 1931,
+      "publication": {
+        "release_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.2",
+        "release_id": 418149848,
+        "published_at": "2026-10-20T08:14:31Z",
+        "promotion_run_id": 39391815404,
+        "promotion_run_url": "https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/runs/39391815404",
+        "promotion_conclusion": "success",
+        "promotion_workflow_sha": "7a1db6f7ade9353949af1766190caa14ba1841ab",
+        "public_asset_count": 6,
+        "all_public_asset_bytes_match_original": true,
+        "public_byte_readback": "evidence/rc2-20261020/3.51.2/public-byte-readback.json",
+        "promotion_gui_review": "evidence/rc2-20261020/3.51.2/promotion-gui-review.json"
+      }
     }
   ],
   "limitations": [
@@ -222,6 +287,8 @@
     "This is a limited localization, name and path regression, not complete product or engineering-accuracy validation.",
     "All eight complete-aircraft examples are retained. Three community models still lack a verified CC BY-SA version; see issue 16."
   ],
-  "publication_status": "not_yet_published",
-  "independent_evidence_audit_at": "2026-10-20T08:02:00Z"
+  "publication_status": "five_families_published_prerelease_and_public_bytes_verified",
+  "independent_evidence_audit_at": "2026-10-20T08:02:00Z",
+  "publication_checked_at": "2026-10-20T08:16:50.734801+00:00",
+  "postpublication_metadata_audit": "evidence/rc2-20261020/postpublication-metadata-audit.json"
 }
