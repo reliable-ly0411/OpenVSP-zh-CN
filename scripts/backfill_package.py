@@ -14,6 +14,12 @@ def verify(archive_path, source, runtime_resources=False):
     for name in ('AI_LOCALIZATION_HANDOFF.md', 'LOCALIZATION_CHANGELOG.md'):
         if name in tracked:
             expected[name] = name
+    # Old immutable source tags did not promise the evidence document tree.
+    # New notices opt the corresponding source revision into the complete docs
+    # requirement; do not retroactively reject or alter historical packages.
+    if 'THIRD_PARTY_NOTICES.md' in tracked:
+        expected['THIRD_PARTY_NOTICES.md'] = 'THIRD_PARTY_NOTICES.md'
+        expected.update({name: name for name in tracked if name.startswith('docs/')})
     for name in tracked:
         if name.startswith('examples/'):
             expected['Official_Examples/' + name.removeprefix('examples/')] = name
