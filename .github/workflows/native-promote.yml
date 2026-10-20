@@ -35,6 +35,10 @@ concurrency:
 jobs:
   promote:
     runs-on: ubuntu-24.04
+    concurrency:
+      group: openvsp-native-release-publication
+      queue: max
+      cancel-in-progress: false
     permissions:
       contents: write
       actions: read
