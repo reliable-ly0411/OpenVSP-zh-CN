@@ -161,7 +161,7 @@ cmake --build build --target package --config Release --parallel 2
 - 本次源码检查与轻量回归通过；修复候选尚未进行五平台原生构建、打包和 GUI 复验。
   已发布 rc.2 包未改动，不将该源码验证称为新包验收。
   详见[本族回归记录](docs/opaque-layout-label-regression-20261020.md)。
-  记录附修复前 3.55.0 / 3.51.2 原始包的实际截图与合成模型，测试通过/跳过数分列；不代表修复后 GUI 已通过。
+  记录附原始包复现及独立 3.55.0 Linux AMD64 候选的有限 GUI 通过证据；本族候选尚无原生 GUI 通过记录。
 
 ## 3.53.0-zh-CN.rc.2
 

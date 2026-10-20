@@ -64,3 +64,18 @@ ZIP 为 865266 字节，SHA-256 为
 
 [源码来源对照](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/93138b90593ae1fb1b452e3238c609a4a2645075/docs/evidence/opaque-layout-labels/source-provenance.json)记录五族本地测试提交、
 远程审查提交、各族基线和相同的完整 Git 树哈希。本次补充只涉及文档，生产代码未变。
+
+## 其他版本的候选 GUI 参考
+
+[3.55.0 Linux AMD64 实际候选截图与合成模型 ZIP](https://github.com/reliable-ly0411/OpenVSP-zh-CN/blob/e3f95be1b2df6cd701d722bbb01cd93e3569dbaa/docs/evidence/opaque-layout-labels/candidate-gui-3.55.0-20261020.zip)
+为 600676 字节，SHA-256：
+`1aa88e923b8881f1c3942e0c0f0081193f6a89a5a3200ad0bc5ef2142aa7456c`。
+此固定链接包含 6 张截图、保存后的合成模型、读回/差异及分开的构建与 GUI 回执，不在本族重复存储。
+3.55.0 独立 `vsp` 候选三处动态名称和固定中文标题的有限 GUI 抽查通过；经 GUI 保存后，
+XML 仅 AdjustView Zoom 浮点序列化的一行变化，测试名称/ID 及其他 XML 行不变。
+源码为公开 `546b71549eaf443c4e746d61d0ac0eff29f0828e`（等价本地 `5379906d4c113684a17275aaed0872f91dc0a5ac`），
+二进制 SHA-256 为 `29daadcfe3cf1689ffd415202afe344b664ec52d257a101f8016ebcabe3b8290`。
+
+这不是本族修复候选的 GUI 通过记录，也不是发布包。3.55 候选未构建 VSPAERO、Python/API
+包装层和帮助资源；缺少组件的预期警告保留。其他四族和 Windows/macOS/ARM 的原生候选 GUI
+仍未完成，五平台包验收未完成；所有 PR 保持草稿，不改动已发布 rc.2 或新建发布。
