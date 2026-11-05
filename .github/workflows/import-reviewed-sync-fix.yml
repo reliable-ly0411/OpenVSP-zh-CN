@@ -1,0 +1,82 @@
+name: Import reviewed OpenVSP sync objects
+
+on:
+  push:
+    branches: ['ci/import-3.56.0-sync-169cb469']
+    paths:
+      - '.github/workflows/import-reviewed-sync-fix.yml'
+      - 'scripts/reviewed-sync-169cb469.bundle'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: import-reviewed-openvsp-169cb469
+  cancel-in-progress: false
+
+jobs:
+  import:
+    if: github.repository == 'reliable-ly0411/OpenVSP-zh-CN' && github.ref == 'refs/heads/ci/import-3.56.0-sync-169cb469'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      DOWNSTREAM_BASE: 7fbc131d05aa28bffb16122188ce83085a211ece
+      UPSTREAM_SHA: ca4958f2cf98d5e787a2a3fa37efb497e4903902
+      MERGE_SHA: 1868bbba570f08839c8eeb737cf28f7a8865bd3e
+      TARGET_SHA: 169cb469f4aa84a50a62e043879cf985933eb58c
+      TARGET_BRANCH: fix/3.56.0-upstream-sync-conflicts
+      BUNDLE: scripts/reviewed-sync-169cb469.bundle
+    steps:
+      - name: Checkout isolated import branch without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify bundle and import exact original Git objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote --heads origin refs/heads/main | cut -f1)" = "$DOWNSTREAM_BASE"
+          printf '%s  %s\n' 606a6321e63b36392366f4c8997516c84f7c3b3f0f92c4df34758436d62d0e5a "$BUNDLE" | sha256sum --check --strict
+          test "$(git bundle list-heads "$BUNDLE")" = "$TARGET_SHA refs/heads/$TARGET_BRANCH"
+          git fetch --no-tags https://github.com/OpenVSP/OpenVSP.git "$UPSTREAM_SHA"
+          test "$(git rev-parse FETCH_HEAD)" = "$UPSTREAM_SHA"
+          git bundle verify "$BUNDLE"
+          git bundle unbundle "$BUNDLE"
+          test "$(git rev-parse "$TARGET_SHA^{tree}")" = e01c9a87def814afd8dee12412049aa8c8e38e03
+          test "$(git show -s --format=%P "$MERGE_SHA")" = "$DOWNSTREAM_BASE $UPSTREAM_SHA"
+          test "$(git show -s --format=%P "$TARGET_SHA")" = "$MERGE_SHA"
+          git merge-base --is-ancestor "$DOWNSTREAM_BASE" "$TARGET_SHA"
+          git merge-base --is-ancestor "$UPSTREAM_SHA" "$TARGET_SHA"
+          git diff --quiet "$DOWNSTREAM_BASE" "$TARGET_SHA" -- .github/workflows
+          test -z "$(git ls-tree -r "$TARGET_SHA" -- .github/workflows/import-reviewed-sync-fix.yml "$BUNDLE")"
+          git fsck --connectivity-only --no-dangling "$TARGET_SHA"
+
+      - name: Create only the reviewed repair branch with normal Git push
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_PROMPT_DISABLED: '1'
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          current="$(git ls-remote --heads origin "refs/heads/$TARGET_BRANCH" | cut -f1)"
+          if [ -n "$current" ] && [ "$current" != "$TARGET_SHA" ]; then
+            echo 'Target branch already exists at a different commit; refusing to update it.' >&2
+            exit 1
+          fi
+          test "$(git ls-remote --heads origin refs/heads/main | cut -f1)" = "$DOWNSTREAM_BASE"
+          if [ -z "$current" ]; then
+            git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push --porcelain origin "$TARGET_SHA:refs/heads/$TARGET_BRANCH"
+          fi
+          test "$(git ls-remote --heads origin "refs/heads/$TARGET_BRANCH" | cut -f1)" = "$TARGET_SHA"
+          test "$(git ls-remote --heads origin refs/heads/main | cut -f1)" = "$DOWNSTREAM_BASE"
+          {
+            echo 'Imported the reviewed source objects without rewriting commits.'
+            printf '\nBranch: `%s`\n\nCommit: `%s`\n' "$TARGET_BRANCH" "$TARGET_SHA"
+            echo 'The downstream/upstream parents and unchanged workflow tree were verified.'
+            echo 'No merge, tag, package build, release, or branch deletion was performed.'
+          } >> "$GITHUB_STEP_SUMMARY"
