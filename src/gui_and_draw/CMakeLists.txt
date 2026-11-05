@@ -200,6 +200,7 @@ ResultsViewer.h
 RoutingScreen.h
 ScreenBase.h
 ScreenDump.h
+ScreenDumpNames.h
 ScreenMgr.h
 ScreenshotScreen.h
 SelectFileScreen.h

@@ -29,6 +29,7 @@
 #include "VSPWindow.h"
 #include "AttributeEditor.h"
 #include "AttributeManager.h"
+#include "ScreenDumpNames.h"
 
 class ScreenMgr;
 class Vehicle;
@@ -46,6 +47,7 @@ struct ScreenDumpLog
     double m_Scale = 1.0;
     vector< string > m_Lines;
     int m_NumFailed = 0;
+    ScreenDumpNames m_FileNames;
 };
 
 //====VspScreen ====//

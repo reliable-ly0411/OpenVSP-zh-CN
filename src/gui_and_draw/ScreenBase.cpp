@@ -104,20 +104,6 @@ std::string VspScreen::getFeedbackGroupName()
     return "";
 }
 
-// A screen or tab title made fit for a file name: anything but a letter or digit becomes '_'
-static string DumpFileName( const string &title )
-{
-    string name = title;
-    for ( size_t i = 0; i < name.size(); i++ )
-    {
-        if ( !isalnum( ( unsigned char )name[i] ) )
-        {
-            name[i] = '_';
-        }
-    }
-    return name;
-}
-
 // Every tab set in a group, outer ones first
 static void FindTabs( Fl_Group* g, vector< Fl_Tabs* > &tabs )
 {
@@ -222,7 +208,9 @@ void VspScreen::ScreenDump( ScreenDumpLog &log )
 // Writes a PNG and an EPS of the window's contents, without the frame the system draws around it
 void VspScreen::DumpWindow( const string &name, ScreenDumpLog &log )
 {
-    string fname = DumpFileName( name );
+    // Reserve once before either write, even if one format fails.  Translated
+    // tab labels can otherwise collapse to identical underscore-only suffixes.
+    string fname = log.m_FileNames.Next( name );
     string base = log.m_Dir + "/" + fname;
     int w = m_FLTK_Window->w();
     int h = m_FLTK_Window->h();
