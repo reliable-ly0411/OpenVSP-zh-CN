@@ -18,7 +18,7 @@
 
 
 //==== Constructor ====//
-GearScreen::GearScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 450, 800, "Gear" )
+GearScreen::GearScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 450, 800, "Gear", "Gear.html" )
 {
     Fl_Group* design_tab = AddTab( "Design" );
     Fl_Group* design_group = AddSubGroup( design_tab, 5 );
@@ -137,11 +137,6 @@ GearScreen::GearScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 450, 800, "Gear" )
 
     m_BogieLayout.ForceNewLine();
 
-    m_BogieLayout.AddButton( m_ShowAllBogiesButton, "Show All" );
-    m_BogieLayout.AddButton( m_HideAllBogiesButton, "Hide All" );
-
-    m_BogieLayout.ForceNewLine();
-
     m_BogieLayout.SetSameLineFlag( false );
     m_BogieLayout.SetFitWidthFlag( true );
 
@@ -257,8 +252,8 @@ GearScreen::GearScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 450, 800, "Gear" )
     m_TireLayout.SetButtonWidth( m_TireLayout.GetChoiceButtonWidth() );
 
     m_TireLayout.SetSameLineFlag( false );
-    m_TireLayout.AddSlider( m_PlyRatingSlider, "Ply Rating", 10, "%6.5f" );
-    m_TireLayout.AddSlider( m_SpeedRatingSlider, "Speed Rating", 10, "%6.5f" );
+    m_TireLayout.AddSlider( m_PlyRatingSlider, "Ply Rating", 10, "%5.1f" );
+    m_TireLayout.AddSlider( m_SpeedRatingSlider, "Speed Rating", 10, "%5.1f" );
 
     m_TireModeChoice.AddItem( "Full TRA", vsp::TIRE_TRA );
     m_TireModeChoice.AddItem( "TRA w/ Faired Flange", vsp::TIRE_FAIR_FLANGE );
@@ -358,7 +353,7 @@ GearScreen::GearScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 450, 800, "Gear" )
     m_TireLayout.SetFitWidthFlag( false );
     m_TireLayout.SetButtonWidth( inToggleButtonWidth + modelToggleButtonWidth + bw2 );
 
-    m_TireLayout.AddButton( m_DeflectionToggleButton, "Delfection Frac H" );
+    m_TireLayout.AddButton( m_DeflectionToggleButton, "Deflection Frac H" );
     m_TireLayout.SetFitWidthFlag( true );
     m_TireLayout.SetButtonWidth( 0 );
     m_TireLayout.AddSlider( m_DeflectionSlider, "", 1, "%6.5f" );
@@ -1498,7 +1493,7 @@ bool GearScreen::Update()
         }
 
         if ( bogie_ptr->m_StowTransAttachFlag() != vsp::ATTACH_TRANS_LMN && bogie_ptr->m_StowRotAttachFlag() != vsp::ATTACH_ROT_LMN &&
-             bogie_ptr->m_StowTransAttachFlag() != vsp::ATTACH_TRANS_EtaMN && bogie_ptr->m_StowRotAttachFlag() != vsp::ATTACH_TRANS_EtaMN )
+             bogie_ptr->m_StowTransAttachFlag() != vsp::ATTACH_TRANS_EtaMN && bogie_ptr->m_StowRotAttachFlag() != vsp::ATTACH_ROT_EtaMN )
         {
             m_StowAttachMSlider.Deactivate();
             m_StowAttachNSlider.Deactivate();
@@ -1531,7 +1526,7 @@ bool GearScreen::Update()
             {
                 orphaned_trans = true;
             }
-            if ( !parent && bogie_ptr->m_StowRotAttachFlag() != vsp::ATTACH_TRANS_NONE )
+            if ( !parent && bogie_ptr->m_StowRotAttachFlag() != vsp::ATTACH_ROT_NONE )
             {
                 orphaned_rot = true;
             }
@@ -1857,14 +1852,10 @@ bool GearScreen::Update()
     if ( !bogies.empty() )
     {
         m_RemoveAllBogiesButton.Activate();
-        m_ShowAllBogiesButton.Activate();
-        m_HideAllBogiesButton.Activate();
     }
     else
     {
         m_RemoveAllBogiesButton.Deactivate();
-        m_ShowAllBogiesButton.Deactivate();
-        m_HideAllBogiesButton.Deactivate();
     }
 
     return true;
@@ -2075,14 +2066,6 @@ void GearScreen::GuiDeviceCallBack( GuiDevice* device )
         gear_ptr->DelAllBogies();
         gear_ptr->Update();
     }
-    else if ( device == &m_ShowAllBogiesButton )
-    {
-        gear_ptr->ShowAllBogies();
-    }
-    else if ( device == &m_HideAllBogiesButton )
-    {
-        gear_ptr->HideAllBogies();
-    }
     else if ( device == &m_BogieNameInput )
     {
         Bogie * bogie = gear_ptr->GetCurrentBogie();
@@ -2118,6 +2101,18 @@ void GearScreen::GuiDeviceCallBack( GuiDevice* device )
 
 
     GeomScreen::GuiDeviceCallBack( device );
+}
+
+// Selects the first bogie, so its panels are filled
+void GearScreen::PrepareDump()
+{
+    GeomScreen::PrepareDump();
+
+    GearGeom* gear_ptr = dynamic_cast< GearGeom* >( m_ScreenMgr->GetCurrGeom() );
+    if ( gear_ptr && !gear_ptr->GetBogieVec().empty() )
+    {
+        gear_ptr->SetCurrBogieIndex( 0 );
+    }
 }
 
 

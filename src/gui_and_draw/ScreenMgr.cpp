@@ -54,11 +54,13 @@
 #include "ParmDebugScreen.h"
 #include "ParmLinkScreen.h"
 #include "ParmScreen.h"
+#include "ScreenDump.h"
 #include "PreferencesScreen.h"
 #include "ProjectionScreen.h"
 #include "PSliceScreen.h"
 #include "ResultsViewer.h"
 #include "ScreenshotScreen.h"
+#include "VectorScreenshotScreen.h"
 #include "SetEditorScreen.h"
 #include "STEPOptionsScreen.h"
 #include "STEPStructureOptionsScreen.h"
@@ -739,6 +741,96 @@ void ScreenMgr::APIScreenGrab( const string & fname, int w, int h, bool transpar
     }
 }
 
+bool ScreenMgr::APIVectorScreenGrabImplementation( const string & fname, int filetype, bool autocrop, bool scaletopage, double pagewidth, double pageheight, int pageunits )
+{
+    // Make sure most current OpenGL data has been collected.
+    ( ( MainVSPScreen* ) m_ScreenVec[vsp::VSP_MAIN_SCREEN] )->Update();
+
+    bool written = ( ( MainVSPScreen* ) m_ScreenVec[vsp::VSP_MAIN_SCREEN] )->VectorScreenGrab( fname, filetype, autocrop, scaletopage, pagewidth, pageheight, pageunits );
+
+    // Set flag that task has been completed.
+    m_TaskComplete = true;
+
+    return written;
+}
+
+struct VectorScreenGrabStruct {
+    string m_fname;
+    int m_FileType;
+    bool m_AutoCrop;
+    bool m_ScaleToPage;
+    double m_PageWidth;
+    double m_PageHeight;
+    int m_PageUnits;
+    bool * m_Written;
+    ScreenMgr * m_ScrMgr;
+};
+
+void APIVectorScreenGrabHandler( void * data )
+{
+    VectorScreenGrabStruct * sg = ( VectorScreenGrabStruct * ) data;
+
+    std::unique_lock lk( sg->m_ScrMgr->m_TaskMutex );
+
+    *sg->m_Written = sg->m_ScrMgr->APIVectorScreenGrabImplementation( sg->m_fname, sg->m_FileType, sg->m_AutoCrop,
+                                                                      sg->m_ScaleToPage, sg->m_PageWidth,
+                                                                      sg->m_PageHeight, sg->m_PageUnits );
+
+    lk.unlock();
+
+    sg->m_ScrMgr->m_TaskCV.notify_one();
+
+    delete sg;
+}
+
+bool ScreenMgr::APIVectorScreenGrab( const string & fname, int filetype, bool autocrop, bool scaletopage, double pagewidth, double pageheight, int pageunits )
+{
+    // Mark that task has not been completed.
+    m_TaskComplete = false;
+
+    bool written = false;
+
+    if ( MainThreadIDMgr.IsCurrentThreadMain() )
+    {
+        // Simple main thread code path.
+        written = APIVectorScreenGrabImplementation( fname, filetype, autocrop, scaletopage, pagewidth, pageheight, pageunits );
+    }
+    else
+    {
+        // Works for Python under Facade.
+        VectorScreenGrabStruct *sg = new VectorScreenGrabStruct;
+        sg->m_fname = fname;
+        sg->m_FileType = filetype;
+        sg->m_AutoCrop = autocrop;
+        sg->m_ScaleToPage = scaletopage;
+        sg->m_PageWidth = pagewidth;
+        sg->m_PageHeight = pageheight;
+        sg->m_PageUnits = pageunits;
+        sg->m_Written = &written;
+        sg->m_ScrMgr = this;
+
+        // Queue task to main thread.
+        Fl::awake( APIVectorScreenGrabHandler, sg );
+
+        // Release lock to allow main thread to process queue.
+        Fl::unlock();
+
+        // Set up lock and mutex.
+        std::unique_lock lk( m_TaskMutex );
+
+        // Wait for change in task flag.
+        m_TaskCV.wait(lk, [this]
+            {
+                return m_TaskComplete;
+            });
+
+        // Re-acquire lock from main thread.
+        Fl::lock();
+    }
+
+    return written;
+}
+
 bool ScreenMgr::IsGUIElementDisabled( int e ) const
 {
     if ( e >= 0 && e < m_DisabledGUIElements.size() )
@@ -991,6 +1083,7 @@ void ScreenMgr::Init()
     m_ScreenVec[vsp::VSP_STEP_OPTIONS_SCREEN] = new STEPOptionsScreen( this );
     m_ScreenVec[vsp::VSP_STEP_STRUCTURE_OPTIONS_SCREEN] = new STEPStructureOptionsScreen( this );
     m_ScreenVec[vsp::VSP_SPLIT_STITCH_OPTIONS_SCREEN] = new SplitStitchOptionsScreen( this );
+    m_ScreenVec[vsp::VSP_VECTOR_SCREENSHOT_SCREEN] = new VectorScreenshotScreen( this );
     m_ScreenVec[vsp::VSP_STL_OPTIONS_SCREEN] = new STLOptionsScreen( this );
     m_ScreenVec[vsp::VSP_STRUCT_SCREEN] = new StructScreen( this );
     m_ScreenVec[vsp::VSP_STRUCT_ASSEMBLY_SCREEN] = new StructAssemblyScreen( this );
@@ -1036,6 +1129,17 @@ void ScreenMgr::Init()
 void ScreenMgr::FirstShow()
 {
     m_ScreenVec[vsp::VSP_MAIN_SCREEN]->Show();
+
+    // Windows not yet shown take their coordinates in the scale of the main window's screen.
+    int screen = m_ScreenVec[vsp::VSP_MAIN_SCREEN]->GetFlWindow()->screen_num();
+    for ( int i = 0 ; i < ( int )m_ScreenVec.size() ; i++ )
+    {
+        if ( m_ScreenVec[i] && m_ScreenVec[i]->GetFlWindow() )
+        {
+            m_ScreenVec[i]->GetFlWindow()->screen_num( screen );
+        }
+    }
+    VSP_Window::SetGeomScreen( screen );
 
     // Set manage geom screen to show up to the main screen as the default.
     int x,y,w,w1,h1,h2,h3;
@@ -1304,4 +1408,10 @@ int ScreenMgr::GlobalHandler(int event)
         return 1;
     }
     return 0;
+}
+
+int ScreenMgr::DumpScreens( int screen, int geom_screen, const string &dir, double scale )
+{
+    ScreenDumper dumper( this );
+    return dumper.Dump( screen, geom_screen, dir, scale );
 }

@@ -669,7 +669,7 @@ SixSeries::SixSeries( ) : Airfoil( )
     m_Type = XS_SIX_SERIES;
     m_Name = "SixSeries";
 
-    m_Series.Init( "Series", m_GroupName, this, SERIES_63, SERIES_63, NUM_SERIES );
+    m_Series.Init( "Series", m_GroupName, this, SIX_SERIES_63, SIX_SERIES_63, NUM_SIX_SERIES - 1 );
     m_IdealCl.Init( "IdealCl", m_GroupName, this, 0.0, 0.0, 2.0 );
     m_A.Init( "A", m_GroupName, this, 1.0, 0.0, 1.0 );
     m_ThickChord.SetUpperLimit( 0.5 );
@@ -682,12 +682,12 @@ void SixSeries::UpdateCurve( bool updateParms )
     float cli = ( float )m_IdealCl();
     float toc = ( float )m_ThickChord();
     int sixser = 63;
-    if ( m_Series() <= SERIES_67 )
+    if ( m_Series() <= SIX_SERIES_67 )
     {
         sixser = m_Series() + 63;
         m_A.Activate();
     }
-    else if ( m_Series() < NUM_SERIES )
+    else if ( m_Series() < NUM_SIX_SERIES )
     {
         m_A = 0.8;
         m_A.Deactivate();
@@ -785,11 +785,11 @@ string SixSeries::GetAirfoilName()
     float fa = int( m_A() * 10.0 + 0.5f ) / 10.0;
 
     int sixser = 63;
-    if ( m_Series() <= SERIES_67 )
+    if ( m_Series() <= SIX_SERIES_67 )
     {
         sixser = m_Series() + 63;
     }
-    else if ( m_Series() < NUM_SERIES )
+    else if ( m_Series() < NUM_SIX_SERIES )
     {
         sixser = -( m_Series() + 58 );
     }
@@ -1344,30 +1344,39 @@ bool FileAirfoil::ReadLednicerAirfoil( FILE* file_id )
 
     fgets( buff, 255, file_id );
     fgets( buff, 255, file_id );
-    sscanf( buff, "%f %f", &x, &y );
-    int num_pnts_upper = ( int )( x + 0.5 );
-    int num_pnts_lower = ( int )( y + 0.5 );
-
-    if ( num_pnts_upper < 3 || num_pnts_lower < 3 )
+    if ( sscanf( buff, "%f %f", &x, &y ) != 2 )
     {
         return false;
     }
 
+    // The counts are numbers of points, so anything past a million is not a Lednicer header.
+    if ( !( x >= 2.5f && y >= 2.5f && x < 1.0e6f && y < 1.0e6f ) )
+    {
+        return false;
+    }
+    int num_pnts_upper = ( int )( x + 0.5 );
+    int num_pnts_lower = ( int )( y + 0.5 );
+
     m_UpperPnts.clear();
     m_LowerPnts.clear();
 
+    // Every point line must hold two numbers; a file that ends early is not a Lednicer airfoil.
     fgets( buff, 255, file_id );
     for ( int i = 0 ; i < num_pnts_upper ; i++ )
     {
-        fgets( buff, 255, file_id );
-        sscanf( buff, "%f %f", &x, &y );
+        if ( !fgets( buff, 255, file_id ) || sscanf( buff, "%f %f", &x, &y ) != 2 )
+        {
+            return false;
+        }
         m_UpperPnts.push_back( vec3d( x, y, 0.0 ) );
     }
     fgets( buff, 255, file_id );
     for ( int i = 0 ; i < num_pnts_lower ; i++ )
     {
-        fgets( buff, 255, file_id );
-        sscanf( buff, "%f %f", &x, &y );
+        if ( !fgets( buff, 255, file_id ) || sscanf( buff, "%f %f", &x, &y ) != 2 )
+        {
+            return false;
+        }
         m_LowerPnts.push_back( vec3d( x, y, 0.0 ) );
     }
 
@@ -1709,23 +1718,38 @@ void CSTAirfoil::FitCurve( const VspCurve &c, int deg )
 
     cst_fitter.create( cst, transform_out, translate_out, actual_leading_edge_t );
 
-    m_Scale = 1.0 / transform_out(2,2);
-    m_Theta = std::atan2( -transform_out(1,0), transform_out(0,0) ) * 180.0 / M_PI;
+    // The fit's scale, rotation and shift carry the CST shape onto the curve fitted.
+    double fit_scale = 1.0 / transform_out(2,2);
+    double fit_theta = std::atan2( -transform_out(1,0), transform_out(0,0) );
 
-    translate_out = (translate_out*m_Scale())*transform_out*m_Scale();
-    m_DeltaX = -translate_out.x();
-    m_DeltaY = -translate_out.y();
+    translate_out = (translate_out*fit_scale)*transform_out*fit_scale;
+    double fit_dx = -translate_out.x();
+    double fit_dy = -translate_out.y();
 
+    double fit_shift;
     if ( actual_leading_edge_t < 0 )
     {
-        m_ShiftLE = -2.0 * sqrt( -actual_leading_edge_t );
+        fit_shift = -2.0 * sqrt( -actual_leading_edge_t );
     }
     else
     {
-        m_ShiftLE = 2.0 * sqrt( actual_leading_edge_t );
+        fit_shift = 2.0 * sqrt( actual_leading_edge_t );
     }
 
-    double dte = cst.get_trailing_edge_thickness() * m_Scale();
+    // The section's own scale, rotation and shift then apply to the fitted curve, as RotTransScale
+    // applies them: x' = scale * R( theta ) * x + delta.
+    double scale = m_Scale();
+    double theta = m_Theta() * M_PI / 180.0;
+    double ct = std::cos( theta );
+    double st = std::sin( theta );
+
+    m_DeltaX = scale * ( ct * fit_dx - st * fit_dy ) + m_DeltaX();
+    m_DeltaY = scale * ( st * fit_dx + ct * fit_dy ) + m_DeltaY();
+    m_Scale = scale * fit_scale;
+    m_Theta = clampCyclic( ( theta + fit_theta ) * 180.0 / M_PI, -180.0, 180.0 );
+    m_ShiftLE = m_ShiftLE() + fit_shift;
+
+    double dte = cst.get_trailing_edge_thickness() * fit_scale;
 
     if ( std::abs( dte ) > 1e-6 )
     {

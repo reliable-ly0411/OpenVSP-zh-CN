@@ -32,6 +32,13 @@ ConformalGeom::ConformalGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
     m_DetachFlag.Init( "DetachFlag", "Design", this, false, false, true );
     m_DetachFlag.SetDescript( "Conformal detachment flag" );
 
+    // Symmetry follows the conformal parent.
+    m_SymAncestor.Deactivate();
+    m_SymAncestOriginFlag.Deactivate();
+    m_SymPlanFlag.Deactivate();
+    m_SymAxFlag.Deactivate();
+    m_SymRotN.Deactivate();
+
     m_HingeConformalPositionFlag.Init( "HingeConformalPositionFlag", "Design", this, true, false, true );
     m_HingeConformalPositionFlag.SetDescript( "Set REL position on hinge based on conformal parent position" );
 
@@ -202,6 +209,14 @@ bool ConformalGeom::SetConformalParent( const string &parent )
         return parentchanged;
     }
 
+    // Nor be a type a Conformal cannot follow, the same ones AddGeom refuses.
+    if ( new_parent && ( new_parent->isNonSurfaceType() ||
+                         new_parent->GetType().m_Type == CONFORMAL_GEOM_TYPE ||
+                         new_parent->GetBehaviorType() == GEAR_GEOM_TYPE ) )
+    {
+        return parentchanged;
+    }
+
     if ( m_ConformalParentID != parent )
     {
         Geom * g = veh->FindGeom( m_ConformalParentID );
@@ -346,6 +361,9 @@ void ConformalGeom::UpdateSurf()
     copy_geom->Update();
     copy_geom->GetMainSurfVecCopy( m_MainSurfVec );
 
+    // Offset Ends acts only on a ribbed surface of a parent other than a Cobra.
+    bool offset_ends_used = false;
+
     for ( int i = 0 ; i < (int)m_MainSurfVec.size() ; i++ )
     {
         m_MainSurfVec[i].SetFoilSurf( nullptr );
@@ -382,9 +400,14 @@ void ConformalGeom::UpdateSurf()
                 }
 
                 //==== Offset Ribs ====//
-                if ( m_OffsetEnds() && !COBRA_ParentFlag )
+                if ( !COBRA_ParentFlag )
                 {
-                    OffsetEndRibs(m_MainSurfVec[i], offset);
+                    offset_ends_used = true;
+
+                    if ( m_OffsetEnds() )
+                    {
+                        OffsetEndRibs(m_MainSurfVec[i], offset);
+                    }
                 }
 
                 //==== Adjust Shape By Scaling Fp and Moving End Ribs ====//
@@ -408,6 +431,15 @@ void ConformalGeom::UpdateSurf()
                 TrimV(m_MainSurfVec[i]);
             }
         }
+    }
+
+    if ( offset_ends_used )
+    {
+        m_OffsetEnds.Activate();
+    }
+    else
+    {
+        m_OffsetEnds.Deactivate();
     }
 
     //==== Delete Geom Copy ====//
@@ -515,22 +547,6 @@ void ConformalGeom::UpdateCopyXFormParms()
         m_MLoc.Activate();
         m_NLoc.Activate();
         m_EtaLoc.Activate();
-
-        m_SymAncestor = parent_geom->m_SymAncestor();
-        if ( m_SymAncestor() != 0 ) // Not global ancestor.
-        {
-            m_SymAncestor = m_SymAncestor() + 1;  // + 1 increment for parent
-        }
-        m_SymAncestOriginFlag = parent_geom->m_SymAncestOriginFlag();
-        m_SymPlanFlag = parent_geom->m_SymPlanFlag();
-        m_SymAxFlag = parent_geom->m_SymAxFlag();
-        m_SymRotN = parent_geom->m_SymRotN();
-
-        m_SymAncestor.Activate();
-        m_SymAncestOriginFlag.Activate();
-        m_SymPlanFlag.Activate();
-        m_SymAxFlag.Activate();
-        m_SymRotN.Activate();
     }
     else
     {
@@ -552,23 +568,17 @@ void ConformalGeom::UpdateCopyXFormParms()
         m_MLoc.Deactivate();
         m_NLoc.Deactivate();
         m_EtaLoc.Deactivate();
-
-        m_SymAncestor = parent_geom->m_SymAncestor();
-        if ( m_SymAncestor() != 0 ) // Not global ancestor.
-        {
-            m_SymAncestor = m_SymAncestor() + 1;  // + 1 increment for parent
-        }
-        m_SymAncestOriginFlag = parent_geom->m_SymAncestOriginFlag();
-        m_SymPlanFlag = parent_geom->m_SymPlanFlag();
-        m_SymAxFlag = parent_geom->m_SymAxFlag();
-        m_SymRotN = parent_geom->m_SymRotN();
-
-        m_SymAncestor.Deactivate();
-        m_SymAncestOriginFlag.Deactivate();
-        m_SymPlanFlag.Deactivate();
-        m_SymAxFlag.Deactivate();
-        m_SymRotN.Deactivate();
     }
+
+    m_SymAncestor = parent_geom->m_SymAncestor();
+    if ( m_SymAncestor() != 0 ) // Not global ancestor.
+    {
+        m_SymAncestor = m_SymAncestor() + 1;  // + 1 increment for parent
+    }
+    m_SymAncestOriginFlag = parent_geom->m_SymAncestOriginFlag();
+    m_SymPlanFlag = parent_geom->m_SymPlanFlag();
+    m_SymAxFlag = parent_geom->m_SymAxFlag();
+    m_SymRotN = parent_geom->m_SymRotN();
 
 
     if ( ActiveRel )

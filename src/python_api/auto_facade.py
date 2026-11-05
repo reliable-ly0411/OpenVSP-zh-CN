@@ -110,10 +110,11 @@ class _vsp_server():
             except Exception as e:
                 if openvsp_config.FACADE_PRINT_LEVEL > 0: print(f'OpenVSP failed to start server, attempt {i+1}, trying again; "{str(e)}"')
                 try:
-                    self._proc.close()
-                    self._proc = None
-                except:
+                    self._proc.kill()
+                    self._proc.wait()
+                except Exception:
                     pass
+                self._proc = None
         if self._proc is None:
             raise RuntimeError("Facade failed to start the server")
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -336,21 +337,25 @@ from time import sleep
 #special code that is not generalizable
 import openvsp_config
 openvsp_config._IGNORE_IMPORTS = True
-try:
-    openvsp_config.LOAD_GRAPHICS = (sys.argv[2] == 'True')
-except IndexError:
-    pass
-try:
-    openvsp_config.FACADE_PRINT_LEVEL = int(sys.argv[3])
-except IndexError:
-    pass
+# The arguments are the server's own; a client imports this module for pack_data and unpack_data
+# with arguments of its own, which must not set its config.
+PORT = 0
+if __name__ == "__main__":
+    try:
+        openvsp_config.LOAD_GRAPHICS = (sys.argv[2] == 'True')
+    except IndexError:
+        pass
+    try:
+        openvsp_config.FACADE_PRINT_LEVEL = int(sys.argv[3])
+    except IndexError:
+        pass
+    try:
+        PORT = int(sys.argv[1])
+    except IndexError:
+        pass
 import openvsp as module
 
 HOST = 'localhost'
-try:
-    PORT = int(sys.argv[1])
-except IndexError:
-    PORT = 0
 event = Event()
 global gui_wait
 gui_wait = True

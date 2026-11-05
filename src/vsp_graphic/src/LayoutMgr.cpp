@@ -6,6 +6,7 @@
 #include "Protractor.h"
 #include "Ruler.h"
 #include "Probe.h"
+#include "gl2ps.h"
 
 #include <assert.h>
 
@@ -154,7 +155,7 @@ void LayoutMgr::predraw( Scene * scene, int x, int y )
     }
 }
 
-void LayoutMgr::draw( Scene * scene, int x, int y )
+void LayoutMgr::draw( Scene * scene, int x, int y, bool vecout )
 {
     for( int i = 0; i < ( int )_viewportList.size(); i++ )
     {
@@ -180,7 +181,9 @@ void LayoutMgr::draw( Scene * scene, int x, int y )
         glDisable( GL_LIGHTING );
 
         glBlendFuncSeparate( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA, GL_ONE );
+        gl2psBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
         glEnable( GL_BLEND );
+        gl2psEnable( GL2PS_BLEND );
 
         glAlphaFunc( GL_GREATER, 0 );
         glEnable( GL_ALPHA_TEST );
@@ -194,7 +197,11 @@ void LayoutMgr::draw( Scene * scene, int x, int y )
 
         // Draw Background
         glDisable( GL_DEPTH_TEST );
-        _viewportList[i]->drawBackground();
+
+        if ( !vecout )
+        {
+            _viewportList[i]->drawBackground();
+        }
 
         glClear( GL_DEPTH_BUFFER_BIT );
 
@@ -211,19 +218,22 @@ void LayoutMgr::draw( Scene * scene, int x, int y )
         // Draw arrows.
         _viewportList[i]->drawXYZArrows();
 
-        if ( _startx != -1 )
+        if ( !vecout )
         {
-            _viewportList[i]->drawRectangle( _startx, _starty, x, y );
-        }
+            if ( _startx != -1 )
+            {
+                _viewportList[i]->drawRectangle( _startx, _starty, x, y );
+            }
 
-        // Draw border.
-        if( i == _selected )
-        {
-            _viewportList[i]->drawBorder( true );
-        }
-        else
-        {
-            _viewportList[i]->drawBorder( false );
+            // Draw border.
+            if( i == _selected )
+            {
+                _viewportList[i]->drawBorder( true );
+            }
+            else
+            {
+                _viewportList[i]->drawBorder( false );
+            }
         }
 
         _viewportList[i]->drawColorScale();
@@ -231,6 +241,7 @@ void LayoutMgr::draw( Scene * scene, int x, int y )
         _viewportList[i]->drawWatermark();
 
         glDisable( GL_BLEND );
+        gl2psDisable( GL2PS_BLEND );
         glDisable( GL_ALPHA_TEST );
         glDisable( GL_DEPTH_TEST );
         glDepthMask( GL_FALSE );

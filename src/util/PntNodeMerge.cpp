@@ -159,10 +159,19 @@ long long int PntNodeCloud::LookupPntBase( const vec3d & pnt )
     return -1;
 }
 
+void BuildPntNodeIndex( PntNodeCloud & cloud )
+{
+    if ( cloud.m_index )
+    {
+        delete cloud.m_index;
+    }
+    // The constructor builds the tree.
+    cloud.m_index = new PNTree( 3, cloud, KDTreeSingleIndexAdaptorParams( 10 )  );
+}
+
 void IndexPntNodes( PntNodeCloud & cloud, double tolsq, bool keep_matches )
 {
-    cloud.m_index = new PNTree( 3, cloud, KDTreeSingleIndexAdaptorParams( 10 )  );
-    cloud.m_index->buildIndex();
+    BuildPntNodeIndex( cloud );
 
     vector< long long int >().swap( cloud.m_MatchStart );
     vector< long long int >().swap( cloud.m_MatchVec );
@@ -177,19 +186,19 @@ void IndexPntNodes( PntNodeCloud & cloud, double tolsq, bool keep_matches )
     {
         if ( cloud.m_PntNodes[i].m_Index == -1 )
         {
-            std::vector < std::pair < unsigned int, double > > ret_matches;
+            std::vector < nanoflann::ResultItem < unsigned int, double > > ret_matches;
 
-            nanoflann::SearchParams params;
+            nanoflann::SearchParameters params;
             // L2_Simple_Adaptor works in squared distance, so the radius handed to
             // radiusSearch is squared.
-            cloud.m_index->radiusSearch( &cloud.m_PntNodes[i].m_Pnt[0], tolsq, ret_matches, params );
+            size_t nmatch = cloud.m_index->radiusSearch( &cloud.m_PntNodes[i].m_Pnt[0], tolsq, ret_matches, params );
 
             if ( keep_matches )
             {
                 cloud.m_MatchStart.push_back( ( long long int )cloud.m_MatchVec.size() );
             }
 
-            for ( size_t j = 0 ; j < ret_matches.size() ; j++ )
+            for ( size_t j = 0 ; j < nmatch ; j++ )
             {
                 unsigned int m_ind = ret_matches[j].first;
                 cloud.m_PntNodes[ m_ind ].m_Index = i;
@@ -198,6 +207,18 @@ void IndexPntNodes( PntNodeCloud & cloud, double tolsq, bool keep_matches )
                     cloud.m_MatchVec.push_back( m_ind );
                 }
             }
+
+            // The search finds nothing within a zero radius, nor around a point that is not a
+            // number; such a point is a group of one.
+            if ( cloud.m_PntNodes[i].m_Index == -1 )
+            {
+                cloud.m_PntNodes[i].m_Index = i;
+                if ( keep_matches )
+                {
+                    cloud.m_MatchVec.push_back( i );
+                }
+            }
+
             cloud.m_PntNodes[i].m_UsedIndex = cnt;
             cnt++;
         }
@@ -213,6 +234,29 @@ void IndexPntNodes( PntNodeCloud & cloud, double tolsq, bool keep_matches )
 
 
 
+void FindPntNodesWithinTolSq( const PntNodeCloud & cloud, const vec3d & pnt, double tolsq, vector< unsigned int > & found )
+{
+    found.clear();
+
+    if ( !cloud.m_index )
+    {
+        return;
+    }
+
+    vector < nanoflann::ResultItem < unsigned int, double > > matches;
+    nanoflann::SearchParameters params;
+    params.sorted = false;
+
+    vec3d p = pnt;
+    size_t nmatch = cloud.m_index->radiusSearch( &p[0], tolsq, matches, params );
+
+    found.resize( nmatch );
+    for ( size_t i = 0; i < nmatch; i++ )
+    {
+        found[i] = matches[i].first;
+    }
+}
+
 bool AnyPntWithinTol( PntNodeCloud & cloud, const vec3d & pnt, double tol )
 {
     if ( !cloud.m_index )
@@ -220,8 +264,8 @@ bool AnyPntWithinTol( PntNodeCloud & cloud, const vec3d & pnt, double tol )
         return false;
     }
 
-    vector < pair < unsigned int, double > > matches;
-    nanoflann::SearchParams params;
+    vector < nanoflann::ResultItem < unsigned int, double > > matches;
+    nanoflann::SearchParameters params;
 
     // L2_Simple_Adaptor works in squared distance, so the radius handed to radiusSearch is squared.
     vec3d p = pnt;

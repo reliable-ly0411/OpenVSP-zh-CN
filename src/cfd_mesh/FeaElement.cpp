@@ -15,6 +15,30 @@
 #include "FeaMeshMgr.h"
 #include "StringUtil.h"
 #include "StlHelper.h"
+#include "Mesh.h"
+#include "FastFormat.h"
+
+// Append the indices of nodes, each offset by noffset and preceded by sep.
+static void AppendNodeIndices( string &out, const vector < FeaNode* > &nodes, long long int noffset, char sep )
+{
+    for ( size_t i = 0; i < nodes.size(); i++ )
+    {
+        out += sep;
+        FastFormat::AppendInt( out, nodes[i]->GetIndex() + noffset );
+    }
+}
+
+// Append v right justified in a field of width, as printf's %<width>lld writes it.
+static void AppendIntW( string &out, long long v, int width )
+{
+    string num;
+    FastFormat::AppendInt( num, v );
+    if ( (int)num.size() < width )
+    {
+        out.append( width - num.size(), ' ' );
+    }
+    out += num;
+}
 
 using namespace StringUtil;
 
@@ -65,20 +89,22 @@ long long int FeaNode::GetIndex()
     return m_Index;
 }
 
-void FeaNode::WriteNASTRAN( FILE* fp, long long int noffset, bool includeBC )
+void FeaNode::AppendNASTRAN( string &out, long long int noffset, bool includeBC )
 {
-    double x = m_Pnt.x();
-    double y = m_Pnt.y();
-    double z = m_Pnt.z();
-
-    string bcstr;
+    out += "GRID    ,";
+    AppendIntW( out, m_Index + noffset, 8 );
+    out += ",        ,";
+    AppendNas( out, m_Pnt.x() );
+    out += ',';
+    AppendNas( out, m_Pnt.y() );
+    out += ',';
+    AppendNas( out, m_Pnt.z() );
+    out += ",        ,";
     if ( includeBC )
     {
-        bcstr = m_BCs.AsNASTRAN();
+        out += m_BCs.AsNASTRAN();
     }
-
-    string fmt = "GRID    ,%8lld,        ," + NasFmt( x ) + "," + NasFmt( y ) + "," + NasFmt( z ) + ",        ,%s\n";
-    fprintf( fp, fmt.c_str(), m_Index + noffset, x, y, z, bcstr.c_str() );
+    out += '\n';
 }
 
 void FeaNode::WriteNASTRAN_SPC1( FILE* fp, long long int noffset )
@@ -91,21 +117,16 @@ void FeaNode::WriteNASTRAN_SPC1( FILE* fp, long long int noffset )
     }
 }
 
-void FeaNode::WriteCalculix( FILE* fp, long long int noffset )
+void FeaNode::AppendCalculix( string &out, long long int noffset )
 {
-    if ( true )   // print 'just' nodes.
-    {
-        fprintf( fp, "%lld,%f,%f,%f\n", m_Index + noffset, m_Pnt.x(), m_Pnt.y(), m_Pnt.z() );
-    }
-    else          // also print node tags for debugging.
-    {
-        fprintf( fp, "%lld,%f,%f,%f  ** ", m_Index + noffset, m_Pnt.x(), m_Pnt.y(), m_Pnt.z() );
-        for ( int i = 0; i < m_Tags.size(); i++ )
-        {
-            fprintf( fp, "%d ", m_Tags[ i ] );
-        }
-        fprintf( fp, "\n" );
-    }
+    FastFormat::AppendInt( out, m_Index + noffset );
+    out += ',';
+    FastFormat::AppendF( out, m_Pnt.x(), 0, 6 );
+    out += ',';
+    FastFormat::AppendF( out, m_Pnt.y(), 0, 6 );
+    out += ',';
+    FastFormat::AppendF( out, m_Pnt.z(), 0, 6 );
+    out += '\n';
 }
 
 void FeaNode::WriteCalculixBCs( FILE* fp, long long int noffset )
@@ -122,9 +143,16 @@ void FeaNode::WriteCalculixBCs( FILE* fp, long long int noffset )
     }
 }
 
-void FeaNode::WriteGmsh( FILE* fp, long long int noffset )
+void FeaNode::AppendGmsh( string &out, long long int noffset )
 {
-    fprintf( fp, "%lld %f %f %f\n", m_Index + noffset, m_Pnt.x(), m_Pnt.y(), m_Pnt.z() );
+    FastFormat::AppendInt( out, m_Index + noffset );
+    out += ' ';
+    FastFormat::AppendF( out, m_Pnt.x(), 0, 6 );
+    out += ' ';
+    FastFormat::AppendF( out, m_Pnt.y(), 0, 6 );
+    out += ' ';
+    FastFormat::AppendF( out, m_Pnt.z(), 0, 6 );
+    out += '\n';
 }
 
 //////////////////////////////////////////////////////
@@ -198,22 +226,18 @@ void FeaTri::Create( vec3d & p0, vec3d & p1, vec3d & p2, bool highorder )
     }
 }
 
-void FeaTri::WriteCalculix( FILE* fp, int id, long long int noffset, long long int eoffset )
+void FeaTri::AppendCalculix( string &out, int id, long long int noffset, long long int eoffset )
 {
-    if ( m_ElementType == FEA_TRI_3 )
+    FastFormat::AppendInt( out, id + eoffset );
+    AppendNodeIndices( out, m_Corners, noffset, ',' );
+    if ( m_ElementType != FEA_TRI_3 )
     {
-        fprintf( fp, "%lld,%lld,%lld,%lld\n", id + eoffset,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset );
+        AppendNodeIndices( out, m_Mids, noffset, ',' );
     }
-    else
-    {
-        fprintf( fp, "%lld,%lld,%lld,%lld,%lld,%lld,%lld\n", id + eoffset,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset,
-                 m_Mids[0]->GetIndex() + noffset, m_Mids[1]->GetIndex() + noffset, m_Mids[2]->GetIndex() + noffset );
-    }
+    out += '\n';
 }
 
-void FeaTri::WriteNASTRAN( FILE* fp, int id, int property_index, long long int noffset, long long int eoffset )
+void FeaTri::AppendNASTRAN( string &out, int id, int property_index, long long int noffset, long long int eoffset )
 {
     vec3d v01 = m_Corners[1]->m_Pnt - m_Corners[0]->m_Pnt;
     vec3d v12 = m_Corners[2]->m_Pnt - m_Corners[1]->m_Pnt;
@@ -229,43 +253,58 @@ void FeaTri::WriteNASTRAN( FILE* fp, int id, int property_index, long long int n
         theta_material += 180.0;
     }
 
-
     if ( m_ElementType == FEA_TRI_3 )
     {
-        string format_string = "CTRIA3  ,%8lld,%8lld,%8lld,%8lld,%8lld," + NasFmt( theta_material ) + "\n";
-
-        fprintf( fp, format_string.c_str(), id + eoffset, property_index + 1,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset,
-                 theta_material );
+        out += "CTRIA3  ,";
     }
     else
     {
-        string format_string = "CTRIA6  ,%8lld,%8lld,%8lld,%8lld,%8lld,%8lld,%8lld,%8lld,\n        ," + NasFmt( theta_material ) + "\n";
-
-        fprintf( fp, format_string.c_str(), id + eoffset, property_index + 1,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset,
-                 m_Mids[0]->GetIndex() + noffset, m_Mids[1]->GetIndex() + noffset, m_Mids[2]->GetIndex() + noffset, theta_material );
+        out += "CTRIA6  ,";
     }
+    AppendIntW( out, id + eoffset, 8 );
+    out += ',';
+    AppendIntW( out, property_index + 1, 8 );
+    for ( int i = 0; i < 3; i++ )
+    {
+        out += ',';
+        AppendIntW( out, m_Corners[i]->GetIndex() + noffset, 8 );
+    }
+
+    if ( m_ElementType != FEA_TRI_3 )
+    {
+        for ( int i = 0; i < 3; i++ )
+        {
+            out += ',';
+            AppendIntW( out, m_Mids[i]->GetIndex() + noffset, 8 );
+        }
+        out += ",\n        ";
+    }
+    out += ',';
+    AppendNas( out, theta_material );
+    out += '\n';
 }
 
-void FeaTri::WriteGmsh( FILE* fp, int id, int fea_part_index, long long int noffset, long long int eoffset )
+void FeaTri::AppendGmsh( string &out, int id, int fea_part_index, long long int noffset, long long int eoffset )
 {
+    FastFormat::AppendInt( out, id + eoffset );
     if ( m_ElementType == FEA_TRI_3 )
     {
-        // 3-node triangle element type (2)
-        fprintf( fp, "%lld 2 1 %d %lld %lld %lld\n", id + eoffset, fea_part_index,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset );
+        out += " 2 1 ";
     }
     else
     {
-        // 6-node second order triangle element type (9)
-        fprintf( fp, "%lld 9 1 %d %lld %lld %lld %lld %lld %lld\n", id + eoffset, fea_part_index,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset,
-                 m_Mids[0]->GetIndex() + noffset,m_Mids[1]->GetIndex() + noffset, m_Mids[2]->GetIndex() + noffset );
+        out += " 9 1 ";
     }
+    FastFormat::AppendInt( out, fea_part_index );
+    AppendNodeIndices( out, m_Corners, noffset, ' ' );
+    if ( m_ElementType != FEA_TRI_3 )
+    {
+        AppendNodeIndices( out, m_Mids, noffset, ' ' );
+    }
+    out += '\n';
 }
 
-void FeaTri::WriteSTL( FILE* fp )
+void FeaTri::AppendSTL( string &out )
 {
     vec3d p0 = m_Corners[0]->m_Pnt;
     vec3d p1 = m_Corners[1]->m_Pnt;
@@ -275,15 +314,7 @@ void FeaTri::WriteSTL( FILE* fp )
     vec3d norm = cross( v01, v12 );
     norm.normalize();
 
-    fprintf( fp, " facet normal  %2.10le %2.10le %2.10le\n",  norm.x(), norm.y(), norm.z() );
-    fprintf( fp, "   outer loop\n" );
-
-    fprintf( fp, "     vertex %2.10le %2.10le %2.10le\n", p0.x(), p0.y(), p0.z() );
-    fprintf( fp, "     vertex %2.10le %2.10le %2.10le\n", p1.x(), p1.y(), p1.z() );
-    fprintf( fp, "     vertex %2.10le %2.10le %2.10le\n", p2.x(), p2.y(), p2.z() );
-
-    fprintf( fp, "   endloop\n" );
-    fprintf( fp, " endfacet\n" );
+    AppendSTLFacet( out, norm, p0, p1, p2 );
 }
 
 double FeaTri::ComputeMass( int property_index )
@@ -299,7 +330,7 @@ double FeaTri::ComputeMass( int property_index )
     double avg_t = 0;
     int mat_index = -1;
 
-    vector < SimpleFeaProperty > simp_prop_vec = FeaMeshMgr.GetSimplePropertyVec();
+    const vector < SimpleFeaProperty > & simp_prop_vec = FeaMeshMgr.GetSimplePropertyVec();
 
     if ( property_index < simp_prop_vec.size() && property_index >= 0 && simp_prop_vec.size() > 0 )
     {
@@ -309,7 +340,7 @@ double FeaTri::ComputeMass( int property_index )
 
     double avg_d = 0;
 
-    vector < SimpleFeaMaterial > simp_mat_vec = FeaMeshMgr.GetSimpleMaterialVec();
+    const vector < SimpleFeaMaterial > & simp_mat_vec = FeaMeshMgr.GetSimpleMaterialVec();
 
     if ( mat_index < simp_mat_vec.size() && mat_index >= 0 && simp_mat_vec.size() > 0 )
     {
@@ -352,21 +383,17 @@ void FeaQuad::Create( vec3d & p0, vec3d & p1, vec3d & p2, vec3d & p3, bool higho
     }
 }
 
-void FeaQuad::WriteCalculix( FILE* fp, int id, long long int noffset, long long int eoffset )
+void FeaQuad::AppendCalculix( string &out, int id, long long int noffset, long long int eoffset )
 {
-    if ( m_ElementType == FEA_QUAD_4 )
+    FastFormat::AppendInt( out, id + eoffset );
+    AppendNodeIndices( out, m_Corners, noffset, ',' );
+    if ( m_ElementType != FEA_QUAD_4 )
     {
-        fprintf( fp, "%lld,%lld,%lld,%lld,%lld\n", id + eoffset,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset, m_Corners[3]->GetIndex() + noffset );
+        AppendNodeIndices( out, m_Mids, noffset, ',' );
     }
-    else
-    {
-        fprintf( fp, "%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld\n", id + eoffset,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset, m_Corners[3]->GetIndex() + noffset,
-                 m_Mids[0]->GetIndex() + noffset, m_Mids[1]->GetIndex() + noffset, m_Mids[2]->GetIndex() + noffset, m_Mids[3]->GetIndex() + noffset );
-    }
+    out += '\n';
 }
-void FeaQuad::WriteNASTRAN( FILE* fp, int id, int property_index, long long int noffset, long long int eoffset )
+void FeaQuad::AppendNASTRAN( string &out, int id, int property_index, long long int noffset, long long int eoffset )
 {
     vec3d v01 = m_Corners[1]->m_Pnt - m_Corners[0]->m_Pnt;
     vec3d v12 = m_Corners[2]->m_Pnt - m_Corners[1]->m_Pnt;
@@ -384,40 +411,62 @@ void FeaQuad::WriteNASTRAN( FILE* fp, int id, int property_index, long long int 
 
     if ( m_ElementType == FEA_QUAD_4 )
     {
-        string format_string = "CQUAD4  ,%8lld,%8d,%8lld,%8lld,%8lld,%8lld," + NasFmt( theta_material ) + "\n";
-
-        fprintf( fp, format_string.c_str(), id + eoffset, property_index + 1,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset, m_Corners[3]->GetIndex() + noffset, theta_material );
+        out += "CQUAD4  ,";
     }
     else
     {
-        string format_string = "CQUAD8  ,%8lld,%8d,%8lld,%8lld,%8lld,%8lld,%8lld,%8lld,\n        ,%8lld,%8lld,        ,        ,        ,        ," + NasFmt( theta_material ) + "\n";
-
-        fprintf( fp, format_string.c_str(), id + eoffset, property_index + 1,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset, m_Corners[3]->GetIndex() + noffset,
-                 m_Mids[0]->GetIndex() + noffset, m_Mids[1]->GetIndex() + noffset, m_Mids[2]->GetIndex() + noffset, m_Mids[3]->GetIndex() + noffset, theta_material );
-
+        out += "CQUAD8  ,";
     }
+    AppendIntW( out, id + eoffset, 8 );
+    out += ',';
+    AppendIntW( out, property_index + 1, 8 );
+    for ( int i = 0; i < 4; i++ )
+    {
+        out += ',';
+        AppendIntW( out, m_Corners[i]->GetIndex() + noffset, 8 );
+    }
+
+    if ( m_ElementType != FEA_QUAD_4 )
+    {
+        for ( int i = 0; i < 2; i++ )
+        {
+            out += ',';
+            AppendIntW( out, m_Mids[i]->GetIndex() + noffset, 8 );
+        }
+        out += ",\n        ";
+        for ( int i = 2; i < 4; i++ )
+        {
+            out += ',';
+            AppendIntW( out, m_Mids[i]->GetIndex() + noffset, 8 );
+        }
+        out += ",        ,        ,        ,        ";
+    }
+    out += ',';
+    AppendNas( out, theta_material );
+    out += '\n';
 }
 
-void FeaQuad::WriteGmsh( FILE* fp, int id, int fea_part_index, long long int noffset, long long int eoffset )
+void FeaQuad::AppendGmsh( string &out, int id, int fea_part_index, long long int noffset, long long int eoffset )
 {
+    FastFormat::AppendInt( out, id + eoffset );
     if ( m_ElementType == FEA_QUAD_4 )
     {
-        // 4-node quadrangle element type (3)
-        fprintf( fp, "%lld 3 1 %d %lld %lld %lld %lld\n", id + eoffset, fea_part_index,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset, m_Corners[3]->GetIndex() + noffset );
+        out += " 3 1 ";
     }
     else
     {
-        // 8-node second order quadrangle element type (16)
-        fprintf( fp, "%lld 16 1 %d %lld %lld %lld %lld %lld %lld %lld %lld\n", id + eoffset, fea_part_index,
-                 m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset, m_Corners[2]->GetIndex() + noffset, m_Corners[3]->GetIndex() + noffset,
-                 m_Mids[0]->GetIndex() + noffset, m_Mids[1]->GetIndex() + noffset, m_Mids[2]->GetIndex() + noffset, m_Mids[3]->GetIndex() + noffset );
+        out += " 16 1 ";
     }
+    FastFormat::AppendInt( out, fea_part_index );
+    AppendNodeIndices( out, m_Corners, noffset, ' ' );
+    if ( m_ElementType != FEA_QUAD_4 )
+    {
+        AppendNodeIndices( out, m_Mids, noffset, ' ' );
+    }
+    out += '\n';
 }
 
-void FeaQuad::WriteSTL( FILE* fp )
+void FeaQuad::AppendSTL( string &out )
 {
     vec3d p0 = m_Corners[0]->m_Pnt;
     vec3d p1 = m_Corners[1]->m_Pnt;
@@ -427,15 +476,7 @@ void FeaQuad::WriteSTL( FILE* fp )
     vec3d norm = cross( v01, v12 );
     norm.normalize();
 
-    fprintf( fp, " facet normal  %2.10le %2.10le %2.10le\n",  norm.x(), norm.y(), norm.z() );
-    fprintf( fp, "   outer loop\n" );
-
-    fprintf( fp, "     vertex %2.10le %2.10le %2.10le\n", p0.x(), p0.y(), p0.z() );
-    fprintf( fp, "     vertex %2.10le %2.10le %2.10le\n", p1.x(), p1.y(), p1.z() );
-    fprintf( fp, "     vertex %2.10le %2.10le %2.10le\n", p2.x(), p2.y(), p2.z() );
-
-    fprintf( fp, "   endloop\n" );
-    fprintf( fp, " endfacet\n" );
+    AppendSTLFacet( out, norm, p0, p1, p2 );
 
     vec3d p3 = m_Corners[3]->m_Pnt;
     vec3d v23 = p3 - p2;
@@ -443,15 +484,7 @@ void FeaQuad::WriteSTL( FILE* fp )
     norm = cross( v23, v30 );
     norm.normalize();
 
-    fprintf( fp, " facet normal  %2.10le %2.10le %2.10le\n",  norm.x(), norm.y(), norm.z() );
-    fprintf( fp, "   outer loop\n" );
-
-    fprintf( fp, "     vertex %2.10le %2.10le %2.10le\n", p0.x(), p0.y(), p0.z() );
-    fprintf( fp, "     vertex %2.10le %2.10le %2.10le\n", p2.x(), p2.y(), p2.z() );
-    fprintf( fp, "     vertex %2.10le %2.10le %2.10le\n", p3.x(), p3.y(), p3.z() );
-
-    fprintf( fp, "   endloop\n" );
-    fprintf( fp, " endfacet\n" );
+    AppendSTLFacet( out, norm, p0, p2, p3 );
 }
 
 double FeaQuad::ComputeMass( int property_index )
@@ -469,7 +502,7 @@ double FeaQuad::ComputeMass( int property_index )
     double avg_t = 0;
     int mat_index = -1;
 
-    vector < SimpleFeaProperty > simp_prop_vec = FeaMeshMgr.GetSimplePropertyVec();
+    const vector < SimpleFeaProperty > & simp_prop_vec = FeaMeshMgr.GetSimplePropertyVec();
 
     if ( property_index < simp_prop_vec.size() && property_index >= 0 && simp_prop_vec.size() > 0 )
     {
@@ -479,7 +512,7 @@ double FeaQuad::ComputeMass( int property_index )
 
     double avg_d = 0;
 
-    vector < SimpleFeaMaterial > simp_mat_vec = FeaMeshMgr.GetSimpleMaterialVec();
+    const vector < SimpleFeaMaterial > & simp_mat_vec = FeaMeshMgr.GetSimpleMaterialVec();
 
     if ( mat_index < simp_mat_vec.size() && mat_index >= 0 && simp_mat_vec.size() > 0 )
     {
@@ -510,10 +543,16 @@ void FeaBeam::Create( vec3d &p0, vec3d &p1, vec3d &norm0, vec3d &norm1 )
     m_Norm1 = norm1;
 }
 
-void FeaBeam::WriteCalculix( FILE* fp, int id, long long int noffset, long long int eoffset )
+void FeaBeam::AppendCalculix( string &out, int id, long long int noffset, long long int eoffset )
 {
-    fprintf( fp, "%lld,%lld,%lld,%lld\n", id + eoffset,
-             m_Corners[0]->GetIndex() + noffset, m_Mids[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset );
+    FastFormat::AppendInt( out, id + eoffset );
+    out += ',';
+    FastFormat::AppendInt( out, m_Corners[0]->GetIndex() + noffset );
+    out += ',';
+    FastFormat::AppendInt( out, m_Mids[0]->GetIndex() + noffset );
+    out += ',';
+    FastFormat::AppendInt( out, m_Corners[1]->GetIndex() + noffset );
+    out += '\n';
 
     m_ElementIndex = id; // Save element index 
 }
@@ -533,20 +572,36 @@ void FeaBeam::WriteCalculixNormal( FILE* fp )
     fprintf( fp, "%f,%f,%f\n", m_Norm0.x(), m_Norm0.y(), m_Norm0.z() );
 }
 
-void FeaBeam::WriteNASTRAN( FILE* fp, int id, int property_index, long long int noffset, long long int eoffset )
+void FeaBeam::AppendNASTRAN( string &out, int id, int property_index, long long int noffset, long long int eoffset )
 {
-    string format_string = "CBAR    ,%8lld,%8d,%8lld,%8lld," + NasFmt( m_Norm0.x() ) + "," +
-                           NasFmt( m_Norm0.y() ) + "," + NasFmt( m_Norm0.z() ) + "\n";
-
-    fprintf( fp, format_string.c_str(), id + eoffset, property_index + 1, m_Corners[0]->GetIndex() + noffset,
-             m_Corners[1]->GetIndex() + noffset, m_Norm0.x(), m_Norm0.y(), m_Norm0.z() );
+    out += "CBAR    ,";
+    AppendIntW( out, id + eoffset, 8 );
+    out += ',';
+    AppendIntW( out, property_index + 1, 8 );
+    out += ',';
+    AppendIntW( out, m_Corners[0]->GetIndex() + noffset, 8 );
+    out += ',';
+    AppendIntW( out, m_Corners[1]->GetIndex() + noffset, 8 );
+    out += ',';
+    AppendNas( out, m_Norm0.x() );
+    out += ',';
+    AppendNas( out, m_Norm0.y() );
+    out += ',';
+    AppendNas( out, m_Norm0.z() );
+    out += '\n';
 }
 
-void FeaBeam::WriteGmsh( FILE* fp, int id, int fea_part_index, long long int noffset, long long int eoffset )
+void FeaBeam::AppendGmsh( string &out, int id, int fea_part_index, long long int noffset, long long int eoffset )
 {
     // 2 node line line (1)
-    fprintf( fp, "%lld 1 1 %d %lld %lld\n", id + eoffset, fea_part_index,
-             m_Corners[0]->GetIndex() + noffset, m_Corners[1]->GetIndex() + noffset );
+    FastFormat::AppendInt( out, id + eoffset );
+    out += " 1 1 ";
+    FastFormat::AppendInt( out, fea_part_index );
+    out += ' ';
+    FastFormat::AppendInt( out, m_Corners[0]->GetIndex() + noffset );
+    out += ' ';
+    FastFormat::AppendInt( out, m_Corners[1]->GetIndex() + noffset );
+    out += '\n';
 }
 
 double FeaBeam::ComputeMass( int property_index )
@@ -563,7 +618,7 @@ double FeaBeam::ComputeMass( int property_index )
     double area = 0;
     int mat_index = -1;
 
-    vector < SimpleFeaProperty > simp_prop_vec = FeaMeshMgr.GetSimplePropertyVec();
+    const vector < SimpleFeaProperty > & simp_prop_vec = FeaMeshMgr.GetSimplePropertyVec();
 
     if ( property_index < simp_prop_vec.size() && property_index >= 0 && simp_prop_vec.size() > 0 )
     {
@@ -573,7 +628,7 @@ double FeaBeam::ComputeMass( int property_index )
 
     double avg_d = 0;
 
-    vector < SimpleFeaMaterial > simp_mat_vec = FeaMeshMgr.GetSimpleMaterialVec();
+    const vector < SimpleFeaMaterial > & simp_mat_vec = FeaMeshMgr.GetSimpleMaterialVec();
 
     if ( mat_index < simp_mat_vec.size() && mat_index >= 0 && simp_mat_vec.size() > 0 )
     {
@@ -600,17 +655,24 @@ void FeaPointMass::Create( vec3d & p0, double mass )
     m_Mass = mass;
 }
 
-void FeaPointMass::WriteCalculix( FILE* fp, int id, long long int noffset, long long int eoffset )
+void FeaPointMass::AppendCalculix( string &out, int id, long long int noffset, long long int eoffset )
 {
-    fprintf( fp, "%lld,%lld\n", id + eoffset, m_Corners[0]->GetIndex() + noffset );
+    FastFormat::AppendInt( out, id + eoffset );
+    out += ',';
+    FastFormat::AppendInt( out, m_Corners[0]->GetIndex() + noffset );
+    out += '\n';
 }
 
-void FeaPointMass::WriteNASTRAN( FILE* fp, int id, int property_index, long long int noffset, long long int eoffset )
+void FeaPointMass::AppendNASTRAN( string &out, int id, int property_index, long long int noffset, long long int eoffset )
 {
     // Note: property_index ignored
-    string format_string = "CONM2   ,%8lld,%8lld,        ," + NasFmt( m_Mass ) + "\n";
-
-    fprintf( fp, format_string.c_str(), id + eoffset, m_Corners[0]->GetIndex() + noffset, m_Mass );
+    out += "CONM2   ,";
+    AppendIntW( out, id + eoffset, 8 );
+    out += ',';
+    AppendIntW( out, m_Corners[0]->GetIndex() + noffset, 8 );
+    out += ",        ,";
+    AppendNas( out, m_Mass );
+    out += '\n';
 }
 
 //////////////////////////////////////////////////////

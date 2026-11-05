@@ -22,7 +22,7 @@ class MaterialLabelContextTests(unittest.TestCase):
     def test_material_button_uses_its_own_fixed_context(self):
         labels = re.findall(r'AddButton\(\s*m_CustomMaterialButton\s*,\s*"([^"]+)"\s*\)', self.screen)
         self.assertEqual(labels, ['Customize Material'])
-        self.assertRegex(self.custom, r'CustomScreen::CustomScreen\([^\n]+GeomScreen\([^\n]+"Custom"\s*\)')
+        self.assertRegex(self.custom, r'CustomScreen::CustomScreen\([^\n]+GeomScreen\([^\n]+"Custom"\s*,\s*"Custom\.html"\s*\)')
 
     def test_material_names_are_passed_raw_without_translation(self):
         body = self.screen.split('void GeomScreen::UpdateMaterialNames()', 1)[1].split(

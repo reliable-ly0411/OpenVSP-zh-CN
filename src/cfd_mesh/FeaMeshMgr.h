@@ -59,6 +59,12 @@ public:
 
     virtual ~FeaMeshMgrSingleton();
     virtual void CleanUp() override;
+
+    bool CoplanarSurfsMeshed() const override
+    {
+        return false;
+    }
+
     virtual void CleanMeshMap();
 
     // The finished meshes are kept in a map of their own, one per structure, so emptying the
@@ -110,7 +116,9 @@ public:
     virtual void TransferFeaData();
     virtual void TransferPropMatData();
     virtual void TransferSubSurfData() override;
-    virtual bool CheckPropMat();
+    virtual vector < string > GetSimplePropertyIDVec();
+    virtual bool CheckPropMat( vector < SimpleSubSurface > &ssvec, FeaMesh* mesh );
+    virtual bool IndexAndCheckPropMat( FeaMesh* mesh );
     virtual void TransferBCData();
     virtual void MergeCoplanarParts();
     virtual void AddStructureSurfParts();
@@ -123,11 +131,13 @@ public:
     virtual void SetFixPointBorderNodes() override;
     virtual void CheckFixPointIntersects() override;
     virtual void BuildFeaMesh();
+    FeaElement* BuildFeaShellElement( int i, vector < SimpFace > &all_face_vec, const vector < int > &tri_surf_ind_vec, vector < vec3d > &node_vec, const vector < vec2d > &new_uw_vec, const vector < int > &new_uw_surf_ind_vec, bool highorder );
     virtual void CheckSubSurfBorderIntersect();
     virtual void CheckDuplicateSSIntersects();
     virtual void MergeFeaPartSSEdgeOverlap() override;
     virtual void RemoveSubSurfFeaTris();
     virtual void TagFeaNodes();
+    void ElementNodeBases( int j, int nelem_loaded, const vector < int > &elem_node_start, PntNodeCloud &pnCloud, vector < int > &node_base );
 
     virtual void SetFeaMeshStructID( const string &struct_id )
     {

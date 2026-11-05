@@ -17,6 +17,17 @@
 
 #include <FL/Fl.H>
 
+// The harmonic motion controls of one hinge: its mean, number of harmonics and coefficients.
+struct HarmonicGui
+{
+    SliderAdjRangeInput m_MeanSlider;
+    GroupLayout m_Layout;
+    Fl_Scroll* m_Scroll;
+    string m_Greek;
+    vector < SliderAdjRangeInput > m_CosSliderVec;
+    vector < SliderAdjRangeInput > m_SinSliderVec;
+};
+
 class PropScreen : public XSecScreen
 {
 public:
@@ -24,6 +35,12 @@ public:
     virtual ~PropScreen();
 
     virtual void RedrawBladeAzimuthSliders( int num_sliders );
+    virtual void AddSliderPair( GroupLayout & layout, SliderAdjRangeInput & a, const string & alabel, double arange,
+                                SliderAdjRangeInput & b, const string & blabel, double brange );
+    virtual void AddHingePlace( SliderAdjRangeInput & rad, SliderAdjRangeInput & ax, SliderAdjRangeInput & off );
+    virtual void AddHarmonicGui( HarmonicGui & gui, SliderAdjRangeInput & angle, const string & greek );
+    virtual void UpdateHarmonicGui( HarmonicGui & gui, Parm & mean, const vector< Parm* > & cosvec,
+                                    const vector< Parm* > & sinvec );
 
     virtual void Show();
     virtual bool Update();
@@ -71,6 +88,8 @@ protected:
     SliderAdjRangeInput m_MarkerScaleSlider;
 
     Choice m_PropModeChoice;
+    Choice m_PresetChoice;
+    TriggerButton m_PresetButton;
 
     TriggerButton m_InsertXSec;
     TriggerButton m_CutXSec;
@@ -150,18 +169,44 @@ protected:
 
     PCurveEditor m_CurveEditor;
 
-    GroupLayout m_MoreLayout;
+    GroupLayout m_HingeLayout;
 
+    SliderAdjRangeInput m_HingeRotateSlider;
+    SliderAdjRangeInput m_PsiRefSlider;
+
+    Choice m_BladeMotionModeChoice;
+    Counter m_NumHarmonicsCounter;
+    IndexSelector m_ActiveBladeIndexSelector;
+
+    SliderAdjRangeInput m_FlapAngleSlider;
+    HarmonicGui m_FlapHarmonicGui;
+    SliderAdjRangeInput m_RFlapSlider;
+    SliderAdjRangeInput m_AxFlapSlider;
+    SliderAdjRangeInput m_OffFlapSlider;
+    SliderAdjRangeInput m_AzFlapSlider;
+    SliderAdjRangeInput m_ElFlapSlider;
+
+    SliderAdjRangeInput m_LagAngleSlider;
+    HarmonicGui m_LagHarmonicGui;
+    SliderAdjRangeInput m_RLagSlider;
+    SliderAdjRangeInput m_AxLagSlider;
+    SliderAdjRangeInput m_OffLagSlider;
+    SliderAdjRangeInput m_AzLagSlider;
+    SliderAdjRangeInput m_CantLagSlider;
+
+    SliderAdjRangeInput m_HingeFeatherSlider;
+    HarmonicGui m_FeatherHarmonicGui;
+    SliderAdjRangeInput m_RFeatherSlider;
+
+    ToggleButton m_IndividualBladeFoldToggle;
+    SliderAdjRangeInput m_FoldAngleSlider;
     SliderAdjRangeInput m_RFoldSlider;
     SliderAdjRangeInput m_AxFoldSlider;
     SliderAdjRangeInput m_OffFoldSlider;
     SliderAdjRangeInput m_AzFoldSlider;
     SliderAdjRangeInput m_ElFoldSlider;
-    SliderAdjRangeInput m_FoldAngleSlider;
 
-    ToggleButton m_IndividualBladeFoldToggle;
-    Counter m_ActiveBladeIndexSelector;
-
+    GroupLayout m_MoreLayout;
 
     Choice m_BladeAziModeChoice;
     ToggleButton m_BladeAziDeltaButton;

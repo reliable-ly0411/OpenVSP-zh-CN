@@ -108,6 +108,8 @@ public:
 
     int m_POGSNRef;
 
+    bool m_TopoInteriorFlag;
+
     string m_FarGeomID;
 
     double m_FarXScale; // Check FractionParm to double is appropriate data conversion
@@ -209,6 +211,8 @@ public:
     void Highlight( BaseSource * source ); // TODO: Update to SimpleSource
 
     bool m_RigorLimit;
+    bool m_WidthLimit;
+    double m_NWidthSeg;
     double m_BaseLen;
     double m_FarMaxLen;
     double m_MinLen;

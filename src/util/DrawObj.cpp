@@ -264,6 +264,7 @@ DrawObj::DrawObj()
 
     m_Visible = true;
     m_VisibleDirFlag = false;
+    m_VisibleDirBothFlag = true;
     m_VisibleDir = vec3d( 0, 0, 0 );
     m_VisTol = 1.0;
 
@@ -805,6 +806,9 @@ int DrawObj::reasonColorMap( int reason )
         case vsp::SOURCES:
             return DrawObj::MAGENTA;
             break;
+        case vsp::SURF_WIDTH:
+            return DrawObj::DARK_ORANGE;
+            break;
         case vsp::MIN_LEN_CONSTRAINT:
             return DrawObj::BLACK;
             break;
@@ -816,6 +820,9 @@ int DrawObj::reasonColorMap( int reason )
             break;
         case vsp::MIN_LEN_CONSTRAINT_SOURCES:
             return DrawObj::BLACK;
+            break;
+        case vsp::MIN_LEN_CONSTRAINT_SURF_WIDTH:
+            return DrawObj::BROWN;
             break;
         case vsp::GROW_LIMIT_MAX_LEN_CONSTRAINT:
             return DrawObj::TOMATO;
@@ -829,6 +836,9 @@ int DrawObj::reasonColorMap( int reason )
         case vsp::GROW_LIMIT_SOURCES:
             return DrawObj::VIOLET;
             break;
+        case vsp::GROW_LIMIT_SURF_WIDTH:
+            return DrawObj::GOLD;
+            break;
         case vsp::GROW_LIMIT_MIN_LEN_CONSTRAINT:
             return DrawObj::LIGHT_SALMON;
             break;
@@ -840,6 +850,9 @@ int DrawObj::reasonColorMap( int reason )
             break;
         case vsp::GROW_LIMIT_MIN_LEN_CONSTRAINT_SOURCES:
             return DrawObj::VIOLET;
+            break;
+        case vsp::GROW_LIMIT_MIN_LEN_CONSTRAINT_SURF_WIDTH:
+            return DrawObj::GOLD;
             break;
         default:
             return DrawObj::BLACK;

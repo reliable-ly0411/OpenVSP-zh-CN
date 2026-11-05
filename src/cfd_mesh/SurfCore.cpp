@@ -421,66 +421,49 @@ void SurfCore::LoadBorderCurves( vector < Bezier_curve > & borderCurves ) const
     borderCurves.push_back( GetBorderCurve( UMAX ) );
 }
 
-bool SurfCore::SurfMatch( SurfCore* otherSurf ) const
+// Whether otherSurf is this surface, however its parameters run.  Reversing one direction, or
+// swapping the two, turns the normal over, and a second does so again.  opposite is set where the
+// two are matched with their normals pointing apart, which is said of a surface that matches both
+// ways round.
+bool SurfCore::SurfMatch( SurfCore* otherSurf, bool &opposite ) const
 {
-    piecewise_surface_type osurf, swaposurf;
+    bool match = false;
+    opposite = false;
 
-    osurf = otherSurf->m_Surface;
-    if( MatchThisOrientation( osurf ) )
+    for ( int swap = 0; swap < 2; swap++ )
     {
-        return true;
+        for ( int rv = 0; rv < 2; rv++ )
+        {
+            for ( int ru = 0; ru < 2; ru++ )
+            {
+                piecewise_surface_type osurf = otherSurf->m_Surface;
+                if ( swap )
+                {
+                    osurf.swap_uv();
+                }
+                if ( ru )
+                {
+                    osurf.reverse_u();
+                }
+                if ( rv )
+                {
+                    osurf.reverse_v();
+                }
+
+                if ( MatchThisOrientation( osurf ) )
+                {
+                    match = true;
+                    if ( ( swap + ru + rv ) % 2 == 1 )
+                    {
+                        opposite = true;
+                        return true;
+                    }
+                }
+            }
+        }
     }
 
-    osurf = otherSurf->m_Surface;
-    osurf.reverse_u();
-    if( MatchThisOrientation( osurf ) )
-    {
-        return true;
-    }
-
-    osurf = otherSurf->m_Surface;
-    osurf.reverse_v();
-    if( MatchThisOrientation( osurf ) )
-    {
-        return true;
-    }
-
-    osurf = otherSurf->m_Surface;
-    osurf.reverse_u();
-    osurf.reverse_v();
-    if( MatchThisOrientation( osurf ) )
-    {
-        return true;
-    }
-
-    swaposurf = otherSurf->m_Surface;
-    swaposurf.swap_uv();
-
-    osurf = swaposurf;
-    if( MatchThisOrientation( osurf ) )
-    {
-        return true;
-    }
-
-    osurf = swaposurf;
-    osurf.reverse_u();
-    if( MatchThisOrientation( osurf ) )
-    {
-        return true;
-    }
-
-    osurf = swaposurf;
-    osurf.reverse_v();
-    if( MatchThisOrientation( osurf ) )
-    {
-        return true;
-    }
-
-    osurf = swaposurf;
-    osurf.reverse_u();
-    osurf.reverse_v();
-
-    return MatchThisOrientation( osurf );
+    return match;
 }
 
 bool SurfCore::MatchThisOrientation( const piecewise_surface_type &osurf ) const
@@ -833,9 +816,9 @@ void SurfCore::TangentStep( double &u, double &w, const vec3d &target ) const
     u = std::min( std::max( u, umn ), umx );
     w = std::min( std::max( w, wmn ), wmx );
 
-    surface_point_type S( m_Surface.f( u, w ) );
-    surface_point_type Su( m_Surface.f_u( u, w ) );
-    surface_point_type Sv( m_Surface.f_v( u, w ) );
+    // The point and both tangents from one patch lookup.
+    surface_point_type S, Su, Sv;
+    m_Surface.f_pt_derivs( u, w, S, Su, Sv );
 
     surface_point_type tgt;
     target.get_pnt( tgt );

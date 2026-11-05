@@ -449,7 +449,7 @@ void Bogie:: UpdateParms()
         m_WsFrac = m_WsIn() / W;
         m_WsModel = m_WsIn() * in2model;
     }
-    else if ( m_WsMode() == vsp::TIRE_DIM_IN )
+    else if ( m_WsMode() == vsp::TIRE_DIM_MODEL )
     {
         m_WsIn = m_WsModel() * model2in;
         m_WsFrac = m_WsIn() / W;
@@ -465,7 +465,7 @@ void Bogie:: UpdateParms()
         m_HsFrac = m_HsIn() / H;
         m_HsModel = m_HsIn() * in2model;
     }
-    else if ( m_HsMode() == vsp::TIRE_DIM_IN )
+    else if ( m_HsMode() == vsp::TIRE_DIM_MODEL )
     {
         m_HsIn = m_HsModel() * model2in;
         m_HsFrac = m_HsIn() / H;
@@ -1667,29 +1667,26 @@ void Bogie::ComposeMechAttachMatrix()
     FlipAttachMatrix( m_MechAttachMatrix );
 }
 
-void Bogie::BuildRetractMatrix( Matrix4d &ret_mat, vec3d &knee_pt, vec3d &knee_ax, double k, int isymm ) const
+// The retraction axis, the unbent strut from pivot to trunnion with its frame u_dir, n, v, and the
+// angle gamma the knee bend turns the upper strut about the axis.
+void Bogie::KneeFrame( vec3d &axis, vec3d &u, vec3d &u_dir, vec3d &n, vec3d &v, double &gamma ) const
 {
-    vec3d axis = vec3d( m_MechXAxis(), m_MechYAxis(), m_MechZAxis() );
+    axis = vec3d( m_MechXAxis(), m_MechYAxis(), m_MechZAxis() );
     axis.normalize();
 
     vec3d trunnion = vec3d( m_MechXLoc(), m_MechYLoc(), m_MechZLoc() );
 
     vec3d pivot = GetNominalPivotPoint( 0 );
 
-    vec3d u = trunnion - pivot;
+    u = trunnion - pivot;
 
-    vec3d u_dir = u;
+    u_dir = u;
     u_dir.normalize();
-    vec3d n = cross( axis, u_dir );
+    n = cross( axis, u_dir );
     n.normalize();
 
-    vec3d v = cross( u_dir, n );
+    v = cross( u_dir, n );
     v.normalize();
-
-    Matrix4d orientKnee;
-    orientKnee.rotate( m_MechKneeAzimuthAngle() * M_PI / 180.0, u_dir );
-    orientKnee.rotate( -m_MechKneeElevationAngle() * M_PI / 180.0, n );
-    vec3d w = orientKnee.xformnorm( v );
 
     // SSA calculation for knee position.  The angle at the pivot is asin( beta ), taken with atan2,
     // with 1 - beta and 1 + beta formed without cancellation from 1 -+ sin( alpha ) = 2 sin^2( t )
@@ -1702,8 +1699,25 @@ void Bogie::BuildRetractMatrix( Matrix4d &ret_mat, vec3d &knee_pt, vec3d &knee_a
     double ct = std::cos( t );
     double one_minus_beta = kpos + ( 1.0 - kpos ) * 2.0 * st * st;
     double one_plus_beta = kpos + ( 1.0 - kpos ) * 2.0 * ct * ct;
-    double gamma = M_PI - alpha - std::atan2( beta, std::sqrt( one_minus_beta * one_plus_beta ) );
+    gamma = M_PI - alpha - std::atan2( beta, std::sqrt( one_minus_beta * one_plus_beta ) );
+}
 
+void Bogie::BuildRetractMatrix( Matrix4d &ret_mat, vec3d &knee_pt, vec3d &knee_ax, double k, int isymm ) const
+{
+    vec3d axis, u, u_dir, n, v;
+    double gamma;
+    KneeFrame( axis, u, u_dir, n, v, gamma );
+
+    vec3d trunnion = vec3d( m_MechXLoc(), m_MechYLoc(), m_MechZLoc() );
+
+    vec3d pivot = GetNominalPivotPoint( 0 );
+
+    Matrix4d orientKnee;
+    orientKnee.rotate( m_MechKneeAzimuthAngle() * M_PI / 180.0, u_dir );
+    orientKnee.rotate( -m_MechKneeElevationAngle() * M_PI / 180.0, n );
+    vec3d w = orientKnee.xformnorm( v );
+
+    // The knee hinge is fixed to the upper strut, which the knee bend turns.
     Matrix4d knee_bend;
     knee_bend.translatev( trunnion );
     knee_bend.rotate( -gamma, axis ); // Negative is to match right hand rule
@@ -1720,7 +1734,7 @@ void Bogie::BuildRetractMatrix( Matrix4d &ret_mat, vec3d &knee_pt, vec3d &knee_a
     knee_ax = ret_mat.xformnorm( k_ax );
 
     ret_mat.translatev( k_pt );
-    ret_mat.rotate( -k * m_MechKneeAngle() * M_PI / 180.0, w ); // Negative is to match right hand rule
+    ret_mat.rotate( -k * m_MechKneeAngle() * M_PI / 180.0, k_ax ); // Negative is to match right hand rule
     ret_mat.translatev( -k_pt );
 
     ret_mat.translatev( GetContinuiousPivotPoint( 0, -k * m_MechStrutDL() ) );
@@ -2267,9 +2281,7 @@ void Bogie::UpdateTess()
                      m_TireMode() == vsp::TIRE_FAIR_FLANGE ||
                      m_TireMode() == vsp::TIRE_FAIR_WHEEL )
                 {
-                    m_GrownTireSurface.CopyNonSurfaceData( m_TireSurface );
                     gg->UpdateTess( m_GrownTireSurface, false, false, m_GrownTireTess, m_GrownTireFeatureTess );
-                    m_ClearanceSurface.CopyNonSurfaceData( m_TireSurface );
                     gg->UpdateTess( m_ClearanceSurface, false, false, m_ClearanceTess, m_ClearanceFeatureTess );
                 }
                 else
@@ -2861,7 +2873,11 @@ GearGeom::GearGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
 //==== Destructor ====//
 GearGeom::~GearGeom()
 {
-
+    for ( int i = 0; i < ( int )m_Bogies.size(); i++ )
+    {
+        delete m_Bogies[i];
+    }
+    m_Bogies.clear();
 }
 
 void GearGeom::SetDirtyFlags( Parm* parm_ptr )
@@ -3420,12 +3436,13 @@ xmlNodePtr GearGeom::DecodeXml( xmlNodePtr & node )
     char labelName[256];
 
     xmlNodePtr label_root_node = XmlUtil::GetNode( node, "Gear", 0 );
+    std::unordered_map< string, xmlNodePtr > label_nodes = XmlUtil::GetNodeMap( label_root_node );
 
     int numofLabels = XmlUtil::FindInt( label_root_node, "Num_of_Bogies", 0 );
     for ( int i = 0; i < numofLabels; i++ )
     {
         snprintf( labelName, sizeof( labelName ), "Bogie_%d", i );
-        xmlNodePtr label_node = XmlUtil::GetNode( label_root_node, labelName, 0 );
+        xmlNodePtr label_node = XmlUtil::FindNode( label_nodes, labelName );
         if( label_node )
         {
             xmlNodePtr parmcontain_node = XmlUtil::GetNode( label_node, "ParmContainer", 0 );
@@ -3540,22 +3557,6 @@ void GearGeom::DelAllBogies()
     m_Bogies.clear();
     m_CurrBogieIndex = -1;
     UpdateParents();
-}
-
-void GearGeom::ShowAllBogies()
-{
-    for( int i = 0; i < ( int )m_Bogies.size(); i++ )
-    {
-        m_Bogies[i]->m_Visible = true;
-    }
-}
-
-void GearGeom::HideAllBogies()
-{
-    for( int i = 0; i < ( int )m_Bogies.size(); i++ )
-    {
-        m_Bogies[i]->m_Visible = false;
-    }
 }
 
 Bogie * GearGeom::GetBogie( const string &id ) const
@@ -3778,23 +3779,24 @@ void GearGeom::BuildThreePtOffAxisBasis( const string &cp1, int isymm1, int susp
         // Find mean of main gear contact points.
         vec3d pmaincen = ( p2 + p3 ) * 0.5;
 
-        // Find wheelbase
-        double wb = dist( p1, pmaincen );
+        // The nominal track runs from the nose gear's contact point through the main gear's center, in the ground
+        // plane; wb is the wheelbase.
+        vec3d xnom = pmaincen - p1;
+        double wb = xnom.mag();
+        xnom.normalize();
 
-        // Trig to resolve specified offset measured perpendicular to nominal track.
-        // delta should be slightly larger than mainoffset
-        // double delta = wb * sin( atan( mainoffset / wb ) );
-        // Alternate equivalent formulation with less trig.
-        double o = mainoffset / wb;
-        double delta = mainoffset / sqrt( 1.0 + o * o );
+        // Square to the nominal track in the ground plane, toward the second main gear.
+        vec3d ynom = cross( normal, xnom );
+        ynom.normalize();
+        if ( dot( ynom, v23 ) < 0 )
+        {
+            ynom = -ynom;
+        }
 
-        // Offset mean main point along the line between the main gear contact points.
-        vec3d pmainoff = pmaincen + v23 * delta;
-
-        // X is in the ground plane by construction.
-        // All points on line between main gear contact points are on ground plane.
-        vec3d x = pmainoff - p1;
-        x.normalize();
+        // Turn the track about the nose gear's contact point so that the main gear's center lies mainoffset from
+        // it, measured square to the track.
+        double s = clamp( mainoffset / wb, -1.0, 1.0 );
+        vec3d x = xnom * std::sqrt( 1.0 - s * s ) + ynom * s;
 
         // Find rotated y direction.
         vec3d y = cross( normal, x );

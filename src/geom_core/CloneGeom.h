@@ -52,7 +52,7 @@ public:
                                        vector< vector< vector< vec3d > > > &norms ) const override;
 
     // The copied surfaces are already capped; take the original's results.
-    virtual void UpdateEndCaps( int ncap = -1 ) override;
+    virtual void UpdateEndCaps() override;
 
     virtual xmlNodePtr EncodeXml( xmlNodePtr & node ) override;
     virtual xmlNodePtr DecodeXml( xmlNodePtr & node ) override;
@@ -251,8 +251,28 @@ public:
     //==== Standing in for a rotor ====//
     virtual double GetRotorDiameter() const override;
     virtual double GetRotorR0() const override;
+    virtual double GetRotorFlapRadiusFract() const override;
     virtual bool GetRotorReverseFlag() const override;
     virtual bool GetRotorHubDiameter( double &hubdia ) const override;
+
+    // This Clone's own angle, the original's while it is copied, so Clones of one rotor can turn
+    // apart.  The blades are placed by the original.
+    virtual double GetRotorRotate() const override
+    {
+        return m_RotorRotate();
+    }
+    virtual void SetRotorRotate( double rotate ) override
+    {
+        m_RotorRotate.Set( rotate );
+    }
+    virtual void GetMainSurfVecAtRotate( double rotate, vector< VspSurf > &surfs ) override;
+    virtual void GetMainTessVecAtRotate( double rotate, vector< SimpleTess > &tess, vector< SimpleFeatureTess > &ftess ) override;
+    virtual void GetMainDegenGeomPreviewAtRotate( double rotate, vector< DegenGeom > &degen ) override;
+    virtual int NumPlacedBlades() override;
+    virtual Matrix4d GetBladePlacement( int iblade, double rotate ) override;
+
+    // The original as a rotor, if it is one.
+    virtual RotorRole* GetOriginalRotor() const;
 
     //==== Standing in for a joint ====//
     // Defined by the original, so a Clone of a hinge moves its children.  The deflection is
@@ -326,11 +346,15 @@ public:
     BoolParm m_CloneParasiteDrag;
     BoolParm m_CloneSubSurfs;
     BoolParm m_CloneJoint;
+    BoolParm m_CloneRotate;
     BoolParm m_AutoName;
 
     // Used only when the original is a joint.
     Parm m_JointTranslate;
     Parm m_JointRotate;
+
+    // Used only when the original is a rotor.
+    Parm m_RotorRotate;
 
 protected:
     virtual void UpdateSurf() override;

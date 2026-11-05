@@ -8,6 +8,7 @@
 #include "VertexBuffer.h"
 #include "ColorBuffer.h"
 #include "ElementBuffer.h"
+#include "gl2ps.h"
 
 #include "Display.h"
 
@@ -184,6 +185,14 @@ void Entity::_draw_Shaded()
 
 void Entity::_draw_Textured()
 {
+    // A vector file cannot hold a texture's image: there a lit surface is drawn with its
+    // material alone, and an unlit one, which shows nothing but its image, is left out.
+    bool image = gl2psGetFileFormat() == GL2PS_UNINITIALIZED;
+    if( !image && !_lighting )
+    {
+        return;
+    }
+
     if( _lighting )
     {
         glEnable( GL_LIGHTING );
@@ -193,9 +202,15 @@ void Entity::_draw_Textured()
     glEnable( GL_POLYGON_OFFSET_FILL );
     glPolygonOffset( 1.f, 1.f );
 
-    _textureMgr.bind();
+    if( image )
+    {
+        _textureMgr.bind();
+    }
     _draw_Mesh();
-    _textureMgr.unbind();
+    if( image )
+    {
+        _textureMgr.unbind();
+    }
 
     glDisable( GL_POLYGON_OFFSET_FILL );
 
@@ -204,6 +219,14 @@ void Entity::_draw_Textured()
 
 void Entity::_draw_Textured_Transparent_Back()
 {
+    // A vector file cannot hold a texture's image: there a lit surface is drawn with its
+    // material alone, and an unlit one, which shows nothing but its image, is left out.
+    bool image = gl2psGetFileFormat() == GL2PS_UNINITIALIZED;
+    if( !image && !_lighting )
+    {
+        return;
+    }
+
     if( _lighting )
     {
         glEnable( GL_LIGHTING );
@@ -214,9 +237,15 @@ void Entity::_draw_Textured_Transparent_Back()
     glEnable( GL_POLYGON_OFFSET_FILL );
     glPolygonOffset( 1.f, 1.f );
 
-    _textureMgr.bind();
+    if( image )
+    {
+        _textureMgr.bind();
+    }
     _draw_Mesh();
-    _textureMgr.unbind();
+    if( image )
+    {
+        _textureMgr.unbind();
+    }
 
     glDisable( GL_POLYGON_OFFSET_FILL );
     glDisable( GL_CULL_FACE );
@@ -236,11 +265,13 @@ void Entity::_draw_Wire_Frame()
 void Entity::_draw_Wire_Frame_Solid()
 {
     glEnable( GL_POLYGON_OFFSET_FILL );
+    gl2psEnable( GL2PS_POLYGON_OFFSET_FILL );
     glPolygonOffset( 1.f, 1.f );
 
     _draw_Mesh( 1.f, 1.f, 1.f, 1.f );
 
     glDisable( GL_POLYGON_OFFSET_FILL );
+    gl2psDisable( GL2PS_POLYGON_OFFSET_FILL );
 
     _draw_Wire();
 }
@@ -391,10 +422,12 @@ void Entity::_draw_Wire( float r, float g, float b, float a, float lineWidth )
     if( lineWidth == 0.f )
     {
         glLineWidth( _getLineWidth() * Display::getScreenSizeDiffRatio() );
+        gl2psLineWidth( _getLineWidth() * Display::getScreenSizeDiffRatio() );
     }
     else
     {
         glLineWidth( lineWidth * Display::getScreenSizeDiffRatio() );
+        gl2psLineWidth( lineWidth * Display::getScreenSizeDiffRatio() );
     }
 
     if( eBufferEnabled )

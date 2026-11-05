@@ -12,6 +12,14 @@ GUI = ROOT / "src/gui_and_draw"
 
 
 class EngineeringTermContextTests(unittest.TestCase):
+    def test_rotor_flapping_uses_a_distinct_display_key(self):
+        source = (GUI / "PropScreen.cpp").read_text(encoding="utf-8")
+        self.assertRegex(source, r'm_HingeLayout\.AddDividerBox\(\s*"Flapping"\s*,\s*0,\s*'
+                                 r'DrawObjKeyColor\(\s*PropGeom::HingeDrawColor\(\s*PropGeom::FLAP_HINGE\s*\)')
+        self.assertNotRegex(source, r'm_HingeLayout\.AddDividerBox\(\s*"Flap"')
+        # The opaque hinge identifier remains upstream's FLAP_HINGE.
+        self.assertIn('AddHarmonicGui( m_FlapHarmonicGui, m_FlapAngleSlider, beta );', source)
+
     def test_plan_is_the_wing_planform_tab(self):
         wing = (GUI / "WingScreen.cpp").read_text(encoding="utf-8")
         self.assertRegex(wing, r'plan_tab\s*=\s*AddTab\(\s*"Plan",\s*4\s*\)')

@@ -34,11 +34,13 @@ public:
 protected:
 
     GuiDevice* FindGuiDevice( const string & custom_type_name, int index );
+    int LayoutWidth( const string & expr );
 
     GroupLayout m_Layout;
     unordered_map< string, vector< GuiDevice* > > m_DeviceVecMap;
 
     bool m_SameLineFlag;
+    bool m_SameLinePlacedFlag;
     vector< GuiDevice* > m_SameLineVec;
 
     bool m_ForceWidthFlag;
@@ -49,6 +51,8 @@ protected:
     string m_CurrTabLayoutName;
 
     Choice* m_LastChoiceGui;
+    ToggleRadioGroup* m_LastRadioGroup;
+    vector< int > m_LastRadioVals;
 
 };
 

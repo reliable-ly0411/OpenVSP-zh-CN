@@ -258,6 +258,8 @@ void StackGeom::InitParms( int stack_type )
         nacelle_midplane.m_XDelta = -0.75;
         nacelle_midplane.m_AllSymFlag = 1;
         nacelle_midplane.m_TopLAngle = -180.0;
+        // InitXSecs swaps the sides of the first section, and the mid-origin loop starts here.
+        nacelle_midplane.m_TopRAngle = -180.0;
         nacelle_midplane.GetXSecCurve()->SetWidthHeight( 2.0, 2.0 );
 
         nacelle_inlet_face.m_XDelta = -0.75;
@@ -300,7 +302,9 @@ void StackGeom::InitParms( int stack_type )
 
                 m_EngineGeomIOType = ENGINE_GEOM_INLET_OUTLET;
                 m_EngineGeomInType = ENGINE_GEOM_FLOWTHROUGH;
-                m_EngineInModeType = ENGINE_MODE_FLOWTHROUGH_NEG;
+                m_EngineGeomOutType = ENGINE_GEOM_TO_LIP;
+                m_EngineInModeType = ENGINE_MODE_FLOWTHROUGH;
+                m_EngineOutModeType = ENGINE_MODE_TO_LIP;
 
                 break;
             }
@@ -325,7 +329,9 @@ void StackGeom::InitParms( int stack_type )
 
                 m_EngineGeomIOType = ENGINE_GEOM_INLET_OUTLET;
                 m_EngineGeomInType = ENGINE_GEOM_FLOWTHROUGH;
-                m_EngineInModeType = ENGINE_MODE_FLOWTHROUGH_NEG;
+                m_EngineGeomOutType = ENGINE_GEOM_TO_LIP;
+                m_EngineInModeType = ENGINE_MODE_FLOWTHROUGH;
+                m_EngineOutModeType = ENGINE_MODE_TO_LIP;
 
                 break;
             }
@@ -350,7 +356,9 @@ void StackGeom::InitParms( int stack_type )
 
                 m_EngineGeomIOType = ENGINE_GEOM_INLET_OUTLET;
                 m_EngineGeomInType = ENGINE_GEOM_FLOWTHROUGH;
-                m_EngineInModeType = ENGINE_MODE_FLOWTHROUGH_NEG;
+                m_EngineGeomOutType = ENGINE_GEOM_TO_LIP;
+                m_EngineInModeType = ENGINE_MODE_FLOWTHROUGH;
+                m_EngineOutModeType = ENGINE_MODE_TO_LIP;
 
                 break;
             }
@@ -571,7 +579,7 @@ void StackGeom::InitParms( int stack_type )
                 m_EngineInLipIndex = 1;
 
                 m_EngineGeomIOType = ENGINE_GEOM_INLET;
-                m_EngineGeomInType = ENGINE_GEOM_INLET;
+                m_EngineGeomInType = ENGINE_GEOM_TO_LIP;
                 m_EngineInModeType = ENGINE_MODE_TO_LIP;
 
                 break;
@@ -619,7 +627,7 @@ void StackGeom::InitParms( int stack_type )
                 m_EngineGeomIOType = ENGINE_GEOM_INLET_OUTLET;
                 m_EngineGeomInType = ENGINE_GEOM_FLOWPATH;
                 m_EngineGeomOutType = ENGINE_GEOM_TO_FACE;
-                m_EngineInModeType = ENGINE_MODE_FLOWTHROUGH_NEG;
+                m_EngineInModeType = ENGINE_MODE_TO_LIP;
                 m_EngineOutModeType = ENGINE_MODE_TO_LIP;
 
                 break;
@@ -654,7 +662,7 @@ void StackGeom::InitParms( int stack_type )
                 m_EngineGeomIOType = ENGINE_GEOM_INLET;
                 m_EngineGeomInType = ENGINE_GEOM_FLOWPATH;
                 m_EngineGeomOutType = ENGINE_GEOM_TO_FACE;
-                m_EngineInModeType = ENGINE_MODE_FLOWTHROUGH_NEG;
+                m_EngineInModeType = ENGINE_MODE_TO_LIP;
                 m_EngineOutModeType = ENGINE_MODE_TO_LIP;
 
                 break;
@@ -688,8 +696,8 @@ void StackGeom::InitParms( int stack_type )
 
                 m_EngineGeomIOType = ENGINE_GEOM_OUTLET;
                 m_EngineGeomInType = ENGINE_GEOM_FLOWPATH;
-                m_EngineGeomOutType = ENGINE_GEOM_TO_FACE;
-                m_EngineInModeType = ENGINE_MODE_FLOWTHROUGH_NEG;
+                m_EngineGeomOutType = ENGINE_GEOM_FLOWPATH;
+                m_EngineInModeType = ENGINE_MODE_TO_LIP;
                 m_EngineOutModeType = ENGINE_MODE_TO_LIP;
 
                 break;
@@ -726,6 +734,24 @@ void StackGeom::InitXSecs( vector < StackXSec* > stack_xs )
             xs->m_ZRotateAbs = 0.0;
         }
     }
+    // A loop's first and last sections are one section.  A strength is scaled by the distance to
+    // the nearer neighbour, and an end section has a neighbour on one side only, so both are
+    // brought to the scale the section has in the middle of a loop: the nearer of the two.
+    int nxs = m_XSecSurf.NumXSec();
+    if ( m_OrderPolicy() == STACK_LOOP && nxs > 2 )
+    {
+        StackXSec* firstxs = ( StackXSec* ) m_XSecSurf.FindXSec( 0 );
+        StackXSec* lastxs = ( StackXSec* ) m_XSecSurf.FindXSec( nxs - 1 );
+        if ( firstxs && lastxs )
+        {
+            double sfirst = firstxs->GetScale();
+            double slast = lastxs->GetScale();
+            double sloop = std::min( sfirst, slast );
+            firstxs->ScaleTanStrengths( sloop / sfirst );
+            lastxs->ScaleTanStrengths( sloop / slast );
+        }
+    }
+
     // ValidateParms to update index parm upper limits
     ValidateParms();
 }
@@ -1008,6 +1034,16 @@ xmlNodePtr StackGeom::DecodeXml( xmlNodePtr & node )
 void StackGeom::CutXSec( int index )
 {
     m_XSecSurf.CutXSec( index );
+
+    // Each section is placed from the one before it, so every section after the cut is placed again.
+    for ( int i = index; i < m_XSecSurf.NumXSec(); i++ )
+    {
+        XSec* xs = m_XSecSurf.FindXSec( i );
+        if ( xs )
+        {
+            xs->SetLateUpdateFlag( true );
+        }
+    }
     // Set up flag so Update() knows to regenerate surface.
     // Insert / split cases don't need this because Parms are added,
     // which implicitly triggers this flag.
@@ -1096,6 +1132,8 @@ void StackGeom::InsertXSec( int type )
     StackXSec* xs = ( StackXSec* ) GetXSec( m_ActiveXSec() );
 
     m_XSecSurf.InsertXSec( type, m_ActiveXSec() );
+    // The new section may be past the old last one.
+    m_ActiveXSec.SetUpperLimit( m_XSecSurf.NumXSec() - 1 );
     m_ActiveXSec = m_ActiveXSec() + 1;
 
     StackXSec* inserted_xs = ( StackXSec* ) GetXSec( m_ActiveXSec() );

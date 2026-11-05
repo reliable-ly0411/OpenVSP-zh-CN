@@ -242,6 +242,7 @@ enum CFD_CONTROL_TYPE {     CFD_MIN_EDGE_LEN,	/*!< Minimum mesh edge length */
                             CFD_SPLIT_JOIN_SURFS_FLAG,	/*!< Flag to cut wings and bodies into patches chosen for the feature they carry */
                             CFD_PARALLEL_MESH_FLAG,	/*!< Flag to mesh on several threads */
                             CFD_POGS_NUM_REFINE,	/*!< Number of tessellation refinements in the POGS surface files */
+                            CFD_TOPO_INTERIOR_FLAG,	/*!< Flag to find interior triangles from the topology of the intersection curves */
 };
 
 /*!
@@ -556,18 +557,20 @@ enum ERROR_CODE {   VSP_UNKNOWN = -1,	/*!< Unknown error */
                     VSP_COULD_NOT_CREATE_BACKGROUND3D,	/*!< Could not create and add Background3D */
                     VSP_CLONE_ORIGINAL_LOST,	/*!< A Clone Geom no longer has the Geom it was copying */
                     VSP_GEOM_IN_BOTH_SETS,	/*!< A Geom is in both the thick and the thin set of an analysis */
+                    VSP_NON_C_NUMERIC_LOCALE,	/*!< The numeric locale does not use a '.' decimal point */
+                    VSP_UNDEFINED_ANALYSIS_INPUT,	/*!< An analysis looked up an input it does not define */
                     VSP_NUM_ERROR_CODE	/*!< Total number of VSP error codes */
 };
 
 /*!
 	\ingroup Enumerations
 */
-/*! Enum used to indicate Parasite Drag Tool excressence type. */
-enum EXCRES_TYPE { EXCRESCENCE_COUNT = 0,	/*!< Drag counts excressence type */
-                   EXCRESCENCE_CD,	/*!< Drag coefficient excressence type */
-                   EXCRESCENCE_PERCENT_GEOM,	/*!< Percent of parent Geom drag coefficient excressence type */
-                   EXCRESCENCE_MARGIN,	/*!< Percent margin excressence type */
-                   EXCRESCENCE_DRAGAREA,	/*!< Drag area (D/q) excressence type */
+/*! Enum used to indicate Parasite Drag Tool excrescence type. */
+enum EXCRES_TYPE { EXCRESCENCE_COUNT = 0,	/*!< Drag counts excrescence type */
+                   EXCRESCENCE_CD,	/*!< Drag coefficient excrescence type */
+                   EXCRESCENCE_PERCENT_GEOM,	/*!< Percent of parent Geom drag coefficient excrescence type */
+                   EXCRESCENCE_MARGIN,	/*!< Percent margin excrescence type */
+                   EXCRESCENCE_DRAGAREA,	/*!< Drag area (D/q) excrescence type */
 };
 
 /*!
@@ -864,6 +867,16 @@ enum FILE_CHOOSER_TYPE { FC_OPENVSP,	/*!< OpenVSP's own file chooser with direct
 /*!
 	\ingroup Enumerations
 */
+/*! Enum for the limits a Fuselage puts on its cross sections' X locations. */
+enum FUSE_ORDER_POLICY { FUSE_MONOTONIC,	/*!< First cross section at X 0, last at 1, each other between its neighbors (default) */
+                         FUSE_LOOP,	/*!< First and last cross sections at X 1, the last a copy of the first */
+                         FUSE_FREE,	/*!< Every cross section anywhere from X 0 to 1, in any order */
+                         NUM_FUSE_POLICY	/*!< Number of Fuselage cross section order policies */
+};
+
+/*!
+	\ingroup Enumerations
+*/
 /*! Enum used for custom GUI development. */
 enum GDEV { GDEV_TAB,	/*!< Custom GUI Tab */
             GDEV_SCROLL_TAB,	/*!< Custom GUI Fl_Scroll and Tab */
@@ -878,14 +891,14 @@ enum GDEV { GDEV_TAB,	/*!< Custom GUI Tab */
             GDEV_RADIO_BUTTON,	/*!< Custom GUI RadioButton */
             GDEV_TOGGLE_BUTTON,	/*!< Custom GUI ToggleButton */
             GDEV_TOGGLE_BUTTON_FREE,	/*!< Custom GUI ToggleButton without Parm */
-            GDEV_TOGGLE_RADIO_GROUP,	/*!< Custom GUI ToggleRadioGroup (NOT IMPLEMENTED) */  // TODO: Implement or remove
+            GDEV_TOGGLE_RADIO_GROUP,	/*!< Custom GUI ToggleRadioGroup, its toggle buttons added as GDEV_ADD_CHOICE_ITEM */
             GDEV_TRIGGER_BUTTON,	/*!< Custom GUI TriggerButton */
             GDEV_COUNTER,	/*!< Custom GUI Counter */
             GDEV_CHOICE,	/*!< Custom GUI Choice */
-            GDEV_ADD_CHOICE_ITEM,	/*!< Add item to custom GUI Choice */
+            GDEV_ADD_CHOICE_ITEM,	/*!< Add item to custom GUI Choice or ToggleRadioGroup */
             GDEV_SLIDER_INPUT,	/*!< Custom GUI SliderInput */
             GDEV_SLIDER_ADJ_RANGE_INPUT,	/*!< Custom GUI SliderAdjRangeInput */
-            GDEV_SLIDER_ADJ_RANGE_TWO_INPUT,	/*!< Custom GUI SliderAdjRangeInput with two inputs (NOT IMPLEMENTED) */  // TODO: Implement or remove
+            GDEV_SLIDER_ADJ_RANGE_TWO_INPUT,	/*!< Custom GUI SliderAdjRange2Input: a slider with two inputs, one active at a time */
             GDEV_FRACT_PARM_SLIDER,	/*!< Custom GUI FractParmSlider */
             GDEV_STRING_INPUT,	/*!< Custom GUI StringInput */
             GDEV_INDEX_SELECTOR,	/*!< Custom GUI IndexSelector */
@@ -896,6 +909,9 @@ enum GDEV { GDEV_TAB,	/*!< Custom GUI Tab */
             GDEV_END_SAME_LINE,	/*!< Set end same line flag for custom GUI */
             GDEV_FORCE_WIDTH,	/*!< Set forced width for custom GUI */
             GDEV_SET_FORMAT,	/*!< Set format label for custom GUI */
+            GDEV_ADD_X,	/*!< Move along the line in custom GUI by a width given in the layout's widths */
+            GDEV_SET_BUTTON_WIDTH,	/*!< Set the width of custom GUI buttons, given in the layout's widths */
+            GDEV_SET_CHOICE_BUTTON_WIDTH,	/*!< Set the width of custom GUI choices' labels, given in the layout's widths */
             NUM_GDEV_TYPES,	/*!< Number of GDEV types */
             ALL_GDEV_TYPES, /*!< Flag for all GDEV types */
 };
@@ -1066,9 +1082,32 @@ enum GUI_VSP_SCREEN { VSP_ADV_LINK_SCREEN,	/*!< Advanced linking screen */
                       VSP_XSEC_SCREEN,	/*!< XSec screen */
                       VSP_WAVEDRAG_SCREEN,	/*!< Wave drag screen */
                       VSP_SPLIT_STITCH_OPTIONS_SCREEN,	/*!< Split and stitched STEP and IGES options screen */
+                      VSP_VECTOR_SCREENSHOT_SCREEN,	/*!< Vector screenshot screen */
                       VSP_MAIN_SCREEN,   /*!< Main screen */ // Leave at end of list, helps draw after update.
                       VSP_NUM_SCREENS,	/*!< Number of screens */
                       VSP_ALL_SCREENS   /*!< Flag for all screens */
+};
+
+/*!
+	\ingroup Enumerations
+*/
+/*! Enum for how a Hinge's axes are set. */
+enum HINGE_ORIENT_TYPE { HINGE_ORIENT_ROT,	/*!< From the XForm rotations (default) */
+                         HINGE_ORIENT_VEC,	/*!< From directions; the XForm rotations are computed from them */
+                         NUM_HINGE_ORIENT_TYPES	/*!< Number of Hinge orientation types */
+};
+
+/*!
+	\ingroup Enumerations
+*/
+/*! Enum for how a Hinge's axis direction is given when its axes are set from directions. */
+enum HINGE_PRIM_TYPE { HINGE_PRIM_VECTOR3D,	/*!< Along the direction vector (default) */
+                       HINGE_PRIM_POINT3D,	/*!< From the Hinge's origin toward the offset point */
+                       HINGE_PRIM_SURFPT,	/*!< From the Hinge's origin toward a point on the parent's surface, moved by the offset */
+                       HINGE_PRIM_UDIR,	/*!< Along the parent's surface in its u direction */
+                       HINGE_PRIM_WDIR,	/*!< Along the parent's surface in its w direction */
+                       HINGE_PRIM_NDIR,	/*!< Along the parent's surface normal */
+                       NUM_HINGE_PRIM_TYPES	/*!< Number of Hinge axis direction types */
 };
 
 /*!
@@ -1141,18 +1180,22 @@ enum MESH_REASON { NO_REASON,	/*!< No reason determined. */
                    CURV_GAP,	/*!< Maximum gap curvature based criteria. */
                    CURV_NCIRCSEG,	/*!< Minimum number of segments to define a circle curvature based criteria. */
                    SOURCES,	/*!< Mesh sources. */
+                   SURF_WIDTH,	/*!< Width of the surface across one of its parameter directions. */
                    MIN_LEN_CONSTRAINT,  /*!< Minimum edge length. */                                                                 // MAX_LEN_CONSTRAINT + MIN_LEN_INCREMENT
                    MIN_LEN_CONSTRAINT_CURV_GAP, /*!< Maximum gap constrained by minimum length. */                                   // CURV_GAP + MIN_LEN_INCREMENT
                    MIN_LEN_CONSTRAINT_CURV_NCIRCSEG,    /*!< Number of segments to define a circle constrained by minimum length. */ // CURV_NCIRCSEG + MIN_LEN_INCREMENT
                    MIN_LEN_CONSTRAINT_SOURCES,  /*!< Mesh sources constrained by minimum length (not applied). */                    // Placeholder -- min len not applied to sources.
+                   MIN_LEN_CONSTRAINT_SURF_WIDTH,   /*!< Surface width constrained by minimum length. */                              // SURF_WIDTH + MIN_LEN_INCREMENT
                    GROW_LIMIT_MAX_LEN_CONSTRAINT,	/*!< Maximum growth limit from maximum edge length (not used, growth limited small to large). */
                    GROW_LIMIT_CURV_GAP,	/*!< Maximum growth limit from maximum gap. */
                    GROW_LIMIT_CURV_NCIRCSEG,	/*!< Maximum growth limit from number of segments to define a circle. */
                    GROW_LIMIT_SOURCES,	/*!< Maximum growth limit from mesh sources. */
+                   GROW_LIMIT_SURF_WIDTH,	/*!< Maximum growth limit from surface width. */
                    GROW_LIMIT_MIN_LEN_CONSTRAINT,	/*!< Maximum growth limit from minimum length constraint. */
                    GROW_LIMIT_MIN_LEN_CONSTRAINT_CURV_GAP,	/*!< Maximum growth limit from maximum gap constrained by minimum length. */
                    GROW_LIMIT_MIN_LEN_CONSTRAINT_CURV_NCIRCSEG,	/*!< Maximum growth limit from number of segments to define a circle constrained by minimum length. */
                    GROW_LIMIT_MIN_LEN_CONSTRAINT_SOURCES,	/*!< Maximum growth limit from sources constrained by minimum length. */
+                   GROW_LIMIT_MIN_LEN_CONSTRAINT_SURF_WIDTH,	/*!< Maximum growth limit from surface width constrained by minimum length. */
                    NUM_MESH_REASON,	/*!< Number of reasons that can set the mesh local minimum edge length. */
                    MIN_LEN_INCREMENT = MIN_LEN_CONSTRAINT - MAX_LEN_CONSTRAINT,	/*!< Reason increment when adding minimum length constraint. */
                    GROW_LIMIT_INCREMENT = GROW_LIMIT_CURV_GAP - CURV_GAP,	/*!< Reason increment when adding growth limit constraint. */
@@ -1296,6 +1339,16 @@ enum PROP_AZIMUTH_MODE { PROP_AZI_UNIFORM,	/*!< Propeller blades are uniformly s
 /*!
 	\ingroup Enumerations
 */
+/*! Enum used to specify how the blades of a propeller take a hinge's angle. */
+enum PROP_BLADE_MOTION_MODE { PROP_BLADE_COLLECTIVE,	/*!< Every blade takes the same angle */
+                              PROP_BLADE_INDIVIDUAL,	/*!< Each blade has its own angle */
+                              PROP_BLADE_HARMONIC,	/*!< Each blade's angle is a mean plus harmonics of its azimuth */
+                              NUM_PROP_BLADE_MOTION,	/*!< Number of propeller blade motion modes */
+};
+
+/*!
+	\ingroup Enumerations
+*/
 /*! Enum used to identify thrown blade type for AC 25.905-1. */
 enum PROP_BLADE_MODE { PROP_BLADE_TRADITIONAL,	/*!< Traditional straight blades */
                        PROP_BLADE_NONTRADITIONAL,	/*!< Non-traditional blades */
@@ -1341,6 +1394,14 @@ enum PROP_PCURVE { PROP_CHORD,	/*!< Chord parameterization */
                    PROP_AXIAL,	/*!< Axial parameterization */
                    PROP_TANGENTIAL,	/*!< Tangential parameterization */
                    NUM_PROP_PCURVE	/*!< Number of propeller blade curve parameterization options */
+};
+
+/*!
+	\ingroup Enumerations
+*/
+/*! Enum that identifies a propeller starting design (see InitPropPreset). */
+enum PROP_PRESETS { PROP_PRESET_PROPELLER = 0,	/*!< The default propeller, Y rotation 0 */
+                    PROP_PRESET_HELICOPTER = 1	/*!< A helicopter main rotor: NACA 0012 blades of constant chord and linear twist, Feather driving the pitch, Y rotation 90 */
 };
 
 /*!
@@ -1455,14 +1516,56 @@ enum SET_TYPE { SET_NONE = -1,	/*!< None set */
 /*!
 	\ingroup Enumerations
 */
+/*! Enum for the NACA 6-series airfoil's series. */
+enum SIX_SERIES_TYPE { SIX_SERIES_63,	/*!< 63 series */
+                       SIX_SERIES_64,	/*!< 64 series */
+                       SIX_SERIES_65,	/*!< 65 series */
+                       SIX_SERIES_66,	/*!< 66 series */
+                       SIX_SERIES_67,	/*!< 67 series */
+                       SIX_SERIES_63A,	/*!< 63A series */
+                       SIX_SERIES_64A,	/*!< 64A series */
+                       SIX_SERIES_65A,	/*!< 65A series */
+                       NUM_SIX_SERIES	/*!< Number of 6-series airfoil series */
+};
+
+/*!
+	\ingroup Enumerations
+*/
+/*! Enum for the sides of a wing a control surface sub-surface covers. */
+enum SS_CONTROL_SURF_TYPE { SS_CONTROL_UPPER_SURF,	/*!< Upper surface */
+                            SS_CONTROL_LOWER_SURF,	/*!< Lower surface */
+                            SS_CONTROL_BOTH_SURF	/*!< Upper and lower surfaces (default) */
+};
+
+/*!
+	\ingroup Enumerations
+*/
+/*! Enum for the side of a line sub-surface that it tags. */
+enum SS_LINE_TEST_TYPE { SS_LINE_TEST_GREATER,	/*!< Tag the side of greater U or W (default) */
+                         SS_LINE_TEST_LESS,	/*!< Tag the side of less U or W */
+                         SS_LINE_TEST_NONE	/*!< Tag neither side; equal to NONE */
+};
+
+/*!
+	\ingroup Enumerations
+*/
+/*! Enum for the limits a Stack puts on its cross sections' placement. */
+enum STACK_ORDER_POLICY { STACK_FREE,	/*!< Every cross section placed freely (default) */
+                          STACK_LOOP,	/*!< The last cross section a copy of the first, placed on it */
+                          NUM_STACK_POLICY	/*!< Number of Stack cross section order policies */
+};
+
+/*!
+	\ingroup Enumerations
+*/
 /*! Enum that identifies a StackGeom starting point.  Each preset builds a
     different set of cross sections, most of them nacelle layouts. */
 enum STACK_PRESETS { STACK_PRESET_DEFAULT = 0,	/*!< Standard init type */
                      STACK_PRESET_CYLINDER_ENDPTS = 1,	/*!< Cylinder with points as first/last XSec */
                      STACK_PRESET_CYLINDER_ENDCAPS = 2,	/*!< Cylinder with end caps instead of points */
-                     STACK_PRESET_FLOWTHRU_OUTLIP_ORIG = 3,	/*!< Flowthru nacelle starting/ending with outlet lip */
-                     STACK_PRESET_FLOWTHRU_INLIP_ORIG = 4,	/*!< Flowthru nacelle starting/ending with inlet lip */
-                     STACK_PRESET_FLOWTHRU_MID_ORIG = 5,	/*!< Flowthru nacelle starting/ending with outlet face */
+                     STACK_PRESET_FLOWTHRU_OUTLIP_ORIG = 3,	/*!< Flowthrough nacelle starting/ending with outlet lip */
+                     STACK_PRESET_FLOWTHRU_INLIP_ORIG = 4,	/*!< Flowthrough nacelle starting/ending with inlet lip */
+                     STACK_PRESET_FLOWTHRU_MID_ORIG = 5,	/*!< Flowthrough nacelle starting/ending in the flowpath halfway between the faces */
                      STACK_PRESET_BOTHFACEFACE = 6,	/*!< Nacelle from the inlet face around the outside to the outlet face */
                      STACK_PRESET_BOTHLIPFACE = 7,	/*!< Nacelle from the inlet lip around the outside to the outlet face */
                      STACK_PRESET_BOTHFACELIP = 8,	/*!< Nacelle from the inlet face around the outside to the outlet lip */
@@ -1547,7 +1650,7 @@ enum SYM_FLAG {  SYM_XY = ( 1 << 0 ),    /*!< XY planar symmetry. */
 	\ingroup Enumerations
 */
 /*! Enum that represents various cross section symmetry types. */
-enum SYM_XSEC_TYP { SYM_NONE,    /*!< No cross section symmetry. */
+enum SYM_XSEC_TYPE { SYM_NONE,    /*!< No cross section symmetry. */
                     SYM_RL,    /*!< Right/left cross section symmetry. */
                     SYM_TB,    /*!< Top/bottom cross section symmetry. */
                     SYM_ALL    /*!< All cross section symmetry. */
@@ -1606,6 +1709,15 @@ enum TIRE_MODES { TIRE_TRA,	/*!< Full TRA model */
                   TIRE_BALLOON_WHEEL,	/*!< Balloon tire with wheel */
                   TIRE_BALLOON_FAIR_WHEEL,	/*!< Balloon tire with faired wheel */
                   NUM_TIRE_MODES	/*!< Number of tire choices  */
+};
+
+/*!
+	\ingroup Enumerations
+*/
+/*! Enum for the file types of a vector screenshot. */
+enum VEC_SCREENSHOT_TYPE { VEC_SVG,	/*!< SVG vector screenshot */
+                           VEC_PDF,	/*!< PDF vector screenshot */
+                           VEC_NUM_TYPES	/*!< Number of vector screenshot file types */
 };
 
 /*!

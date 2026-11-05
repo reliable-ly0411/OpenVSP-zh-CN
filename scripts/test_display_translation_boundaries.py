@@ -56,7 +56,39 @@ def parm_description_is_safe(source):
         r'm_DescString\.Update\(\s*description\s*\)', code))
 
 
+def vector_alert_is_safe(source):
+    return bool(re.search(
+        r'\bAlert\s*\(\s*VSPTranslateLabelAndValue\s*\(\s*"Could not write the vector file "'
+        r'\s*,\s*fname\s*\)\s*\)', strip_comments(source)))
+
+
+def prop_preset_prompt_is_safe(source):
+    return bool(re.search(
+        r'\bfl_choice\s*\(\s*"%s"\s*,\s*VSPTranslate\(\s*"Cancel"\s*\)\.c_str\(\s*\)\s*,\s*'
+        r'VSPTranslate\(\s*"Ok"\s*\)\.c_str\(\s*\)\s*,\s*0\s*,\s*'
+        r'VSPTranslateMessage\(\s*"Replace the sections, blade curves, pitch and rotation with the preset\?"'
+        r'\s*\)\.c_str\(\s*\)\s*\)\s*==\s*1', strip_comments(source)))
+
+
 class DisplayTranslationBoundaryTests(unittest.TestCase):
+    def test_vector_export_alert_preserves_the_filename(self):
+        source = (GUI / 'VectorScreenshotScreen.cpp').read_text(encoding='utf-8')
+        self.assertTrue(vector_alert_is_safe(source))
+        self.assertTrue(has_unconditional_translation_include(source))
+        safe = 'Alert(VSPTranslateLabelAndValue("Could not write the vector file ", fname));'
+        self.assertTrue(vector_alert_is_safe(safe))
+        self.assertFalse(vector_alert_is_safe('Alert("Could not write the vector file " + fname);'))
+        self.assertFalse(vector_alert_is_safe(safe.replace('fname', 'VSPTranslate(fname)')))
+        self.assertFalse(vector_alert_is_safe('// ' + safe))
+
+    def test_propeller_preset_prompt_translates_before_fltk_formatting(self):
+        source = (GUI / 'PropScreen.cpp').read_text(encoding='utf-8')
+        self.assertTrue(prop_preset_prompt_is_safe(source))
+        self.assertTrue(has_unconditional_translation_include(source))
+        self.assertFalse(prop_preset_prompt_is_safe(source.replace('VSPTranslateMessage', 'Untranslated')))
+        self.assertFalse(prop_preset_prompt_is_safe(source.replace('VSPTranslate( "Cancel" ).c_str()', '"Cancel"')))
+        self.assertFalse(prop_preset_prompt_is_safe(source.replace(') == 1', ') == 0')))
+
     def test_export_alert_translates_template_before_formatting(self):
         source = (GUI / 'ExportScreen.cpp').read_text(encoding='utf-8')
         if 'SplitStitchSurfaces' not in strip_comments(source):

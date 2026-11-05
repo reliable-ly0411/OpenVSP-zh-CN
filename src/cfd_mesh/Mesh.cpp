@@ -9,10 +9,13 @@
 
 #include "Mesh.h"
 
+#include <cmath>
+#include <limits>
 #include <map>
 #include <set>
 #include "Surf.h"
 #include "PntNodeMerge.h"
+#include "FastFormat.h"
 #include "VspUtil.h"
 #include <triangle.h>
 #include <triangle_api.h>
@@ -30,9 +33,10 @@ bool ShortEdgePairLengthCompare( const pair< Edge*, double >& a, const pair< Edg
 {
     return ( a.second < b.second );
 }
-bool ShortEdgeTargetLengthCompare( const Edge* a, const Edge* b )
+static bool TargetLenKeyCompare( const pair< double, list< Edge* >::iterator > &a,
+                                 const pair< double, list< Edge* >::iterator > &b )
 {
-    return ( a->target_len < b->target_len );
+    return a.first < b.first;
 }
 
 
@@ -62,15 +66,16 @@ void Mesh::Clear()
     list< Face* >::iterator f;
     for ( f = faceList.begin() ; f != faceList.end(); ++f )
     {
-        delete ( *f );
+        m_FacePool.Give( *f );
     }
 
     faceList.clear();
+    m_BorderChainMap.clear();
 
     list< Edge* >::iterator e;
     for ( e = edgeList.begin() ; e != edgeList.end(); ++e )
     {
-        delete ( *e );
+        m_EdgePool.Give( *e );
     }
 
     edgeList.clear();
@@ -78,7 +83,7 @@ void Mesh::Clear()
     list< Node* >::iterator n;
     for ( n = nodeList.begin() ; n != nodeList.end(); ++n )
     {
-        delete ( *n );
+        m_NodePool.Give( *n );
     }
 
     nodeList.clear();
@@ -174,7 +179,19 @@ void Mesh::LimitTargetEdgeLength()
     double growratio = m_GridDensity->m_GrowRatio;
     double limitlen;
 
-    edgeList.sort( ShortEdgeTargetLengthCompare );
+    // Order the list by target length, ties kept in list order.  The keys are sorted side by
+    // side and the list nodes then moved into place, so each edge is read once.
+    vector< pair< double, list< Edge* >::iterator > > order;
+    order.reserve( edgeList.size() );
+    for ( e = edgeList.begin() ; e != edgeList.end(); ++e )
+    {
+        order.push_back( pair< double, list< Edge* >::iterator >( ( *e )->target_len, e ) );
+    }
+    std::stable_sort( order.begin(), order.end(), TargetLenKeyCompare );
+    for ( size_t i = 0 ; i < order.size() ; i++ )
+    {
+        edgeList.splice( edgeList.end(), edgeList, order[i].second );
+    }
 
     for ( e = edgeList.begin() ; e != edgeList.end(); ++e )
     {
@@ -500,8 +517,7 @@ int Mesh::Split( int num_iter )
 }
 
 // Wang 2006 gives the contraction parameter as Cc = 1/sqrt(2): an edge below this fraction
-// of its target is one the mesher wants to collapse away.  Nothing should deliberately build
-// one.
+// of its target is one the mesher wants to collapse away.
 static const double CC_LENGTH_RATIO = 0.707;
 
 // The angle below which a triangle is ill-shaped whatever its size, and its cosine.  The
@@ -736,6 +752,149 @@ bool Mesh::TriReversed( const vec3d &p0, const vec3d &p1, const vec3d &p2,
     return dprod < 0.0;
 }
 
+static double SignedUWArea( const vec2d &a, const vec2d &b, const vec2d &c );
+
+void Mesh::SetUWSign()
+{
+    int npos = 0;
+    int nneg = 0;
+
+    list< Face* >::iterator f;
+    for ( f = faceList.begin() ; f != faceList.end(); ++f )
+    {
+        if ( ( *f )->n3 )
+        {
+            continue;
+        }
+
+        double a = SignedUWArea( ( *f )->n0->uw, ( *f )->n1->uw, ( *f )->n2->uw );
+
+        if ( a > 0.0 )
+        {
+            npos++;
+        }
+        else if ( a < 0.0 )
+        {
+            nneg++;
+        }
+        else
+        {
+            nneg++;
+            npos++;
+        }
+    }
+
+    // A surface whose parameters do not lay it out flat -- a cap, say -- can come out of the
+    // triangulator with faces wound both ways in UW even though every one of them is sound in
+    // space.  UW says nothing about which way such a surface's faces should be wound.
+    m_UWSign = 0;
+
+    if ( npos > 0 && nneg == 0 )
+    {
+        m_UWSign = 1;
+    }
+    else if ( nneg > 0 && npos == 0 )
+    {
+        m_UWSign = -1;
+    }
+}
+
+bool Mesh::UWWoundRight( const vec2d &uw0, const vec2d &uw1, const vec2d &uw2 ) const
+{
+    if ( m_UWSign == 0 )
+    {
+        return true;
+    }
+
+    return m_UWSign * SignedUWArea( uw0, uw1, uw2 ) > 0.0;
+}
+
+// Each face is cut in two: one half with n0 moved to the split point and one with n1 moved
+// there, each keeping the face's own order of corners.
+bool Mesh::SplitWoundRight( Face* fa, Face* fb, Node* n0, Node* n1, const vec2d &uws ) const
+{
+    Face* faces[2] = { fa, fb };
+    Node* ends[2] = { n0, n1 };
+
+    for ( int k = 0; k < 2; k++ )
+    {
+        Face* f = faces[k];
+
+        if ( !f || f->n3 )
+        {
+            continue;
+        }
+
+        for ( int j = 0; j < 2; j++ )
+        {
+            Node* fn[3] = { f->n0, f->n1, f->n2 };
+            vec2d uw[3];
+
+            for ( int i = 0; i < 3; i++ )
+            {
+                uw[i] = fn[i]->uw;
+                if ( fn[i] == ends[j] )
+                {
+                    uw[i] = uws;
+                }
+            }
+
+            if ( !UWWoundRight( uw[0], uw[1], uw[2] ) )
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// Can the face ( ps, p, q ) that a split at ps would build in face f stand?  It can if it
+// does not turn over, or if flipping its edge p-q, which f now holds, gives two faces that do
+// not.  That edge is then added to flips.  The flip joins the split point to the corner across
+// p-q, which may not be one the split joins it to already: a corner of f, or other_apex, the
+// apex of the face on the split edge's other side.
+bool Mesh::SplitFaceStands( const vec3d &ps, const vec2d &uws, Node* p, Node* q, Face* f,
+                            Node* other_apex, vector < Edge* > &flips )
+{
+    if ( !TriReversed( ps, p->pnt, q->pnt, uws, p->uw, q->uw ) )
+    {
+        return true;
+    }
+
+    Edge* e = f->FindEdge( p, q );
+
+    if ( !e || e->border || e->ridge )
+    {
+        return false;
+    }
+
+    Face* fo = e->OtherFace( f );
+
+    if ( !fo )
+    {
+        return false;
+    }
+
+    Node* x = fo->OtherNodeTri( p, q );
+
+    if ( !x || x == other_apex || x == f->OtherNodeTri( p, q ) )
+    {
+        return false;
+    }
+
+    if ( TriReversed( ps, p->pnt, x->pnt, uws, p->uw, x->uw ) ||
+         TriReversed( ps, x->pnt, q->pnt, uws, x->uw, q->uw ) ||
+         !UWWoundRight( uws, p->uw, x->uw ) ||
+         !UWWoundRight( uws, x->uw, q->uw ) )
+    {
+        return false;
+    }
+
+    flips.push_back( e );
+    return true;
+}
+
 // Collapse away the faces that are not fit to keep.
 //
 // A face is unfit if it faces the wrong way, or if it has been squeezed until it has no
@@ -823,7 +982,7 @@ void Mesh::ColorTris()
 
 Node* Mesh::AddNode( const vec3d &p, const vec2d &uw_in )
 {
-    Node* nptr = new Node( p, uw_in );
+    Node* nptr = new ( m_NodePool.Take() ) Node( p, uw_in );
     nodeList.push_back( nptr );
     nptr->list_ptr = --nodeList.end();
     return nptr;
@@ -858,7 +1017,7 @@ Node* Mesh::FindNode( const vec3d& p )
 
 Edge* Mesh::AddEdge( Node* n0, Node* n1 )
 {
-    Edge* eptr = new Edge( n0, n1 );
+    Edge* eptr = new ( m_EdgePool.Take() ) Edge( n0, n1 );
 
     edgeList.push_back( eptr );
     eptr->list_ptr = --edgeList.end();
@@ -914,7 +1073,7 @@ Edge* Mesh::FindEdge( Node* n0, Node* n1 )
 
 Face* Mesh::AddFace( Node* nn0, Node* nn1, Node* nn2, Edge* ee0, Edge* ee1, Edge* ee2 )
 {
-    Face* fptr = new Face( nn0, nn1, nn2, ee0, ee1, ee2 );
+    Face* fptr = new ( m_FacePool.Take() ) Face( nn0, nn1, nn2, ee0, ee1, ee2 );
     faceList.push_back( fptr );
     fptr->list_ptr = --faceList.end();
 
@@ -930,7 +1089,7 @@ Face* Mesh::AddFace( Node* nn0, Node* nn1, Node* nn2, Edge* ee0, Edge* ee1, Edge
 
 Face* Mesh::AddFace( Node* nn0, Node* nn1, Node* nn2, Node* nn3, Edge* ee0, Edge* ee1, Edge* ee2, Edge* ee3 )
 {
-    Face* fptr = new Face( nn0, nn1, nn2, nn3, ee0, ee1, ee2, ee3 );
+    Face* fptr = new ( m_FacePool.Take() ) Face( nn0, nn1, nn2, nn3, ee0, ee1, ee2, ee3 );
     faceList.push_back( fptr );
     fptr->list_ptr = --faceList.end();
 
@@ -982,21 +1141,21 @@ void Mesh::DumpGarbage()
     //==== Delete Flagged Nodes =====//
     for ( int i = 0 ; i < ( int )garbageNodeVec.size() ; i++ )
     {
-        delete garbageNodeVec[i];
+        m_NodePool.Give( garbageNodeVec[i] );
     }
     garbageNodeVec.clear();
 
     //==== Delete Flagged Edges =====//
     for ( int i = 0 ; i < ( int )garbageEdgeVec.size() ; i++ )
     {
-        delete garbageEdgeVec[i];
+        m_EdgePool.Give( garbageEdgeVec[i] );
     }
     garbageEdgeVec.clear();
 
     //==== Delete Flagged Faces =====//
     for ( int i = 0 ; i < ( int )garbageFaceVec.size() ; i++ )
     {
-        delete garbageFaceVec[i];
+        m_FacePool.Give( garbageFaceVec[i] );
     }
     garbageFaceVec.clear();
 }
@@ -1024,6 +1183,19 @@ void Mesh::SetNodeFlags()
 // ::Degenerate already calls unfit, so anything at or under it is a face the mesher would
 // immediately want to be rid of again.
 static const double MIN_COLLAPSE_ANGLE = 0.5 * M_PI / 180.0;
+static const double COS_MIN_COLLAPSE_ANGLE = cos( MIN_COLLAPSE_ANGLE );
+
+// A border edge more than this many times the target of an edge beside it is coarse: the
+// split guard in SplitEdge acts only next to one.
+static const double COARSE_BORDER_RATIO = 2.0;
+
+// The cosine of a triangle's smallest angle, which is the largest of its three cosines.
+static double CosSmallAng( const vec3d &p0, const vec3d &p1, const vec3d &p2 )
+{
+    double ang0, ang1, ang2;
+    Face::ComputeCosAngles( p0, p1, p2, &ang0, &ang1, &ang2 );
+    return max( ang0, max( ang1, ang2 ) );
+}
 
 void Mesh::SplitEdge( Edge* edge )
 {
@@ -1060,43 +1232,66 @@ void Mesh::SplitEdge( Edge* edge )
 
     // Not the midpoint projected to the surface: across a tip that lands back on the side the
     // edge came from, and the split does not shorten anything.  See Surf::SplitUW.
-    vec2d uws = m_Surf->SplitUW( n0->pnt, n1->pnt, n0->uw, n1->uw );
-    vec3d ps  = m_Surf->CompPnt( uws.x(), uws.y() );
+    vec3d ps;
+    vec2d uws = m_Surf->SplitUW( n0->pnt, n1->pnt, n0->uw, n1->uw, ps );
+
+    // The point that best halves the edge in space need not lie on the edge in UW.  Beside a
+    // sliver it can land past the far side of the face, and the split then builds a face wound
+    // the wrong way in UW, overlapping its neighbour -- which the test in space below cannot
+    // see, because a sliver's normal says nothing about which way it is wound.  The point on
+    // the straight UW line between the ends always lies inside both faces.
+    if ( !SplitWoundRight( fa, fb, n0, n1, uws ) )
+    {
+        uws = m_Surf->SplitUWOnLine( n0->pnt, n1->pnt, n0->uw, n1->uw );
+
+        if ( !SplitWoundRight( fa, fb, n0, n1, uws ) )
+        {
+            return;
+        }
+
+        ps = m_Surf->CompPnt( uws.x(), uws.y() );
+    }
 
     // A split must not turn a face over.  CollapseEdge refuses a move that would, through
     // ValidNodeMove.  A reversed face is collapsed away by RemoveIllFormedFaces, which is how a
     // tip ends up with edges shared by more than two triangles.
     //
-    // The four faces the split would build are checked before anything is created.  A split
-    // that would turn one over does not happen; the edge stays as it is.
+    // The four faces the split would build are checked before anything is created.  A face
+    // that would turn over is repaired by flipping its edge across from the new point, if the
+    // two faces of the flip do not turn over; otherwise the split does not happen and the edge
+    // stays as it is.
+    vector < Edge* > flips;
     {
         bool wouldreverse = false;
 
+        Node* na = nullptr;
+        Node* nb = nullptr;
+
         if ( fa )
         {
-            Node* na = fa->OtherNodeTri( n0, n1 );
+            na = fa->OtherNodeTri( n0, n1 );
+        }
 
-            if ( na )
+        if ( fb )
+        {
+            nb = fb->OtherNodeTri( n0, n1 );
+        }
+
+        if ( na )
+        {
+            if ( !SplitFaceStands( ps, uws, na, n0, fa, nb, flips ) ||
+                 !SplitFaceStands( ps, uws, n1, na, fa, nb, flips ) )
             {
-                if ( TriReversed( n0->pnt, ps, na->pnt, n0->uw, uws, na->uw ) ||
-                     TriReversed( n1->pnt, na->pnt, ps, n1->uw, na->uw, uws ) )
-                {
-                    wouldreverse = true;
-                }
+                wouldreverse = true;
             }
         }
 
-        if ( fb && !wouldreverse )
+        if ( nb && !wouldreverse )
         {
-            Node* nb = fb->OtherNodeTri( n0, n1 );
-
-            if ( nb )
+            if ( !SplitFaceStands( ps, uws, n0, nb, fb, na, flips ) ||
+                 !SplitFaceStands( ps, uws, nb, n1, fb, na, flips ) )
             {
-                if ( TriReversed( n0->pnt, nb->pnt, ps, n0->uw, nb->uw, uws ) ||
-                     TriReversed( n1->pnt, ps, nb->pnt, n1->uw, uws, nb->uw ) )
-                {
-                    wouldreverse = true;
-                }
+                wouldreverse = true;
             }
         }
 
@@ -1106,52 +1301,75 @@ void Mesh::SplitEdge( Edge* edge )
         }
     }
 
-    // A split must not manufacture an edge shorter than the size that was asked for.
+    // Next to a border edge much longer than the target, splitting cannot make good
+    // triangles.  Border edges are never split, so each split there carves a thinner wedge off
+    // the triangle on the border, and nothing afterwards mends the fan it leaves.  Elsewhere
+    // a thin triangle a split leaves is mended by the collapses, swaps and smoothing after it.
     //
-    // The criterion that chose this edge looked only at the edge being consumed.  The two
-    // halves it becomes are bounded by that criterion -- an edge over Cs * target halves to
-    // something at or above Cc * target -- but the edge from the new point to the apex of an
-    // adjacent face is not.  Its length is the height of that face, which has nothing to do
-    // with the base that was measured.
-    //
-    // Splitting the long base of a thin triangle therefore produces an edge far under target, and
-    // splitting again halves the height once more, while that target never moves.
-    //
-    // The target field is graded, so the parent edge's own target is a good local scale and
-    // costs nothing to reuse.
+    // So beside such a border a split is refused when the faces it would build have a smaller
+    // angle than the faces it replaces, and one under the angle a collapse takes to be
+    // ill-shaped.  The edge is swapped instead.  SwapEdge only acts when it raises the smallest
+    // angle, so this either improves the pair or leaves them alone.
     {
-        double shortest = CC_LENGTH_RATIO * edge->target_len;
+        Face* faces[2] = { fa, fb };
 
-        bool wouldbeshort = false;
-
-        if ( fa )
+        bool coarse = false;
+        for ( int k = 0 ; k < 2 && !coarse ; k++ )
         {
-            Node* na = fa->OtherNodeTri( n0, n1 );
-
-            if ( na && dist( na->pnt, ps ) < shortest )
+            if ( !faces[k] )
             {
-                wouldbeshort = true;
+                continue;
+            }
+
+            Node* apex = faces[k]->OtherNodeTri( n0, n1 );
+
+            if ( !apex )
+            {
+                continue;
+            }
+
+            Edge* sides[2] = { faces[k]->FindEdge( n0, apex ), faces[k]->FindEdge( apex, n1 ) };
+            for ( int j = 0 ; j < 2 ; j++ )
+            {
+                if ( sides[j] && sides[j]->border &&
+                     dist( sides[j]->n0->pnt, sides[j]->n1->pnt ) > COARSE_BORDER_RATIO * edge->target_len )
+                {
+                    coarse = true;
+                }
             }
         }
 
-        if ( fb && !wouldbeshort )
+        if ( coarse )
         {
-            Node* nb = fb->OtherNodeTri( n0, n1 );
+            double cosold = -1.0;
+            double cosnew = -1.0;
 
-            if ( nb && dist( nb->pnt, ps ) < shortest )
+            for ( int k = 0 ; k < 2 ; k++ )
             {
-                wouldbeshort = true;
-            }
-        }
+                if ( !faces[k] )
+                {
+                    continue;
+                }
 
-        if ( wouldbeshort )
-        {
-            // The edge is genuinely too long, but bisecting it is the wrong answer for the
-            // shape it sits on.  A thin triangle wants its long edge swapped away, not cut
-            // in half.  SwapEdge only acts when it raises the smallest angle, so this either
-            // improves the pair or leaves them alone.
-            SwapEdge( edge );
-            return;
+                Node* apex = faces[k]->OtherNodeTri( n0, n1 );
+
+                if ( !apex )
+                {
+                    continue;
+                }
+
+                cosold = max( cosold, CosSmallAng( n0->pnt, n1->pnt, apex->pnt ) );
+                cosnew = max( cosnew, CosSmallAng( n0->pnt, ps, apex->pnt ) );
+                cosnew = max( cosnew, CosSmallAng( ps, n1->pnt, apex->pnt ) );
+            }
+
+            // The corners at the ends of the edge carry over to the new faces.  Rounding in
+            // one of them does not make the smallest angle smaller.
+            if ( cosnew > cosold + 1.0e-9 && cosnew > COS_COLLAPSE_QUAL_ANGLE )
+            {
+                SwapEdge( edge );
+                return;
+            }
         }
     }
 
@@ -1241,6 +1459,11 @@ void Mesh::SplitEdge( Edge* edge )
     ComputeTargetEdgeLength( ns );
     LimitTargetEdgeLength( ns );
 
+    for ( int i = 0; i < ( int )flips.size(); i++ )
+    {
+        FlipEdge( flips[i] );
+    }
+
     MakeActiveAround( ns );
 
     // "Neighboring edge swapping is performed to improve the local configuration, in terms
@@ -1280,6 +1503,32 @@ void Mesh::SplitEdge( Edge* edge )
     }
 }
 
+// Whether the angle between a and b, as angle() measures it, is over ( strict ) or at least
+// the angle whose tangent is tanlim, for a limit under a right angle.  angle() is
+// atan2( |a x b|, a . b ), 0 for two zero vectors.  With a . b <= 0 the angle is a right angle
+// or more, over the limit, unless both are zero.  With a . b > 0 it is atan of the ratio, and
+// atan is increasing, so it is over the limit when |a x b| > ( a . b ) tanlim; in doubles the
+// two differ only for a ratio that rounds to the limit.
+static bool AngleOverLimit( const vec3d &a, const vec3d &b, double tanlim, bool strict )
+{
+    double s = cross( a, b ).mag();
+    double c = dot( a, b );
+
+    if ( c <= 0.0 )
+    {
+        return !( s == 0.0 && c == 0.0 );
+    }
+
+    if ( strict )
+    {
+        return s > c * tanlim;
+    }
+    return s >= c * tanlim;
+}
+
+static const double TAN_SWAP_FOLD_ANGLE = tan( 0.25 * M_PI_4 );
+static const double TAN_MOVE_TURN_ANGLE = tan( 0.5 * M_PI_4 );
+
 void Mesh::SwapEdge( Edge* edge )
 {
     if ( !edge )
@@ -1302,16 +1551,6 @@ void Mesh::SwapEdge( Edge* edge )
         return;
     }
 
-    if ( ThreeEdgesThreeFaces( edge ) )
-    {
-        return;
-    }
-
-    // A flip replaces the shared edge with one joining the two opposite corners.  If those
-    // two are already joined, the flip builds a SECOND edge between the same pair of nodes,
-    // which is not a surface any more: the pair of edges bounds no area and the faces on
-    // either side of it are shared three ways.  ThreeEdgesThreeFaces catches only the
-    // valence-3 case, which is one instance of this and not the general one.
     {
         Node* sa = edge->f0->OtherNodeTri( edge->n0, edge->n1 );
         Node* sb = edge->f1->OtherNodeTri( edge->n0, edge->n1 );
@@ -1319,15 +1558,6 @@ void Mesh::SwapEdge( Edge* edge )
         if ( !sa || !sb || sa == sb )
         {
             return;
-        }
-
-        for ( int i = 0; i < ( int )sa->edgeVec.size(); i++ )
-        {
-            Edge* ee = sa->edgeVec[i];
-            if ( ee && !ee->m_DeleteMeFlag && ee->OtherNode( sa ) == sb )
-            {
-                return;
-            }
         }
     }
 
@@ -1356,14 +1586,39 @@ void Mesh::SwapEdge( Edge* edge )
     }
 
     //==== Determine Face Quality of Existing Faces =====//
-    double qa = fa->ComputeTriQual();
-    double qb = fb->ComputeTriQual();
-    double qc = Face::ComputeTriQual( n0, nb, na );
-    double qd = Face::ComputeTriQual( n1, na, nb );
+    // A face's smallest angle is acos of its largest cosine, both clamped to [-1, 1] alike, and
+    // acos is decreasing there.  So min( qc, qd ) <= min( qa, qb ) on the angles when
+    // max( cc, cd ) >= max( ca, cb ) on the cosines, but for cosines one rounding apart, which
+    // acos can make equal angles.
+    double ca = Face::ComputeCosSmallAng( fa->n0, fa->n1, fa->n2 );
+    double cb = Face::ComputeCosSmallAng( fb->n0, fb->n1, fb->n2 );
+    double cc = Face::ComputeCosSmallAng( n0, nb, na );
+    double cd = Face::ComputeCosSmallAng( n1, na, nb );
 
-    if ( min( qc, qd ) <= min( qa, qb ) )
+    if ( max( cc, cd ) >= max( ca, cb ) )
     {
         return;
+    }
+
+    // The tests below only refuse a swap, so they are asked after the quality test, which
+    // refuses most edges and reads only the four corners.
+    if ( ThreeEdgesThreeFaces( edge ) )
+    {
+        return;
+    }
+
+    // A flip replaces the shared edge with one joining the two opposite corners.  If those
+    // two are already joined, the flip builds a SECOND edge between the same pair of nodes,
+    // which is not a surface any more: the pair of edges bounds no area and the faces on
+    // either side of it are shared three ways.  ThreeEdgesThreeFaces catches only the
+    // valence-3 case, which is one instance of this and not the general one.
+    for ( int i = 0; i < ( int )na->edgeVec.size(); i++ )
+    {
+        Edge* ee = na->edgeVec[i];
+        if ( ee && !ee->m_DeleteMeFlag && ee->OtherNode( na ) == nb )
+        {
+            return;
+        }
     }
 
     vec3d norma = fa->Normal();
@@ -1378,27 +1633,43 @@ void Mesh::SwapEdge( Edge* edge )
     // to be better shaped than the pair it replaces, so let it through deliberately.
     if ( norma.mag() > 0.0 && normb.mag() > 0.0 )
     {
-        double angab = angle( norma, normb );
-
-        if ( angab > 0.25 * M_PI_4  )
+        // angle() > 0.25 * M_PI_4, asked through the tangent; see AngleOverLimit.
+        if ( AngleOverLimit( norma, normb, TAN_SWAP_FOLD_ANGLE, true ) )
         {
             return;
         }
 
-        double angcd = angle( normc, normd );
-
-        if ( angcd > 0.25 * M_PI_4  )
+        if ( AngleOverLimit( normc, normd, TAN_SWAP_FOLD_ANGLE, true ) )
         {
             return;
         }
 
-        double angac = angle( norma, normc );
-
-        if ( angac > 0.25 * M_PI_4 )
+        if ( AngleOverLimit( norma, normc, TAN_SWAP_FOLD_ANGLE, true ) )
         {
             return;
         }
     }
+
+    FlipEdge( edge );
+}
+
+// Replace the edge shared by two faces with the one joining their opposite corners.
+void Mesh::FlipEdge( Edge* edge )
+{
+    Face*  fa = edge->f0;
+    Face*  fb = edge->f1;
+
+    Node* n0 = edge->n0;
+    Node* n1 = edge->n1;
+
+    if ( !fa->CorrectOrder( n0, n1 ) )
+    {
+        n0 = edge->n1;
+        n1 = edge->n0;
+    }
+
+    Node* na = fa->OtherNodeTri( n0, n1 );
+    Node* nb = fb->OtherNodeTri( n0, n1 );
 
     Edge* ea0 = fa->FindEdge( n0, na );
     Edge* ea1 = fa->FindEdge( na, n1 );
@@ -1756,7 +2027,8 @@ bool Mesh::ValidNodeMove( Node* nptr, const vec3d & move_to, Face* ignoreFace, F
             break;
         }
 
-        if ( angle( normals[i], move_normals[i] ) >= 0.5 * M_PI_4 )
+        // angle() >= 0.5 * M_PI_4, asked through the tangent; see AngleOverLimit.
+        if ( AngleOverLimit( normals[i], move_normals[i], TAN_MOVE_TURN_ANGLE, false ) )
         {
             valid_flag = false;
             break;
@@ -1795,9 +2067,11 @@ void Mesh::CollapseHighlightEdge()
 
 // Signed area of a triangle in the parametric domain.  Only the sign is used: if it changes
 // across an operation, the triangle turned inside out and the mesh overlapped itself.
-// Smallest angle of a triangle on three points, in radians.  Face::ComputeTriQual asks the
-// same question of an existing face; this asks it of a face that does not exist yet.
-static double TriMinAngle( const vec3d &p0, const vec3d &p1, const vec3d &p2 )
+// Cosine of the smallest angle of a triangle on three points, clamped to [-1, 1].  It is
+// compared, never turned into an angle: acos is decreasing on [-1, 1], so a smaller angle is
+// a larger cosine, but for cosines one rounding apart, which acos can make equal angles; a face
+// with no side has the cosine 1 of the angle 0.
+static double TriMinAngleCos( const vec3d &p0, const vec3d &p1, const vec3d &p2 )
 {
     double s[3];
     s[0] = dist( p1, p2 );
@@ -1806,7 +2080,7 @@ static double TriMinAngle( const vec3d &p0, const vec3d &p1, const vec3d &p2 )
 
     if ( s[0] <= 0.0 || s[1] <= 0.0 || s[2] <= 0.0 )
     {
-        return 0.0;
+        return 1.0;
     }
 
     std::sort( s, s + 3 );
@@ -1823,7 +2097,7 @@ static double TriMinAngle( const vec3d &p0, const vec3d &p1, const vec3d &p2 )
         cosv = -1.0;
     }
 
-    return acos( cosv );
+    return cosv;
 }
 
 static double SignedUWArea( const vec2d &a, const vec2d &b, const vec2d &c )
@@ -1832,17 +2106,19 @@ static double SignedUWArea( const vec2d &a, const vec2d &b, const vec2d &c )
                    ( c.x() - a.x() ) * ( b.y() - a.y() ) );
 }
 
-double Mesh::CollapseConfigQuality( Edge* edge, const vec3d &pc, const vec2d &uwc, bool &flipped, double &qbefore )
+double Mesh::CollapseConfigQuality( Edge* edge, const vec3d &pc, const vec2d &uwc, bool &flipped, double &cosbefore )
 {
     flipped = false;
-    qbefore = M_PI;
+
+    // The cosine of the angle pi, so any face's smallest angle is no larger.
+    cosbefore = -1.0;
 
     Node* n0 = edge->n0;
     Node* n1 = edge->n1;
     Face* fa = edge->f0;
     Face* fb = edge->f1;
 
-    double worst = M_PI;
+    double worst = -1.0;
 
     for ( int side = 0; side < 2; side++ )
     {
@@ -1898,18 +2174,19 @@ double Mesh::CollapseConfigQuality( Edge* edge, const vec3d &pc, const vec2d &uw
                 return 0.0;
             }
 
-            double qnow = TriMinAngle( fn[0]->pnt, fn[1]->pnt, fn[2]->pnt );
+            // A smaller angle is a larger cosine.
+            double cnow = TriMinAngleCos( fn[0]->pnt, fn[1]->pnt, fn[2]->pnt );
 
-            if ( qnow < qbefore )
+            if ( cnow > cosbefore )
             {
-                qbefore = qnow;
+                cosbefore = cnow;
             }
 
-            double q = TriMinAngle( p[0], p[1], p[2] );
+            double c = TriMinAngleCos( p[0], p[1], p[2] );
 
-            if ( q < worst )
+            if ( c > worst )
             {
-                worst = q;
+                worst = c;
             }
         }
     }
@@ -1999,14 +2276,17 @@ bool Mesh::CollapseEdge( Edge* edge, bool repair )
         ncand = 3;
     }
 
+    // The candidate whose worst face has the largest smallest angle: the smallest of the
+    // largest cosines, acos being decreasing on [-1, 1].  Every cosine is under 2, as every
+    // angle was over -1, so the first candidate that does not overlap is always taken up.
     int best = -1;
-    double bestq = -1.0;
+    double bestc = 2.0;
 
     for ( int k = 0; k < ncand; k++ )
     {
         bool flipped = false;
-        double qb = M_PI;
-        double q = CollapseConfigQuality( edge, cand_p[k], cand_uw[k], flipped, qb );
+        double cb = -1.0;
+        double c = CollapseConfigQuality( edge, cand_p[k], cand_uw[k], flipped, cb );
 
         // Wang 2006 5.2 step 2: a negative area means the collapse overlapped the mesh.
         if ( flipped )
@@ -2014,9 +2294,9 @@ bool Mesh::CollapseEdge( Edge* edge, bool repair )
             continue;
         }
 
-        if ( q > bestq )
+        if ( c < bestc )
         {
-            bestq = q;
+            bestc = c;
             best = k;
         }
     }
@@ -2032,7 +2312,8 @@ bool Mesh::CollapseEdge( Edge* edge, bool repair )
     // A collapse made for size may not leave a triangle at nearly zero.  A collapse made to
     // remove a face that is already unfit may, because refusing it leaves the unfit face in
     // the mesh, which is the worse of the two outcomes.  Overlap is refused either way.
-    if ( !repair && bestq < MIN_COLLAPSE_ANGLE )
+    // An angle under the limit is a cosine over the limit's cosine.
+    if ( !repair && bestc > COS_MIN_COLLAPSE_ANGLE )
     {
         return false;
     }
@@ -2199,6 +2480,10 @@ bool Mesh::CollapseEdge( Edge* edge, bool repair )
 
 void Mesh::LaplacianSmooth( int num_iter )
 {
+    vector< Face* > connectFaces;
+    vector< double > areas;
+    vector< char > wasgood;
+
     for ( int i = 0 ; i < num_iter ; i++ )
     {
         list< Node* >::iterator n;
@@ -2213,7 +2498,7 @@ void Mesh::LaplacianSmooth( int num_iter )
                 //(*n)->pnt = m_Surf->CompPnt( uw.x(), uw.y());
                 //(*n)->uw = uw;
 //              (*n)->LaplacianSmooth( m_Surf );
-                ( *n )->AreaWeightedLaplacianSmooth( m_Surf );
+                ( *n )->AreaWeightedLaplacianSmooth( m_Surf, connectFaces, areas, wasgood );
             }
         }
     }
@@ -2637,7 +2922,7 @@ bool Mesh::InitMesh_DBA( const vector< vec2d > & uw_prime, const vector< MeshSeg
 
 bool Mesh::InitMesh_TRI( const vector< vec2d > & uw_prime, const vector< MeshSeg > & segs_indexes,
                          vector< vector< int > > & connlist, vector< vec2d > & points_out, int relax,
-                         double areascale )
+                         double areascale, bool * steinerout )
 {
     int num_pnts  = uw_prime.size();
     int num_edges = segs_indexes.size();
@@ -2730,15 +3015,38 @@ bool Mesh::InitMesh_TRI( const vector< vec2d > & uw_prime, const vector< MeshSeg
         snprintf( str, sizeof( str ), "zpYQa%8.6fq20", uw_tri_area );
     }
 
+    // S caps the points Triangle may add.  A surface that meshes adds fewer than one point for
+    // each point and estimated triangle; refinement that cannot meet its bounds -- a triangle
+    // too small for floating point to split -- adds points until memory runs out instead.
+    int max_steiner = 4 * ( num_pnts + ( int )est_num_tris );
+    size_t optlen = strlen( str );
+    snprintf( str + optlen, sizeof( str ) - optlen, "S%d", max_steiner );
+
     tristatus = triangle_context_options( ctx, str );
     if ( tristatus != TRI_OK ) printf( "triangle_context_options Error\n" );
 
     tristatus = triangle_mesh_create( ctx, &in );
     if ( tristatus != TRI_OK ) printf( "triangle_mesh_create Error\n" );
 
+    // Using every point allowed means refinement was stopped, not finished.
+    bool ranout = false;
     if ( tristatus == TRI_OK )
     {
-        triangle_mesh_copy( ctx, &out, 1, 1 );
+        statistics stats;
+        triangle_mesh_statistics( ctx, &stats );
+        if ( stats.vertices - num_pnts >= max_steiner )
+        {
+            ranout = true;
+            if ( steinerout )
+            {
+                *steinerout = true;
+            }
+        }
+    }
+    if ( tristatus == TRI_OK && !ranout )
+    {
+        // The points and triangles only: no edge or neighbor lists.
+        triangle_mesh_copy( ctx, &out, 0, 0 );
 
         points_out.resize( out.numberofpoints );
         for ( int i = 0; i < out.numberofpoints; i++ )
@@ -2766,7 +3074,135 @@ bool Mesh::InitMesh_TRI( const vector< vec2d > & uw_prime, const vector< MeshSeg
 
     triangle_context_destroy( ctx );
 
-    return tristatus == TRI_OK;
+    return tristatus == TRI_OK && !ranout;
+}
+
+// Make the points that coincide in s,t one point, the first of them in their order, and end
+// every segment there; then drop the segments left joining a point to itself, and all but the
+// first of those joining the same two points.
+//
+// Points coincide when they are within a ten billionth of the extent of all the points.  That
+// is far below any mesh spacing, but catches points that differ only by rounding: Triangle
+// cannot meet its angle bound among points that close, and refines toward them without end.
+static void MergeCoincidentPoints( vector< vec2d > & uw_points, vector< vec2d > & uw_prime, vector< MeshSeg > & segs_indexes )
+{
+    const double reltol = 1.0e-10;
+
+    // A point that is not a number keeps its own index.
+    vector< bool > placed( uw_prime.size() );
+
+    double xmin = 0.0, xmax = 0.0, ymin = 0.0, ymax = 0.0;
+    bool first = true;
+
+    for ( int i = 0; i < ( int )uw_prime.size(); i++ )
+    {
+        placed[i] = !std::isnan( uw_prime[i].x() ) && !std::isnan( uw_prime[i].y() );
+
+        if ( placed[i] )
+        {
+            if ( first )
+            {
+                xmin = xmax = uw_prime[i].x();
+                ymin = ymax = uw_prime[i].y();
+                first = false;
+            }
+            xmin = std::min( xmin, uw_prime[i].x() );
+            xmax = std::max( xmax, uw_prime[i].x() );
+            ymin = std::min( ymin, uw_prime[i].y() );
+            ymax = std::max( ymax, uw_prime[i].y() );
+        }
+    }
+
+    double tol = reltol * std::max( xmax - xmin, ymax - ymin );
+
+    // The placed points go in a tree, searched to twice tol so the test below sees every point
+    // it can accept.  With no extent the radius is the least above zero.
+    PntNodeCloud cloud;
+    vector< int > pointof;
+    pointof.reserve( uw_prime.size() );
+    cloud.ReserveMorePntNodes( uw_prime.size() );
+
+    for ( int i = 0; i < ( int )uw_prime.size(); i++ )
+    {
+        if ( placed[i] )
+        {
+            cloud.AddPntNode( vec3d( uw_prime[i].x(), uw_prime[i].y(), 0.0 ) );
+            pointof.push_back( i );
+        }
+    }
+
+    BuildPntNodeIndex( cloud );
+
+    double searchsq = 4.0 * tol * tol + std::numeric_limits< double >::min();
+
+    vector< int > newindex( uw_prime.size() );
+    vector< bool > kept( uw_prime.size(), false );
+    vector< unsigned int > near;
+
+    vector< vec2d > uw_keep;
+    vector< vec2d > prime_keep;
+    uw_keep.reserve( uw_points.size() );
+    prime_keep.reserve( uw_prime.size() );
+
+    for ( int i = 0; i < ( int )uw_prime.size(); i++ )
+    {
+        // The first kept point before this one within tol of it.
+        int found = -1;
+
+        if ( placed[i] )
+        {
+            FindPntNodesWithinTolSq( cloud, vec3d( uw_prime[i].x(), uw_prime[i].y(), 0.0 ), searchsq, near );
+
+            for ( int k = 0; k < ( int )near.size(); k++ )
+            {
+                int j = pointof[ near[k] ];
+                if ( j < i && kept[j] && dist( uw_prime[j], uw_prime[i] ) <= tol && ( found < 0 || j < found ) )
+                {
+                    found = j;
+                }
+            }
+        }
+
+        if ( found >= 0 )
+        {
+            newindex[i] = newindex[ found ];
+        }
+        else
+        {
+            newindex[i] = ( int )prime_keep.size();
+            kept[i] = true;
+            uw_keep.push_back( uw_points[i] );
+            prime_keep.push_back( uw_prime[i] );
+        }
+    }
+
+    vector< MeshSeg > segs_keep;
+    segs_keep.reserve( segs_indexes.size() );
+    set< pair< int, int > > joined;
+
+    for ( int j = 0; j < ( int )segs_indexes.size(); j++ )
+    {
+        MeshSeg seg = segs_indexes[j];
+        seg.m_Index[0] = newindex[ seg.m_Index[0] ];
+        seg.m_Index[1] = newindex[ seg.m_Index[1] ];
+
+        if ( seg.m_Index[0] == seg.m_Index[1] )
+        {
+            continue;
+        }
+
+        pair< int, int > ends( std::min( seg.m_Index[0], seg.m_Index[1] ), std::max( seg.m_Index[0], seg.m_Index[1] ) );
+        if ( !joined.insert( ends ).second )
+        {
+            continue;
+        }
+
+        segs_keep.push_back( seg );
+    }
+
+    uw_points.swap( uw_keep );
+    uw_prime.swap( prime_keep );
+    segs_indexes.swap( segs_keep );
 }
 
 void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_indexes, SurfaceIntersectionSingleton *MeshMgr )
@@ -2864,6 +3300,10 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
         uw_prime[i] = m_Surf->GetST( uw_points[ i ] );
     }
 
+    MergeCoincidentPoints( uw_points, uw_prime, segs_indexes );
+    num_pnts = uw_points.size();
+    num_edges = segs_indexes.size();
+
 #ifdef DEBUG_CFD_MESH
 
     if ( !MeshMgr->m_DebugMeshUWFile )
@@ -2960,7 +3400,11 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
     vector< vector< int > > connlist;
     vector< vec2d > points_out;
 
-    bool success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out );
+    // Set when a triangulation used every point it was allowed.  Asking again for the same
+    // quality bound would only do the same, so those retries are skipped.
+    bool steinerout = false;
+
+    bool success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out, 0, 1.0, &steinerout );
 
     int trimethod = 0;      // 0 first try, 1..5 retry number, 9 fell back to DBA, -1 nothing worked
 
@@ -2970,11 +3414,11 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
     // built to the sizing that was asked for.
     const double areatry[] = { 0.8, 1.25, 0.6, 1.6 };
 
-    for ( int r = 0; !success && r < 4; r++ )
+    for ( int r = 0; !success && !steinerout && r < 4; r++ )
     {
         connlist.clear();
         points_out.clear();
-        success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out, 0, areatry[r] );
+        success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out, 0, areatry[r], &steinerout );
 
         if ( success )
         {
@@ -2987,7 +3431,7 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
     {
         connlist.clear();
         points_out.clear();
-        success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out, r );
+        success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out, r, 1.0, &steinerout );
 
         if ( success )
         {
@@ -2995,19 +3439,27 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
         }
     }
 
-    if ( !success )
+    if ( !success && !steinerout )
     {
         int n = 0;
-        while ( !success && n < 5 )
+        while ( !success && !steinerout && n < 5 )
         {
 #ifdef DEBUG_CFD_MESH
             printf( "  Triangulation failed for surface %d %s %s, randomizing point order for %d time and trying again\n", namecnt, m_Surf->GetName().c_str(), m_Surf->GetGeomID().c_str(), n );
 #endif
-            RandomizePointOrder( uw_prime, segs_indexes, CFD_MESH_SEED_BASE + n );
+            vector< int > perm = RandomizePointOrder( uw_prime, segs_indexes, CFD_MESH_SEED_BASE + n );
+
+            // The nodes are built from uw_points, so it takes the same order as uw_prime.
+            vector< vec2d > uw_shuffled( num_pnts );
+            for ( int k = 0; k < num_pnts; k++ )
+            {
+                uw_shuffled[k] = uw_points[ perm[k] ];
+            }
+            uw_points.swap( uw_shuffled );
 
             connlist.clear();
             points_out.clear();
-            success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out );
+            success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out, 0, 1.0, &steinerout );
             n++;
 
             if ( success )
@@ -3029,11 +3481,11 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
     }
     // Last thing before giving the surface to a triangulator that ignores the sizing: let the
     // interior segments be split.
-    if ( !success )
+    if ( !success && !steinerout )
     {
         connlist.clear();
         points_out.clear();
-        success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out, 3 );
+        success = InitMesh_TRI( uw_prime, segs_indexes, connlist, points_out, 3, 1.0, &steinerout );
 
         if ( success )
         {
@@ -3112,8 +3564,14 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
             how = "COULD NOT BE TRIANGULATED";
         }
 
-        printf( "Surface %d (%s %s): %s.\n", m_Surf->GetSurfID(),
-                m_Surf->GetName().c_str(), m_Surf->GetGeomID().c_str(), how );
+        const char *why = "";
+        if ( steinerout )
+        {
+            why = ", as refinement used every point it was allowed";
+        }
+
+        printf( "Surface %d (%s %s): %s%s.\n", m_Surf->GetSurfID(),
+                m_Surf->GetName().c_str(), m_Surf->GetGeomID().c_str(), how, why );
         fflush( stdout );
     }
 
@@ -3193,6 +3651,7 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
             if ( e )
             {
                 e->border = true;
+                m_BorderChainMap[ e ] = std::make_pair( segs_indexes[j].m_Chain[0], segs_indexes[j].m_Chain[1] );
 
                 n0->fixed = true;
                 n1->fixed = true;
@@ -3206,6 +3665,8 @@ void Mesh::InitMesh( vector< vec2d > & uw_points, vector< MeshSeg > & segs_index
                 e->ns = nsplit;
             }
         }
+
+        SetUWSign();
     }
 
 #ifdef DEBUG_CFD_MESH
@@ -3552,21 +4013,30 @@ void Mesh::ReadSTL( const char* file_name )
 
 }
 
-// One STL facet, in the seven lines the format asks for.  buf is the caller's scratch, so a
-// loop over a million faces does not stand one up each time round.
-void AppendSTLFacet( string &out, char* buf, int buflen, const vec3d &norm,
-                     const vec3d &p0, const vec3d &p1, const vec3d &p2 )
+// Three numbers as printf's "%2.10le %2.10le %2.10le\n" writes them
+static void AppendSTLTriple( string &out, const vec3d &p )
 {
-    snprintf( buf, buflen, " facet normal  %2.10le %2.10le %2.10le\n", norm.x(), norm.y(), norm.z() );
-    out += buf;
+    FastFormat::AppendE( out, p.x(), 2, 10 );
+    out += ' ';
+    FastFormat::AppendE( out, p.y(), 2, 10 );
+    out += ' ';
+    FastFormat::AppendE( out, p.z(), 2, 10 );
+    out += '\n';
+}
+
+// One STL facet, in the seven lines the format asks for.
+void AppendSTLFacet( string &out, const vec3d &norm, const vec3d &p0, const vec3d &p1, const vec3d &p2 )
+{
+    out += " facet normal  ";
+    AppendSTLTriple( out, norm );
     out += "   outer loop\n";
 
-    snprintf( buf, buflen, "     vertex %2.10le %2.10le %2.10le\n", p0.x(), p0.y(), p0.z() );
-    out += buf;
-    snprintf( buf, buflen, "     vertex %2.10le %2.10le %2.10le\n", p1.x(), p1.y(), p1.z() );
-    out += buf;
-    snprintf( buf, buflen, "     vertex %2.10le %2.10le %2.10le\n", p2.x(), p2.y(), p2.z() );
-    out += buf;
+    out += "     vertex ";
+    AppendSTLTriple( out, p0 );
+    out += "     vertex ";
+    AppendSTLTriple( out, p1 );
+    out += "     vertex ";
+    AppendSTLTriple( out, p2 );
 
     out += "   endloop\n";
     out += " endfacet\n";
@@ -3597,8 +4067,6 @@ void Mesh::WriteSimpleSTL( FILE* file_id )
 
 void Mesh::AppendSimpleSTL( int ibeg, int iend, string &out )
 {
-    char buf[256];
-
     for ( int i = ibeg ; i < iend ; i++ )
     {
         SimpFace* f = &simpFaceVec[i];
@@ -3611,7 +4079,7 @@ void Mesh::AppendSimpleSTL( int ibeg, int iend, string &out )
         vec3d norm = cross( v01, v12 );
         norm.normalize();
 
-        AppendSTLFacet( out, buf, sizeof( buf ), norm, p0, p1, p2 );
+        AppendSTLFacet( out, norm, p0, p1, p2 );
 
         if ( f->m_isQuad ) // Split quad and write additional tri.
         {
@@ -3621,7 +4089,7 @@ void Mesh::AppendSimpleSTL( int ibeg, int iend, string &out )
             norm = cross( v23, v30 );
             norm.normalize();
 
-            AppendSTLFacet( out, buf, sizeof( buf ), norm, p0, p2, p3 );
+            AppendSTLFacet( out, norm, p0, p2, p3 );
         }
     }
 }

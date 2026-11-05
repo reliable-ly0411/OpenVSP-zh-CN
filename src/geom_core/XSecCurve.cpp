@@ -7,6 +7,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include <cfloat>
 #include <cmath>
 
 #include "XSecCurve.h"
@@ -115,7 +116,7 @@ XSecCurve::XSecCurve()
     m_LECapStrength.Init( "LE_Cap_Strength", "Cap", this, 0.5, 0, 1);
 
     m_TEFlapType.Init( "TE_Flap_Type", "Flap", this, FLAP_NONE, FLAP_NONE, FLAP_NUM_TYPES - 1 );
-    m_TEFlapAbsRel.Init( "TE_Trim_AbsRel", "Flap", this, REL, ABS, REL );
+    m_TEFlapAbsRel.Init( "TE_Flap_AbsRel", "Flap", this, REL, ABS, REL );
 
     m_TEFlapX.Init( "TE_Flap_X", "Flap", this, 0, 0, 1e12 );
     m_TEFlapX.SetDescript( "X length to lap trailing edge" );
@@ -164,8 +165,8 @@ XSecCurve::XSecCurve()
 
     m_ChevTopAmplitude.Init( "TopAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
     m_ChevBottomAmplitude.Init( "BottomAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
-    m_ChevRightAmplitude.Init( "LeftAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
-    m_ChevLeftAmplitude.Init( "RightAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
+    m_ChevRightAmplitude.Init( "RightAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
+    m_ChevLeftAmplitude.Init( "LeftAmplitude", "Chevron", this, 1.0, -1e12, 1e12 );
 
     m_ChevTopAngle.Init( "Top_Angle", "Chevron", this, 0.0, -360.0, 360.0 );
     m_ChevBottomAngle.Init( "Bottom_Angle", "Chevron", this, 0.0, -360.0, 360.0 );
@@ -550,6 +551,26 @@ xmlNodePtr XSecCurve::EncodeXml(  xmlNodePtr & node  )
 xmlNodePtr XSecCurve::DecodeXml( xmlNodePtr & node )
 {
     ParmContainer::DecodeXml( node );
+
+    //=========================================================================================//
+    // Work-around for buggy files: files written before the flap's Abs/Rel Parm was named
+    // TE_Flap_AbsRel store it as TE_Trim_AbsRel in the Flap group.
+    xmlNodePtr pc_node = XmlUtil::GetNode( node, "ParmContainer", 0 );
+    if ( pc_node )
+    {
+        xmlNodePtr flap_node = XmlUtil::GetNode( pc_node, "Flap", 0 );
+        if ( flap_node && !XmlUtil::GetNode( flap_node, "TE_Flap_AbsRel", 0 ) )
+        {
+            xmlNodePtr old_node = XmlUtil::GetNode( flap_node, "TE_Trim_AbsRel", 0 );
+            if ( old_node )
+            {
+                m_TEFlapAbsRel.DecodeXmlNode( old_node );
+            }
+        }
+    }
+    // End of work-around for buggy files.
+    //=========================================================================================//
+
     m_GroupName = XmlUtil::FindString( node, "GroupName", m_GroupName );
 
     xmlNodePtr xscrv_node = XmlUtil::GetNode( node, "XSecCurve", 0 );
@@ -692,7 +713,22 @@ double XSecCurve::EstimateFlapArcLen()
 
     const double tmid = ( tmin + tmax ) * 0.5;
 
-    const double s = m_TEFlapXChord();
+    // An absolute flap length sets X/C only once the flap is built, so convert it here the same way.
+    double s = m_TEFlapXChord();
+    if ( m_TEFlapAbsRel() == ABS )
+    {
+        double xflap = m_TEFlapX();
+        double div = GetWidth();
+        if ( m_UseFakeWidth )
+        {
+            div = GetFakeWidth();
+            xflap = m_TEFlapX() * GetWidth() / div;
+        }
+        if ( div != 0.0 )
+        {
+            s = xflap / div;
+        }
+    }
 
     const double tslow = tmin + TMAGIC + s * ( tmid - TMAGIC - ( tmin + TMAGIC ) );
     const double tsup = tmax - TMAGIC - s * ( tmax - TMAGIC - ( tmid + TMAGIC ) );
@@ -718,6 +754,60 @@ double XSecCurve::EstimateFlapArcLen()
     }
 
     return arclen;
+}
+
+// The points where a plain flap of chord xflap leaves each side of an airfoil curve, and its hinge,
+// yfrac of the way from the lower point to the upper.  False when a point is an end of its side, as
+// for a flap with no chord: there is no flap to deflect.
+static bool PlainFlapPoints( const piecewise_curve_type &clow, const piecewise_curve_type &cup, const vec3d &telow,
+                             const vec3d &teup, double xflap, double width, double yfrac, double tmin, double tmax,
+                             double umin, double umid, double umax, double &tslow, double &tsup,
+                             threed_point_type &plow, threed_point_type &pup, threed_point_type &phinge )
+{
+    double s = xflap / width;
+    double tslow0 = tmin + TMAGIC + s * ( umid - ( tmin + TMAGIC ) );
+    double tsup0 = tmax - TMAGIC - s * ( tmax - TMAGIC - umid );
+
+    tslow = tslow0;
+    tsup = tsup0;
+
+    threed_point_type ptelow, pteup;
+    telow.get_pnt( ptelow );
+    eli::geom::intersect::specified_distance( tslow, clow, ptelow, xflap, tslow0 );
+    tslow = clamp( tslow, umin, umid );
+
+    teup.get_pnt( pteup );
+    eli::geom::intersect::specified_distance( tsup, cup, pteup, xflap, tsup0 );
+    tsup = clamp( tsup, umid, umax );
+
+
+    plow = clow.f( tslow );
+    pup = cup.f( tsup );
+
+    phinge = plow + yfrac * ( pup - plow );
+
+    // The points nearest the hinge, unless one is an end of its side, as on a round section.
+    double tslowd = tslow;
+    double tsupd = tsup;
+    const double ttol = 1e-6;
+
+    eli::geom::intersect::minimum_distance( tslow, clow, phinge, tslow );
+    tslow = clamp( tslow, umin, umid );
+    if ( tslow < umin + ttol || tslow > umid - ttol )
+    {
+        tslow = tslowd;
+    }
+    plow = clow.f( tslow );
+
+    eli::geom::intersect::minimum_distance( tsup, cup, phinge, tsup );
+    tsup = clamp( tsup, umid, umax );
+    if ( tsup > umax - ttol || tsup < umid + ttol )
+    {
+        tsup = tsupd;
+    }
+    pup = cup.f( tsup );
+
+    return !( tslow < umin + ttol || tslow > umid - ttol || tsup > umax - ttol || tsup < umid + ttol );
 }
 
 void XSecCurve::DeflectTE( bool wingtype )
@@ -770,40 +860,15 @@ void XSecCurve::DeflectTE( bool wingtype )
     crv = crest;
     crv.split( cup, cteup, tmax - TMAGIC );
 
-    if ( m_TEFlapType() == FLAP_PLAIN )
+    double tslow = 0.0;
+    double tsup = 0.0;
+    threed_point_type plow, pup, phinge;
+    bool plain = m_TEFlapType() == FLAP_PLAIN &&
+                 PlainFlapPoints( clow, cup, telow, teup, xflap, GetWidth(), m_TEFlapYFrac(), tmin, tmax, umin, umid,
+                                  umax, tslow, tsup, plow, pup, phinge );
+
+    if ( plain )
     {
-        double s = xflap / GetWidth();
-        double tslow0 = tmin + TMAGIC + s * ( umid - ( tmin + TMAGIC ) );
-        double tsup0 = tmax - TMAGIC - s * ( tmax - TMAGIC - umid );
-
-        double tslow = tslow0;
-        double tsup = tsup0;
-
-        threed_point_type ptelow, pteup;
-        telow.get_pnt( ptelow );
-        eli::geom::intersect::specified_distance( tslow, clow, ptelow, xflap, tslow0 );
-        tslow = clamp( tslow, umin, umid );
-
-        teup.get_pnt( pteup );
-        eli::geom::intersect::specified_distance( tsup, cup, pteup, xflap, tsup0 );
-        tsup = clamp( tsup, umid, umax );
-
-
-        threed_point_type plow = clow.f( tslow );
-        threed_point_type pup = cup.f( tsup );
-
-        threed_point_type phinge = plow + m_TEFlapYFrac() * ( pup - plow );
-
-
-        eli::geom::intersect::minimum_distance( tslow, clow, phinge, tslow );
-        tslow = clamp( tslow, umin, umid );
-        plow = clow.f( tslow );
-
-        eli::geom::intersect::minimum_distance( tsup, cup, phinge, tsup );
-        tsup = clamp( tsup, umid, umax );
-        pup = cup.f( tsup );
-
-
         piecewise_curve_type clowrear, clowfwd, cupfwd, cuprear;
         clow.split( clowrear, clowfwd, tslow );
         cup.split( cupfwd, cuprear, tsup );
@@ -3555,23 +3620,39 @@ bool FileXSec::SetPnts( vector< vec3d > & pnt_vec )
     int num_pnts = ( int )pnt_vec.size();
 
     //==== Find Height & Width ====//
-    double width = 1.0e-12;
-    double height = 1.0e-12;
+    double xmin = DBL_MAX;
+    double xmax = -DBL_MAX;
+    double ymin = DBL_MAX;
+    double ymax = -DBL_MAX;
     for ( int i = 0 ; i < num_pnts ; i++ )
     {
-        for ( int j = 0 ; j < num_pnts ; j++ )
+        if ( pnt_vec[i].x() < xmin )
         {
-            double w = std::abs( pnt_vec[i].x() - pnt_vec[j].x() );
-            if ( w > width )
-            {
-                width = w;
-            }
-            double h = std::abs( pnt_vec[i].y() - pnt_vec[j].y() );
-            if ( h > height )
-            {
-                height = h;
-            }
+            xmin = pnt_vec[i].x();
         }
+        if ( pnt_vec[i].x() > xmax )
+        {
+            xmax = pnt_vec[i].x();
+        }
+        if ( pnt_vec[i].y() < ymin )
+        {
+            ymin = pnt_vec[i].y();
+        }
+        if ( pnt_vec[i].y() > ymax )
+        {
+            ymax = pnt_vec[i].y();
+        }
+    }
+
+    double width = 1.0e-12;
+    double height = 1.0e-12;
+    if ( xmax - xmin > width )
+    {
+        width = xmax - xmin;
+    }
+    if ( ymax - ymin > height )
+    {
+        height = ymax - ymin;
     }
 
     //==== Scale Point By Height & Width ====//

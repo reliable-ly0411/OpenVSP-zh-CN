@@ -1,4 +1,4 @@
-// Regenerate the bundled Simplified-Chinese HTML help from the Markdown sources.
+// Regenerate only the explicitly localized help pages. Preserve upstream Pandoc HTML.
 // Usage: node build_help_zh.js <path-to-node_modules> [--check | --test]
 
 const assert = require("assert/strict");
@@ -122,6 +122,46 @@ function testGenerator(marked) {
     console.log("Help generator self-tests passed (Chinese/English, formatting, duplicate collisions, per-page reset).");
 }
 
+function loadLocalizedPages(helpDir) {
+    const names = JSON.parse(fs.readFileSync(path.join(helpDir, "localized_pages.json"), "utf8"));
+    assert.ok(Array.isArray(names) && names.length > 0, "Localized page list must be a nonempty array.");
+    assert.equal(new Set(names).size, names.length, "Duplicate localized page names.");
+    // Only flat Markdown basenames are allowed, including on Windows. Resolve
+    // symlinks as well so neither an input nor an output can escape the help tree.
+    const root = fs.realpathSync(helpDir);
+    for (const name of names) {
+        assert.ok(typeof name === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]*\.md$/.test(name),
+            `Unsafe localized page name: ${JSON.stringify(name)}`);
+        for (const relative of [name, path.join("html", name.replace(/\.md$/, ".html"))]) {
+            const file = path.join(root, relative);
+            assert.ok(fs.statSync(file).isFile(), `Missing help file: ${relative}`);
+            const realFile = fs.realpathSync(file);
+            const resolved = path.relative(root, realFile);
+            assert.ok(resolved !== ".." && !resolved.startsWith(`..${path.sep}`) && !path.isAbsolute(resolved),
+                `Help file escapes help directory: ${relative}`);
+            assert.equal(realFile, file, `Help file must not alias another path: ${relative}`);
+        }
+    }
+    return names;
+}
+
+function buildHelp(marked, helpDir, check) {
+    // Validate the entire list before writing anything. Unlisted upstream pages
+    // are deliberately not parsed by marked (notably Pandoc-rendered formulas).
+    const names = loadLocalizedPages(helpDir);
+    for (const name of names) {
+        const markdown = fs.readFileSync(path.join(helpDir, name), "utf8");
+        const html = renderDocument(marked, markdown, name);
+        const output = path.join(helpDir, "html", name.replace(/\.md$/, ".html"));
+        if (check) {
+            assert.equal(fs.readFileSync(output, "utf8"), html, `Regenerate stale help: ${name}`);
+        } else {
+            fs.writeFileSync(output, html, "utf8");
+        }
+    }
+    return names.length;
+}
+
 async function main() {
     const [moduleRoot, mode] = process.argv.slice(2);
     if (!moduleRoot || (mode && !["--check", "--test"].includes(mode)) || process.argv.length > 4) {
@@ -132,24 +172,11 @@ async function main() {
     const { marked } = await import(pathToFileURL(modulePath).href);
     if (mode === "--test") {
         testGenerator(marked);
+        require("../../scripts/test_help_generator.js").testBuildScope(marked);
         return;
     }
-    const outputDir = path.join(__dirname, "html");
-    const names = fs.readdirSync(__dirname).filter((file) => file.endsWith(".md")).sort();
-    if (mode !== "--check") {
-        fs.mkdirSync(outputDir, { recursive: true });
-    }
-    for (const name of names) {
-        const markdown = fs.readFileSync(path.join(__dirname, name), "utf8");
-        const html = renderDocument(marked, markdown, name);
-        const output = path.join(outputDir, path.basename(name, ".md") + ".html");
-        if (mode === "--check") {
-            assert.equal(fs.readFileSync(output, "utf8"), html, `Regenerate stale help: ${name}`);
-        } else {
-            fs.writeFileSync(output, html, "utf8");
-        }
-    }
-    console.log(`${mode === "--check" ? "Checked" : "Generated"} ${names.length} help pages.`);
+    const count = buildHelp(marked, __dirname, mode === "--check");
+    console.log(`${mode === "--check" ? "Checked" : "Generated"} ${count} localized help pages; upstream HTML preserved.`);
 }
 
 if (require.main === module) {
@@ -159,4 +186,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { createHeadingSlugger, renderBody, renderDocument, testGenerator };
+module.exports = { createHeadingSlugger, renderBody, renderDocument, testGenerator, loadLocalizedPages, buildHelp };

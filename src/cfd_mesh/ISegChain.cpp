@@ -13,6 +13,9 @@
 #include <Eigen/Dense>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <map>
 
 //////////////////////////////////////////////////////////////////////
 //==== UW Point on Surface ====//
@@ -443,19 +446,20 @@ ISegBox::~ISegBox()
     delete m_SubBox[1];
 }
 
+// A box over eight segments or fewer is taken from their points; a larger one is split in two
+// and made of its halves' boxes, which bound the same points.
 void ISegBox::BuildSubDivide()
 {
-    vec2d uw0, uw1;
-    for ( int i = m_BeginInd ; i < m_EndInd ; i++ )
-    {
-        uw0 = m_ChainPtr->m_ISegVec[i]->m_IPnt[0]->GetPuw( m_Surf )->m_UW;
-        uw1 = m_ChainPtr->m_ISegVec[i]->m_IPnt[1]->GetPuw( m_Surf )->m_UW;
-        m_Box.Update( vec3d( uw0.x(), uw0.y(), 0.0 ) );
-        m_Box.Update( vec3d( uw1.x(), uw1.y(), 0.0 ) );
-    }
-
     if ( m_EndInd - m_BeginInd <= 8 )
     {
+        vec2d uw0, uw1;
+        for ( int i = m_BeginInd ; i < m_EndInd ; i++ )
+        {
+            uw0 = m_ChainPtr->m_ISegVec[i]->m_IPnt[0]->GetPuw( m_Surf )->m_UW;
+            uw1 = m_ChainPtr->m_ISegVec[i]->m_IPnt[1]->GetPuw( m_Surf )->m_UW;
+            m_Box.Update( vec3d( uw0.x(), uw0.y(), 0.0 ) );
+            m_Box.Update( vec3d( uw1.x(), uw1.y(), 0.0 ) );
+        }
         return;
     }
 
@@ -479,6 +483,8 @@ void ISegBox::BuildSubDivide()
     m_SubBox[0]->BuildSubDivide();
     m_SubBox[1]->BuildSubDivide();
 
+    m_Box.Update( m_SubBox[0]->m_Box );
+    m_Box.Update( m_SubBox[1]->m_Box );
 }
 
 // The surface of a segment that is not s
@@ -602,6 +608,68 @@ static bool FractionOnSeg( const vec2d &uw, const vec2d &a, const vec2d &b, doub
     return frac >= 0.0 && frac <= 1.0;
 }
 
+// Where two segments meet end to end, the end they share and how far along each it lies.  Two
+// curves that touch at a point of both are cut there however they meet, and the crossing test
+// misses a touch at an end by rounding, or between segments close to parallel.
+static bool SharedEnd( const vec2d &p0, const vec2d &p1, const vec2d &p2, const vec2d &p3, vec2d &pnt,
+                       double &t0, double &t1 )
+{
+    const double tol = 1.0e-12;
+    const vec2d *a[2] = { &p0, &p1 };
+    const vec2d *b[2] = { &p2, &p3 };
+
+    for ( int i = 0; i < 2; i++ )
+    {
+        for ( int j = 0; j < 2; j++ )
+        {
+            if ( dist( *a[i], *b[j] ) < tol )
+            {
+                pnt = *a[i];
+                t0 = i;
+                t1 = j;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+// Whether two chains run together near segments i of a and j of b: a segment of a at or next to i
+// has both ends on those of a segment of b at or next to j.
+static bool RunTogether( ISegChain* a, int i, ISegChain* b, int j, Surf* s )
+{
+    const double tol = 1.0e-12;
+
+    for ( int ii = i - 1; ii <= i + 1; ii++ )
+    {
+        if ( ii < 0 || ii >= ( int )a->m_ISegVec.size() )
+        {
+            continue;
+        }
+        vec2d a0 = a->m_ISegVec[ii]->m_IPnt[0]->GetPuw( s )->m_UW;
+        vec2d a1 = a->m_ISegVec[ii]->m_IPnt[1]->GetPuw( s )->m_UW;
+
+        for ( int jj = j - 1; jj <= j + 1; jj++ )
+        {
+            if ( jj < 0 || jj >= ( int )b->m_ISegVec.size() )
+            {
+                continue;
+            }
+            vec2d b0 = b->m_ISegVec[jj]->m_IPnt[0]->GetPuw( s )->m_UW;
+            vec2d b1 = b->m_ISegVec[jj]->m_IPnt[1]->GetPuw( s )->m_UW;
+
+            if ( ( dist( a0, b0 ) < tol && dist( a1, b1 ) < tol ) ||
+                 ( dist( a0, b1 ) < tol && dist( a1, b0 ) < tol ) )
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 void ISegBox::Intersect( ISegBox* box )
 {
     int i, j;
@@ -634,7 +702,9 @@ void ISegBox::Intersect( ISegBox* box )
                 vec2d p3 = box->m_ChainPtr->m_ISegVec[j]->m_IPnt[1]->GetPuw( m_Surf )->m_UW;
 
                 double t0, t1;
-                if ( seg_seg_intersect( p0, p1, p2, p3, int_pnt, t0, t1 ) )
+                if ( seg_seg_intersect( p0, p1, p2, p3, int_pnt, t0, t1 ) ||
+                     ( SharedEnd( p0, p1, p2, p3, int_pnt, t0, t1 ) &&
+                       !RunTogether( m_ChainPtr, i, box->m_ChainPtr, j, m_Surf ) ) )
                 {
                     ISeg* seg0 = m_ChainPtr->m_ISegVec[i];
                     ISeg* seg1 = box->m_ChainPtr->m_ISegVec[j];
@@ -891,7 +961,13 @@ bool ISegChain::Valid()
         len += dist( m_ISegVec[i]->m_IPnt[0]->m_Pnt, m_ISegVec[i]->m_IPnt[1]->m_Pnt );
     }
 
+    // At least 1e-4 long, or 2.5e-5 of the size of the surfaces it lies on where that is less
     double tol = 1.0e-4;
+    if ( m_SurfA && m_SurfB )
+    {
+        double size = std::max( m_SurfA->GetBBox().DiagDist(), m_SurfB->GetBBox().DiagDist() );
+        tol = std::min( tol, 2.5e-5 * size );
+    }
 
     return len >= tol;
 }
@@ -1009,6 +1085,7 @@ bool ISegChain::AddBorderSplit( Puw* uw )
     int closest_index = -1;
     double closest_fract = 0.0;
     double closest_dist = 1.0e12;
+    vec2d closest_proj;
     double split_tol = tol;
 
     if ( m_SurfA == m_SurfB )
@@ -1037,6 +1114,7 @@ bool ISegChain::AddBorderSplit( Puw* uw )
             {
                 closest_dist = d;
                 closest_index = i;
+                closest_proj = proj;
                 closest_fract = 0.0;
                 vec3d p0 = surfPtr->CompPnt( iuw0[0], iuw0[1] );
                 vec3d p1 = surfPtr->CompPnt( iuw1[0], iuw1[1] );
@@ -1049,13 +1127,26 @@ bool ISegChain::AddBorderSplit( Puw* uw )
         }
     }
 
+    // An end of the chain is not split, compared here in 3D, relative to the length of the end
+    // segment: a cap whose grid collapses reaches one point from more than one u,w.
+    const double endtol = 1.0e-5;
+    vec3d uw3d = surfPtr->CompPnt( uw->m_UW[0], uw->m_UW[1] );
+    ISeg* front = m_ISegVec.front();
+    ISeg* back = m_ISegVec.back();
+    if ( dist( uw3d, front->m_IPnt[0]->m_Pnt ) < endtol * dist( front->m_IPnt[0]->m_Pnt, front->m_IPnt[1]->m_Pnt ) ||
+         dist( uw3d, back->m_IPnt[1]->m_Pnt ) < endtol * dist( back->m_IPnt[0]->m_Pnt, back->m_IPnt[1]->m_Pnt ) )
+    {
+        return false;
+    }
+
     if ( closest_dist < split_tol )
     {
         ISegSplit* split = new ISegSplit;
         split->m_Surf  = surfPtr;
         split->m_Index = closest_index;
         split->m_Fract = closest_fract;
-        split->m_UW    = uw->m_UW;
+        // On the segment, where ISeg::Split measures its fraction
+        split->m_UW    = closest_proj;
         m_SplitVec.push_back( split );
         return true; // AddBorderSplit success
     }
@@ -1140,25 +1231,107 @@ void ISegChain::MergeSplits()
 //  double tol = 0.01;
     double tol = 1.0e-6;
     vector < vector< ISegSplit* > > mergedVec;
+
+    // A split joins the first group made whose first split is within tol of it.  Groups are found
+    // through cells two tol across; a group or split with no cell is compared with every split or
+    // group.
+    const double cellsize = 2.0 * tol;
+    const double cellmax = 1.0e15;
+    map < array < long long, 3 >, vector < int > > cells;
+    vector < int > loose;
+
     for (  i = 0 ; i < ( int )m_SplitVec.size() ; i++ )
     {
-        bool merge_flag = false;
-        for (  j = 0 ; j < ( int )mergedVec.size() ; j++ )
+        const vec3d &p = m_SplitVec[i]->m_Pnt;
+        bool usable = true;
+        for ( int k = 0; k < 3; k++ )
         {
-            double d = dist( m_SplitVec[i]->m_Pnt, mergedVec[j][0]->m_Pnt );
-            if ( d < tol )
+            if ( !std::isfinite( p[k] ) || fabs( p[k] / cellsize ) > cellmax )
             {
-                merge_flag = true;
-                mergedVec[j].push_back( m_SplitVec[i] );
-                // A split joins one group only, so it is freed at most once below.
-                break;
+                usable = false;
             }
         }
-        if ( !merge_flag )
+
+        array < long long, 3 > cell = { 0, 0, 0 };
+        int join = -1;
+
+        if ( !usable )
+        {
+            for ( j = 0 ; j < ( int )mergedVec.size() ; j++ )
+            {
+                if ( dist( p, mergedVec[j][0]->m_Pnt ) < tol )
+                {
+                    join = j;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            for ( j = 0 ; j < ( int )loose.size() ; j++ )
+            {
+                if ( dist( p, mergedVec[ loose[j] ][0]->m_Pnt ) < tol )
+                {
+                    join = loose[j];
+                    break;
+                }
+            }
+
+            cell[0] = ( long long ) floor( p.x() / cellsize );
+            cell[1] = ( long long ) floor( p.y() / cellsize );
+            cell[2] = ( long long ) floor( p.z() / cellsize );
+
+            for ( int dx = -1; dx <= 1; dx++ )
+            {
+                for ( int dy = -1; dy <= 1; dy++ )
+                {
+                    for ( int dz = -1; dz <= 1; dz++ )
+                    {
+                        array < long long, 3 > nbcell = { cell[0] + dx, cell[1] + dy, cell[2] + dz };
+                        map < array < long long, 3 >, vector < int > >::const_iterator it = cells.find( nbcell );
+                        if ( it == cells.end() )
+                        {
+                            continue;
+                        }
+
+                        // Groups in the order made; the first within tol is the earliest.
+                        const vector < int > &groups = it->second;
+                        for ( j = 0 ; j < ( int )groups.size() ; j++ )
+                        {
+                            if ( join >= 0 && groups[j] > join )
+                            {
+                                break;
+                            }
+                            if ( dist( p, mergedVec[ groups[j] ][0]->m_Pnt ) < tol )
+                            {
+                                join = groups[j];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if ( join >= 0 )
+        {
+            // A split joins one group only, so it is freed at most once below.
+            mergedVec[ join ].push_back( m_SplitVec[i] );
+        }
+        else
         {
             vector< ISegSplit* > v;
             v.push_back( m_SplitVec[i] );
             mergedVec.push_back( v );
+
+            if ( usable )
+            {
+                cells[ cell ].push_back( ( int )mergedVec.size() - 1 );
+            }
+            else
+            {
+                loose.push_back( ( int )mergedVec.size() - 1 );
+            }
         }
     }
 
@@ -1522,7 +1695,7 @@ void ISegChain::SpreadDensityB( )
     m_ACurve.SpreadDensityB( &m_BCurve );
 }
 
-void ISegChain::CalcDensity( SimpleGridDensity* grid_den, list< MapSource* > & splitSources )
+void ISegChain::CalcDensity( SimpleGridDensity* grid_den, SplitSourceSet & splitSources )
 {
     m_ACurve.CalcDensity( grid_den, &m_BCurve, splitSources );
 }

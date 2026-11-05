@@ -221,15 +221,23 @@ int PtCloudGeom::ReadPTS( const char* file_name )
     else
     {
         m_Pts.clear();
-        int stopFlag = 0;
-        while ( !stopFlag )
+        char buf[4096];
+        while ( fgets( buf, sizeof( buf ), file_id ) )
         {
-            double x, y, z;
-            if ( EOF == fscanf( file_id, "%lf%*[, ]%lf%*[, ]%lf\n", &x, &y, &z ) )
+            // Commas, spaces and tabs separate the values; a line without three numbers is skipped.
+            for ( int i = 0; buf[i] != '\0'; i++ )
             {
-                break;
+                if ( buf[i] == ',' )
+                {
+                    buf[i] = ' ';
+                }
             }
-            m_Pts.push_back( vec3d( x, y, z ) );
+
+            double x, y, z;
+            if ( sscanf( buf, "%lf %lf %lf", &x, &y, &z ) == 3 )
+            {
+                m_Pts.push_back( vec3d( x, y, z ) );
+            }
         }
         fclose( file_id );
     }
@@ -498,19 +506,22 @@ void PtCloudGeom::GetSelectedPoints( vector < vec3d > &selpts )
 
 void PtCloudGeom::CreateConvexHull()
 {
-    WritePTS( "test.pts" );
-
     constexpr int dim = 3;
 
     int npts = m_Pts.size();
+
+    // The hull is a new mesh at the model origin, so it is built from the points placed by the cloud's XForm.
+    Matrix4d transMat = GetTotalTransMat();
+    vector < vec3d > placed( npts );
 
     gte::Vector3 < double > *pts = new gte::Vector3 < double > [ npts ];
 
     for ( int i = 0 ; i < ( int )npts ; i++ )
     {
-        pts[i][0] = m_Pts[i].x();
-        pts[i][1] = m_Pts[i].y();
-        pts[i][2] = m_Pts[i].z();
+        placed[i] = transMat.xform( m_Pts[i] );
+        pts[i][0] = placed[i].x();
+        pts[i][1] = placed[i].y();
+        pts[i][2] = placed[i].z();
     }
 
 
@@ -549,7 +560,7 @@ void PtCloudGeom::CreateConvexHull()
                 if ( vused[i] )
                 {
                     TNode *n = new TNode();
-                    n->m_Pnt = m_Pts[ i ];
+                    n->m_Pnt = placed[ i ];
                     n->m_ID = i;
                     tMesh->m_NVec.push_back( n );
                     vxref[i] = iused;
@@ -602,11 +613,15 @@ void PtCloudGeom::ProjectPts( const string &geomid, int surfid, int idir )
             double u, w;
             // ProjectPt hands back raw surface parameters, so normalize them
             // before asking for the point back in 0-1 parameterization.
-            surf->ProjectPt01( pin, idir, u, w );
+            double idist = surf->ProjectPt01( pin, idir, u, w );
 
-            pout = surf->CompPnt01( u, w );
+            // A point whose ray misses the surface stays where it is.
+            if ( idist >= 0 )
+            {
+                pout = surf->CompPnt01( u, w );
 
-            m_Pts[i] = invMat.xform( pout );
+                m_Pts[i] = invMat.xform( pout );
+            }
         }
     }
 

@@ -108,6 +108,7 @@ public:
 
     bool FaceRemoveNodeTest( PGFace* f ) const;
     bool ColinearNode() const;
+    int IntersectionEdgeCount() const;
     bool Check() const;
     bool BodyWakeNode( const PGMesh *m, int &part ) const;
 
@@ -171,6 +172,7 @@ public:
 
     void PrintWingWakeEdgeData( const PGMesh *m ) const;
     bool SilouetteEdge( const PGMesh *m, const vec3d &v ) const;
+    bool IntersectionEdge() const;
     bool WingWakeEdge( const PGMesh *m, int &part ) const;
     bool BodyWakeEdge( const PGMesh *m, int &part ) const;
 };
@@ -213,6 +215,7 @@ public:
     bool Check() const;
 
     void DumpMatlab() const;
+    void PrintUWNodes() const;
     void Diagnostics() const;
 
     bool Validate() const;
@@ -243,10 +246,14 @@ public:
     int m_Tag;
     int m_jref;
     int m_kref;
+    int m_FanID; // Collapsed-quad fan this face came from; -1 if its quad did not collapse.
 
     int m_ID;
 
     int m_Region;
+    int m_RegionDir; // -1 = not a region, 0 = J-type (constant kref), 1 = K-type (constant jref)
+    int m_kref_max;  // max kref of K-type region span; -1 if not a K-type region
+    int m_jref_max;  // max jref of J-type region span; -1 if not a J-type region
 
     vector< PGEdge* > m_EdgeVec;
     vector < PGNode* > m_TriNodeVec;
@@ -263,9 +270,13 @@ public:
 
 void QuadFaceMergeProps( PGFace *f0, PGFace *f1 );
 
+void RegionMergeProps( PGFace *f0, PGFace *f1 );
+
 void JrefMergeProps( PGFace *f0, PGFace *f1 );
 
 void KrefMergeProps( PGFace *f0, PGFace *f1 );
+
+bool RegionMatch( PGFace *f0, PGFace *f1 );
 
 bool QuadTagMatch( PGFace *f0, PGFace *f1 );
 
@@ -306,7 +317,7 @@ public:
     PGFace* AddFace();
     PGFace* AddFace( PGNode* n0, PGNode* n1, PGNode* n2,
                              const vec2d &uw0, const vec2d &uw1, const vec2d &uw2,
-                             const vec3d & norm, int iQuad, int tag, int jref, int kref );
+                             const vec3d & norm, int iQuad, int tag, int jref, int kref, int fanid );
 
     void  RemoveFace( PGFace* fptr );
 
@@ -335,6 +346,7 @@ public:
     void RemoveNodeMergeEdges( PGNode* n );
 
     bool Check();
+    void CountNonManifoldEdges( int &n_one, int &n_many, int &n_dup ) const;
 
     PGMulti *m_PGMulti;
     list < PGFace* > m_FaceList;
@@ -373,6 +385,9 @@ public:
     void ExtendSilhouette( vector < PGEdge * > & silhouette, PGEdge *e, const PGNode *n, const vec3d &v );
     void IdentifySilhouettes( vector < vector < PGEdge * > > &silhouetteLoopVec, const vec3d &v );
 
+    void ExtendIntersection( vector < PGEdge * > & intersection, PGEdge *e, const PGNode *n );
+    void IdentifyIntersections( vector < vector < PGEdge * > > &intersectionVec );
+
     void ExtendWingWake( vector < PGEdge * > & wake, PGEdge *e, const PGNode *n );
     void IdentifyWingWakes();
     void ExtendBodyWake( vector < PGEdge * > & wake, PGEdge *e, const PGNode *n );
@@ -388,10 +403,20 @@ public:
 
     void SplitFaceFromDoubleBackNode( PGFace *f, const PGEdge *e, PGNode *n );
 
+    void SplitLEGeom();
+
     void SplitFace( PGFace *f0, PGEdge *e );
 
+    void CleanIntersections( double lenratio );
+    int CleanIntersectionChain( const vector < PGEdge * > &chain, double lenratio, const set < PGNode * > &junctions );
+    bool CollapseKeepsFaces( const PGNode *nkeep, const PGNode *ngone, const PGEdge *e ) const;
+
     void MakeManifoldRegions();
+    void MakeTriangleRegions();
     void MakeRegions();
+    void PrintRegions();
+    void DumpDiagnostic( const string & fname ) const;
+    void DumpTriDiagnostic( const string & fname ) const;
     void CullOrphanThinRegions( double tol );
 
     void CullMinorRegions();
@@ -409,6 +434,7 @@ public:
 
     void MergeFaces( bool ( * facemergetest ) ( PGFace *f0, PGFace *f1 ), void ( * facemergeproperties ) ( PGFace *f0, PGFace *f1 ) = &QuadFaceMergeProps  );
 
+    void MergeRegions();
     void PolygonizeMesh();
     void CleanColinearVerts();
 
@@ -445,6 +471,16 @@ protected:
 
 PGNode* FindEndNode( const vector < PGEdge* > & eVec );
 void GetNodes( const vector < PGEdge* > & eVec, vector< PGNode* > & nodVec );
+bool ShortIntersectionEdge( double lprev, double l, double lnext, double lenratio );
+
+// Degrees.  Where an intersection curve turns by more than this, its node is a corner and
+// cleaning keeps it.  Intersection nodes cleaning removes turn by up to about 27.
+const double CLEAN_CORNER_ANGLE = 30.0;
+
+// Degrees.  The same for a subsurface outline, which runs straight between its corners to
+// within a degree.  A control surface corner turns by 90 less the hinge sweep, or by the angle
+// between hinge and side edge, so it can be well under CLEAN_CORNER_ANGLE.
+const double CLEAN_SUBSURF_CORNER_ANGLE = 10.0;
 
 //////////////////////////////////////////////////////////////////////
 

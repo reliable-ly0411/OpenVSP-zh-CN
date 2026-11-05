@@ -53,6 +53,7 @@ Surf::Surf()
     m_FlipFlag = false;
     m_WakeFlag = false;
     m_SurfCfdType = vsp::CFD_NORMAL;
+    m_SurfVspType = vsp::NORMAL_SURF;
     m_ThickSurf = true;
     m_PlateNum = -1;
     m_CopyIndex = -1;
@@ -68,8 +69,12 @@ Surf::Surf()
     m_FeaPartIndex = -1;
     m_FeaPartSurfNum = -1;
     m_FeaSymmIndex = -1;
+    m_FeaOrientationType = vsp::FEA_ORIENT_OML_U;
     m_IgnoreSurfFlag = false;
+    m_CoincidentSurf = nullptr;
+    m_CoincidentOverlap = false;
     m_PlanarUWAspect = -1;
+    m_PlaneFlag = false;
     m_DistMapBuilt = false;
 }
 
@@ -355,6 +360,126 @@ void Surf::BuildTargetMap( vector< MapSource* > &sources, int sid )
             sources.push_back( &( m_SrcMap[i][j] ) );
         }
     }
+
+    if ( m_GridDensityPtr->m_WidthLimit )
+    {
+        LimitTargetMapToWidth();
+    }
+}
+
+// How wide the surface is along each line of a family of map lines, from each line's length
+// and the distance between its two ends.  A line that is no measure of width is given the
+// largest double, so it never limits anything:
+//
+//  - one that closes on itself, the way round a fuselage, has no far side;
+//  - one that has collapsed to a point, at a nose or a cap's tip, has no length;
+//  - one whose length shrinks line by line all the way into a collapsed one is the taper into
+//    that point.  Triangles there fan out from the point, and edges brought down to the width
+//    would only crowd it.
+static void MapLineWidths( const vector< double > &len, const vector< double > &chord, vector< double > &width )
+{
+    int n = ( int )len.size();
+
+    double lmax = 0.0;
+    for ( int k = 0; k < n; k++ )
+    {
+        lmax = max( lmax, len[k] );
+    }
+
+    vector< bool > collapsed( n );
+    for ( int k = 0; k < n; k++ )
+    {
+        collapsed[k] = len[k] <= 1.0e-6 * lmax;
+    }
+
+    // Lines that taper into a collapsed one below them, and above them.
+    vector< bool > taperlo( n );
+    vector< bool > taperhi( n );
+    for ( int k = 0; k < n; k++ )
+    {
+        taperlo[k] = collapsed[k] || ( k > 0 && len[k - 1] < len[k] && taperlo[k - 1] );
+    }
+    for ( int k = n - 1; k >= 0; k-- )
+    {
+        taperhi[k] = collapsed[k] || ( k < n - 1 && len[k + 1] < len[k] && taperhi[k + 1] );
+    }
+
+    width.assign( n, numeric_limits< double >::max() );
+    for ( int k = 0; k < n; k++ )
+    {
+        bool closed = chord[k] < 1.0e-6 * len[k];
+
+        if ( !taperlo[k] && !taperhi[k] && !closed )
+        {
+            width[k] = len[k];
+        }
+    }
+}
+
+// A strip narrower than the edges asked of it cannot be meshed well: its borders are cut
+// coarser than it is wide, and every triangle across it is a sliver.  So the target at each
+// map point is held to the width of the surface through it, measured along the map row and
+// the map column it lies on, divided by the number of edges asked across that width.  Those run border to border, so the curves on the borders take
+// the width when they are cut from this map, and it spreads from them, and through this map,
+// with the growth limit like any other target.
+void Surf::LimitTargetMapToWidth()
+{
+    int nmapu = ( int )m_SrcMap.size();
+    int nmapw = ( int )m_SrcMap[0].size();
+
+    double minlen = m_GridDensityPtr->m_MinLen;
+    double nseg = m_GridDensityPtr->m_NWidthSeg;
+
+    // Length of the line of constant u through each row, and of constant w through each
+    // column, and the distance between each line's ends.
+    vector< double > rowlen( nmapu, 0.0 );
+    vector< double > rowchord( nmapu );
+    vector< double > collen( nmapw, 0.0 );
+    vector< double > colchord( nmapw );
+
+    for ( int i = 0; i < nmapu; i++ )
+    {
+        for ( int j = 0; j < nmapw - 1; j++ )
+        {
+            rowlen[i] += dist( m_SrcMap[i][j].m_pt, m_SrcMap[i][j + 1].m_pt );
+        }
+        rowchord[i] = dist( m_SrcMap[i][0].m_pt, m_SrcMap[i][nmapw - 1].m_pt );
+    }
+
+    for ( int j = 0; j < nmapw; j++ )
+    {
+        for ( int i = 0; i < nmapu - 1; i++ )
+        {
+            collen[j] += dist( m_SrcMap[i][j].m_pt, m_SrcMap[i + 1][j].m_pt );
+        }
+        colchord[j] = dist( m_SrcMap[0][j].m_pt, m_SrcMap[nmapu - 1][j].m_pt );
+    }
+
+    vector< double > rowwidth;
+    vector< double > colwidth;
+    MapLineWidths( rowlen, rowchord, rowwidth );
+    MapLineWidths( collen, colchord, colwidth );
+
+    for ( int i = 0; i < nmapu; i++ )
+    {
+        for ( int j = 0; j < nmapw; j++ )
+        {
+            double len = min( rowwidth[i], colwidth[j] ) / nseg;
+            int reason = vsp::SURF_WIDTH;
+
+            if ( len <= minlen )
+            {
+                len = minlen;
+                reason = vsp::MIN_LEN_CONSTRAINT_SURF_WIDTH;
+            }
+
+            if ( len < m_SrcMap[i][j].m_str )
+            {
+                m_SrcMap[i][j].m_str = len;
+                m_SrcMap[i][j].m_reason = reason;
+            }
+        }
+    }
 }
 
 void Surf::SetSymPlaneFlag( bool flag )
@@ -580,75 +705,100 @@ void Surf::LimitTargetMap()
     }
 }
 
-void Surf::LimitTargetMap( const MSCloud &es_cloud, const MSTree &es_tree, double minmap )
+int Surf::StartTargetMapLimits()
+{
+    size_t nmap = m_SrcMap.size() * m_SrcMap[0].size();
+
+    m_LimStart.resize( nmap );
+    m_LimStr.resize( nmap );
+    m_LimReason.resize( nmap );
+    m_LimR2.resize( nmap );
+
+    return ( int )m_SrcMap.size();
+}
+
+void Surf::FindTargetMapLimits( const MSBoundTree &ms_tree, double tmin, int sid, int i )
 {
     double grm1 = m_GridDensityPtr->m_GrowRatio - 1.0;
 
-    double tmin = min( minmap, es_cloud.sources[0]->m_str );
+    int nmapw = m_SrcMap[0].size();
 
-    SearchParams params;
-    params.sorted = false;
+    for( int j = 0; j < nmapw ; j++ )
+    {
+        size_t k = ( size_t )i * nmapw + j;
+
+        double t = m_SrcMap[i][j].m_str;
+        int reason = m_SrcMap[i][j].m_reason;
+        double r2 = 0.0;
+
+        m_LimStart[k] = t;
+
+        double rmax = ( t - tmin ) / grm1;
+        if( rmax > 0.0 )
+        {
+            ms_tree.LimitStrength( m_SrcMap[i][j].m_pt, rmax * rmax, sid, grm1, t, reason, r2 );
+        }
+
+        m_LimStr[k] = t;
+        m_LimReason[k] = reason;
+        m_LimR2[k] = r2;
+    }
+}
+
+// Points go in order, each lowered and walked out from as before.  A point whose strength is as it
+// was when its limit was found takes that limit.  So does one an earlier walk has lowered, when the
+// source that gives the limit lies within its smaller radius; otherwise it is searched again.
+void Surf::LimitTargetMap( const MSBoundTree &ms_tree, double tmin, int sid )
+{
+    double grm1 = m_GridDensityPtr->m_GrowRatio - 1.0;
 
     int nmapu = m_SrcMap.size();
     int nmapw = m_SrcMap[0].size();
 
-    // Loop over surface evaluating source strength and curvature
     for( int i = 0; i < nmapu ; i++ )
     {
-//      double u = ( 1.0 * i ) / ( m_NumMap - 1 );
         for( int j = 0; j < nmapw ; j++ )
         {
-//          double w = ( 1.0 * j ) / ( m_NumMap - 1 );
+            size_t k = ( size_t )i * nmapw + j;
 
-            double *query_pt = m_SrcMap[i][j].m_pt.v;
+            double torig = m_SrcMap[i][j].m_str;
 
-            double t = m_SrcMap[i][j].m_str;
-            double torig = t;
-            int reason = m_SrcMap[i][j].m_reason;
-
-            double rmax = ( t - tmin ) / grm1;
-            if( rmax > 0.0 )
+            if( m_LimStr[k] < torig )
             {
-                double r2max = rmax * rmax;
+                double t = m_LimStr[k];
+                int reason = m_LimReason[k];
 
-                MSTreeResults es_matches;
-
-                unsigned int nMatches = es_tree.radiusSearch( query_pt, r2max, es_matches, params );
-
-                for ( int k = 0; k < nMatches; k++ )
+                if( torig != m_LimStart[k] )
                 {
-                    unsigned int imatch = es_matches[k].first;
-                    double r = sqrt( es_matches[k].second );
-
-                    double str = es_cloud.sources[imatch]->m_str;
-
-                    double ts = str + grm1 * r;
-
-                    if ( ts < t )
+                    double rmax = ( torig - tmin ) / grm1;
+                    if( !( rmax > 0.0 && m_LimR2[k] < rmax * rmax ) )
                     {
-                        reason = es_cloud.sources[imatch]->m_reason;
-                    }
+                        t = torig;
+                        reason = m_SrcMap[i][j].m_reason;
 
-                    t = min( t, ts );
+                        if( rmax > 0.0 )
+                        {
+                            double r2;
+                            ms_tree.LimitStrength( m_SrcMap[i][j].m_pt, rmax * rmax, sid, grm1, t, reason, r2 );
+                        }
+                    }
                 }
+
                 if( t < torig )
                 {
                     m_SrcMap[i][j].m_str = t;
-
-                    if ( reason < vsp::MIN_GROW_LIMIT )
-                    {
-                        m_SrcMap[i][j].m_reason = reason + vsp::GROW_LIMIT_INCREMENT;
-                    }
-                    else
-                    {
-                        m_SrcMap[i][j].m_reason = reason;
-                    }
+                    m_SrcMap[i][j].m_reason = GrowLimitReason( reason );
 
                     WalkMap( i, j );
                 }
             }
         }
     }
+
+    vector< double >().swap( m_LimStart );
+    vector< double >().swap( m_LimStr );
+    vector< int >().swap( m_LimReason );
+    vector< double >().swap( m_LimR2 );
 }
 
 double Surf::InterpTargetMap( double u, double w, int &reason )
@@ -784,10 +934,11 @@ vec2d Surf::ClosestUW( const vec3d & pnt_in ) const
 // but it cannot converge to the wrong stationary point.
 double Surf::SplitSearch( const vec3d & p0, const vec3d & p1,
                           double ulo, double uhi, double wlo, double whi,
-                          double &u, double &w ) const
+                          double &u, double &w, vec3d &pnt ) const
 {
     vec3d p = m_SurfCore.CompPnt( u, w );
     double best = max( dist( p, p0 ), dist( p, p1 ) );
+    pnt = p;
 
     double du = 0.25 * ( uhi - ulo );
     double dw = 0.25 * ( whi - wlo );
@@ -817,6 +968,7 @@ double Surf::SplitSearch( const vec3d & p0, const vec3d & p1,
                 best = f;
                 u = tu;
                 w = tw;
+                pnt = tp;
                 moved = true;
             }
         }
@@ -853,7 +1005,7 @@ double Surf::SplitSearch( const vec3d & p0, const vec3d & p1,
 //
 // So solve first and check the answer.  A split that halves its edge is kept, and only one
 // Both are measured against the projection, which is kept where it beats them.
-vec2d Surf::SplitUW( const vec3d & p0, const vec3d & p1, const vec2d & uw0, const vec2d & uw1 ) const
+vec2d Surf::SplitUW( const vec3d & p0, const vec3d & p1, const vec2d & uw0, const vec2d & uw1, vec3d &pnt ) const
 {
     double u0 = 0.5 * ( uw0.x() + uw1.x() );
     double w0 = 0.5 * ( uw0.y() + uw1.y() );
@@ -866,10 +1018,10 @@ vec2d Surf::SplitUW( const vec3d & p0, const vec3d & p1, const vec2d & uw0, cons
     double upad = 0.25 * ( uhi - ulo );
     double wpad = 0.25 * ( whi - wlo );
 
-    ulo = max( ulo - upad, m_SurfCore.GetMinU() );
-    uhi = min( uhi + upad, m_SurfCore.GetMaxU() );
-    wlo = max( wlo - wpad, m_SurfCore.GetMinW() );
-    whi = min( whi + wpad, m_SurfCore.GetMaxW() );
+    ulo = clamp( ulo - upad, m_SurfCore.GetMinU(), m_SurfCore.GetMaxU() );
+    uhi = clamp( uhi + upad, m_SurfCore.GetMinU(), m_SurfCore.GetMaxU() );
+    wlo = clamp( wlo - wpad, m_SurfCore.GetMinW(), m_SurfCore.GetMaxW() );
+    whi = clamp( whi + wpad, m_SurfCore.GetMinW(), m_SurfCore.GetMaxW() );
 
     // Seed on the straight line between the two ends in parameter space.  The equidistant
     // point along that line always exists and is always found, and unlike the parametric
@@ -900,13 +1052,15 @@ vec2d Surf::SplitUW( const vec3d & p0, const vec3d & p1, const vec2d & uw0, cons
     {
         double su = u0;
         double sw = w0;
-        double fs = SplitSearch( p0, p1, ulo, uhi, wlo, whi, su, sw );
+        vec3d ps;
+        double fs = SplitSearch( p0, p1, ulo, uhi, wlo, whi, su, sw, ps );
 
         if ( fs < fe )
         {
             u = su;
             w = sw;
             fe = fs;
+            pe = ps;
         }
 
         // Fall back on the projection where it does better.
@@ -917,9 +1071,23 @@ vec2d Surf::SplitUW( const vec3d & p0, const vec3d & p1, const vec2d & uw0, cons
 
         if ( max( dist( pp, p0 ), dist( pp, p1 ) ) < fe )
         {
+            pnt = pp;
             return vec2d( pu, pw );
         }
     }
+
+    pnt = pe;
+    return vec2d( u, w );
+}
+
+// Not as good a halving as SplitUW's in general, but it lies between the two ends in UW, so a
+// triangle cut there is cut into two that each keep its orientation in UW.
+vec2d Surf::SplitUWOnLine( const vec3d & p0, const vec3d & p1, const vec2d & uw0, const vec2d & uw1 ) const
+{
+    double u = 0.5 * ( uw0.x() + uw1.x() );
+    double w = 0.5 * ( uw0.y() + uw1.y() );
+
+    m_SurfCore.FindEquidistantOnLine( u, w, p0, p1, uw0.x(), uw0.y(), uw1.x(), uw1.y() );
 
     return vec2d( u, w );
 }
@@ -1073,6 +1241,26 @@ bool Surf::IntersectPrepare( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMg
     {
         return false;
     }
+    // A face lying on a face of another body meets what that face meets, so it is cut neither
+    // by that face nor by that face's own body.
+    if ( m_CoincidentSurf && m_CoincidentSurf->GetCompID() == surfPtr->GetCompID() )
+    {
+        return false;
+    }
+    if ( surfPtr->GetCoincidentSurf() && surfPtr->GetCoincidentSurf()->GetCompID() == m_CompID )
+    {
+        return false;
+    }
+    // Two flat surfaces in one plane meet in that plane, where the patches cannot be
+    // intersected; SplitCoplanarBorders and AddCoplanarChains intersect them instead.
+    if ( CoplanarWith( surfPtr ) )
+    {
+        return false;
+    }
+    if ( TouchesAlongCoplanarBorder( surfPtr ) || surfPtr->TouchesAlongCoplanarBorder( this ) )
+    {
+        return false;
+    }
     if ( BorderCurveOnSurface( surfPtr, MeshMgr ) )
     {
         return false;
@@ -1131,6 +1319,104 @@ void Surf::IntersectLineSeg( vec3d & p0, vec3d & p1, vector< double > & t_vals )
     }
 }
 
+// Whether this surface only touches flat surface plane, along a border it shares with a surface
+// lying in plane's plane: the whole of this surface on one side of the plane, and a border of it
+// in the plane, running across plane, whose other surface is coplanar with plane.  The two meet
+// only along that border, which the coplanar intersection of plane and the border's other surface
+// lays where it is needed, whether or not all of it lies on plane.
+bool Surf::TouchesAlongCoplanarBorder( Surf* plane )
+{
+    if ( !plane->GetPlaneFlag() || plane->GetCoplanarSurfs().empty() )
+    {
+        return false;
+    }
+
+    const vec3d &n = plane->GetPlaneNorm();
+    vec3d p0 = plane->m_PlanePnt;
+    double tol = 1.0e-6 * std::max( m_BBox.DiagDist(), plane->GetBBox().DiagDist() );
+    double uwtol = 1.0e-6 * std::max( plane->GetSurfCore()->GetDU(), plane->GetSurfCore()->GetDW() );
+
+    // Control points hull the surface, so all of them on one side puts it there.
+    bool above = false;
+    bool below = false;
+
+    const piecewise_surface_type *surf = m_SurfCore.GetSurf();
+    for ( piecewise_surface_type::index_type ip = 0; ip < surf->number_u_patches(); ++ip )
+    {
+        for ( piecewise_surface_type::index_type jp = 0; jp < surf->number_v_patches(); ++jp )
+        {
+            const surface_patch_type *patch = surf->get_patch( ip, jp );
+
+            for ( surface_patch_type::index_type icp = 0; icp <= patch->degree_u(); ++icp )
+            {
+                for ( surface_patch_type::index_type jcp = 0; jcp <= patch->degree_v(); ++jcp )
+                {
+                    surface_point_type cp = patch->get_control_point( icp, jcp );
+                    double d = dot( n, vec3d( cp.x(), cp.y(), cp.z() ) - p0 );
+                    if ( d > tol )
+                    {
+                        above = true;
+                    }
+                    if ( d < -tol )
+                    {
+                        below = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if ( above && below )
+    {
+        return false;
+    }
+
+    for ( int i = 0 ; i < ( int )m_SCurveVec.size() ; i++ )
+    {
+        ICurve* icrv = m_SCurveVec[i]->GetICurve();
+        if ( !icrv || !icrv->m_SCurve_A || !icrv->m_SCurve_B )
+        {
+            continue;
+        }
+
+        SCurve* other = icrv->m_SCurve_A;
+        if ( other == m_SCurveVec[i] )
+        {
+            other = icrv->m_SCurve_B;
+        }
+        if ( !plane->CoplanarWith( other->GetSurf() ) )
+        {
+            continue;
+        }
+
+        // In the plane, and crossing plane's interior somewhere rather than only running along
+        // its border, where the two bodies' own borders meet.
+        Bezier_curve uwcrv = m_SCurveVec[i]->GetUWCrv();
+        bool inplane = true;
+        bool inside = false;
+        for ( int k = 0 ; k <= 8 && inplane ; k++ )
+        {
+            vec3d uw = uwcrv.CompPnt01( 0.125 * k );
+            vec3d p = CompPnt( uw.x(), uw.y() );
+            inplane = std::abs( dot( n, p - p0 ) ) <= tol;
+
+            if ( inplane && k > 0 && k < 8 && !inside )
+            {
+                vec2d uwp = plane->ClosestUW( p );
+                inside = dist( plane->CompPnt( uwp.x(), uwp.y() ), p ) <= tol &&
+                         plane->GetSurfCore()->UWPointOnBorder( uwp.x(), uwp.y(), uwtol ) == SurfCore::NOBNDY;
+            }
+        }
+
+        if ( inplane && inside )
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool Surf::BorderCurveOnSurface( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr )
 {
     bool retFlag = false;
@@ -1149,28 +1435,110 @@ bool Surf::BorderCurveOnSurface( Surf* surfPtr, SurfaceIntersectionSingleton *Me
         Bezier_curve crv;
         border_curves[i]->GetBorderCurve( crv );
 
-        BndBox crvbox;
-        crv.GetBBox( crvbox );
-
-        if ( Compare( m_BBox, crvbox ) )
+        if ( CurveOnSurface( crv, tol ) )
         {
-            Bezier_curve projcrv = crv;
-            projcrv.XYZCurveToUWCurve( this );
-            projcrv.UWCurveToXYZCurve( this );
+            retFlag = true;
+            //==== If Surface Add To List ====//
+            MeshMgr->AddPossCoPlanarSurf( this, surfPtr );
 
-            int num_pnts_on_surf = crv.CountMatch( projcrv, tol );
-
-            if ( num_pnts_on_surf > 2 || ( num_pnts_on_surf == 2 && crv.SingleLinear() ) )
+            // A border shared with a surface lying in this one's plane stays with that surface;
+            // the two are intersected as coplanar surfaces.
+            ICurve* icrv = border_curves[i]->GetICurve();
+            if ( icrv && icrv->m_SCurve_A && icrv->m_SCurve_B )
             {
-                retFlag = true;
-                //==== If Surface Add To List ====//
-                MeshMgr->AddPossCoPlanarSurf( this, surfPtr );
+                SCurve* other = icrv->m_SCurve_A;
+                if ( other == border_curves[i] )
+                {
+                    other = icrv->m_SCurve_B;
+                }
+                if ( CoplanarWith( other->GetSurf() ) )
+                {
+                    continue;
+                }
+            }
+
+            // A curve along one of this surface's own borders is matched as a border, with
+            // whichever surface border matching paired it.
+            if ( !OnOwnBorder( crv, tol ) )
+            {
                 PlaneBorderCurveIntersect( surfPtr, border_curves[i], MeshMgr );
             }
         }
     }
 
     return retFlag;
+}
+
+bool Surf::OnOwnBorder( const Bezier_curve &crv, double tol )
+{
+    for ( int i = 0 ; i < ( int )m_SCurveVec.size() ; i++ )
+    {
+        Bezier_curve own;
+        m_SCurveVec[i]->GetBorderCurve( own );
+
+        if ( crv.Match( own, tol ) )
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Surf::CurveOnSurface( Bezier_curve &crv, double tol )
+{
+    // A curve laid across a surface's interior is not one of its borders, and GetBorderCurve
+    // gives it no segments; with no control points to test, it lies on nothing.
+    if ( crv.GetNumSections() == 0 )
+    {
+        return false;
+    }
+
+    BndBox crvbox;
+    crv.GetBBox( crvbox );
+
+    if ( !Compare( m_BBox, crvbox ) )
+    {
+        return false;
+    }
+
+    // Each control point is projected on its own, so the first one off the surface settles it
+    // without projecting the rest.  A curve whose points all land is checked in full below.
+    piecewise_surface_type *surf = GetSurfCore()->GetSurf();
+    double umin = surf->get_u0();
+    double wmin = surf->get_v0();
+    double umax = surf->get_umax();
+    double wmax = surf->get_vmax();
+
+    piecewise_curve_type pcrv = crv.GetCurve();
+    int nsect = pcrv.number_segments();
+    for ( int i = 0; i < nsect; i++ )
+    {
+        curve_segment_type c;
+        pcrv.get( c, i );
+
+        for ( int j = 0; j <= c.degree(); j++ )
+        {
+            curve_point_type cp = c.get_control_point( j );
+            vec3d p = vec3d( cp.x(), cp.y(), cp.z() );
+            vec2d uw = ClosestUW( p, GetSurfCore()->GetMidU(), GetSurfCore()->GetMidW() );
+            double u = clamp( uw.x(), umin, umax );
+            double w = clamp( uw.y(), wmin, wmax );
+            curve_point_type onsurf = surf->f( u, w );
+
+            if ( eli::geom::point::distance( cp, onsurf ) > tol )
+            {
+                return false;
+            }
+        }
+    }
+
+    Bezier_curve projcrv = crv;
+    projcrv.XYZCurveToUWCurve( this );
+    projcrv.UWCurveToXYZCurve( this );
+
+    // On the surface only where every control point is: a curve that touches the
+    // surface, or runs close to it for a stretch, still has to be intersected with it.
+    return crv.MatchFwd( projcrv, tol );
 }
 
 void Surf::PlaneBorderCurveIntersect( Surf* surfPtr, SCurve* brdPtr, SurfaceIntersectionSingleton *MeshMgr )
@@ -1195,7 +1563,6 @@ void Surf::PlaneBorderCurveIntersect( Surf* surfPtr, SCurve* brdPtr, SurfaceInte
     if ( !repeat_curve )
     {
         SCurve* pSCurve = new SCurve;
-        SCurve* bSCurve = new SCurve;
         ICurve* pICurve = new ICurve;
 
         ICurve* bICurve = pICurve;
@@ -1218,8 +1585,6 @@ void Surf::PlaneBorderCurveIntersect( Surf* surfPtr, SCurve* brdPtr, SurfaceInte
         bICurve->m_SCurve_A = pSCurve;
         bICurve->m_SCurve_B = brdPtr;
         bICurve->m_PlaneBorderIntersectFlag = true;
-        bSCurve->SetSurf( surfPtr );
-        bSCurve->SetICurve( bICurve );
 
         brdPtr->SetICurve( bICurve );
 
@@ -1229,6 +1594,10 @@ void Surf::PlaneBorderCurveIntersect( Surf* surfPtr, SCurve* brdPtr, SurfaceInte
             if ( ICurveVecIndex < (int)ICurves.size() )
             {
                 MeshMgr->SetICurveVec( brdPtr->GetICurve(), ICurveVecIndex );
+            }
+            else
+            {
+                MeshMgr->KeepICurve( pICurve );
             }
         }
         else
@@ -1241,10 +1610,172 @@ void Surf::PlaneBorderCurveIntersect( Surf* surfPtr, SCurve* brdPtr, SurfaceInte
                     ICurves[i]->m_PlaneBorderIntersectFlag = true;
                 }
             }
+            MeshMgr->KeepICurve( pICurve );
         }
 
         m_SCurveVec.push_back( pSCurve );
     }
+}
+
+// The plane is laid through the control points: through the first, the one farthest from it
+// and the one farthest from the line those two make, which does not depend on how the surface
+// is parameterized.  The control points hull the surface, so all of them within the tolerance
+// of that plane puts the whole surface there.  The normal is turned to agree with the
+// surface's own, sampled where the parameterization does not collapse.
+void Surf::FitPlane( double reltol )
+{
+    m_PlaneFlag = false;
+
+    double tol = reltol * m_BBox.DiagDist();
+    if ( tol <= 0.0 )
+    {
+        return;
+    }
+
+    vector< vec3d > cps;
+
+    const piecewise_surface_type *surf = m_SurfCore.GetSurf();
+    piecewise_surface_type::index_type nu = surf->number_u_patches();
+    piecewise_surface_type::index_type nw = surf->number_v_patches();
+
+    for ( piecewise_surface_type::index_type ip = 0; ip < nu; ++ip )
+    {
+        for ( piecewise_surface_type::index_type jp = 0; jp < nw; ++jp )
+        {
+            const surface_patch_type *patch = surf->get_patch( ip, jp );
+
+            for ( surface_patch_type::index_type icp = 0; icp <= patch->degree_u(); ++icp )
+            {
+                for ( surface_patch_type::index_type jcp = 0; jcp <= patch->degree_v(); ++jcp )
+                {
+                    surface_point_type cp = patch->get_control_point( icp, jcp );
+                    cps.push_back( vec3d( cp.x(), cp.y(), cp.z() ) );
+                }
+            }
+        }
+    }
+
+    if ( cps.size() < 3 )
+    {
+        return;
+    }
+
+    vec3d p0 = cps[0];
+    vec3d p1 = p0;
+    for ( int i = 1 ; i < ( int )cps.size() ; i++ )
+    {
+        if ( dist( cps[i], p0 ) > dist( p1, p0 ) )
+        {
+            p1 = cps[i];
+        }
+    }
+
+    vec3d n;
+    for ( int i = 1 ; i < ( int )cps.size() ; i++ )
+    {
+        vec3d c = cross( p1 - p0, cps[i] - p0 );
+        if ( c.mag() > n.mag() )
+        {
+            n = c;
+        }
+    }
+
+    if ( n.mag() <= 0.0 )
+    {
+        return;
+    }
+    n.normalize();
+
+    for ( int i = 0 ; i < ( int )cps.size() ; i++ )
+    {
+        if ( std::abs( dot( n, cps[i] - p0 ) ) > tol )
+        {
+            return;
+        }
+    }
+
+    double sense = 0.0;
+    for ( int i = 1 ; i < 4 ; i++ )
+    {
+        for ( int j = 1 ; j < 4 ; j++ )
+        {
+            double u = m_SurfCore.GetMinU() + 0.25 * i * m_SurfCore.GetDU();
+            double w = m_SurfCore.GetMinW() + 0.25 * j * m_SurfCore.GetDW();
+            sense += dot( n, m_SurfCore.CompNorm( u, w ) );
+        }
+    }
+
+    if ( sense == 0.0 )
+    {
+        return;
+    }
+
+    if ( ( sense < 0.0 ) != m_FlipFlag )
+    {
+        n = -1.0 * n;
+    }
+
+    m_PlaneFlag = true;
+    m_PlaneNorm = n;
+    m_PlanePnt = p0;
+}
+
+bool Surf::SamePlane( const Surf* s, double tol ) const
+{
+    if ( !m_PlaneFlag || !s->m_PlaneFlag )
+    {
+        return false;
+    }
+
+    // Parallel to the angle the tolerance subtends across the larger surface
+    double size = std::max( m_BBox.DiagDist(), s->m_BBox.DiagDist() );
+    double c = std::abs( dot( m_PlaneNorm, s->m_PlaneNorm ) );
+    if ( 1.0 - c > 0.5 * ( tol / size ) * ( tol / size ) )
+    {
+        return false;
+    }
+
+    return std::abs( dot( m_PlaneNorm, s->m_PlanePnt - m_PlanePnt ) ) <= tol;
+}
+
+bool Surf::PntsOnBorder( const vector< vec3d > &pnts, double tol ) const
+{
+    double uwtol = 1.0e-6 * std::max( m_SurfCore.GetDU(), m_SurfCore.GetDW() );
+
+    // The surface lies inside the box around its control points, so a point farther than tol
+    // from the box is farther than tol from the surface, and needs no search.
+    BndBox box = m_BBox;
+    box.Expand( tol );
+    for ( int i = 0 ; i < ( int )pnts.size() ; i++ )
+    {
+        if ( !box.CheckPnt( pnts[i] ) )
+        {
+            return false;
+        }
+    }
+
+    for ( int i = 0 ; i < ( int )pnts.size() ; i++ )
+    {
+        vec2d uw = ClosestUW( pnts[i] );
+        if ( dist( CompPnt( uw[0], uw[1] ), pnts[i] ) > tol ||
+             m_SurfCore.UWPointOnBorder( uw[0], uw[1], uwtol ) == SurfCore::NOBNDY )
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Surf::CoplanarWith( const Surf* s ) const
+{
+    for ( int i = 0 ; i < ( int )m_CoplanarSurfs.size() ; i++ )
+    {
+        if ( m_CoplanarSurfs[i] == s )
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 void Surf::SetBBox( const vec3d &pmin, const vec3d &pmax )
@@ -1321,9 +1852,15 @@ void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > 
         IPnt *ipt = ipnts[k].second;
         vec3d p = CompPnt( uw[0], uw[1] );
 
+        // The points are taken in order of u, so those already numbered are too.  A point
+        // further than the merge tolerance in u alone is further than it in u,w and cannot be
+        // the one taken, so the scan starts at the first point within twice that in u.
+        int istart = std::lower_bound( uwPntVec.begin(), uwPntVec.end(), uw.x() - 2.0e-4,
+                                       []( const vec2d &a, double u ) { return a.x() < u; } ) - uwPntVec.begin();
+
         int min_id = -1;
         double min_dist = 1.0;
-        for ( int i = 0 ; i < ( int )uwPntVec.size() ; i++ )
+        for ( int i = istart ; i < ( int )uwPntVec.size() ; i++ )
         {
             double d = dist( uwPntVec[i], uw );
             if ( d < min_dist && ( tol3d < 0.0 || dist( pntVec[i], p ) < tol3d ) )
@@ -1366,6 +1903,7 @@ void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > 
             seg.m_P[0] = chains[i]->m_TessVec[2 * j]->m_Pnt;
             seg.m_P[1] = chains[i]->m_TessVec[2 * (j + 1)]->m_Pnt;
             seg.m_Pmid = chains[i]->m_TessVec[2 * j + 1]->m_Pnt;
+            seg.m_Chain[0] = chains[i];
 
             isegVec.push_back( seg );
         }
@@ -1375,7 +1913,7 @@ void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > 
     // Duplicates arise when two chains share a boundary and both contribute the same edge.
     // Duplicates appear to be harmless, but removing them is cheap insurance.
     {
-        set< pair< int, int > > seen;
+        map< pair< int, int >, int > seen;
         vector< MeshSeg > unique;
         unique.reserve( isegVec.size() );
         for ( int i = 0; i < (int)isegVec.size(); i++ )
@@ -1383,9 +1921,16 @@ void Surf::InitMesh( const vector< ISegChain* > &chains, const vector < vec2d > 
             int a = isegVec[i].m_Index[0];
             int b = isegVec[i].m_Index[1];
             pair< int, int > key( min( a, b ), max( a, b ) );
-            if ( seen.insert( key ).second )
+            map< pair< int, int >, int >::iterator it = seen.find( key );
+            if ( it == seen.end() )
             {
+                seen[ key ] = unique.size();
                 unique.push_back( isegVec[i] );
+            }
+            else if ( !unique[ it->second ].m_Chain[1] && unique[ it->second ].m_Chain[0] != isegVec[i].m_Chain[0] )
+            {
+                // Two chains coincide here; the segment keeps both.
+                unique[ it->second ].m_Chain[1] = isegVec[i].m_Chain[0];
             }
         }
 #ifdef DEBUG_CFD_MESH
@@ -1599,9 +2144,31 @@ void Surf::BuildDistMap()
         return;
     }
 
+    // Give up on the map if a grid point is on no face.
+    int nunref = 0;
+    vector < ABF::Mesh::VertPtr > used_verts = mesh->vertices();
+    for ( i = 0; i < (int)used_verts.size(); i++ )
+    {
+        if ( used_verts[ i ]->is_unreferenced() )
+        {
+            nunref++;
+        }
+    }
+
+    if ( nunref > 0 )
+    {
+        printf( "Surface %s: %d of the distance map grid's points are on no face; spacing points "
+                "by surface parameter instead.\n", GetDisplayName().c_str(), nunref );
+        return;
+    }
+
+    // ABF++ adjusts angles around interior vertices; a grid with none goes to LSCM alone.
     try
     {
-        ABF::Compute( mesh );
+        if ( mesh->num_vertices_interior() > 0 )
+        {
+            ABF::Compute( mesh );
+        }
         LSCM::Compute( mesh );
     }
     catch ( const std::exception &e )
@@ -1878,6 +2445,55 @@ void Surf::FindSTBox( const vec2d &st, int &i_match, int &j_match )
     }
 }
 
+// Where in the cell p0, p1, p2, p3 -- corners at (0,0), (1,0), (0,1), (1,1) -- the point
+// nearest p lies, for a cell the exact inverse cannot answer: one collapsed to a line or a
+// point, or a point just outside it.  A grid over the cell gives a start, the first nearest in
+// order where several are as near, and Gauss-Newton steps kept in the cell refine it.
+static void NearestInCell( const vec2d &p0, const vec2d &p1, const vec2d &p2, const vec2d &p3, const vec2d &p,
+                           double &s, double &t )
+{
+    const int n = 20;
+
+    double dmin = -1.0;
+    for ( int i = 0 ; i <= n ; i++ )
+    {
+        for ( int j = 0 ; j <= n ; j++ )
+        {
+            double si = ( double )i / ( double )n;
+            double tj = ( double )j / ( double )n;
+            vec2d b = ( 1.0 - si ) * ( 1.0 - tj ) * p0 + si * ( 1.0 - tj ) * p1 + ( 1.0 - si ) * tj * p2 + si * tj * p3;
+            double d = dist_squared( b, p );
+            if ( dmin < 0.0 || d < dmin )
+            {
+                dmin = d;
+                s = si;
+                t = tj;
+            }
+        }
+    }
+
+    for ( int it = 0 ; it < 10 ; it++ )
+    {
+        vec2d b = ( 1.0 - s ) * ( 1.0 - t ) * p0 + s * ( 1.0 - t ) * p1 + ( 1.0 - s ) * t * p2 + s * t * p3;
+        vec2d bs = ( 1.0 - t ) * ( p1 - p0 ) + t * ( p3 - p2 );
+        vec2d bt = ( 1.0 - s ) * ( p2 - p0 ) + s * ( p3 - p1 );
+        vec2d r = p - b;
+
+        double det = bs.x() * bt.y() - bs.y() * bt.x();
+        double scale = bs.mag() * bt.mag();
+        if ( scale <= 0.0 || std::abs( det ) <= 1.0e-12 * scale )
+        {
+            return;
+        }
+
+        double ds = ( r.x() * bt.y() - r.y() * bt.x() ) / det;
+        double dt = ( bs.x() * r.y() - bs.y() * r.x() ) / det;
+
+        s = clamp( s + ds, 0.0, 1.0 );
+        t = clamp( t + dt, 0.0, 1.0 );
+    }
+}
+
 vec2d Surf::GetUW( const vec2d &st )
 {
     double asp = LinearSTAspect();
@@ -1904,8 +2520,14 @@ vec2d Surf::GetUW( const vec2d &st )
     double VspdU = VspMaxU - VspMinU;
     double VspdW = VspMaxW - VspMinW;
 
-    double fu, fw, u2, w2;
-    inverse_bi_lin_interp( m_STMap[ i ][ j ], m_STMap[ i + 1 ][ j ], m_STMap[ i ][ j + 1 ], m_STMap[ i + 1 ][ j + 1 ], st, fu, fw, u2, w2 );
+    double fu = 0.0;
+    double fw = 0.0;
+    double u2 = 0.0;
+    double w2 = 0.0;
+    if ( !inverse_bi_lin_interp( m_STMap[ i ][ j ], m_STMap[ i + 1 ][ j ], m_STMap[ i ][ j + 1 ], m_STMap[ i + 1 ][ j + 1 ], st, fu, fw, u2, w2 ) )
+    {
+        NearestInCell( m_STMap[ i ][ j ], m_STMap[ i + 1 ][ j ], m_STMap[ i ][ j + 1 ], m_STMap[ i + 1 ][ j + 1 ], st, fu, fw );
+    }
 
     double iud = i + fu;
     double iwd = j + fw;
@@ -2292,7 +2914,7 @@ vec3d Surf::GetFeaElementOrientation( double u, double w, int type, const vec3d 
         vec2d uw = vec2d( u, w );
         if ( ValidUW( uw ) )
         {
-            orient = m_SurfCore.CompTanU( u, w );
+            orient = m_SurfCore.CompTanU( uw[0], uw[1] );
         }
     }
     else if ( type == vsp::FEA_ORIENT_PART_V )
@@ -2300,7 +2922,7 @@ vec3d Surf::GetFeaElementOrientation( double u, double w, int type, const vec3d 
         vec2d uw = vec2d( u, w );
         if ( ValidUW( uw ) )
         {
-            orient = m_SurfCore.CompTanW( u, w );
+            orient = m_SurfCore.CompTanW( uw[0], uw[1] );
         }
     }
 

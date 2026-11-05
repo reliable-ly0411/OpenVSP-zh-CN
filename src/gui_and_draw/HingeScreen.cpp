@@ -11,7 +11,7 @@
 
 
 //==== Constructor ====//
-HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge", string(""), false )
+HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge", "Hinge.html", false )
 {
     Fl_Group* orient_tab = AddTab( "Orient" );
     Fl_Group* orient_group = AddSubGroup( orient_tab, 5 );
@@ -90,8 +90,8 @@ HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge",
 
     m_PrimVecLayout.SetFitWidthFlag( false );
     m_PrimVecLayout.SetSameLineFlag( true );
-    m_PrimVecLayout.AddLabel( "Direction Vector:", 170 );
-    m_PrimVecLayout.SetButtonWidth( m_PrimVecLayout.GetRemainX() / 2 );
+    m_PrimVecLayout.AddLabel( "Direction Vector:", m_PrimVecLayout.GetW() - 2 * m_PrimVecLayout.GetInputWidth() );
+    m_PrimVecLayout.SetButtonWidth( m_PrimVecLayout.GetInputWidth() );
     m_PrimVecLayout.AddButton( m_PrimVecRelToggle, "Rel" );
     m_PrimVecLayout.AddButton( m_PrimVecAbsToggle, "Abs" );
     m_PrimVecLayout.ForceNewLine();
@@ -121,8 +121,8 @@ HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge",
 
     m_PrimOffLayout.SetFitWidthFlag( false );
     m_PrimOffLayout.SetSameLineFlag( true );
-    m_PrimOffLayout.AddLabel( "Offset:", 170 );
-    m_PrimOffLayout.SetButtonWidth( m_PrimOffLayout.GetRemainX() / 2 );
+    m_PrimOffLayout.AddLabel( "Offset:", m_PrimOffLayout.GetW() - 2 * m_PrimOffLayout.GetInputWidth() );
+    m_PrimOffLayout.SetButtonWidth( m_PrimOffLayout.GetInputWidth() );
     m_PrimOffLayout.AddButton( m_PrimOffRelToggle, "Rel" );
     m_PrimOffLayout.AddButton( m_PrimOffAbsToggle, "Abs" );
     m_PrimOffLayout.ForceNewLine();
@@ -165,8 +165,8 @@ HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge",
 
     m_SecVecLayout.SetButtonWidth( m_SecVecLayout.GetRemainX() / 3 );
     m_SecVecLayout.AddLabel( "Reference Vec", m_SecVecLayout.GetButtonWidth() );
-    m_SecVecLayout.AddButton( m_SecVecAbsToggle, "Rel" );
-    m_SecVecLayout.AddButton( m_SecVecRelToggle, "Abs" );
+    m_SecVecLayout.AddButton( m_SecVecRelToggle, "Rel" );
+    m_SecVecLayout.AddButton( m_SecVecAbsToggle, "Abs" );
     m_SecVecLayout.ForceNewLine();
 
     m_SecVecAbsRelToggle.Init( this );
@@ -299,7 +299,7 @@ bool HingeScreen::Update()
     HingeGeom* hinge_geom_ptr = dynamic_cast< HingeGeom* >( geom_ptr );
     assert( hinge_geom_ptr );
 
-    if ( hinge_geom_ptr->m_OrientType.Get() == HingeGeom::ORIENT_VEC )
+    if ( hinge_geom_ptr->m_OrientType.Get() == vsp::HINGE_ORIENT_VEC )
     {
         m_RotActive = false;
     }
@@ -322,7 +322,7 @@ bool HingeScreen::Update()
     m_SecondaryYToggle.Activate();
     m_SecondaryZToggle.Activate();
 
-    if ( hinge_geom_ptr->m_OrientType.Get() == HingeGeom::ORIENT_VEC )
+    if ( hinge_geom_ptr->m_OrientType.Get() == vsp::HINGE_ORIENT_VEC )
     {
 
         if ( hinge_geom_ptr->m_PrimaryDir.Get() == vsp::X_DIR )
@@ -412,24 +412,23 @@ bool HingeScreen::Update()
 
     m_PrimTypeChoice.Update( hinge_geom_ptr->m_PrimaryType.GetID() );
 
-    if ( hinge_geom_ptr->m_OrientType.Get() == HingeGeom::ORIENT_VEC )
+    if ( hinge_geom_ptr->m_OrientType.Get() == vsp::HINGE_ORIENT_VEC )
     {
         m_VectorLayout.GetGroup()->activate();
         m_SecondaryDirLayout.GetGroup()->activate();
+        m_SecVecLayout.GetGroup()->activate();
 
-        if ( hinge_geom_ptr->m_PrimaryType.Get() == HingeGeom::VECTOR3D )
+        if ( hinge_geom_ptr->m_PrimaryType.Get() == vsp::HINGE_PRIM_VECTOR3D )
         {
             m_PrimVecLayout.GetGroup()->activate();
-            m_SecVecLayout.GetGroup()->activate();
         }
         else
         {
             m_PrimVecLayout.GetGroup()->deactivate();
-            m_SecVecLayout.GetGroup()->deactivate();
         }
 
-        if ( hinge_geom_ptr->m_PrimaryType.Get() == HingeGeom::POINT3D ||
-             hinge_geom_ptr->m_PrimaryType.Get() == HingeGeom::SURFPT )
+        if ( hinge_geom_ptr->m_PrimaryType.Get() == vsp::HINGE_PRIM_POINT3D ||
+             hinge_geom_ptr->m_PrimaryType.Get() == vsp::HINGE_PRIM_SURFPT )
         {
             m_PrimOffLayout.GetGroup()->activate();
         }
@@ -438,10 +437,10 @@ bool HingeScreen::Update()
             m_PrimOffLayout.GetGroup()->deactivate();
         }
 
-        if ( hinge_geom_ptr->m_PrimaryType.Get() == HingeGeom::SURFPT ||
-             hinge_geom_ptr->m_PrimaryType.Get() == HingeGeom::UDIR ||
-             hinge_geom_ptr->m_PrimaryType.Get() == HingeGeom::WDIR ||
-             hinge_geom_ptr->m_PrimaryType.Get() == HingeGeom::NDIR )
+        if ( hinge_geom_ptr->m_PrimaryType.Get() == vsp::HINGE_PRIM_SURFPT ||
+             hinge_geom_ptr->m_PrimaryType.Get() == vsp::HINGE_PRIM_UDIR ||
+             hinge_geom_ptr->m_PrimaryType.Get() == vsp::HINGE_PRIM_WDIR ||
+             hinge_geom_ptr->m_PrimaryType.Get() == vsp::HINGE_PRIM_NDIR )
         {
             m_PrimUWLayout.GetGroup()->activate();
         }

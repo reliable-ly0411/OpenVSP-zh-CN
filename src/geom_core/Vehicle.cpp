@@ -10,7 +10,13 @@
 #define _HAS_STD_BYTE 0
 #endif
 
+#include <atomic>
 #include <cmath>
+#include <exception>
+#include <functional>
+#include <list>
+#include <mutex>
+#include <thread>
 
 #include <filesystem>
 
@@ -38,6 +44,7 @@
 #include "HumanGeom.h"
 #include "GeometryAnalysisMgr.h"
 #include "LinkMgr.h"
+#include "LocaleUtil.h"
 #include "MeasureMgr.h"
 #include "MeshGeom.h"
 #include "ModeMgr.h"
@@ -70,6 +77,22 @@ using namespace vsp;
 Vehicle::Vehicle()
 {
     m_Name = "Vehicle_Constructor";
+
+    // Every number OpenVSP writes or reads as text needs a '.' decimal point.  The API wrappers
+    // set the C numeric locale for each call; a program that uses the C++ library directly must
+    // keep its threads in it.
+    if ( !CNumericLocaleGuard::IsCNumeric() )
+    {
+        string msg = "Error: the numeric locale does not use a '.' decimal point, so files OpenVSP "
+                     "writes and reads will be corrupt.  Set LC_NUMERIC to \"C\" before using OpenVSP.\n";
+        fprintf( stderr, "%s", msg.c_str() );
+
+        MessageData errMsgData;
+        errMsgData.m_String = "Error";
+        errMsgData.m_IntVec.push_back( vsp::VSP_NON_C_NUMERIC_LOCALE );
+        errMsgData.m_StringVec.push_back( msg );
+        MessageMgr::getInstance().SendAll( errMsgData );
+    }
 
     m_ExperimentalFlag = false;
 
@@ -234,6 +257,13 @@ Vehicle::Vehicle()
     m_NewHeightValue.Init( "Height", "Screenshot", this, 1.0, 0.0, 1.0e12 );
     m_TransparentBGFlag.Init( "TransparentBGFlag", "Screenshot", this, 1, 0, 1 );
     m_AutoCropFlag.Init( "AutoCropFlag", "Screenshot", this, false, false, true );
+
+    m_VecFileType.Init( "FileType", "VectorScreenshot", this, vsp::VEC_SVG, vsp::VEC_SVG, vsp::VEC_NUM_TYPES - 1 );
+    m_VecAutoCropFlag.Init( "AutoCropFlag", "VectorScreenshot", this, false, false, true );
+    m_VecScaleToPageFlag.Init( "ScaleToPageFlag", "VectorScreenshot", this, false, false, true );
+    m_VecPageWidth.Init( "PageWidth", "VectorScreenshot", this, 4.0, 1e-3, 1.0e12 );
+    m_VecPageHeight.Init( "PageHeight", "VectorScreenshot", this, 3.0, 1e-3, 1.0e12 );
+    m_VecPageUnits.Init( "PageUnits", "VectorScreenshot", this, vsp::LEN_IN, vsp::LEN_MM, vsp::LEN_IN );
 
     m_UserParmVal.Init( "Val", "UserParm", this, 0.0, -1.0e12, 1.0e12 );
     m_UserParmMin.Init( "Min", "UserParm", this, -1.0e5, -1.0e12, 1.0e12 );
@@ -1196,7 +1226,8 @@ string Vehicle::AddGeom( const GeomType & type )
             if ( par )
             {
                 if ( par->isNonSurfaceType() ||
-                     par->GetType().m_Type == CONFORMAL_GEOM_TYPE )
+                     par->GetType().m_Type == CONFORMAL_GEOM_TYPE ||
+                     par->GetBehaviorType() == GEAR_GEOM_TYPE )
                 {
                     MessageData errMsgData;
                     errMsgData.m_String = "Error";
@@ -2261,6 +2292,13 @@ string Vehicle::ReplaceCloneGeom( const string & clone_id )
         joint->SetJointRotate( clone->GetJointRotate() );
     }
 
+    // Rotor angle, if the replacement is a rotor; a Clone may be turned apart from its original.
+    RotorRole* rotor = Geom::CastTo< RotorRole >( replacement );
+    if ( rotor )
+    {
+        rotor->SetRotorRotate( clone->GetRotorRotate() );
+    }
+
     // Drop the Clone's step-child entry on its original before the ID swap; the replacement
     // takes the ID, so the stale entry would never be pruned.
     Geom* registered_on = clone->GetOriginalGeom();
@@ -2441,11 +2479,11 @@ void Vehicle::DeleteClipBoard()
 // A Fuselage numbers its order policies MONOTONIC, LOOP, FREE; a Stack FREE, LOOP.
 static int StackOrderPolicy( int fuse_policy )
 {
-    if ( fuse_policy == FuselageGeom::FUSE_LOOP )
+    if ( fuse_policy == FUSE_LOOP )
     {
-        return StackGeom::STACK_LOOP;
+        return STACK_LOOP;
     }
-    return StackGeom::STACK_FREE;
+    return STACK_FREE;
 }
 
 // A Stack places each cross section relative to the one before it, where a Fuselage places
@@ -3362,13 +3400,14 @@ xmlNodePtr Vehicle::DecodeXml( xmlNodePtr & node )
     xmlNodePtr setnamenode = XmlUtil::GetNode( node, "SetNames", 0 );
     if ( setnamenode )
     {
-        int num = XmlUtil::GetNumNames( setnamenode, "Set" );
+        vector< xmlNodePtr > name_nodes = XmlUtil::GetNodes( setnamenode, "Set" );
+        int num = ( int )name_nodes.size();
 
         SetNumUserSets( num - SET_FIRST_USER );
 
         for ( int i = 0; i < num; i++ )
         {
-            xmlNodePtr namenode = XmlUtil::GetNode( setnamenode, "Set", i );
+            xmlNodePtr namenode = name_nodes[i];
             if ( namenode )
             {
                 string name = XmlUtil::ExtractString( namenode );
@@ -3388,10 +3427,11 @@ xmlNodePtr Vehicle::DecodeXml( xmlNodePtr & node )
         int def_int = -1;
         string def_str = string();
 
-        int num_set_colls = XmlUtil::GetNumNames( set_attr_node, "Set" );
+        vector< xmlNodePtr > set_nodes = XmlUtil::GetNodes( set_attr_node, "Set" );
+        int num_set_colls = ( int )set_nodes.size();
         for ( int i = 0; i < num_set_colls; i++ )
         {
-            xmlNodePtr set_node = XmlUtil::GetNode( set_attr_node, "Set", i );
+            xmlNodePtr set_node = set_nodes[i];
             if ( set_node )
             {
                 string set_name = XmlUtil::FindStringProp( set_node, "SetName", def_str );
@@ -3426,10 +3466,11 @@ xmlNodePtr Vehicle::DecodeXmlGeomsOnly( xmlNodePtr & node )
         MeasureMgr.DecodeXml( vehicle_node );
 
         vector< Geom* > add_geom_vec;
-        int num = XmlUtil::GetNumNames( vehicle_node, "Geom" );
+        vector< xmlNodePtr > geom_nodes = XmlUtil::GetNodes( vehicle_node, "Geom" );
+        int num = ( int )geom_nodes.size();
         for ( int i = 0 ; i < num ; i++ )
         {
-            xmlNodePtr geom_node = XmlUtil::GetNode( vehicle_node, "Geom", i );
+            xmlNodePtr geom_node = geom_nodes[i];
             if ( geom_node )
             {
                 xmlNodePtr base_node = XmlUtil::GetNode( geom_node, "GeomBase", 0 );
@@ -3505,10 +3546,11 @@ static void PreRegisterNewObjectIDs( xmlNodePtr node )
     xmlNodePtr vehicle_node = XmlUtil::GetNode( node, "Vehicle", 0 );
     if ( vehicle_node )
     {
-        int num = XmlUtil::GetNumNames( vehicle_node, "Geom" );
+        vector< xmlNodePtr > geom_nodes = XmlUtil::GetNodes( vehicle_node, "Geom" );
+        int num = ( int )geom_nodes.size();
         for ( int i = 0 ; i < num ; i++ )
         {
-            xmlNodePtr geom_node = XmlUtil::GetNode( vehicle_node, "Geom", i );
+            xmlNodePtr geom_node = geom_nodes[i];
             if ( geom_node )
             {
                 IDMgr.PreRegisterIDs( geom_node );
@@ -5337,10 +5379,143 @@ void Vehicle::WritePovRayFile( const string & file_name, int write_set, bool use
     fclose( pov_file );
 }
 
-void Vehicle::FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs, int n_ref, bool splitjoin )
+// One surface of one Geom to hand over to a mesher, with everything asked of its Geom.
+struct XFerSurfTask
+{
+    const VspSurf* m_Surf = nullptr;
+    string m_GeomID;
+    string m_Name;
+    int m_MainSurfID = 0;
+    int m_Comp = 0;
+    int m_CopyIndx = 0;
+    int m_SurfNum = 0;
+    bool m_CapUMin = false;
+    bool m_CapUMax = false;
+    vector < double > m_UTess;
+    vector < double > m_WTess;
+};
+
+static XFerSurfTask MakeXFerSurfTask( Geom* geom, const VspSurf* surf, int j, int icomp, int n_ref )
+{
+    XFerSurfTask t;
+    t.m_Surf = surf;
+    t.m_GeomID = geom->GetID();
+    t.m_Name = geom->GetName();
+    t.m_MainSurfID = geom->GetMainSurfID( j );
+    t.m_Comp = icomp;
+    t.m_CopyIndx = geom->GetSurfCopyIndx( j );
+    t.m_SurfNum = j;
+    t.m_CapUMin = geom->GetCapUMinSuccess( t.m_MainSurfID );
+    t.m_CapUMax = geom->GetCapUMaxSuccess( t.m_MainSurfID );
+    geom->GetUWTessSurf( j, t.m_UTess, t.m_WTess, n_ref );
+    return t;
+}
+
+// Split each surface for the mesher, on nthread threads.  A surface is split only through its
+// own data, and each one's pieces are gathered in turn, so the list comes out as it would from
+// one thread.
+static void RunXFerSurfTasks( const vector < XFerSurfTask > &tasks, vector< XferSurf > &xfersurfs,
+                              bool splitjoin, bool symcut, bool cfdcaps, int nthread )
+{
+    int n = ( int )tasks.size();
+    vector < vector < XferSurf > > out( n );
+
+    std::function < void( int ) > body = [&]( int k )
+    {
+        const XFerSurfTask &t = tasks[k];
+        t.m_Surf->FetchXFerSurf( t.m_GeomID, t.m_Name, t.m_MainSurfID, t.m_Comp, t.m_CopyIndx, t.m_SurfNum, out[k],
+                                 std::vector< double >(), std::vector< double >(), t.m_UTess, t.m_WTess,
+                                 t.m_CapUMin, t.m_CapUMax, splitjoin, symcut, cfdcaps );
+    };
+
+    if ( nthread > n )
+    {
+        nthread = n;
+    }
+
+    if ( nthread > 1 )
+    {
+        std::atomic < int > next( 0 );
+        std::exception_ptr err;
+        std::mutex errmutex;
+        vector < std::thread > pool;
+
+        try
+        {
+            for ( int i = 0 ; i < nthread ; i++ )
+            {
+                pool.push_back( std::thread( [&]()
+                {
+                    while ( true )
+                    {
+                        int k = next++;
+                        if ( k >= n )
+                        {
+                            break;
+                        }
+
+                        try
+                        {
+                            body( k );
+                        }
+                        catch ( ... )
+                        {
+                            std::lock_guard < std::mutex > lock( errmutex );
+                            if ( !err )
+                            {
+                                err = std::current_exception();
+                            }
+                            next = n;
+                        }
+                    }
+                } ) );
+            }
+        }
+        catch ( ... )
+        {
+            next = n;
+            err = std::current_exception();
+        }
+
+        for ( int i = 0 ; i < ( int )pool.size() ; i++ )
+        {
+            pool[i].join();
+        }
+
+        if ( err )
+        {
+            std::rethrow_exception( err );
+        }
+    }
+    else
+    {
+        for ( int k = 0 ; k < n ; k++ )
+        {
+            body( k );
+        }
+    }
+
+    size_t ntotal = xfersurfs.size();
+    for ( int k = 0 ; k < n ; k++ )
+    {
+        ntotal += out[k].size();
+    }
+    xfersurfs.reserve( ntotal );
+    for ( int k = 0 ; k < n ; k++ )
+    {
+        for ( int i = 0 ; i < ( int )out[k].size() ; i++ )
+        {
+            xfersurfs.push_back( std::move( out[k][i] ) );
+        }
+    }
+}
+
+void Vehicle::FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs, int n_ref, bool splitjoin, bool symcut, bool cfdcaps,
+                              int nthread )
 {
     vector< Geom* > geom_vec = FindGeomVec( geomvec );
 
+    vector < XFerSurfTask > tasks;
     int icomp = 0;
     for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
@@ -5350,21 +5525,23 @@ void Vehicle::FetchXFerSurfs( const vector < string > & geomvec, vector< XferSur
 
         for ( int j = 0; j < num_surf; j++ )
         {
-            vector < double > utess, wtess;
-            geom_vec[i]->GetUWTessSurf( j, utess, wtess, n_ref );
-
-            (*surf_vec_ptr)[j].FetchXFerSurf( geom_vec[i]->GetID(), geom_vec[i]->GetName(), geom_vec[i]->GetMainSurfID( j ), icomp, geom_vec[i]->GetSurfCopyIndx( j ), j, xfersurfs, std::vector< double >(), std::vector< double >(), utess, wtess,
-                                                 geom_vec[i]->GetCapUMinSuccess( geom_vec[i]->GetMainSurfID( j ) ),
-                                                 geom_vec[i]->GetCapUMaxSuccess( geom_vec[i]->GetMainSurfID( j ) ), splitjoin );
+            tasks.push_back( MakeXFerSurfTask( geom_vec[i], &( *surf_vec_ptr )[j], j, icomp, n_ref ) );
             icomp++;
         }
     }
+
+    RunXFerSurfTasks( tasks, xfersurfs, splitjoin, symcut, cfdcaps, nthread );
 }
 
-void Vehicle::FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &xfersurfs, int n_ref, bool splitjoin )
+void Vehicle::FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &xfersurfs, int n_ref, bool splitjoin, bool symcut, bool cfdcaps,
+                             int nthread )
 {
     vector< Geom* > geom_vec = FindGeomVec( GetGeomVec() );
 
+    // The degenerate surfaces asked for are copies, kept here until they are split.
+    std::list < vector < VspSurf > > degen_surfs;
+
+    vector < XFerSurfTask > tasks;
     int icomp = 0;
     for ( int i = 0 ; i < ( int )geom_vec.size() ; i++ )
     {
@@ -5374,7 +5551,6 @@ void Vehicle::FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &
         {
             int num_surf = geom_vec[i]->GetNumTotalSurfs();
 
-            vector<VspSurf> surf_vec;
             const vector<VspSurf> *surf_vec_ptr = nullptr;
 
             if ( innormalset )
@@ -5383,22 +5559,19 @@ void Vehicle::FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &
             }
             else // indegenset
             {
-                surf_vec = geom_vec[i]->GetDegenSurfVec();
-                surf_vec_ptr = &surf_vec;
+                degen_surfs.push_back( geom_vec[i]->GetDegenSurfVec() );
+                surf_vec_ptr = &degen_surfs.back();
             }
 
             for ( int j = 0; j < num_surf; j++ )
             {
-                vector < double > utess, wtess;
-                geom_vec[i]->GetUWTessSurf( j, utess, wtess, n_ref );
-
-                (*surf_vec_ptr)[j].FetchXFerSurf( geom_vec[i]->GetID(), geom_vec[i]->GetName(), geom_vec[i]->GetMainSurfID( j ), icomp, geom_vec[i]->GetSurfCopyIndx( j ), j, xfersurfs, std::vector< double >(), std::vector< double >(), utess, wtess,
-                                                 geom_vec[i]->GetCapUMinSuccess( geom_vec[i]->GetMainSurfID( j ) ),
-                                                 geom_vec[i]->GetCapUMaxSuccess( geom_vec[i]->GetMainSurfID( j ) ), splitjoin );
+                tasks.push_back( MakeXFerSurfTask( geom_vec[i], &( *surf_vec_ptr )[j], j, icomp, n_ref ) );
                 icomp++;
             }
         }
     }
+
+    RunXFerSurfTasks( tasks, xfersurfs, splitjoin, symcut, cfdcaps, nthread );
 }
 
 void Vehicle::WriteSTEPFile( const string & file_name, int write_set, bool useMode, const string &modeID )
@@ -6764,11 +6937,11 @@ void Vehicle::WriteControlSurfaceFile( const string & file_name, const vector < 
                         fprintf( csf_file, "Surface #:    %d\n", isurf );
                         fprintf( csf_file, "Part #:       %d\n", part );
 
-                        if ( cs->m_SurfType() == SSControlSurf::UPPER_SURF )
+                        if ( cs->m_SurfType() == SS_CONTROL_UPPER_SURF )
                         {
                             fprintf( csf_file, "1 Upper\n" );
                         }
-                        else if ( cs->m_SurfType() == SSControlSurf::LOWER_SURF )
+                        else if ( cs->m_SurfType() == SS_CONTROL_LOWER_SURF )
                         {
                             fprintf( csf_file, "1 Lower\n" );
                         }
@@ -7963,11 +8136,12 @@ string Vehicle::ImportV2File( const string & file_name )
     {
 
         xmlNodePtr comp_list_node = node;
-        int num_comps = XmlUtil::GetNumNames( comp_list_node, "Component" );
+        vector< xmlNodePtr > comp_nodes = XmlUtil::GetNodes( comp_list_node, "Component" );
+        int num_comps = ( int )comp_nodes.size();
 
         for ( int i = 0 ; i < num_comps ; i++ )
         {
-            xmlNodePtr comp_node = XmlUtil::GetNode( comp_list_node, "Component", i );
+            xmlNodePtr comp_node = comp_nodes[i];
 
             node = XmlUtil::GetNode( comp_node, "Type", 0 );
 

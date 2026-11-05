@@ -400,6 +400,11 @@ public:
     BoolParm m_ContinueCoPlanarWakesFlag;
     BoolParm m_FindBodyWakesFlag;
 
+    BoolParm m_MergeDegenTriRegionsFlag;
+
+    BoolParm m_CleanIntersectionsFlag;
+    Parm m_CleanIntersectionsLenRatio;
+
     // Reference Area Parms
     Parm m_Sref;
     Parm m_bref;
@@ -573,6 +578,8 @@ protected:
     // helper functions for VSPAERO files
     void ReadHistoryFile( const string &filename, vector <string> &res_id_vector, double recref ) const;
     void ReadPolarFile( const string &filename, vector <string> &res_id_vector ) const;
+    void AddReCrefHistory( Results* history_res, double recref_1e6, double cdo, double cdtot, double lod,
+                           vector < string > &res_id_vector ) const;
     void ReadLoadFile( const string &filename, vector <string> &res_id_vector ) const;
     void ReadStabFile( const string &filename, vector <string> &res_id_vector, vsp::VSPAERO_STABILITY_TYPE stabilityType );
     static vector <string> ReadDelimLine( FILE * fp, char * delimiters );

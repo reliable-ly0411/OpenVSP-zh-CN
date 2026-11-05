@@ -36,7 +36,7 @@ struct PntNode;
 struct PntNodeCloud;
 
 typedef KDTreeSingleIndexAdaptor< L2_Simple_Adaptor< double, PntNodeCloud > , PntNodeCloud, 3 > PNTree;
-typedef vector < pair< unsigned int, double > > PNTreeResults;
+typedef vector < nanoflann::ResultItem< unsigned int, double > > PNTreeResults;
 
 struct PntNode
 {
@@ -121,6 +121,13 @@ struct PntNodeCloud
 //
 // keep_matches keeps the points of every group for GetMatches, which few callers need.
 void IndexPntNodes( PntNodeCloud & cloud, double tolsq, bool keep_matches = false );
+
+// Build the cloud's tree without grouping its points, for callers that search it themselves.
+void BuildPntNodeIndex( PntNodeCloud & cloud );
+
+// The indices of the cloud's points whose squared distance from pnt is under tolsq, in no
+// particular order.  The distance is summed as the tree sums it.
+void FindPntNodesWithinTolSq( const PntNodeCloud & cloud, const vec3d & pnt, double tolsq, vector< unsigned int > & found );
 
 class VspSurf;
 

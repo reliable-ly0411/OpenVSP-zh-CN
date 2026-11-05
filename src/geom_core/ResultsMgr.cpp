@@ -358,6 +358,24 @@ void NameValData::CopyFrom( NameValData* nvd )
 
     xmlFreeNode( root );
     IDMgr.ResetRemapID( lastreset );
+
+    // The XML form of these types holds only their first value; the copy takes them all.
+    if ( m_Type == vsp::BOOL_DATA || m_Type == vsp::INT_DATA )
+    {
+        m_IntData = nvd->m_IntData;
+    }
+    else if ( m_Type == vsp::DOUBLE_DATA )
+    {
+        m_DoubleData = nvd->m_DoubleData;
+    }
+    else if ( m_Type == vsp::STRING_DATA )
+    {
+        m_StringData = nvd->m_StringData;
+    }
+    else if ( m_Type == vsp::PARM_REFERENCE_DATA )
+    {
+        m_ParmIDData = nvd->m_ParmIDData;
+    }
 }
 
 string NameValData::TruncateString( string str, int len )
@@ -921,6 +939,10 @@ NameValData* NameValCollection::FindPtr( const string & name, int index )
             return iter->second[index];
         }
     }
+    else if ( m_RecordMissed && std::find( m_MissedNames.begin(), m_MissedNames.end(), name ) == m_MissedNames.end() )
+    {
+        m_MissedNames.push_back( name );
+    }
 
     return nullptr;
 }
@@ -1351,10 +1373,11 @@ void AttributeCollection::DecodeXml( xmlNodePtr & node )
         // own ID before it reads its collection.
 
         //then get all the xmlNodePtrs to all the Attributes in there...
-        int num_Attr = XmlUtil::GetNumNames( dnode, "Attribute" );
+        vector< xmlNodePtr > attr_nodes = XmlUtil::GetNodes( dnode, "Attribute" );
+        int num_Attr = ( int )attr_nodes.size();
         for ( int i = 0; i < num_Attr; i++ )
         {
-            xmlNodePtr attrNode = XmlUtil::GetNode( dnode, "Attribute", i );
+            xmlNodePtr attrNode = attr_nodes[i];
             if ( attrNode )
             {
                 // The ID the attribute below will take, not this collection's own.  Resolving

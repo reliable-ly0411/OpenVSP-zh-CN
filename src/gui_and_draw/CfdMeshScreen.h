@@ -80,6 +80,8 @@ protected:
     SliderAdjRangeInput m_GrowthRatio;
 
     ToggleButton m_Rig3dGrowthLimit;
+    ToggleButton m_WidthLimit;
+    SliderAdjRangeInput m_NumWidthSegments;
     ToggleButton m_IntersectSubsurfaces;
 
     TriggerButton m_GlobSrcAdjustLenLftLft;
@@ -107,6 +109,7 @@ protected:
 
     ToggleButton m_ParallelMesh;
     ToggleButton m_SplitJoinSurfs;
+    ToggleButton m_TopoInterior;
 
     //===== Display Tab Items =====//
 
@@ -147,6 +150,10 @@ protected:
 
     TriggerButton m_SourcesLabel;
     TriggerButton m_GrowLimitSourcesLabel;
+
+    TriggerButton m_MinLenSurfWidthLabel;
+    TriggerButton m_SurfWidthLabel;
+    TriggerButton m_GrowLimitSurfWidthLabel;
 
     //===== Output Tab Items =====//
 

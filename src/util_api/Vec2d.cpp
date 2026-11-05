@@ -400,6 +400,8 @@ void clip_seg_rect( double x_min, double y_min, double x_max, double y_max,
 //==== Line Seg - Seg Intersection ====//
 int seg_seg_intersect( const vec2d& pnt_A, const vec2d& pnt_B, const vec2d& pnt_C, const vec2d& pnt_D, vec2d& int_pnt, double &ua, double &ub )
 {
+    ua = 0.0;
+    ub = 0.0;
 
     double denom = ( ( pnt_D[1] - pnt_C[1] ) * ( pnt_B[0] - pnt_A[0] ) ) -
                    ( ( pnt_D[0] - pnt_C[0] ) * ( pnt_B[1] - pnt_A[1] ) );
@@ -562,10 +564,12 @@ vec2d poly_centroid( const std::vector< vec2d > & pnt_vec )
     }
 
     double total_area = 0.0;
+    double total_abs = 0.0;
     for ( int i = 0 ; i < ( int )( pnt_vec.size() - 1 ) ; i++ )
     {
         double da = pnt_vec[i].x() * pnt_vec[i+1].y() - pnt_vec[i+1].x() * pnt_vec[i].y();
         total_area += da;
+        total_abs += std::abs( da );
         vec2d ceni = da * ( pnt_vec[i] + pnt_vec[i+1] ); // Origin point implied.
         centroid += ceni;
     }
@@ -574,8 +578,22 @@ vec2d poly_centroid( const std::vector< vec2d > & pnt_vec )
     {
         double da = pnt_vec.back().x() * pnt_vec[0].y() - pnt_vec[0].x() * pnt_vec.back().y();
         total_area += da;
+        total_abs += std::abs( da );
         vec2d ceni = da * ( pnt_vec[0] + pnt_vec.back() ); // Origin point implied
         centroid += ceni;
+    }
+
+    // A polygon with no area, to within the rounding of the sum of its terms, has no area centroid; use the mean of
+    // its points.
+    if ( std::abs( total_area ) <= 1.0e-12 * total_abs )
+    {
+        centroid = vec2d();
+        for ( int i = 0 ; i < ( int )pnt_vec.size() ; i++ )
+        {
+            centroid += pnt_vec[i];
+        }
+        centroid *= 1.0 / pnt_vec.size();
+        return centroid;
     }
 
     centroid *= (1.0 / (3.0 * total_area ) ); // Divide by 3.0 is to average points in triangle centroid.
@@ -597,6 +615,11 @@ bool in_range( double val, double range_min, double range_max, double tol )
 /* Returns number of solutions found.  If there is one valid solution, it will be put in s and t */
 int inverse_bi_lin_interp( const vec2d &p0, const vec2d &p1, const vec2d &p2, vec2d const &p3, const vec2d &p, double &s, double &t, double &s2, double &t2 )
 {
+    s = 0.0;
+    t = 0.0;
+    s2 = 0.0;
+    t2 = 0.0;
+
     int t_valid, t2_valid;
 
     double a = cross( p0 - p, p0 - p2 );

@@ -421,7 +421,7 @@ void FeaMeshMgrSingleton::TransferBCData()
     }
 }
 
-bool FeaMeshMgrSingleton::CheckPropMat()
+bool FeaMeshMgrSingleton::CheckPropMat( vector < SimpleSubSurface > &ssvec, FeaMesh* mesh )
 {
     bool pass = true;
 
@@ -437,50 +437,50 @@ bool FeaMeshMgrSingleton::CheckPropMat()
         }
     }
 
-    for ( size_t i = 0; i < m_SimpleSubSurfaceVec.size(); i++ )
+    for ( size_t i = 0; i < ssvec.size(); i++ )
     {
-        if ( m_SimpleSubSurfaceVec[ i ].m_KeepDelShellElements == vsp::FEA_KEEP )
+        if ( ssvec[ i ].m_KeepDelShellElements == vsp::FEA_KEEP )
         {
-            if ( m_SimpleSubSurfaceVec[ i ].GetFeaPropertyIndex() == -1 )
+            if ( ssvec[ i ].GetFeaPropertyIndex() == -1 )
             {
-                snprintf( buf, sizeof( buf ), "Could not find subsurface shell property '%s'\n", m_SimpleSubSurfaceVec[ i ].GetFeaPropertyID().c_str() );
+                snprintf( buf, sizeof( buf ), "Could not find subsurface shell property '%s'\n", ssvec[ i ].GetFeaPropertyID().c_str() );
                 addOutputText( string( buf ) );
                 pass = false;
             }
         }
-        if ( m_SimpleSubSurfaceVec[ i ].m_CreateBeamElements )
+        if ( ssvec[ i ].m_CreateBeamElements )
         {
-            if ( m_SimpleSubSurfaceVec[ i ].GetCapFeaPropertyIndex() == -1 )
+            if ( ssvec[ i ].GetCapFeaPropertyIndex() == -1 )
             {
-                snprintf( buf, sizeof( buf ), "Could not find subsurface cap property '%s'\n", m_SimpleSubSurfaceVec[ i ].GetCapFeaPropertyID().c_str() );
+                snprintf( buf, sizeof( buf ), "Could not find subsurface cap property '%s'\n", ssvec[ i ].GetCapFeaPropertyID().c_str() );
                 addOutputText( string( buf ) );
                 pass = false;
             }
         }
     }
 
-    if ( GetMeshPtr() )
+    if ( mesh )
     {
-        for ( size_t i = 0; i < GetMeshPtr()->m_FeaPartPropertyIndexVec.size(); i++ )
+        for ( size_t i = 0; i < mesh->m_FeaPartPropertyIndexVec.size(); i++ )
         {
-            if ( GetMeshPtr()->m_FeaPartKeepDelShellElementsVec[i] == vsp::FEA_KEEP )
+            if ( mesh->m_FeaPartKeepDelShellElementsVec[i] == vsp::FEA_KEEP )
             {
-                if ( GetMeshPtr()->m_FeaPartPropertyIndexVec[ i ] == -1 )
+                if ( mesh->m_FeaPartPropertyIndexVec[ i ] == -1 )
                 {
-                    snprintf( buf, sizeof( buf ), "Could not find part shell property '%s'\n", GetMeshPtr()->m_FeaPartPropertyIDVec[ i ].c_str() );
+                    snprintf( buf, sizeof( buf ), "Could not find part shell property '%s'\n", mesh->m_FeaPartPropertyIDVec[ i ].c_str() );
                     addOutputText( string( buf ) );
                     pass = false;
                 }
             }
         }
 
-        for ( size_t i = 0; i < GetMeshPtr()->m_FeaPartCapPropertyIndexVec.size(); i++ )
+        for ( size_t i = 0; i < mesh->m_FeaPartCapPropertyIndexVec.size(); i++ )
         {
-            if ( GetMeshPtr()->m_FeaPartCreateBeamElementsVec[i] )
+            if ( mesh->m_FeaPartCreateBeamElementsVec[i] )
             {
-                if ( GetMeshPtr()->m_FeaPartCapPropertyIndexVec[ i ] == -1 )
+                if ( mesh->m_FeaPartCapPropertyIndexVec[ i ] == -1 )
                 {
-                    snprintf( buf, sizeof( buf ), "Could not find part cap property '%s'\n", GetMeshPtr()->m_FeaPartCapPropertyIDVec[ i ].c_str() );
+                    snprintf( buf, sizeof( buf ), "Could not find part cap property '%s'\n", mesh->m_FeaPartCapPropertyIDVec[ i ].c_str() );
                     addOutputText( string( buf ) );
                     pass = false;
                 }
@@ -489,6 +489,29 @@ bool FeaMeshMgrSingleton::CheckPropMat()
     }
 
     return pass;
+}
+
+vector < string > FeaMeshMgrSingleton::GetSimplePropertyIDVec()
+{
+    vector < string > prop_id_vec( m_SimplePropertyVec.size() );
+    for ( int i = 0; i < m_SimplePropertyVec.size(); i++ )
+    {
+        prop_id_vec[i] = m_SimplePropertyVec[i].m_ID;
+    }
+    return prop_id_vec;
+}
+
+// A mesh written after properties or materials change is written with them as they now are.
+bool FeaMeshMgrSingleton::IndexAndCheckPropMat( FeaMesh* mesh )
+{
+    mesh->IndexFeaProperties( GetSimplePropertyIDVec() );
+
+    if ( !CheckPropMat( mesh->m_SimpleSubSurfaceVec, mesh ) )
+    {
+        addOutputText( "Material or property not identified.  No mesh files written.\n" );
+        return false;
+    }
+    return true;
 }
 
 void FeaMeshMgrSingleton::GenerateFeaMesh()
@@ -504,7 +527,6 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
     addOutputText( "Transfer Mesh Settings\n" );
     TransferMeshSettings();
 
-    addOutputText( "Load Surfaces\n" );
     LoadSurfaces();
 
     if ( m_SurfVec.size() == 0 )
@@ -536,7 +558,7 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
     addOutputText( "Transfer Subsurf Data\n" );
     TransferSubSurfData();
 
-    if ( !CheckPropMat() )
+    if ( !CheckPropMat( m_SimpleSubSurfaceVec, GetMeshPtr() ) )
     {
         addOutputText( "Material or property not identified.\n" );
         RecordResults();
@@ -554,7 +576,6 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
     addOutputText( "Merge Co-Planar Parts\n" );
     MergeCoplanarParts();
 
-    addOutputText( "Add Structure Parts\n" );
     AddStructureSurfParts();
 
     addOutputText( "Clean Merge Surfs\n" );
@@ -617,7 +638,6 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
     addOutputText( "Set Fixed Points\n" );
     SetFixPointSurfaceNodes();
 
-    addOutputText( "Remesh\n" );
     Remesh( CfdMeshMgrSingleton::VOCAL_OUTPUT );
 
     if ( GetMeshPtr() && GetMeshPtr()->m_StructSettings.m_ConvertToQuadsFlag )
@@ -626,11 +646,9 @@ void FeaMeshMgrSingleton::GenerateFeaMesh()
         ConvertToQuads();
     }
 
-    addOutputText( "ConnectBorderNodes\n" );
     ConnectBorderNodes( false );        // No Wakes
     ConnectBorderNodes( true );         // Only Wakes
 
-    addOutputText( "Post Mesh\n" );
     PostMesh();
 
     addOutputText( "Build Single Tag Map\n" );
@@ -700,7 +718,7 @@ void FeaMeshMgrSingleton::RecordResults()
         num_beams = ( int )mesh->m_NumBeams;
 
         // Each shell element's edges, between corners, by the numbers the nodes are written with.
-        map< pair< long long int, long long int >, int > edge_count;
+        vector< pair< long long int, long long int > > edges;
 
         for ( int i = 0; i < ( int )mesh->m_FeaElementVec.size(); i++ )
         {
@@ -730,17 +748,25 @@ void FeaMeshMgrSingleton::RecordResults()
                     std::swap( a, b );
                 }
 
-                edge_count[ make_pair( a, b ) ]++;
+                edges.push_back( make_pair( a, b ) );
             }
         }
 
-        map< pair< long long int, long long int >, int >::const_iterator e;
-        for ( e = edge_count.begin(); e != edge_count.end(); ++e )
+        // An edge listed once is free.
+        std::sort( edges.begin(), edges.end() );
+        size_t e = 0;
+        while ( e < edges.size() )
         {
-            if ( e->second == 1 )
+            size_t f = e + 1;
+            while ( f < edges.size() && edges[f] == edges[e] )
+            {
+                f++;
+            }
+            if ( f - e == 1 )
             {
                 num_free_edges++;
             }
+            e = f;
         }
     }
 
@@ -762,6 +788,11 @@ void FeaMeshMgrSingleton::ExportFeaMesh( const string &structID )
         mesh->m_StructSettings.CopyPostOpFrom( fea_struct->GetStructSettingsPtr() );
 
         TransferPropMatData();
+
+        if ( !IndexAndCheckPropMat( mesh ) )
+        {
+            return;
+        }
 
         mesh->ExportFeaMesh();
     }
@@ -788,26 +819,14 @@ void FeaMeshMgrSingleton::ExportCADFiles()
         BuildNURBSSurfMap();
     }
 
-    if ( GetSettingsPtr()->GetExportFileFlag( vsp::FEA_IGES_FILE_NAME ) )
-    {
-        string delim = StringUtil::get_delim( GetSettingsPtr()->m_CADLabelDelim );
+    string delim = StringUtil::get_delim( GetSettingsPtr()->m_CADLabelDelim );
 
-        // The surfaces were scaled into the structures' analysis unit for meshing.
-        WriteIGESFile( GetSettingsPtr()->GetExportFileName( vsp::FEA_IGES_FILE_NAME ), m_Vehicle->GetStructLenUnit(),
-                       GetSettingsPtr()->m_CADLabelID, GetSettingsPtr()->m_CADLabelSurfNo, GetSettingsPtr()->m_CADLabelSplitNo,
-                       GetSettingsPtr()->m_CADLabelName, delim );
-    }
-
-    if ( GetSettingsPtr()->GetExportFileFlag( vsp::FEA_STEP_FILE_NAME ) )
-    {
-        string delim = StringUtil::get_delim( GetSettingsPtr()->m_CADLabelDelim );
-
-        // The surfaces were scaled into the structures' analysis unit for meshing.
-        WriteSTEPFile( GetSettingsPtr()->GetExportFileName( vsp::FEA_STEP_FILE_NAME ), m_Vehicle->GetStructLenUnit(),
-                       GetSettingsPtr()->m_STEPTol, GetSettingsPtr()->m_STEPMergePoints,
-                       GetSettingsPtr()->m_CADLabelID, GetSettingsPtr()->m_CADLabelSurfNo, GetSettingsPtr()->m_CADLabelSplitNo,
-                       GetSettingsPtr()->m_CADLabelName, delim, GetSettingsPtr()->m_STEPRepresentation );
-    }
+    // The surfaces were scaled into the structures' analysis unit for meshing.
+    WriteNURBSSurfsCAD( GetSettingsPtr()->GetExportFileFlag( vsp::FEA_IGES_FILE_NAME ), GetSettingsPtr()->GetExportFileName( vsp::FEA_IGES_FILE_NAME ),
+                        GetSettingsPtr()->GetExportFileFlag( vsp::FEA_STEP_FILE_NAME ), GetSettingsPtr()->GetExportFileName( vsp::FEA_STEP_FILE_NAME ),
+                        m_Vehicle->GetStructLenUnit(), GetSettingsPtr()->m_STEPTol, GetSettingsPtr()->m_STEPMergePoints,
+                        GetSettingsPtr()->m_CADLabelID, GetSettingsPtr()->m_CADLabelSurfNo, GetSettingsPtr()->m_CADLabelSplitNo,
+                        GetSettingsPtr()->m_CADLabelName, delim, GetSettingsPtr()->m_STEPRepresentation );
 
 }
 
@@ -989,9 +1008,14 @@ void FeaMeshMgrSingleton::AddStructureSurfParts()
 
         vector < FeaPart* > fea_part_vec = fea_struct->GetFeaPartVec();
 
+        // One bar for all the parts.
+        ProgressStage bar( this, "Structure Parts", ( int )GetMeshPtr()->m_NumFeaParts );
+
         //===== Add FeaParts ====//
         for ( unsigned int i = 0; i < GetMeshPtr()->m_NumFeaParts; i++ ) // Do Not Assume Skin is Index 0
         {
+            bar.Step();
+
             if ( !fea_struct->FeaPartIsFixPoint( i ) &&
                  !fea_struct->FeaPartIsSkin( i ) &&
                  !fea_struct->FeaPartIsTrim( i ) )
@@ -1285,19 +1309,61 @@ void FeaMeshMgrSingleton::RemoveTrimTris()
     double trimtol = 0.01 * GetGridDensityPtr()->m_MinLen;
     if ( GetMeshPtr()->m_TrimVec.size() > 0 ) // Skip if there are no trim groups.
     {
-        for ( int s = 0; s < ( int ) m_SurfVec.size(); ++s ) // every surface
+        int nsurf = ( int ) m_SurfVec.size();
+
+        // The trim groups that can cull a point of each surface.  A group made for another
+        // symmetry copy culls none of them.
+        vector < vector < int > > surf_trims( nsurf );
+        for ( int s = 0; s < nsurf; ++s )
+        {
+            int isymm = m_SurfVec[ s ]->GetFeaSymmIndex();
+            for ( int i = 0; i < GetMeshPtr()->m_TrimVec.size(); i++ )
+            {
+                if ( isymm < 0 || isymm == GetMeshPtr()->m_TrimVec[i].m_TrimSymm )
+                {
+                    surf_trims[ s ].push_back( i );
+                }
+            }
+        }
+
+        // The center of every face, found side by side, each surface by one thread.
+        vector < vector < vec3d > > surf_cp( nsurf );
+        RunStage( "Trim Face Centers", nsurf, [&]( int s )
+        {
+            if ( surf_trims[ s ].empty() )
+            {
+                return;
+            }
+
+            const list < Face * > &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
+            surf_cp[ s ].reserve( faceList.size() );
+            for ( list < Face * >::const_iterator t = faceList.begin(); t != faceList.end(); ++t )
+            {
+                surf_cp[ s ].push_back( ( *t )->ComputeCenterPnt( m_SurfVec[ s ] ) );
+            }
+        } );
+
+        for ( int s = 0; s < nsurf; ++s ) // every surface
         {
             bool delSomeTris = false;
 
             const list < Face * > &faceList = m_SurfVec[ s ]->GetMesh()->GetFaceList();
+            const vector < int > &trims = surf_trims[ s ];
+            if ( trims.empty() )
+            {
+                continue;
+            }
+
+            int k = 0;
             for ( list < Face * >::const_iterator t = faceList.begin(); t != faceList.end(); ++t ) // every triangle
             {
-                vec3d cp = ( *t )->ComputeCenterPnt( m_SurfVec[ s ] );
+                const vec3d &cp = surf_cp[ s ][ k ];
+                k++;
 
-                for ( int i = 0; i < GetMeshPtr()->m_TrimVec.size(); i++ )
+                for ( size_t m = 0; m < trims.size(); m++ )
                 {
                     // This seems convoluted, but it needs to be cumulative.
-                    if ( GetMeshPtr()->m_TrimVec[i].CullPtByTrimGroup( cp, m_SurfVec[s]->GetFeaSymmIndex(), trimtol ) )
+                    if ( GetMeshPtr()->m_TrimVec[ trims[m] ].CullPtByTrimGroup( cp, m_SurfVec[s]->GetFeaSymmIndex(), trimtol ) )
                     {
                         ( *t )->deleteFlag = true;
                         delSomeTris = true;
@@ -1320,20 +1386,26 @@ void FeaMeshMgrSingleton::CheckDuplicateSSIntersects()
     //  This is done to ensure no duplicate beam elements are created along the intersection curve. At this
     //  time, priority is given to the earlier SubSurface (lower index).
 
-    list< ISegChain* >::iterator c1;
-    list< ISegChain* >::iterator c2;
-    int c1_index = -1;
+    vector< ISegChain* > chains( m_ISegChainList.begin(), m_ISegChainList.end() );
 
-    for ( c1 = m_ISegChainList.begin(); c1 != m_ISegChainList.end(); ++c1 )
+    // The chains of each tessellation size, in list order.  Only chains of one size can match.
+    std::map< size_t, vector< int > > by_size;
+    for ( int i = 0; i < (int)chains.size(); i++ )
     {
-        c1_index++;
-        int c2_index = -1;
+        by_size[ chains[i]->m_TessVec.size() ].push_back( i );
+    }
+
+    for ( int c1_index = 0; c1_index < (int)chains.size(); c1_index++ )
+    {
+        ISegChain** c1 = &chains[ c1_index ];
 
         if ( !( *c1 )->m_BorderFlag && ( *c1 )->m_SSIntersectIndex >= 0 )
         {
-            for ( c2 = m_ISegChainList.begin(); c2 != m_ISegChainList.end(); ++c2 )
+            const vector< int > &same = by_size[ ( *c1 )->m_TessVec.size() ];
+            for ( size_t k = 0; k < same.size(); k++ )
             {
-                c2_index++;
+                int c2_index = same[k];
+                ISegChain** c2 = &chains[ c2_index ];
 
                 if ( !( *c2 )->m_BorderFlag && ( *c2 )->m_SSIntersectIndex >= 0 && c1_index != c2_index )
                 {
@@ -1370,6 +1442,19 @@ void FeaMeshMgrSingleton::CheckDuplicateSSIntersects()
             }
         }
     }
+}
+
+// The index of the subsurface carrying a mesh tag, or -1 when none does.
+static int SimpSubSurfIndexFromTag( const vector < SimpleSubSurface > &ssvec, int tag )
+{
+    for ( int i = 0; i < (int)ssvec.size(); i++ )
+    {
+        if ( ssvec[i].m_Tag == tag )
+        {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void FeaMeshMgrSingleton::BuildFeaMesh()
@@ -1577,8 +1662,13 @@ void FeaMeshMgrSingleton::BuildFeaMesh()
         }
     }
 
+    // Where each surface's faces start in all_face_vec.
+    vector < int > face_start( m_SurfVec.size() + 1 );
+
     for ( int s = 0; s < (int)m_SurfVec.size(); s++ )
     {
+        face_start[s] = (int)all_face_vec.size();
+
         vector < vec2d > uw_vec_curr = m_SurfVec[s]->GetMesh()->GetSimpUWPntVec();
         vector < vec3d > pnt_vec_curr = m_SurfVec[s]->GetMesh()->GetSimpPntVec();
         vector < SimpFace > face_vec_curr = m_SurfVec[ s ]->GetMesh()->GetSimpFaceVec();
@@ -1605,6 +1695,7 @@ void FeaMeshMgrSingleton::BuildFeaMesh()
             uw_surf_ind_vec.push_back( s );
         }
     }
+    face_start[ m_SurfVec.size() ] = (int)all_face_vec.size();
 
     if ( all_pnt_vec.size() == 0 )
     {
@@ -1661,24 +1752,11 @@ void FeaMeshMgrSingleton::BuildFeaMesh()
         }
     }
 
-    GetMeshPtr()->m_FeaElementVec.reserve( GetMeshPtr()->m_FeaElementVec.size() + all_face_vec.size() );
-    // Build FeaTris
     for ( int i = 0; i < (int)all_face_vec.size(); i++ )
     {
         vec3d pnt0 = node_vec[all_face_vec[i].ind0];
         vec3d pnt1 = node_vec[all_face_vec[i].ind1];
         vec3d pnt2 = node_vec[all_face_vec[i].ind2];
-
-        vec3d avg_pnt;
-        if ( all_face_vec[i].m_isQuad )
-        {
-            const vec3d& pnt3 = node_vec[all_face_vec[i].ind3];
-            avg_pnt = ( pnt0 + pnt1 + pnt2 + pnt3 ) / 4.0;
-        }
-        else
-        {
-            avg_pnt = ( pnt0 + pnt1 + pnt2 ) / 3.0;
-        }
 
         if ( all_face_vec[i].CheckDegen() )
         {
@@ -1704,110 +1782,33 @@ void FeaMeshMgrSingleton::BuildFeaMesh()
             }
             printf( "\n\n" );
         }
+    }
 
-        // Determine initial guess for uw near SimpTri center (uw points defining SimpTri can be from different surfaces after adjustments) 
-        vec2d uw_guess;
+    // Build FeaTris.  A face is projected onto its own surface, which only one thread may
+    // evaluate at a time, so the surfaces are taken side by side.
+    vector < FeaElement* > face_elem( all_face_vec.size(), nullptr );
+    int nsurf = (int)m_SurfVec.size();
+    RunStage( "Build FEA Elements", nsurf, [&]( int isurf )
+    {
+        for ( int i = face_start[isurf]; i < face_start[isurf + 1]; i++ )
+        {
+            face_elem[i] = BuildFeaShellElement( i, all_face_vec, tri_surf_ind_vec, node_vec, new_uw_vec, new_uw_surf_ind_vec, highorder );
+        }
+    } );
 
-        if ( tri_surf_ind_vec[i] == new_uw_surf_ind_vec[all_face_vec[i].ind0] )
+    GetMeshPtr()->m_FeaElementVec.reserve( GetMeshPtr()->m_FeaElementVec.size() + all_face_vec.size() );
+    for ( int i = 0; i < (int)all_face_vec.size(); i++ )
+    {
+        if ( all_face_vec[i].m_isQuad )
         {
-            uw_guess = new_uw_vec[all_face_vec[i].ind0];
-        }
-        else if ( tri_surf_ind_vec[i] == new_uw_surf_ind_vec[all_face_vec[i].ind1] )
-        {
-            uw_guess = new_uw_vec[all_face_vec[i].ind1];
-        }
-        else if ( tri_surf_ind_vec[i] == new_uw_surf_ind_vec[all_face_vec[i].ind2] )
-        {
-            uw_guess = new_uw_vec[all_face_vec[i].ind2];
-        }
-        else if ( all_face_vec[i].m_isQuad && tri_surf_ind_vec[i] == new_uw_surf_ind_vec[all_face_vec[i].ind3] )
-        {
-            uw_guess = new_uw_vec[all_face_vec[i].ind3];
-        }
-        else
-        {
-            uw_guess.set_x( m_SurfVec[tri_surf_ind_vec[i]]->GetSurfCore()->GetMidU() );
-            uw_guess.set_y( m_SurfVec[tri_surf_ind_vec[i]]->GetSurfCore()->GetMidW() );
-        }
-
-        FeaElement* elem = nullptr;
-        if( all_face_vec[i].m_isQuad )
-        {
-            elem = new FeaQuad;
-            ((FeaQuad*)elem)->Create( node_vec[all_face_vec[i].ind0], node_vec[all_face_vec[i].ind1], node_vec[all_face_vec[i].ind2], node_vec[all_face_vec[i].ind3], highorder );
             GetMeshPtr()->m_NumQuads++;
         }
         else
         {
-            elem = new FeaTri;
-            ((FeaTri*)elem)->Create( node_vec[all_face_vec[i].ind0], node_vec[all_face_vec[i].ind1], node_vec[all_face_vec[i].ind2], highorder );
             GetMeshPtr()->m_NumTris++;
         }
-        elem->SetFeaPartIndex( m_SurfVec[tri_surf_ind_vec[i]]->GetFeaPartIndex() );
-        elem->SetFeaPartSurfNum( m_SurfVec[tri_surf_ind_vec[i]]->GetFeaPartSurfNum() );
-        elem->SetReason( all_face_vec[i].m_reason );
 
-        vec2d closest_uw = m_SurfVec[tri_surf_ind_vec[i]]->ClosestUW( avg_pnt, uw_guess[0], uw_guess[1] );
-
-        // Determine tangent u-direction for orientation vector at tri midpoint
-        vec3d orient_vec = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaElementOrientation( closest_uw[0], closest_uw[1] );
-
-        // Check for subsurface:
-        if ( all_face_vec[i].m_Tags.size() == 2 )
-        {
-            // First index of m_Tags is the parent surface. Second index is subsurface index which begins 
-            //  from the last FeaPart surface index (FeaFixPoints are not tagged; they are not surfaces)
-            // Tag numbering offset is established in CfdMeshMgrSingleton::SetSimpSubSurfTags() which is called from
-            // CfdMeshMgrSingleton::SubTagTris().  The offset is based on the number of surfaces encountered, typically
-            // one per FeaPart.  However, FixPoints and Trim Parts don't have surfaces associated with them.
-            int ssindex = all_face_vec[i].m_Tags[1] - ( GetMeshPtr()->m_NumFeaParts - GetMeshPtr()->m_NumFeaFixPoints - GetMeshPtr()->m_NumFeaTrimParts ) - 1;
-
-            if ( ssindex <= m_SimpleSubSurfaceVec.size() )
-            {
-                elem->SetFeaSSIndex( ssindex );
-
-                int type = m_SimpleSubSurfaceVec[ssindex].GetFeaOrientationType();
-                vector < vec3d > ovec = m_SimpleSubSurfaceVec[ssindex].GetFeaOrientationVec();
-                int surf_num = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaPartSurfNum();
-                const vec3d& defaultorientation = ovec[ surf_num ];
-                orient_vec = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaElementOrientation( closest_uw[0], closest_uw[1], type, defaultorientation );
-            }
-            if ( false ) // else
-            {
-                printf( "Error:  Failed to match subsurface for element properties.\n" );
-            }
-        }
-        else if ( all_face_vec[i].m_Tags.size() > 2 )
-        {
-            // Give priority to first tagged subsurface in the event of overlap.  Potential to do something more sophisticated later.
-            int ssindex = all_face_vec[i].m_Tags[1] - ( GetMeshPtr()->m_NumFeaParts - GetMeshPtr()->m_NumFeaFixPoints - GetMeshPtr()->m_NumFeaTrimParts ) - 1;
-
-            if ( ssindex <= m_SimpleSubSurfaceVec.size() )
-            {
-                elem->SetFeaSSIndex( ssindex );
-
-                int type = m_SimpleSubSurfaceVec[ssindex].GetFeaOrientationType();
-                vector < vec3d > ovec = m_SimpleSubSurfaceVec[ssindex].GetFeaOrientationVec();
-                int surf_num = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaPartSurfNum();
-                const vec3d& defaultorientation = ovec[ surf_num ];
-                orient_vec = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaElementOrientation( closest_uw[0], closest_uw[1], type, defaultorientation );
-            }
-            if ( false ) // else
-            {
-                printf( "Error:  Failed to match subsurface for element properties.\n" );
-            }
-        }
-
-        // Project orientation vector into plane of element.  Will be trivial for u-direction orientation, but
-        // should allow NASTRAN and CalculiX equivalence for other cases.
-        vec3d norm = m_SurfVec[tri_surf_ind_vec[i]]->GetSurfCore()->CompNorm( closest_uw[0], closest_uw[1] );
-        orient_vec = proj_vec_to_plane( orient_vec, norm );
-
-        orient_vec.normalize();
-
-        elem->m_Orientation = orient_vec;
-
-        GetMeshPtr()->m_FeaElementVec.push_back( elem );
+        GetMeshPtr()->m_FeaElementVec.push_back( face_elem[i] );
         GetMeshPtr()->m_NumEls++;
     }
 
@@ -1829,6 +1830,124 @@ void FeaMeshMgrSingleton::BuildFeaMesh()
             }
         }
     }
+}
+
+// The shell element for face i of all_face_vec, which lies on surface tri_surf_ind_vec[i].
+FeaElement* FeaMeshMgrSingleton::BuildFeaShellElement( int i, vector < SimpFace > &all_face_vec, const vector < int > &tri_surf_ind_vec, vector < vec3d > &node_vec, const vector < vec2d > &new_uw_vec, const vector < int > &new_uw_surf_ind_vec, bool highorder )
+{
+    vec3d pnt0 = node_vec[all_face_vec[i].ind0];
+    vec3d pnt1 = node_vec[all_face_vec[i].ind1];
+    vec3d pnt2 = node_vec[all_face_vec[i].ind2];
+
+    vec3d avg_pnt;
+    if ( all_face_vec[i].m_isQuad )
+    {
+        const vec3d& pnt3 = node_vec[all_face_vec[i].ind3];
+        avg_pnt = ( pnt0 + pnt1 + pnt2 + pnt3 ) / 4.0;
+    }
+    else
+    {
+        avg_pnt = ( pnt0 + pnt1 + pnt2 ) / 3.0;
+    }
+
+    // Determine initial guess for uw near SimpTri center (uw points defining SimpTri can be from different surfaces after adjustments) 
+    vec2d uw_guess;
+
+    if ( tri_surf_ind_vec[i] == new_uw_surf_ind_vec[all_face_vec[i].ind0] )
+    {
+        uw_guess = new_uw_vec[all_face_vec[i].ind0];
+    }
+    else if ( tri_surf_ind_vec[i] == new_uw_surf_ind_vec[all_face_vec[i].ind1] )
+    {
+        uw_guess = new_uw_vec[all_face_vec[i].ind1];
+    }
+    else if ( tri_surf_ind_vec[i] == new_uw_surf_ind_vec[all_face_vec[i].ind2] )
+    {
+        uw_guess = new_uw_vec[all_face_vec[i].ind2];
+    }
+    else if ( all_face_vec[i].m_isQuad && tri_surf_ind_vec[i] == new_uw_surf_ind_vec[all_face_vec[i].ind3] )
+    {
+        uw_guess = new_uw_vec[all_face_vec[i].ind3];
+    }
+    else
+    {
+        uw_guess.set_x( m_SurfVec[tri_surf_ind_vec[i]]->GetSurfCore()->GetMidU() );
+        uw_guess.set_y( m_SurfVec[tri_surf_ind_vec[i]]->GetSurfCore()->GetMidW() );
+    }
+
+    FeaElement* elem = nullptr;
+    if( all_face_vec[i].m_isQuad )
+    {
+        elem = new FeaQuad;
+        ((FeaQuad*)elem)->Create( node_vec[all_face_vec[i].ind0], node_vec[all_face_vec[i].ind1], node_vec[all_face_vec[i].ind2], node_vec[all_face_vec[i].ind3], highorder );
+    }
+    else
+    {
+        elem = new FeaTri;
+        ((FeaTri*)elem)->Create( node_vec[all_face_vec[i].ind0], node_vec[all_face_vec[i].ind1], node_vec[all_face_vec[i].ind2], highorder );
+    }
+    elem->SetFeaPartIndex( m_SurfVec[tri_surf_ind_vec[i]]->GetFeaPartIndex() );
+    elem->SetFeaPartSurfNum( m_SurfVec[tri_surf_ind_vec[i]]->GetFeaPartSurfNum() );
+    elem->SetReason( all_face_vec[i].m_reason );
+
+    vec2d closest_uw = m_SurfVec[tri_surf_ind_vec[i]]->ClosestUW( avg_pnt, uw_guess[0], uw_guess[1] );
+
+    // Determine tangent u-direction for orientation vector at tri midpoint
+    vec3d orient_vec = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaElementOrientation( closest_uw[0], closest_uw[1] );
+
+    // Check for subsurface:
+    if ( all_face_vec[i].m_Tags.size() == 2 )
+    {
+        // First index of m_Tags is the parent surface.  Second index is the tag of a subsurface, set in
+        // CfdMeshMgrSingleton::SetSimpSubSurfTags().
+        int ssindex = SimpSubSurfIndexFromTag( m_SimpleSubSurfaceVec, all_face_vec[i].m_Tags[1] );
+
+        if ( ssindex >= 0 )
+        {
+            elem->SetFeaSSIndex( ssindex );
+
+            int type = m_SimpleSubSurfaceVec[ssindex].GetFeaOrientationType();
+            vector < vec3d > ovec = m_SimpleSubSurfaceVec[ssindex].GetFeaOrientationVec();
+            int surf_num = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaPartSurfNum();
+            const vec3d& defaultorientation = ovec[ surf_num ];
+            orient_vec = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaElementOrientation( closest_uw[0], closest_uw[1], type, defaultorientation );
+        }
+        if ( false ) // else
+        {
+            printf( "Error:  Failed to match subsurface for element properties.\n" );
+        }
+    }
+    else if ( all_face_vec[i].m_Tags.size() > 2 )
+    {
+        // Give priority to first tagged subsurface in the event of overlap.  Potential to do something more sophisticated later.
+        int ssindex = SimpSubSurfIndexFromTag( m_SimpleSubSurfaceVec, all_face_vec[i].m_Tags[1] );
+
+        if ( ssindex >= 0 )
+        {
+            elem->SetFeaSSIndex( ssindex );
+
+            int type = m_SimpleSubSurfaceVec[ssindex].GetFeaOrientationType();
+            vector < vec3d > ovec = m_SimpleSubSurfaceVec[ssindex].GetFeaOrientationVec();
+            int surf_num = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaPartSurfNum();
+            const vec3d& defaultorientation = ovec[ surf_num ];
+            orient_vec = m_SurfVec[tri_surf_ind_vec[i]]->GetFeaElementOrientation( closest_uw[0], closest_uw[1], type, defaultorientation );
+        }
+        if ( false ) // else
+        {
+            printf( "Error:  Failed to match subsurface for element properties.\n" );
+        }
+    }
+
+    // Project orientation vector into plane of element.  Will be trivial for u-direction orientation, but
+    // should allow NASTRAN and CalculiX equivalence for other cases.
+    vec3d norm = m_SurfVec[tri_surf_ind_vec[i]]->GetSurfCore()->CompNorm( closest_uw[0], closest_uw[1] );
+    orient_vec = proj_vec_to_plane( orient_vec, norm );
+
+    orient_vec.normalize();
+
+    elem->m_Orientation = orient_vec;
+
+    return elem;
 }
 
 void FeaMeshMgrSingleton::SetFixPointSurfaceNodes()
@@ -2578,6 +2697,11 @@ void FeaMeshMgrSingleton::MergeFeaPartSSEdgeOverlap()
                 // piece is clipped and converted on its own.
                 vector < UWRegion > regvec = surfB->GetUWRegionsOrWhole();
 
+                // The part surface lies inside its bounding box, so a skin point farther than
+                // this from the box cannot pass the distance test below.
+                BndBox part_box = surfA->GetBBox();
+                part_box.Expand( 2.0 * sqrt( FLT_EPSILON ) );
+
                 // Split SubSurfs
                 for ( int ss = 0; ss < (int)ss_vec.size(); ss++ )
                 {
@@ -2643,6 +2767,11 @@ void FeaMeshMgrSingleton::MergeFeaPartSSEdgeOverlap()
                             // Project SubSurface edge point on FeaPart surface
                             vec3d skin_pnt0 = surfB->CompPnt( uw_pnt0[0], uw_pnt0[1] );
                             vec3d skin_pnt1 = surfB->CompPnt( uw_pnt1[0], uw_pnt1[1] );
+
+                            if ( !part_box.CheckPnt( skin_pnt0 ) || !part_box.CheckPnt( skin_pnt1 ) )
+                            {
+                                continue;
+                            }
 
                             double part_U0, part_W0, part_U1, part_W1;
                             surfA->GetSurfCore()->FindNearest( part_U0, part_W0, skin_pnt0 );
@@ -2785,6 +2914,39 @@ void FeaMeshMgrSingleton::RemoveSubSurfFeaTris()
     GetMeshPtr()->m_FeaElementVec = newFeaElementVec;
 }
 
+// The point cloud base index of each of element j's nodes, appended to node_base.  An element
+// loaded into the cloud has its nodes at elem_node_start[j] on, so each node's own base is the
+// one a lookup of its point finds: the nearest point is the node itself or one at the same
+// place, which is always in the same group.  An element added after the cloud was built, and
+// a node at a point that is not finite, is looked up.
+void FeaMeshMgrSingleton::ElementNodeBases( int j, int nelem_loaded, const vector < int > &elem_node_start, PntNodeCloud &pnCloud, vector < int > &node_base )
+{
+    if ( j < nelem_loaded )
+    {
+        for ( int n = elem_node_start[j]; n < elem_node_start[j + 1]; n++ )
+        {
+            const vec3d &p = GetMeshPtr()->m_FeaNodeVec[n]->m_Pnt;
+            if ( !std::isfinite( p.x() ) || !std::isfinite( p.y() ) || !std::isfinite( p.z() ) )
+            {
+                node_base.push_back( pnCloud.LookupPntBase( p ) );
+            }
+            else
+            {
+                node_base.push_back( pnCloud.GetNodeBaseIndex( n ) );
+            }
+        }
+    }
+    else
+    {
+        vector< FeaNode* > temp_nVec;
+        GetMeshPtr()->m_FeaElementVec[j]->LoadNodes( temp_nVec );
+        for ( size_t n = 0; n < temp_nVec.size(); n++ )
+        {
+            node_base.push_back( pnCloud.LookupPntBase( temp_nVec[n]->m_Pnt ) );
+        }
+    }
+}
+
 void FeaMeshMgrSingleton::TagFeaNodes()
 {
     if ( !GetMeshPtr() )
@@ -2804,10 +2966,15 @@ void FeaMeshMgrSingleton::TagFeaNodes()
         GetMeshPtr()->m_FeaNodeVec.push_back( GetMeshPtr()->m_FeaOffBodyFixPointNodeVec[j] );
     }
 
-    for ( int i = 0; i < (int)GetMeshPtr()->m_FeaElementVec.size(); i++ )
+    // Where each element's nodes start in m_FeaNodeVec, which is also their place in the point cloud.
+    int nelem_loaded = (int)GetMeshPtr()->m_FeaElementVec.size();
+    vector < int > elem_node_start( nelem_loaded + 1 );
+    for ( int i = 0; i < nelem_loaded; i++ )
     {
+        elem_node_start[i] = (int)GetMeshPtr()->m_FeaNodeVec.size();
         GetMeshPtr()->m_FeaElementVec[i]->LoadNodes( GetMeshPtr()->m_FeaNodeVec );
     }
+    elem_node_start[ nelem_loaded ] = (int)GetMeshPtr()->m_FeaNodeVec.size();
 
     vector< vec3d > allPntVec;
     allPntVec.reserve( GetMeshPtr()->m_FeaNodeVec.size() );
@@ -2884,8 +3051,15 @@ void FeaMeshMgrSingleton::TagFeaNodes()
             // Create mass element if mass flag is true
             if ( fxpt.m_PtMassFlag )
             {
+                // The mass sits on the fixed point's gridpoint, which is written at m_Pnt.
+                vec3d mass_pnt = fxpt.m_Pnt[ k ];
+                if ( ind >= 0 )
+                {
+                    mass_pnt = GetMeshPtr()->m_FeaNodeVec[ ind ]->m_Pnt;
+                }
+
                 FeaPointMass *mass = new FeaPointMass;
-                mass->Create( GetMeshPtr()->m_FeaNodeVec[ ind ]->m_Pnt, fxpt.m_PtMass );
+                mass->Create( mass_pnt, fxpt.m_PtMass );
                 mass->SetFeaPartIndex( fxpt.m_FeaPartIndex );
 
                 mass->m_Corners[ 0 ]->m_Index = ifixpt + 1;
@@ -2898,22 +3072,26 @@ void FeaMeshMgrSingleton::TagFeaNodes()
         }
     }
 
+    vector < vector < int > > part_elems, ss_elems;
+    GetMeshPtr()->IndexElements( part_elems, ss_elems );
+
     // Tag FeaPart Nodes with FeaPart Index
     for ( unsigned int i = 0; i < GetMeshPtr()->m_NumFeaParts; i++ )
     {
-        vector< FeaNode* > temp_nVec;
+        vector < int > node_base;
 
-        for ( int j = 0; j < GetMeshPtr()->m_FeaElementVec.size(); j++ )
+        for ( size_t k = 0; k < part_elems[i].size(); k++ )
         {
+            int j = part_elems[i][k];
             if ( GetMeshPtr()->m_FeaElementVec[j]->GetFeaPartIndex() == i && GetMeshPtr()->m_FeaElementVec[j]->GetFeaSSIndex() < 0 )
             {
-                GetMeshPtr()->m_FeaElementVec[j]->LoadNodes( temp_nVec );
+                ElementNodeBases( j, nelem_loaded, elem_node_start, pnCloud, node_base );
             }
         }
 
-        for ( int j = 0; j < (int)temp_nVec.size(); j++ )
+        for ( int j = 0; j < (int)node_base.size(); j++ )
         {
-            int ind = pnCloud.LookupPntBase( temp_nVec[j]->m_Pnt );
+            int ind = node_base[j];
 
             if ( ind >= 0 )
             {
@@ -2929,19 +3107,20 @@ void FeaMeshMgrSingleton::TagFeaNodes()
     // Tag FeaSubSurface Nodes with FeaSubSurface Index, beginning at the last FeaPart index (GetMeshPtr()->m_NumFeaParts)
     for ( unsigned int i = 0; i < GetMeshPtr()->m_NumFeaSubSurfs; i++ )
     {
-        vector< FeaNode* > temp_nVec;
+        vector < int > node_base;
 
-        for ( int j = 0; j < GetMeshPtr()->m_FeaElementVec.size(); j++ )
+        for ( size_t k = 0; k < ss_elems[i].size(); k++ )
         {
+            int j = ss_elems[i][k];
             if ( GetMeshPtr()->m_FeaElementVec[j]->GetFeaSSIndex() == i )
             {
-                GetMeshPtr()->m_FeaElementVec[j]->LoadNodes( temp_nVec );
+                ElementNodeBases( j, nelem_loaded, elem_node_start, pnCloud, node_base );
             }
         }
 
-        for ( int j = 0; j < (int)temp_nVec.size(); j++ )
+        for ( int j = 0; j < (int)node_base.size(); j++ )
         {
-            int ind = pnCloud.LookupPntBase( temp_nVec[j]->m_Pnt );
+            int ind = node_base[j];
 
             if ( ind >= 0 )
             {
@@ -2990,8 +3169,11 @@ void FeaMeshMgrSingleton::TagFeaNodes()
                 }
                 results_vec = keep_vec;
 
-                // Trim to six nearest points
-                results_vec.resize( 6 );
+                // Trim to the nspider nearest points
+                if ( (int)results_vec.size() > nspider )
+                {
+                    results_vec.resize( nspider );
+                }
 
                 // Store spider points.
                 GetMeshPtr()->m_FixPntVec[ j ].m_SpiderIndex[ k ] = results_vec;
@@ -3245,6 +3427,15 @@ void FeaMeshMgrSingleton::ExportAssemblyMesh( const string &assembly_id )
     // Transfer common property and material data to FeaMeshMgr.
     TransferPropMatData();
 
+    for ( int i = 0; i < idvec.size(); i++ )
+    {
+        FeaMesh* mesh = GetMeshPtr( idvec[i] );
+        if ( mesh && !IndexAndCheckPropMat( mesh ) )
+        {
+            return;
+        }
+    }
+
     // Compute and store offsets.
     int noffset = 0;
     int eoffset = 0;
@@ -3297,24 +3488,27 @@ void FeaMeshMgrSingleton::ExportAssemblyMesh( const string &assembly_id )
     }
     connoffset = noffset;
 
+    // Each file's bar counts about the structures' nodes and elements, or their elements for STL.
+    int nitem = ( int )( feacount.m_NumNodes + feacount.m_NumEls );
+
     if ( m_AssemblySettings.GetExportFileFlag( vsp::FEA_CALCULIX_FILE_NAME ) )
     {
-        WriteAssemblyCalculix( assembly_id, feacount );
+        WriteFileStage( "Write Calculix", nitem, [&]() { WriteAssemblyCalculix( assembly_id, feacount ); } );
     }
 
     if ( m_AssemblySettings.GetExportFileFlag( vsp::FEA_NASTRAN_FILE_NAME ) )
     {
-        WriteAssemblyNASTRAN( assembly_id, feacount, connoffset );
+        WriteFileStage( "Write NASTRAN", nitem, [&]() { WriteAssemblyNASTRAN( assembly_id, feacount, connoffset ); } );
     }
 
     if ( m_AssemblySettings.GetExportFileFlag( vsp::FEA_STL_FILE_NAME ) )
     {
-        WriteAssemblySTL( assembly_id );
+        WriteFileStage( "Write STL", ( int )feacount.m_NumEls, [&]() { WriteAssemblySTL( assembly_id ); } );
     }
 
     if ( m_AssemblySettings.GetExportFileFlag( vsp::FEA_GMSH_FILE_NAME ) )
     {
-        WriteAssemblyGmsh( assembly_id );
+        WriteFileStage( "Write GMSH", nitem, [&]() { WriteAssemblyGmsh( assembly_id ); } );
     }
 
     if ( m_AssemblySettings.GetExportFileFlag( vsp::FEA_MASS_FILE_NAME ) )

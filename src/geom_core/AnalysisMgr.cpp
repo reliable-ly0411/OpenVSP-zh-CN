@@ -172,9 +172,25 @@ string AnalysisMgrSingleton::ExecAnalysis( const string & analysis )
 
     std::clock_t start = std::clock();
 
+    // An input the analysis looks for but never defined is one a caller cannot set, and that
+    // the analysis silently goes without.
+    analysis_ptr->m_Inputs.StartMissedNames();
+
     string res = analysis_ptr->Execute();
 
+    vector < string > missed = analysis_ptr->m_Inputs.StopMissedNames();
+
     m_AnalysisExecutionDuration = ( std::clock() - start ) / (double)CLOCKS_PER_SEC;
+
+    for ( int i = 0; i < ( int )missed.size(); i++ )
+    {
+        string msg = "Error: analysis " + analysis + " looked up input " + missed[i] + ", which it does not define.\n";
+        MessageData errMsgData;
+        errMsgData.m_String = "Error";
+        errMsgData.m_IntVec.push_back( vsp::VSP_UNDEFINED_ANALYSIS_INPUT );
+        errMsgData.m_StringVec.push_back( msg );
+        MessageMgr::getInstance().SendAll( errMsgData );
+    }
 
     Results* res_ptr = ResultsMgr.FindResultsPtr( res );
     if ( res_ptr )
@@ -1178,8 +1194,19 @@ string EmintonLordAnalysis::Execute()
             area_vec = nvd->GetDoubleData();
         }
 
+        // The integral needs an area at each of at least three stations.
         int n = x_vec.size();
-        vector < double > coeff(n-2);
+        if ( n < 3 || area_vec.size() != x_vec.size() )
+        {
+            MessageData errMsgData;
+            errMsgData.m_String = "Error";
+            errMsgData.m_IntVec.push_back( vsp::VSP_INVALID_INPUT_VAL );
+            errMsgData.m_StringVec.push_back( "Error: EmintonLord needs X_vec and Area_vec of the same length, at least 3.\n" );
+            MessageMgr::getInstance().SendAll( errMsgData );
+            return string();
+        }
+
+        vector < double > coeff( n - 2 );
 
         double Donq = WaveDragMgr.WaveDrag( x_vec, area_vec, coeff );
 
@@ -1363,7 +1390,7 @@ void ParasiteDragFullAnalysis::SetDefaults()
 
         // Friction Coefficient Eqn Choice
         m_Inputs.Add( new NameValData( "LamCfEqnChoice",    ParasiteDragMgr.m_LamCfEqnType.Get(), "Laminar skin friction coefficient equation enum." ) );
-        m_Inputs.Add( new NameValData( "TurbCfEqnChoice",   ParasiteDragMgr.m_TurbCfEqnType.Get(), "Trubulent skin friction coefficient equation enum." ) );
+        m_Inputs.Add( new NameValData( "TurbCfEqnChoice",   ParasiteDragMgr.m_TurbCfEqnType.Get(), "Turbulent skin friction coefficient equation enum." ) );
 
         // Unit Choice
         m_Inputs.Add( new NameValData( "LengthUnit",        ParasiteDragMgr.m_LengthUnit.Get(), "Model length unit enum." ) );
@@ -1383,9 +1410,9 @@ void ParasiteDragFullAnalysis::SetDefaults()
         m_Inputs.Add( new NameValData( "Temperature",          ParasiteDragMgr.m_Temp.Get(), "Temperature." ) );
         m_Inputs.Add( new NameValData( "Pressure",             ParasiteDragMgr.m_Pres.Get(), "Pressure." ) );
         m_Inputs.Add( new NameValData( "Density",              ParasiteDragMgr.m_Rho.Get(), "Density." ) );
-        m_Inputs.Add( new NameValData( "DynaVisc",           ParasiteDragMgr.m_DynaVisc.Get(), "Dynamic viscoscity" ) );
+        m_Inputs.Add( new NameValData( "DynaVisc",           ParasiteDragMgr.m_DynaVisc.Get(), "Dynamic viscosity" ) );
         m_Inputs.Add( new NameValData( "SpecificHeatRatio",  ParasiteDragMgr.m_SpecificHeatRatio.Get(), "Ratio of specific heats" ) );
-        m_Inputs.Add( new NameValData( "KineVisc",           ParasiteDragMgr.m_KineVisc.Get(), "Kinematic viscoscity" ) );
+        m_Inputs.Add( new NameValData( "KineVisc",           ParasiteDragMgr.m_KineVisc.Get(), "Kinematic viscosity" ) );
         m_Inputs.Add( new NameValData( "Mach",               ParasiteDragMgr.m_Mach.Get(), "Mach." ) );
         m_Inputs.Add( new NameValData( "Re_L",               ParasiteDragMgr.m_ReqL.Get(), "Reynolds number per unit length." ) );
 
@@ -2064,6 +2091,11 @@ void VSPAEROComputeGeometryAnalysis::SetDefaults()
         m_Inputs.Add( new NameValData( "CullFrac", VSPAEROMgr.m_CullFrac.Get(), "Area fraction of thin orphan regions to cull." ) );
         m_Inputs.Add( new NameValData( "CullFracFlag", VSPAEROMgr.m_CullFracFlag.Get(), "Flag to enable orphan culling." ) );
         m_Inputs.Add( new NameValData( "FindBodyWakesFlag", VSPAEROMgr.m_FindBodyWakesFlag.Get(), "Flag to control whether body wakes are detected." ) );
+
+        m_Inputs.Add( new NameValData( "MergeDegenTriRegionsFlag", VSPAEROMgr.m_MergeDegenTriRegionsFlag.Get(), "Flag to control whether merge degenerate triangle regions." ) );
+
+        m_Inputs.Add( new NameValData( "CleanIntersectionsFlag", VSPAEROMgr.m_CleanIntersectionsFlag.Get(), "Flag to clean intersections." ) );
+        m_Inputs.Add( new NameValData( "CleanIntersectionsLenRatio", VSPAEROMgr.m_CleanIntersectionsLenRatio.Get(), "Length ratio of intersection segments to clean." ) );
     }
     else
     {
@@ -2152,6 +2184,27 @@ string VSPAEROComputeGeometryAnalysis::Execute()
             VSPAEROMgr.m_FindBodyWakesFlag.Set( nvd->GetInt( 0 ) );
         }
 
+        bool mergeDegenTriRegionsFlagOrig = VSPAEROMgr.m_MergeDegenTriRegionsFlag.Get();
+        nvd = m_Inputs.FindPtr( "MergeDegenTriRegionsFlag", 0 );
+        if ( nvd )
+        {
+            VSPAEROMgr.m_MergeDegenTriRegionsFlag.Set( nvd->GetInt( 0 ) );
+        }
+
+        bool cleanIntersectionsFlagOrig = VSPAEROMgr.m_CleanIntersectionsFlag.Get();
+        nvd = m_Inputs.FindPtr( "CleanIntersectionsFlag", 0 );
+        if ( nvd )
+        {
+            VSPAEROMgr.m_CleanIntersectionsFlag.Set( nvd->GetInt( 0 ) );
+        }
+
+        double cleanIntersectionsLenRatioOrig = VSPAEROMgr.m_CleanIntersectionsLenRatio.Get();
+        nvd = m_Inputs.FindPtr( "CleanIntersectionsLenRatio", 0 );
+        if ( nvd )
+        {
+            VSPAEROMgr.m_CleanIntersectionsLenRatio.Set( nvd->GetDouble(0) );
+        }
+
         //==== Execute Analysis ====//
         resId = VSPAEROMgr.ComputeGeometry();
 
@@ -2166,6 +2219,9 @@ string VSPAEROComputeGeometryAnalysis::Execute()
         VSPAEROMgr.m_CullFrac.Set( cullfracOrig );
         VSPAEROMgr.m_CullFracFlag.Set( cullfracflagOrig );
         VSPAEROMgr.m_FindBodyWakesFlag.Set( findbodywakesflagOrig );
+        VSPAEROMgr.m_MergeDegenTriRegionsFlag.Set( mergeDegenTriRegionsFlagOrig );
+        VSPAEROMgr.m_CleanIntersectionsFlag.Set( cleanIntersectionsFlagOrig );
+        VSPAEROMgr.m_CleanIntersectionsLenRatio.Set( cleanIntersectionsLenRatioOrig );
     }
 
     return resId;

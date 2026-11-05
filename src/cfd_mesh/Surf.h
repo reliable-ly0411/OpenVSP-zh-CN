@@ -76,12 +76,19 @@ public:
 
     double TargetLen( double u, double w, double gap, double radfrac, int &reason, vec3d &pnt );
     void BuildTargetMap( vector< MapSource* > &sources, int sid );
+    void LimitTargetMapToWidth();
     int GetTargetMapSize() const;
     void WalkMap( int istart, int jstart, int kstart );
     void WalkMap( int istart, int jstart );
 
     void LimitTargetMap();
-    void LimitTargetMap( const MSCloud &es_cloud, const MSTree &es_tree, double minmap );
+    // Rows of the map whose limits from the other surfaces' sources are to be found.
+    int StartTargetMapLimits();
+    // The limits on map row i from the other surfaces' sources, as the map now stands.  Rows may
+    // be found side by side.
+    void FindTargetMapLimits( const MSBoundTree &ms_tree, double tmin, int sid, int i );
+    // Limits the map by the other surfaces' sources, from the limits found.
+    void LimitTargetMap( const MSBoundTree &ms_tree, double tmin, int sid );
     double InterpTargetMap( double u, double w, int &reason );
     void UWtoTargetMapij( double u, double w, int &i, int &j, double &fraci, double &fracj );
     void UWtoTargetMapij( double u, double w, int &i, int &j );
@@ -99,10 +106,14 @@ public:
     // The UW of a point to split an edge at: the nearest point on the surface that is
     // equidistant from the edge's two ends.  See the definition for why the midpoint will
     // not do.
-    vec2d SplitUW( const vec3d & p0, const vec3d & p1, const vec2d & uw0, const vec2d & uw1 ) const;
+    // Also gives the point at the returned UW, which the search has already evaluated.
+    vec2d SplitUW( const vec3d & p0, const vec3d & p1, const vec2d & uw0, const vec2d & uw1, vec3d &pnt ) const;
+
+    // The point equidistant from the two ends along the straight UW line between them.
+    vec2d SplitUWOnLine( const vec3d & p0, const vec3d & p1, const vec2d & uw0, const vec2d & uw1 ) const;
     double SplitSearch( const vec3d & p0, const vec3d & p1,
                         double ulo, double uhi, double wlo, double whi,
-                        double &u, double &w ) const;
+                        double &u, double &w, vec3d &pnt ) const;
 
     void AddBorderCurve( double ua, double wa, double ub, double wb );
     void FindBorderCurves();
@@ -210,7 +221,36 @@ public:
     void IntersectLineSeg( vec3d & p0, vec3d & p1, vector< double > & t_vals );
 
     bool BorderCurveOnSurface( Surf* surfPtr, SurfaceIntersectionSingleton *MeshMgr );
+    bool CurveOnSurface( Bezier_curve &crv, double tol );
+    bool OnOwnBorder( const Bezier_curve &crv, double tol );
     void PlaneBorderCurveIntersect( Surf* surfPtr, SCurve* brdPtr, SurfaceIntersectionSingleton *MeshMgr );
+
+    // Flat where every control point lies within reltol times the surface's size of one plane.
+    // The plane's normal points out of the body, as the mesh's faces do.
+    void FitPlane( double reltol );
+    bool GetPlaneFlag() const
+    {
+        return m_PlaneFlag;
+    }
+    const vec3d& GetPlaneNorm() const
+    {
+        return m_PlaneNorm;
+    }
+
+    // Both flat, in one plane to within tol, facing either way
+    bool SamePlane( const Surf* s, double tol ) const;
+
+    // The flat surfaces of other components that lie in this one's plane and meet it
+    void AddCoplanarSurf( Surf* s )
+    {
+        m_CoplanarSurfs.push_back( s );
+    }
+    const vector< Surf* >& GetCoplanarSurfs() const
+    {
+        return m_CoplanarSurfs;
+    }
+    bool CoplanarWith( const Surf* s ) const;
+    bool TouchesAlongCoplanarBorder( Surf* plane );
 
     BndBox& GetBBox()
     {
@@ -248,6 +288,9 @@ public:
 
     bool BorderMatch( Surf* otherSurf );
     bool BorderMatch( int iborder, Surf* otherSurf );
+
+    // Whether every point lies on a border of this surface, within tol
+    bool PntsOnBorder( const vector< vec3d > &pnts, double tol ) const;
 
     void SetWakeFlag( bool flag )
     {
@@ -451,6 +494,22 @@ public:
         return m_IgnoreSurfFlag;
     }
 
+    // The face of another body this one lies on, the one face of a positive body and the
+    // other of a negative body, and whether the two bodies lie on the same side of the faces.
+    void SetCoincidentSurf( Surf* s, bool overlap )
+    {
+        m_CoincidentSurf = s;
+        m_CoincidentOverlap = overlap;
+    }
+    Surf* GetCoincidentSurf() const
+    {
+        return m_CoincidentSurf;
+    }
+    bool GetCoincidentOverlap() const
+    {
+        return m_CoincidentOverlap;
+    }
+
     void SetPlanarUWAspect( double uwAspect )
     {
         m_PlanarUWAspect = uwAspect;
@@ -488,6 +547,9 @@ protected:
 
     bool m_IgnoreSurfFlag; // Flag to ignore the surface after intersected
 
+    Surf* m_CoincidentSurf;
+    bool m_CoincidentOverlap;
+
     vector < double > m_UTess;
     vector < double > m_WTess;
 
@@ -501,6 +563,11 @@ protected:
     int m_CopyIndex;
 
     double m_PlanarUWAspect;
+
+    bool m_PlaneFlag;
+    vec3d m_PlaneNorm;
+    vec3d m_PlanePnt;
+    vector< Surf* > m_CoplanarSurfs;
 
     // Whether BuildDistMap has run since CleanupDistMap.
     bool m_DistMapBuilt;
@@ -529,6 +596,13 @@ protected:
 
     // Cells waiting to be looked at by WalkMap, kept so each walk does not allocate.
     vector < pair < int, int > > m_WalkStack;
+
+    // Each map point's strength when its limit was found, the limit, its reason, and the squared
+    // distance of the source that gives it.
+    vector< double > m_LimStart;
+    vector< double > m_LimStr;
+    vector< int > m_LimReason;
+    vector< double > m_LimR2;
 
     void UtoIndexFrac( const double &u, int &indx, double &frac );
 

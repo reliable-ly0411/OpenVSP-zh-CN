@@ -133,6 +133,8 @@ public:
         return 0;
     }
     virtual int  ReadSTL( const char* file_name );
+    virtual int  BinSTLAttSize( FILE* file_id );
+    virtual void ReadBinSTLBlock( FILE* file_id, TMesh* tMesh, int attSize );
     virtual int  ReadXSec( const char* file_name );
     virtual int  ReadNascart( const char* file_name );
     virtual int  ReadTriFile( const char* file_name );
@@ -155,7 +157,11 @@ public:
     virtual void CreateGeomResults( Results* res );
 
     virtual void CreatePtCloudGeom();
-    virtual string CreateNGonMeshGeom( bool cullfracflag = false, double cullfrac = 0.03, int n_ref = 0, bool FindBodyWakes = false );
+    virtual string CreateNGonMeshGeom( bool cullfracflag = false, double cullfrac = 0.03,
+                                       int n_ref = 0,
+                                       bool FindBodyWakes = false,
+                                       bool mergeDegenTriRegionsFlag = false,
+                                       bool cleanIntersectionsFlag = false, double lenRatio = 0.1 );
 
     virtual void ApplyScale( double currentScale );
 

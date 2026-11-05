@@ -38,6 +38,8 @@ public:
 
 protected:
 
+    virtual void PrepareDump();
+
     GroupLayout m_DesignLayout;
     GroupLayout m_BogieLayout;
     GroupLayout m_TireLayout;
@@ -87,8 +89,6 @@ protected:
     TriggerButton m_RemoveBogieButton;
     TriggerButton m_RemoveAllBogiesButton;
 
-    TriggerButton m_ShowAllBogiesButton;
-    TriggerButton m_HideAllBogiesButton;
 
     StringInput m_BogieNameInput;
 

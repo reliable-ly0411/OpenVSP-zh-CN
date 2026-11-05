@@ -15,7 +15,7 @@
 #include "StlHelper.h"
 
 //==== Constructor ====//
-AuxiliaryGeomScreen::AuxiliaryGeomScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Auxiliary" )
+AuxiliaryGeomScreen::AuxiliaryGeomScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Auxiliary", "Auxiliary.html" )
 {
     Fl_Group* design_tab = AddTab( "Design" );
     Fl_Group* design_group = AddSubGroup( design_tab, 5 );
@@ -65,6 +65,7 @@ AuxiliaryGeomScreen::AuxiliaryGeomScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 40
     m_RotorTipPathLayput.SetButtonWidth( m_RotorTipPathLayput.GetChoiceButtonWidth() );
     m_RotorTipPathLayput.AddButton( m_RTP_AutoDiamToggleButton, "Automatic Diameter" );
     m_RotorTipPathLayput.AddSlider( m_RTP_DiameterSlider, "Diameter", 1.0, "%5.4f" );
+    m_RotorTipPathLayput.AddButton( m_RTP_AutoFlapRadiusToggleButton, "Automatic r_flap/R" );
     m_RotorTipPathLayput.AddSlider( m_RTP_FlapRadiusFractSlider, "r_flap/R", 1.0, "%5.4f" );
     m_RotorTipPathLayput.AddSlider( m_RTP_ThetaThrustSlider, "Theta Thrust", 1.0, "%5.4f" );
     m_RotorTipPathLayput.AddSlider( m_RTP_ThetaAntiThrustSlider, "Theta Anti Thrust", 1.0, "%5.4f" );
@@ -109,7 +110,7 @@ AuxiliaryGeomScreen::AuxiliaryGeomScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 40
 
     m_FragmentLayout.AddYGap();
     m_FragmentLayout.AddDividerBox( "Spread Risk Angle" );
-    m_FragmentLayout.AddSlider( m_FragThetaThrustSlider, "Foreward", 10.0, "%5.4f" );
+    m_FragmentLayout.AddSlider( m_FragThetaThrustSlider, "Forward", 10.0, "%5.4f" );
     m_FragmentLayout.AddSlider( m_FragThetaAntiThrustSlider, "Aft", 10.0, "%5.4f" );
 
 
@@ -133,7 +134,7 @@ AuxiliaryGeomScreen::AuxiliaryGeomScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 40
 
     m_ThrownBladeLayout.AddYGap();
     m_ThrownBladeLayout.AddDividerBox( "Spread Risk Angle" );
-    m_ThrownBladeLayout.AddSlider( m_BladeThetaThrustSlider, "Foreward", 10.0, "%5.4f" );
+    m_ThrownBladeLayout.AddSlider( m_BladeThetaThrustSlider, "Forward", 10.0, "%5.4f" );
     m_ThrownBladeLayout.AddSlider( m_BladeThetaAntiThrustSlider, "Aft", 10.0, "%5.4f" );
 
     m_3ptBogie1SuspensionModeChoice.AddItem( "Nominal", vsp::GEAR_SUSPENSION_NOMINAL );
@@ -1105,6 +1106,7 @@ bool AuxiliaryGeomScreen::Update()
 
             m_RTP_AutoDiamToggleButton.Update( auxiliary_ptr->m_AutoDiam.GetID() );
             m_RTP_DiameterSlider.Update( auxiliary_ptr->m_Diameter.GetID() );
+            m_RTP_AutoFlapRadiusToggleButton.Update( auxiliary_ptr->m_AutoFlapRadius.GetID() );
             m_RTP_FlapRadiusFractSlider.Update( auxiliary_ptr->m_FlapRadiusFract.GetID() );
             m_RTP_ThetaThrustSlider.Update( auxiliary_ptr->m_ThetaThrust.GetID() );
             m_RTP_ThetaAntiThrustSlider.Update( auxiliary_ptr->m_ThetaAntiThrust.GetID() );

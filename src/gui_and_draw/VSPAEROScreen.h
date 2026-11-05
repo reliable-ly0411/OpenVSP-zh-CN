@@ -130,6 +130,12 @@ protected:
     // Additional options
     SliderAdjRangeInput m_CullFracSlider;
     ToggleButton m_CullFracButton;
+
+    ToggleButton m_MergeDegenTriRegionsButton;
+
+    SliderAdjRangeInput m_LenRatioSlider;
+    ToggleButton m_CleanIntersectionsButton;
+
     TriggerButton m_PreviewVSPAEROButton;
 
     // Ref Length Layout

@@ -501,6 +501,8 @@ private:
     SliderAdjRangeInput m_GrowthRatio;
 
     ToggleButton m_Rig3dGrowthLimit;
+    ToggleButton m_WidthLimit;
+    SliderAdjRangeInput m_NumWidthSegments;
     ToggleButton m_HalfMeshButton;
     ToggleButton m_SplitJoinSurfs;
     ToggleButton m_ToCubicToggle;
@@ -564,6 +566,10 @@ private:
 
     TriggerButton m_SourcesLabel;
     TriggerButton m_GrowLimitSourcesLabel;
+
+    TriggerButton m_MinLenSurfWidthLabel;
+    TriggerButton m_SurfWidthLabel;
+    TriggerButton m_GrowLimitSurfWidthLabel;
 
     //===== CAD Items =====//
     ToggleButton m_IGESFile;

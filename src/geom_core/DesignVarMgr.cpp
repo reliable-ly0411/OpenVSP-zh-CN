@@ -7,6 +7,8 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#include <unordered_map>
+
 #include "DesignVarMgr.h"
 #include "ParmMgr.h"
 #include "Vehicle.h"
@@ -173,12 +175,26 @@ bool DesignVarMgrSingleton::AddVar( const string& parm_id, int xddmtype, double 
         return false;
     }
 
+    if ( !AppendVar( parm_id, xddmtype, lowerlimit, upperlimit ) )
+    {
+        return false;
+    }
+
+    SortVars();
+    m_CurrVarIndex = -1;
+
+    return true;
+}
+
+//==== Append a Variable, Unsorted ====//
+DesignVar* DesignVarMgrSingleton::AppendVar( const string& parm_id, int xddmtype, double lowerlimit, double upperlimit )
+{
     //==== Check If ParmIDs Are Valid ====//
     Parm* p = ParmMgr.FindParm( parm_id );
 
     if ( p == nullptr )
     {
-        return false;
+        return nullptr;
     }
 
     DesignVar* dv = new DesignVar();
@@ -189,10 +205,8 @@ bool DesignVarMgrSingleton::AddVar( const string& parm_id, int xddmtype, double 
     dv->m_UpperLimit = upperlimit;
 
     m_VarVec.push_back( dv );
-    SortVars();
-    m_CurrVarIndex = -1;
 
-    return true;
+    return dv;
 }
 
 //==== Check All Vars For Valid Parms ====//
@@ -339,9 +353,17 @@ void DesignVarMgrSingleton::ReadDesVarsDES( const string &newfile )
 {
     FILE *fp;
     fp = fopen( newfile.c_str(), "r" );
+    if ( !fp )
+    {
+        return;
+    }
     char temp[255];
 
-    fgets( temp, 255, fp );
+    if ( !fgets( temp, 255, fp ) )
+    {
+        fclose( fp );
+        return;
+    }
     string line = temp;
     int nparm = atoi( line.c_str() );
 
@@ -350,9 +372,16 @@ void DesignVarMgrSingleton::ReadDesVarsDES( const string &newfile )
         DelAllVars();
         ResetWorkingVar();
 
+        // The variables read, by Parm ID, the first of each kept.
+        std::unordered_map< string, DesignVar* > read_vars;
+
         for ( int i = 0 ; i < nparm ; i++ )
         {
-            fgets( temp, 255, fp );
+            // A file shorter than its count ends the list.
+            if ( !fgets( temp, 255, fp ) )
+            {
+                break;
+            }
             line = temp;
 
             unsigned int istart = 0;
@@ -372,9 +401,15 @@ void DesignVarMgrSingleton::ReadDesVarsDES( const string &newfile )
             {
                 // Set with delayed updates.
                 p->Set( val );
-                AddVar( id, vsp::XDDM_VAR, p->GetLowerLimit(), p->GetUpperLimit() );
+                if ( read_vars.find( id ) == read_vars.end() )
+                {
+                    read_vars[ id ] = AppendVar( id, vsp::XDDM_VAR, p->GetLowerLimit(), p->GetUpperLimit() );
+                }
             }
         }
+
+        SortVars();
+        m_CurrVarIndex = -1;
 
         // Read optional LIMITS section -- match lines by ParmID and apply lower/upper limits.
         while ( fgets( temp, 255, fp ) != nullptr )
@@ -401,14 +436,11 @@ void DesignVarMgrSingleton::ReadDesVarsDES( const string &newfile )
             iend = line.length();
             double upper = atof( line.substr( istart, iend - istart ).c_str() );
 
-            for ( int i = 0 ; i < (int)m_VarVec.size() ; i++ )
+            std::unordered_map< string, DesignVar* >::iterator iter = read_vars.find( id );
+            if ( iter != read_vars.end() )
             {
-                if ( m_VarVec[i]->m_ParmID == id )
-                {
-                    m_VarVec[i]->m_LowerLimit = lower;
-                    m_VarVec[i]->m_UpperLimit = upper;
-                    break;
-                }
+                iter->second->m_LowerLimit = lower;
+                iter->second->m_UpperLimit = upper;
             }
         }
 
@@ -464,9 +496,6 @@ void DesignVarMgrSingleton::WriteDesVarsXDDM( const string &newfile )
 
 void DesignVarMgrSingleton::ReadDesVarsXDDM( const string &newfile )
 {
-    DelAllVars();
-    ResetWorkingVar();
-
     //==== Read Xml File ====//
     xmlDocPtr doc;
 
@@ -475,33 +504,44 @@ void DesignVarMgrSingleton::ReadDesVarsXDDM( const string &newfile )
 
     //==== Build an XML tree from a the file ====//
     doc = xmlReadFile( newfile.c_str(), nullptr, 0 );
-//  if (doc == nullptr) return 0;
+    if ( doc == nullptr )
+    {
+        return;
+    }
 
     xmlNodePtr root = xmlDocGetRootElement( doc );
     if ( root == nullptr )
     {
         fprintf( stderr, "empty document\n" );
         xmlFreeDoc( doc );
-//      return 0;
+        return;
     }
+
+    DelAllVars();
+    ResetWorkingVar();
 
     vector< xmlNodePtr > vlist;
 
-    int num_v = XmlUtil::GetNumNames( root, "Variable" );
+    vector< xmlNodePtr > var_nodes = XmlUtil::GetNodes( root, "Variable" );
+    int num_v = ( int )var_nodes.size();
     for ( int i = 0 ; i < num_v ; i++ )
     {
-        xmlNodePtr var_node = XmlUtil::GetNode( root, "Variable", i );
+        xmlNodePtr var_node = var_nodes[i];
         vlist.push_back( var_node );
     }
 
-    int num_c = XmlUtil::GetNumNames( root, "Constant" );
+    vector< xmlNodePtr > cst_nodes = XmlUtil::GetNodes( root, "Constant" );
+    int num_c = ( int )cst_nodes.size();
     for ( int i = 0 ; i < num_c ; i++ )
     {
-        xmlNodePtr cst_node = XmlUtil::GetNode( root, "Constant", i );
+        xmlNodePtr cst_node = cst_nodes[i];
         vlist.push_back( cst_node );
     }
 
     int num_tot = num_v + num_c;
+
+    // The variables read, by Parm ID, the first of each kept.
+    std::unordered_map< string, DesignVar* > read_vars;
 
     for ( int i = 0 ; i < num_tot ; i++ )
     {
@@ -526,17 +566,23 @@ void DesignVarMgrSingleton::ReadDesVarsXDDM( const string &newfile )
                 const xmlChar* varstr = ( xmlChar* ) "Variable";
 
 
-                if( !xmlStrcmp( var_node->name, varstr ) )
+                if ( read_vars.find( varid ) == read_vars.end() )
                 {
-                    AddVar( varid, vsp::XDDM_VAR, lowerlimit, upperlimit );
-                }
-                else
-                {
-                    AddVar( varid, vsp::XDDM_CONST, lowerlimit, upperlimit );
+                    if( !xmlStrcmp( var_node->name, varstr ) )
+                    {
+                        read_vars[ varid ] = AppendVar( varid, vsp::XDDM_VAR, lowerlimit, upperlimit );
+                    }
+                    else
+                    {
+                        read_vars[ varid ] = AppendVar( varid, vsp::XDDM_CONST, lowerlimit, upperlimit );
+                    }
                 }
             }
         }
     }
+
+    SortVars();
+    m_CurrVarIndex = -1;
 
     // Trigger update.
     VehicleMgr.GetVehicle()->Update();
