@@ -73,6 +73,9 @@ VspSurf::VspSurf()
     m_SurfCfdType = vsp::CFD_NORMAL;
     m_ThickSurf = true;
     m_PlateNum = -1;
+    m_CFDCapUMin = false;
+    m_CFDCapUMax = false;
+    m_CFDCutCaps = false;
     m_SkinType = SKIN_NONE;
     m_SkinBlendedFlag = false;
 
@@ -110,6 +113,9 @@ void VspSurf::CopyNonSurfaceData( const VspSurf & s )
 
     m_ThickSurf = s.m_ThickSurf;
     m_PlateNum = s.m_PlateNum;
+    m_CFDCapUMin = s.m_CFDCapUMin;
+    m_CFDCapUMax = s.m_CFDCapUMax;
+    m_CFDCutCaps = s.m_CFDCutCaps;
     // Main surface, do not copy.
     // m_Surface
 
@@ -318,8 +324,13 @@ bool VspSurf::Compare( const VspSurf & other, double & bound ) const
         same = std::abs( aw[i] - bw[i] ) <= wtol;
     }
 
-    piecewise_surface_type::parm_match_u( a, b );
-    piecewise_surface_type::parm_match_v( a, b );
+    // Surfaces whose parameterizations cannot be brought to the same patches cannot be differenced.
+    if ( piecewise_surface_type::parm_match_u( a, b ) != piecewise_surface_type::NO_ERRORS ||
+         piecewise_surface_type::parm_match_v( a, b ) != piecewise_surface_type::NO_ERRORS )
+    {
+        bound = -1.0;
+        return false;
+    }
     piecewise_surface_type::order_match_u( a, b );
     piecewise_surface_type::order_match_v( a, b );
 
@@ -656,8 +667,12 @@ double VspSurf::ProjectPt01( const vec3d &inpt, const int &idir, double &u_out, 
 {
     double idist = ProjectPt( inpt, idir, u_out, w_out );
 
-    u_out = u_out / GetUMax();
-    w_out = w_out / GetWMax();
+    // A miss leaves u_out and w_out at -1.
+    if ( idist >= 0 )
+    {
+        u_out = u_out / GetUMax();
+        w_out = w_out / GetWMax();
+    }
 
     return idist;
 }
@@ -666,8 +681,12 @@ double VspSurf::ProjectPt01( const vec3d &inpt, const int &idir, const double &u
 {
     double idist = ProjectPt( inpt, idir, u0 * GetUMax(), w0 * GetWMax(), u_out, w_out );
 
-    u_out = u_out / GetUMax();
-    w_out = w_out / GetWMax();
+    // A miss leaves u_out and w_out at -1.
+    if ( idist >= 0 )
+    {
+        u_out = u_out / GetUMax();
+        w_out = w_out / GetWMax();
+    }
 
     return idist;
 }
@@ -794,6 +813,9 @@ Matrix4d VspSurf::CompTransCoordSys( const double &u, const double &w ) const
 
     double uprm = m_UMapping.Invert( u * m_UMapMax ) / GetUMax();
 
+    // A surface trimmed by an engine model can be shorter than its mapping; stay on the surface.
+    uprm = clamp( uprm, 0.0, 1.0 );
+
     // Get x,y,z location of u,w coordinate and place in translation matrix
     vec3d cartCoords = CompPnt01( uprm, w );
     retMat.translatef( cartCoords.x(), cartCoords.y(), cartCoords.z() );
@@ -844,6 +866,9 @@ Matrix4d VspSurf::CompTransCoordSysRST( const double &r, const double &s, const 
     Matrix4d retMat; // Return Matrix
 
     double rprm = m_UMapping.Invert( r * m_UMapMax ) / GetUMax();
+
+    // A surface trimmed by an engine model can be shorter than its mapping; stay on the surface.
+    rprm = clamp( rprm, 0.0, 1.0 );
 
     // Get x,y,z location of r, s, t coordinate and place in translation matrix
     vec3d cartCoords = CompPntRST( rprm, s, t );
@@ -3130,12 +3155,22 @@ void VspSurf::BuildFeatureLines( bool force_xsec_flag)
 
 bool VspSurf::CapUMin(int CapType, double len, double str, double offset, const vec3d &pt, bool swflag)
 {
-    return CapUHandler( multicap_creator_type::CAP_UMIN, CapType, len, str, offset, pt, swflag );
+    bool capped = CapUHandler( multicap_creator_type::CAP_UMIN, CapType, len, str, offset, pt, swflag );
+    if ( capped )
+    {
+        m_CFDCapUMin = true;
+    }
+    return capped;
 }
 
 bool VspSurf::CapUMax(int CapType, double len, double str, double offset, const vec3d &pt, bool swflag)
 {
-    return CapUHandler( multicap_creator_type::CAP_UMAX, CapType, len, str, offset, pt, swflag );
+    bool capped = CapUHandler( multicap_creator_type::CAP_UMAX, CapType, len, str, offset, pt, swflag );
+    if ( capped )
+    {
+        m_CFDCapUMax = true;
+    }
+    return capped;
 }
 
 bool VspSurf::CapUHandler(int whichCap, int CapType, double len, double str, double offset, const vec3d &pt, bool swflag)
@@ -3197,10 +3232,26 @@ bool VspSurf::CapUHandler(int whichCap, int CapType, double len, double str, dou
         cc.set_ext_conditions( extle, extte );
 
         rtn_flag = cc.set_conditions( m_Surface, multicap_creator_type::FLAT, 1.0, (typename multicap_creator_type::edge_cap_identifier) whichCap, len, 0, str, p, swflag );
-        rtn_flag = cc.create_curve( b );
+        if ( rtn_flag )
+        {
+            rtn_flag = cc.create_curve( b );
+        }
 
-        rtn_flag = cc.set_conditions( m_Surface, multicap_creator_type::ROUND, 1.0, (typename multicap_creator_type::edge_cap_identifier) whichCap, len, 0, str, p, swflag );
-        rtn_flag = cc.create_curve( e );
+        if ( rtn_flag )
+        {
+            rtn_flag = cc.set_conditions( m_Surface, multicap_creator_type::ROUND, 1.0, (typename multicap_creator_type::edge_cap_identifier) whichCap, len, 0, str, p, swflag );
+        }
+        if ( rtn_flag )
+        {
+            rtn_flag = cc.create_curve( e );
+        }
+
+        // No cap where the edge gives no curve, such as an edge closed to a point.
+        if ( !rtn_flag )
+        {
+            ResetUSkip();
+            return false;
+        }
 
         b.scale( -1.0 );
         d.sum( b, e );
@@ -3291,7 +3342,8 @@ void VspSurf::RollU( const double &u )
 
     vector < double > pmap;
     m_Surface.get_pmap_u( pmap );
-    int iu = vector_find_val( pmap, u );
+    // Within tolerance of a joint, the split makes none; the roll is to the nearest joint.
+    int iu = vector_find_nearest( pmap, u );
 
     m_Surface.roll_u( iu );
 
@@ -3304,7 +3356,8 @@ void VspSurf::RollW( const double &w )
 
     vector < double > pmap;
     m_Surface.get_pmap_v( pmap );
-    int iw = vector_find_val( pmap, w );
+    // Within tolerance of a joint, the split makes none; the roll is to the nearest joint.
+    int iw = vector_find_nearest( pmap, w );
 
     m_Surface.roll_v( iw );
 }
@@ -3508,8 +3561,8 @@ void SplitSurfsU( vector< piecewise_surface_type > &surfvec, const vector < doub
             vector < piecewise_surface_type > q;
             vector < vector < UWRegion > > qr;
 
-            q.push_back( surfvec[j] );
-            qr.push_back( regionvec[j] );
+            q.push_back( std::move( surfvec[j] ) );
+            qr.push_back( std::move( regionvec[j] ) );
 
             for ( int k = 0; k < ( int )q.size(); k++ )
             {
@@ -3524,7 +3577,8 @@ void SplitSurfsU( vector< piecewise_surface_type > &surfvec, const vector < doub
                 piecewise_surface_type s1, s2;
                 vector < UWRegion > r1, r2;
 
-                q[k].split_u( s1, s2, cuts[0] );
+                s1 = std::move( q[k] );
+                s1.split_u( s2, cuts[0] );
                 SplitRegionsU( qr[k], cuts[0], r1, r2 );
 
                 bool keep1 = ( s1.number_u_patches() > 0 && s1.number_v_patches() > 0 );
@@ -3532,22 +3586,22 @@ void SplitSurfsU( vector< piecewise_surface_type > &surfvec, const vector < doub
 
                 if ( keep1 && keep2 )
                 {
-                    q[k] = s1;
-                    qr[k] = r1;
-                    q.insert( q.begin() + k + 1, s2 );
-                    qr.insert( qr.begin() + k + 1, r2 );
+                    q[k] = std::move( s1 );
+                    qr[k] = std::move( r1 );
+                    q.insert( q.begin() + k + 1, std::move( s2 ) );
+                    qr.insert( qr.begin() + k + 1, std::move( r2 ) );
                     k--;
                 }
                 else if ( keep1 )
                 {
-                    q[k] = s1;
-                    qr[k] = r1;
+                    q[k] = std::move( s1 );
+                    qr[k] = std::move( r1 );
                     k--;
                 }
                 else if ( keep2 )
                 {
-                    q[k] = s2;
-                    qr[k] = r2;
+                    q[k] = std::move( s2 );
+                    qr[k] = std::move( r2 );
                     k--;
                 }
                 else
@@ -3560,12 +3614,12 @@ void SplitSurfsU( vector< piecewise_surface_type > &surfvec, const vector < doub
 
             for ( int k = 0; k < ( int )q.size(); k++ )
             {
-                splitsurfvec.push_back( q[k] );
-                splitregionvec.push_back( qr[k] );
+                splitsurfvec.push_back( std::move( q[k] ) );
+                splitregionvec.push_back( std::move( qr[k] ) );
             }
         }
-        surfvec = splitsurfvec;
-        regionvec = splitregionvec;
+        surfvec.swap( splitsurfvec );
+        regionvec.swap( splitregionvec );
     }
 }
 
@@ -3585,8 +3639,8 @@ void SplitSurfsW( vector< piecewise_surface_type > &surfvec, const vector < doub
             vector < piecewise_surface_type > q;
             vector < vector < UWRegion > > qr;
 
-            q.push_back( surfvec[j] );
-            qr.push_back( regionvec[j] );
+            q.push_back( std::move( surfvec[j] ) );
+            qr.push_back( std::move( regionvec[j] ) );
 
             for ( int k = 0; k < ( int )q.size(); k++ )
             {
@@ -3601,7 +3655,8 @@ void SplitSurfsW( vector< piecewise_surface_type > &surfvec, const vector < doub
                 piecewise_surface_type s1, s2;
                 vector < UWRegion > r1, r2;
 
-                q[k].split_v( s1, s2, cuts[0] );
+                s1 = std::move( q[k] );
+                s1.split_v( s2, cuts[0] );
                 SplitRegionsW( qr[k], cuts[0], r1, r2 );
 
                 bool keep1 = ( s1.number_u_patches() > 0 && s1.number_v_patches() > 0 );
@@ -3609,22 +3664,22 @@ void SplitSurfsW( vector< piecewise_surface_type > &surfvec, const vector < doub
 
                 if ( keep1 && keep2 )
                 {
-                    q[k] = s1;
-                    qr[k] = r1;
-                    q.insert( q.begin() + k + 1, s2 );
-                    qr.insert( qr.begin() + k + 1, r2 );
+                    q[k] = std::move( s1 );
+                    qr[k] = std::move( r1 );
+                    q.insert( q.begin() + k + 1, std::move( s2 ) );
+                    qr.insert( qr.begin() + k + 1, std::move( r2 ) );
                     k--;
                 }
                 else if ( keep1 )
                 {
-                    q[k] = s1;
-                    qr[k] = r1;
+                    q[k] = std::move( s1 );
+                    qr[k] = std::move( r1 );
                     k--;
                 }
                 else if ( keep2 )
                 {
-                    q[k] = s2;
-                    qr[k] = r2;
+                    q[k] = std::move( s2 );
+                    qr[k] = std::move( r2 );
                     k--;
                 }
                 else
@@ -3637,12 +3692,12 @@ void SplitSurfsW( vector< piecewise_surface_type > &surfvec, const vector < doub
 
             for ( int k = 0; k < ( int )q.size(); k++ )
             {
-                splitsurfvec.push_back( q[k] );
-                splitregionvec.push_back( qr[k] );
+                splitsurfvec.push_back( std::move( q[k] ) );
+                splitregionvec.push_back( std::move( qr[k] ) );
             }
         }
-        surfvec = splitsurfvec;
-        regionvec = splitregionvec;
+        surfvec.swap( splitsurfvec );
+        regionvec.swap( splitregionvec );
     }
 }
 
@@ -3653,29 +3708,29 @@ void SplitSurfsU( vector< piecewise_surface_type > &surfvec, const vector < doub
         vector < piecewise_surface_type > splitsurfvec;
         for ( int j = 0; j < surfvec.size(); j++ )
         {
-            piecewise_surface_type s, s1, s2;
+            piecewise_surface_type s, s2;
 
-            s = surfvec[j];
+            s = std::move( surfvec[j] );
 
             if ( s.get_u0() < USplit[i] && s.get_umax() > USplit[i] )
             {
-                s.split_u( s1, s2, USplit[i] );
+                s.split_u( s2, USplit[i] );
 
-                if ( s1.number_u_patches() > 0 && s1.number_v_patches() > 0 )
+                if ( s.number_u_patches() > 0 && s.number_v_patches() > 0 )
                 {
-                    splitsurfvec.push_back( s1 );
+                    splitsurfvec.push_back( std::move( s ) );
                 }
                 if ( s2.number_u_patches() > 0 && s2.number_v_patches() > 0 )
                 {
-                    splitsurfvec.push_back( s2 );
+                    splitsurfvec.push_back( std::move( s2 ) );
                 }
             }
             else
             {
-                splitsurfvec.push_back( s );
+                splitsurfvec.push_back( std::move( s ) );
             }
         }
-        surfvec = splitsurfvec;
+        surfvec.swap( splitsurfvec );
     }
 }
 
@@ -3686,29 +3741,29 @@ void SplitSurfsW( vector< piecewise_surface_type > &surfvec, const vector < doub
         vector < piecewise_surface_type > splitsurfvec;
         for ( int j = 0; j < surfvec.size(); j++ )
         {
-            piecewise_surface_type s, s1, s2;
+            piecewise_surface_type s, s2;
 
-            s = surfvec[j];
+            s = std::move( surfvec[j] );
 
             if ( s.get_v0() < WSplit[i] && s.get_vmax() > WSplit[i] )
             {
-                s.split_v( s1, s2, WSplit[i] );
+                s.split_v( s2, WSplit[i] );
 
-                if ( s1.number_u_patches() > 0 && s1.number_v_patches() > 0 )
+                if ( s.number_u_patches() > 0 && s.number_v_patches() > 0 )
                 {
-                    splitsurfvec.push_back( s1 );
+                    splitsurfvec.push_back( std::move( s ) );
                 }
                 if ( s2.number_u_patches() > 0 && s2.number_v_patches() > 0 )
                 {
-                    splitsurfvec.push_back( s2 );
+                    splitsurfvec.push_back( std::move( s2 ) );
                 }
             }
             else
             {
-                splitsurfvec.push_back( s );
+                splitsurfvec.push_back( std::move( s ) );
             }
         }
-        surfvec = splitsurfvec;
+        surfvec.swap( splitsurfvec );
     }
 }
 
@@ -3976,19 +4031,75 @@ static vector < UWRegion > MakeIdentityRegion( double u0, double u1, double w0, 
     return rv;
 }
 
-// Does the line at this w lie in the symmetry plane the mesher cuts a half mesh along?
+// Add t to lines unless a line within tol of it is there already.
+static void AddLine( vector < double > &lines, double t, double tol )
+{
+    for ( int i = 0; i < ( int )lines.size(); i++ )
+    {
+        if ( std::abs( lines[i] - t ) <= tol )
+        {
+            return;
+        }
+    }
+
+    lines.push_back( t );
+}
+
+static bool HasLine( const vector < double > &lines, double t, double tol )
+{
+    for ( int i = 0; i < ( int )lines.size(); i++ )
+    {
+        if ( std::abs( lines[i] - t ) <= tol )
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// On a closed direction the seam is one line with two names; call it by its start.
+static double SeamToStart( double t, double tmin, double tmax, bool closed, double tol )
+{
+    if ( closed && std::abs( t - tmax ) <= tol )
+    {
+        return tmin;
+    }
+
+    return t;
+}
+
+// Does the line at this u (or w) lie in the symmetry plane the mesher cuts a half mesh along?
 //
-// Sampled rather than solved: a body's quarter lines are either in the plane along their whole
-// length or nowhere near it, so a handful of stations settles it.
-static bool WLineInSymPlane( const VspSurf &surf, double umin, double umax, double w, double tol )
+// Sampled rather than solved: a body's lines are either in the plane along their whole length or
+// nowhere near it, so a handful of stations settles it.
+bool VspSurf::LineInSymPlane( bool uline, double t, double tol ) const
 {
     const int nstation = 9;
 
+    double smin = m_Surface.get_v0();
+    double smax = m_Surface.get_vmax();
+    if ( !uline )
+    {
+        smin = m_Surface.get_u0();
+        smax = m_Surface.get_umax();
+    }
+
     for ( int i = 0; i <= nstation; i++ )
     {
-        double u = umin + ( umax - umin ) * ( double )i / ( double )nstation;
+        double sp = smin + ( smax - smin ) * ( double )i / ( double )nstation;
 
-        if ( std::abs( surf.CompPnt( u, w ).y() ) > tol )
+        vec3d p;
+        if ( uline )
+        {
+            p = CompPnt( t, sp );
+        }
+        else
+        {
+            p = CompPnt( sp, t );
+        }
+
+        if ( std::abs( p.y() ) > tol )
         {
             return false;
         }
@@ -3997,7 +4108,406 @@ static bool WLineInSymPlane( const VspSurf &surf, double umin, double umax, doub
     return true;
 }
 
-void VspSurf::FetchXFerSurf( const std::string &geom_id, const std::string &name, int surf_ind, int comp_ind, int copyindex, int part_surf_num, vector< XferSurf > &xfersurfs, const vector < double > &usuppress, const vector < double > &wsuppress, const vector < double > &utess, const vector < double > &wtess, bool capumin, bool capumax, bool splitjoin ) const
+// A patch may not close on itself, so a direction the surface closes in needs at least two cuts
+// around it.  With one, the second goes opposite it.  With none, the surface is cut into two
+// halves about a plane of its own symmetry.  Every plane through a body of revolution's axis is
+// one, so its start and half lines serve, wherever the curve it was turned from lies.  A skinned
+// body starts at the side of its sections, so its quarter and three quarter lines run along the
+// top and bottom.  A pair lying in the symmetry plane is taken whatever the skinning, so that a
+// half mesh throws away whole patches.
+void VspSurf::AddPeriodicCuts( bool udir, double symtol, double tol, vector < double > &cuts ) const
+{
+    double tmin = m_Surface.get_v0();
+    double tmax = m_Surface.get_vmax();
+    if ( udir )
+    {
+        tmin = m_Surface.get_u0();
+        tmax = m_Surface.get_umax();
+    }
+    double period = tmax - tmin;
+
+    if ( cuts.size() == 1 )
+    {
+        double t = cuts[0] + 0.5 * period;
+        if ( t >= tmax - tol )
+        {
+            t -= period;
+        }
+        AddLine( cuts, t, tol );
+    }
+    else if ( cuts.empty() )
+    {
+        double tqtr = tmin + 0.25 * period;
+        double tmid = tmin + 0.5 * period;
+        double tthreeqtr = tmin + 0.75 * period;
+
+        bool start_in_plane = LineInSymPlane( udir, tmin, symtol ) && LineInSymPlane( udir, tmid, symtol );
+        bool qtr_in_plane = LineInSymPlane( udir, tqtr, symtol ) && LineInSymPlane( udir, tthreeqtr, symtol );
+
+        if ( start_in_plane || ( !qtr_in_plane && GetSkinType() == SKIN_BODY_REV ) )
+        {
+            AddLine( cuts, tmin, tol );
+            AddLine( cuts, tmid, tol );
+        }
+        else
+        {
+            AddLine( cuts, tqtr, tol );
+            AddLine( cuts, tthreeqtr, tol );
+        }
+    }
+}
+
+// Decide where CFDMesh cuts this surface into patches, and which feature lines it holds as
+// creases inside them instead.  A patch boundary goes:
+//
+//   - at a sharp corner, in u or w;
+//   - along the strips a lifting surface keeps at its trailing and leading edges;
+//   - where an end cap meets the surface;
+//   - in a half mesh, along any feature line in the symmetry plane;
+//   - at least twice around a direction the surface closes on itself in.
+//
+// Every other feature line is held as a crease, so the mesh still follows it.  FEA leaves out
+// both kinds of line where a planar structural part lies along it.
+void VspSurf::BuildCFDMeshLines( bool capumin, bool capumax, bool symcut, const vector < double > &usuppress,
+                                 const vector < double > &wsuppress, CFDMeshLines &lines ) const
+{
+    double umin = m_Surface.get_u0();
+    double umax = m_Surface.get_umax();
+    double vmin = m_Surface.get_v0();
+    double vmax = m_Surface.get_vmax();
+    double vmid = 0.5 * ( vmin + vmax );
+
+    double utol = 1.0e-9 * ( umax - umin );
+    double wtol = 1.0e-9 * ( vmax - vmin );
+
+    bool uclosed = IsClosedU();
+    bool wclosed = IsClosedW();
+
+    BndBox bbox;
+    GetBoundingBox( bbox );
+    double symtol = 1.0e-8 * std::max( bbox.GetLargestDist(), 1.0 );
+
+    // Sharp corners, found on the curves along every patch edge; on a closed direction the seam
+    // is tested too.  An end cap is never cut inside, and its own sections are left out of the
+    // test: a cap closes on its tip, and a tip folded flat turns back on itself at the leading
+    // and trailing edges.
+    double ucapmin = umin;
+    double ucapmax = umax;
+    if ( capumin )
+    {
+        ucapmin = umin + 1.0;
+    }
+    if ( capumax )
+    {
+        ucapmax = umax - 1.0;
+    }
+
+    vector < double > upmap, vpmap, tdisc;
+    m_Surface.get_pmap_uv( upmap, vpmap );
+    piecewise_curve_type c;
+
+    for ( int i = 0; i < ( int )vpmap.size(); i++ )
+    {
+        m_Surface.get_vconst_curve( c, vpmap[i] );
+        c.find_discontinuities( CFD_SHARP_TOL, tdisc );
+
+        for ( int j = 0; j < ( int )tdisc.size(); j++ )
+        {
+            if ( tdisc[j] < ucapmin - utol || tdisc[j] > ucapmax + utol )
+            {
+                continue;
+            }
+            AddLine( lines.m_UCut, SeamToStart( tdisc[j], umin, umax, uclosed, utol ), utol );
+        }
+    }
+    for ( int i = 0; i < ( int )upmap.size(); i++ )
+    {
+        if ( upmap[i] < ucapmin - utol || upmap[i] > ucapmax + utol )
+        {
+            continue;
+        }
+
+        m_Surface.get_uconst_curve( c, upmap[i] );
+        c.find_discontinuities( CFD_SHARP_TOL, tdisc );
+
+        for ( int j = 0; j < ( int )tdisc.size(); j++ )
+        {
+            // A lifting surface's corners at its trailing and leading edges are the edges of the
+            // strips it keeps there, which are cut below.  A corner found inside a strip is one
+            // collapsed to nothing on one side, and the strip stays whole.  A half body of
+            // revolution has no leading edge strip.
+            if ( IsMagicVParm() && ( tdisc[j] < vmin + TMAGIC - wtol || tdisc[j] > vmax - TMAGIC + wtol ||
+                                     ( !IsHalfBOR() && std::abs( tdisc[j] - vmid ) < TMAGIC - wtol ) ) )
+            {
+                continue;
+            }
+            AddLine( lines.m_WCut, SeamToStart( tdisc[j], vmin, vmax, wclosed, wtol ), wtol );
+        }
+    }
+
+    // The trailing and leading edge strips.  A half body of revolution has no leading edge.
+    if ( IsMagicVParm() )
+    {
+        AddLine( lines.m_WCut, vmin + TMAGIC, wtol );
+        AddLine( lines.m_WCut, vmax - TMAGIC, wtol );
+
+        if ( !IsHalfBOR() )
+        {
+            AddLine( lines.m_WCut, vmid - TMAGIC, wtol );
+            AddLine( lines.m_WCut, vmid + TMAGIC, wtol );
+        }
+    }
+
+    if ( capumin )
+    {
+        AddLine( lines.m_UCut, umin + 1.0, utol );
+    }
+    if ( capumax )
+    {
+        AddLine( lines.m_UCut, umax - 1.0, utol );
+    }
+
+    if ( symcut )
+    {
+        for ( int i = 0; i < ( int )m_UFeature.size(); i++ )
+        {
+            if ( LineInSymPlane( true, m_UFeature[i], symtol ) )
+            {
+                AddLine( lines.m_UCut, SeamToStart( m_UFeature[i], umin, umax, uclosed, utol ), utol );
+            }
+        }
+        for ( int i = 0; i < ( int )m_WFeature.size(); i++ )
+        {
+            if ( LineInSymPlane( false, m_WFeature[i], symtol ) )
+            {
+                AddLine( lines.m_WCut, SeamToStart( m_WFeature[i], vmin, vmax, wclosed, wtol ), wtol );
+            }
+        }
+    }
+
+    vector < double > ucut, wcut;
+    for ( int i = 0; i < ( int )lines.m_UCut.size(); i++ )
+    {
+        if ( !HasLine( usuppress, lines.m_UCut[i], utol ) )
+        {
+            ucut.push_back( lines.m_UCut[i] );
+        }
+    }
+    for ( int i = 0; i < ( int )lines.m_WCut.size(); i++ )
+    {
+        if ( !HasLine( wsuppress, lines.m_WCut[i], wtol ) )
+        {
+            wcut.push_back( lines.m_WCut[i] );
+        }
+    }
+    lines.m_UCut = ucut;
+    lines.m_WCut = wcut;
+
+    if ( uclosed )
+    {
+        AddPeriodicCuts( true, symtol, utol, lines.m_UCut );
+    }
+    if ( wclosed )
+    {
+        AddPeriodicCuts( false, symtol, wtol, lines.m_WCut );
+    }
+
+    std::sort( lines.m_UCut.begin(), lines.m_UCut.end() );
+    std::sort( lines.m_WCut.begin(), lines.m_WCut.end() );
+
+    // The ends of an open direction are its boundary, not a crease.  A closed direction's seam
+    // is written at its end, where the patch holding it meets itself.
+    for ( int i = 0; i < ( int )m_UFeature.size(); i++ )
+    {
+        double u = m_UFeature[i];
+        bool atend = ( std::abs( u - umin ) <= utol || std::abs( u - umax ) <= utol );
+
+        if ( ( !uclosed && atend ) || HasLine( usuppress, u, utol ) ||
+             HasLine( lines.m_UCut, SeamToStart( u, umin, umax, uclosed, utol ), utol ) )
+        {
+            continue;
+        }
+        if ( atend )
+        {
+            u = umax;
+        }
+        AddLine( lines.m_UJoin, u, utol );
+    }
+    for ( int i = 0; i < ( int )m_WFeature.size(); i++ )
+    {
+        double w = m_WFeature[i];
+        bool atend = ( std::abs( w - vmin ) <= wtol || std::abs( w - vmax ) <= wtol );
+
+        if ( ( !wclosed && atend ) || HasLine( wsuppress, w, wtol ) ||
+             HasLine( lines.m_WCut, SeamToStart( w, vmin, vmax, wclosed, wtol ), wtol ) )
+        {
+            continue;
+        }
+        if ( atend )
+        {
+            w = vmax;
+        }
+        AddLine( lines.m_WJoin, w, wtol );
+    }
+}
+
+// Start a surface closed in u again at the first of the cuts, unless one is at its seam: the
+// stretch from that cut round to the seam and the stretch from the seam on to the cut become
+// one patch.  The regions follow, the second stretch at parameters a period on.  s is a plain
+// piece of the surface in u here, so the cuts are in its own parameters.
+static void RollToFirstCutU( piecewise_surface_type &s, vector < UWRegion > &rv, const vector < double > &cuts,
+                             double tol )
+{
+    double umin = s.get_u0();
+    double umax = s.get_umax();
+
+    if ( cuts.empty() || cuts[0] <= umin + tol || cuts[0] >= umax - tol )
+    {
+        return;
+    }
+
+    piecewise_surface_type before, after;
+    s.split_u( before, after, cuts[0] );
+
+    vector < UWRegion > rbefore, rafter;
+    SplitRegionsU( rv, cuts[0], rbefore, rafter );
+
+    for ( int i = 0; i < ( int )rbefore.size(); i++ )
+    {
+        rbefore[i].m_UOff -= rbefore[i].m_USign * ( umax - umin );
+    }
+
+    s.join_u( after, before );
+
+    rv = rafter;
+    rv.insert( rv.end(), rbefore.begin(), rbefore.end() );
+}
+
+// The same in w.
+static void RollToFirstCutW( piecewise_surface_type &s, vector < UWRegion > &rv, const vector < double > &cuts,
+                             double tol )
+{
+    double vmin = s.get_v0();
+    double vmax = s.get_vmax();
+
+    if ( cuts.empty() || cuts[0] <= vmin + tol || cuts[0] >= vmax - tol )
+    {
+        return;
+    }
+
+    piecewise_surface_type below, above;
+    s.split_v( below, above, cuts[0] );
+
+    vector < UWRegion > rbelow, rabove;
+    SplitRegionsW( rv, cuts[0], rbelow, rabove );
+
+    for ( int i = 0; i < ( int )rbelow.size(); i++ )
+    {
+        rbelow[i].m_WOff -= rbelow[i].m_WSign * ( vmax - vmin );
+    }
+
+    s.join_v( above, below );
+
+    rv = rabove;
+    rv.insert( rv.end(), rbelow.begin(), rbelow.end() );
+}
+
+// Take a wing's end caps off the ends of s, and fold each at its tip into one patch.
+static void FoldWingCaps( piecewise_surface_type &s, bool capumin, bool capumax,
+                          vector < piecewise_surface_type > &surfvec, vector < vector < UWRegion > > &regionvec,
+                          vector < pair < vec3d, vec3d > > &joins )
+{
+    double umin = s.get_u0();
+    double umax = s.get_umax();
+
+    double vmin = s.get_v0();
+    double vmax = s.get_vmax();
+    double vmid = 0.5 * ( vmin + vmax );
+
+    piecewise_surface_type srest;
+
+    if ( capumin )
+    {
+        piecewise_surface_type scaplower, scapupper, scap;
+        double ucap = umin + 1.0;
+
+        s.split_u( scap, srest, ucap );
+        s = std::move( srest );
+
+        scap.split_v( scaplower, scapupper, vmid );
+
+        scapupper.reverse_u();
+        scapupper.reverse_v();
+        scaplower.set_v0( scapupper.get_v0() );
+        scaplower.set_u0( scapupper.get_umax() );
+        // The upper half's edge at u = umin, which the lower half meets along.
+        joins.push_back( make_pair( vec3d( umin, vmid, 0 ), vec3d( umin, vmax, 0 ) ) );
+
+        scap.join_u( scapupper, scaplower );
+
+        surfvec.emplace_back( std::move( scap ) );
+
+        // The upper half was turned end for end in both directions; the lower half was
+        // slid up to meet it.  Neither covers the same parameters it started in.
+        {
+            vector < UWRegion > rv( 2 );
+
+            rv[0].m_UMin = umin;    rv[0].m_UMax = ucap;
+            rv[0].m_WMin = vmid;    rv[0].m_WMax = vmax;
+            rv[0].m_USign = -1.0;   rv[0].m_UOff = umin + ucap;
+            rv[0].m_WSign = -1.0;   rv[0].m_WOff = vmid + vmax;
+
+            rv[1].m_UMin = umin;    rv[1].m_UMax = ucap;
+            rv[1].m_WMin = vmin;    rv[1].m_WMax = vmid;
+            rv[1].m_USign = 1.0;    rv[1].m_UOff = umin - ucap;
+            rv[1].m_WSign = 1.0;    rv[1].m_WOff = vmin - vmid;
+
+            regionvec.push_back( rv );
+        }
+    }
+
+    if ( capumax )
+    {
+        piecewise_surface_type scaplower, scapupper, scap;
+        double ucap = umax - 1.0;
+
+        s.split_u( srest, scap, ucap );
+        s = std::move( srest );
+
+        scap.split_v( scaplower, scapupper, vmid );
+
+        scapupper.reverse_u();
+        scapupper.reverse_v();
+        scapupper.set_v0( scaplower.get_v0() );
+        scapupper.set_u0( scaplower.get_umax() );
+        joins.push_back( make_pair( vec3d( umax, vmin, 0 ), vec3d( umax, vmid, 0 ) ) );
+
+        scap.join_u( scaplower, scapupper );
+
+
+        surfvec.emplace_back( std::move( scap ) );
+
+        // Here the lower half stayed where it was and the upper half was turned round
+        // and slid past the end of it.
+        {
+            vector < UWRegion > rv( 2 );
+
+            rv[0].m_UMin = ucap;    rv[0].m_UMax = umax;
+            rv[0].m_WMin = vmin;    rv[0].m_WMax = vmid;
+            rv[0].m_USign = 1.0;    rv[0].m_UOff = 0.0;
+            rv[0].m_WSign = 1.0;    rv[0].m_WOff = 0.0;
+
+            rv[1].m_UMin = ucap;    rv[1].m_UMax = umax;
+            rv[1].m_WMin = vmid;    rv[1].m_WMax = vmax;
+            rv[1].m_USign = -1.0;   rv[1].m_UOff = 2.0 * umax;
+            rv[1].m_WSign = -1.0;   rv[1].m_WOff = vmin + vmax;
+
+            regionvec.push_back( rv );
+        }
+    }
+}
+
+void VspSurf::FetchXFerSurf( const std::string &geom_id, const std::string &name, int surf_ind, int comp_ind, int copyindex, int part_surf_num, vector< XferSurf > &xfersurfs, const vector < double > &usuppress, const vector < double > &wsuppress, const vector < double > &utess, const vector < double > &wtess, bool capumin, bool capumax, bool splitjoin, bool symcut, bool cfdcaps ) const
 {
     vector < piecewise_surface_type > surfvec;
 
@@ -4007,290 +4517,86 @@ void VspSurf::FetchXFerSurf( const std::string &geom_id, const std::string &name
     // Where this surface gets joined to itself.  See XferSurf::m_JoinLines.
     vector < pair < vec3d, vec3d > > joins;
 
-    vector < double > usup= usuppress;
-    vector < double > wsup = wsuppress;
+    // The caps an engine closed its surfaces with, which the CFD mesh cuts apart like end caps.
+    bool cfdcapumin = cfdcaps && m_CFDCutCaps && m_CFDCapUMin;
+    bool cfdcapumax = cfdcaps && m_CFDCutCaps && m_CFDCapUMax;
+    bool cutumin = capumin || cfdcapumin;
+    bool cutumax = capumax || cfdcapumax;
 
-    if ( splitjoin && GetSurfType() == vsp::WING_SURF ) // IsMagicVParm()
+    if ( splitjoin )
     {
+        CFDMeshLines lines;
+        BuildCFDMeshLines( cutumin, cutumax, symcut, usuppress, wsuppress, lines );
+
+        piecewise_surface_type s( m_Surface );
+
+        if ( GetSurfType() == vsp::WING_SURF )
+        {
+            FoldWingCaps( s, capumin, capumax, surfvec, regionvec, joins );
+        }
+
+        vector < UWRegion > rv = MakeIdentityRegion( s.get_u0(), s.get_umax(), s.get_v0(), s.get_vmax() );
+
+        // A surface closed on itself starts again at its first cut, so the stretch either side
+        // of its seam is one patch: a trailing edge, or the side of a body its seam runs down.
+        if ( IsClosedU() )
+        {
+            RollToFirstCutU( s, rv, lines.m_UCut, 1.0e-9 * ( s.get_umax() - s.get_u0() ) );
+        }
+        if ( IsClosedW() )
+        {
+            RollToFirstCutW( s, rv, lines.m_WCut, 1.0e-9 * ( s.get_vmax() - s.get_v0() ) );
+        }
+
+        surfvec.push_back( std::move( s ) );
+        regionvec.push_back( rv );
+
         double umin = m_Surface.get_u0();
         double umax = m_Surface.get_umax();
-
         double vmin = m_Surface.get_v0();
         double vmax = m_Surface.get_vmax();
-        double vmid = 0.5 * ( vmin + vmax );
 
-        piecewise_surface_type srest, s;
-        s = m_Surface;
-
-        if ( capumin )
+        for ( int i = 0; i < ( int )lines.m_UJoin.size(); i++ )
         {
-            piecewise_surface_type scaplower, scapupper, scap;
-            double ucap = umin + 1.0;
-
-            s.split_u( scap, srest, ucap );
-            s = srest;
-
-            scap.split_v( scaplower, scapupper, vmid );
-
-            scapupper.reverse_u();
-            scapupper.reverse_v();
-            scaplower.set_v0( scapupper.get_v0() );
-            scaplower.set_u0( scapupper.get_umax() );
-            // The upper half's edge at u = umin, which the lower half meets along.
-            joins.push_back( make_pair( vec3d( umin, vmid, 0 ), vec3d( umin, vmax, 0 ) ) );
-
-            scap.join_u( scapupper, scaplower );
-
-            surfvec.emplace_back( scap );
-
-            // The upper half was turned end for end in both directions; the lower half was
-            // slid up to meet it.  Neither covers the same parameters it started in.
-            {
-                vector < UWRegion > rv( 2 );
-
-                rv[0].m_UMin = umin;    rv[0].m_UMax = ucap;
-                rv[0].m_WMin = vmid;    rv[0].m_WMax = vmax;
-                rv[0].m_USign = -1.0;   rv[0].m_UOff = umin + ucap;
-                rv[0].m_WSign = -1.0;   rv[0].m_WOff = vmid + vmax;
-
-                rv[1].m_UMin = umin;    rv[1].m_UMax = ucap;
-                rv[1].m_WMin = vmin;    rv[1].m_WMax = vmid;
-                rv[1].m_USign = 1.0;    rv[1].m_UOff = umin - ucap;
-                rv[1].m_WSign = 1.0;    rv[1].m_WOff = vmin - vmid;
-
-                regionvec.push_back( rv );
-            }
-
-            usup.push_back( ucap );
+            joins.push_back( make_pair( vec3d( lines.m_UJoin[i], vmin, 0 ), vec3d( lines.m_UJoin[i], vmax, 0 ) ) );
+        }
+        for ( int i = 0; i < ( int )lines.m_WJoin.size(); i++ )
+        {
+            joins.push_back( make_pair( vec3d( umin, lines.m_WJoin[i], 0 ), vec3d( umax, lines.m_WJoin[i], 0 ) ) );
         }
 
-        if ( capumax )
-        {
-            piecewise_surface_type scaplower, scapupper, scap;
-            double ucap = umax - 1.0;
-
-            s.split_u( srest, scap, ucap );
-            s = srest;
-
-            scap.split_v( scaplower, scapupper, vmid );
-
-            scapupper.reverse_u();
-            scapupper.reverse_v();
-            scapupper.set_v0( scaplower.get_v0() );
-            scapupper.set_u0( scaplower.get_umax() );
-            joins.push_back( make_pair( vec3d( umax, vmin, 0 ), vec3d( umax, vmid, 0 ) ) );
-
-            scap.join_u( scaplower, scapupper );
-
-
-            surfvec.emplace_back( scap );
-
-            // Here the lower half stayed where it was and the upper half was turned round
-            // and slid past the end of it.
-            {
-                vector < UWRegion > rv( 2 );
-
-                rv[0].m_UMin = ucap;    rv[0].m_UMax = umax;
-                rv[0].m_WMin = vmin;    rv[0].m_WMax = vmid;
-                rv[0].m_USign = 1.0;    rv[0].m_UOff = 0.0;
-                rv[0].m_WSign = 1.0;    rv[0].m_WOff = 0.0;
-
-                rv[1].m_UMin = ucap;    rv[1].m_UMax = umax;
-                rv[1].m_WMin = vmid;    rv[1].m_WMax = vmax;
-                rv[1].m_USign = -1.0;   rv[1].m_UOff = 2.0 * umax;
-                rv[1].m_WSign = -1.0;   rv[1].m_WOff = vmin + vmax;
-
-                regionvec.push_back( rv );
-            }
-
-            usup.push_back( umax );
-        }
-
-        piecewise_surface_type stelower, slower, sle, supper, steupper, ste;
-
-        s.split_v( stelower, srest, TMAGIC );
-        s = srest;
-        s.split_v( slower, srest, vmid - TMAGIC );
-        s = srest;
-        s.split_v( sle, srest, vmid + TMAGIC );
-        s = srest;
-        s.split_v( supper, steupper, vmax - TMAGIC );
-        ste.join_v( steupper, stelower );
-
-        // Whatever u is left once the caps have been taken off.  The four patches below all
-        // span it, and all of them keep u exactly as it was.
-        double ulo = s.get_u0();
-        double uhi = s.get_umax();
-
-        // The upper strip's edge at w = vmax, which the lower strip meets along.
-        joins.push_back( make_pair( vec3d( ulo, vmax, 0 ), vec3d( uhi, vmax, 0 ) ) );
-
-        surfvec.emplace_back( ste );
-
-        // The trailing edge patch is the strip at the top of w followed by the strip at the
-        // bottom of it, so its second half names a piece of w that lies at the other end of
-        // the surface, and does so at parameters that run past vmax.
-        {
-            vector < UWRegion > rv( 2 );
-
-            rv[0].m_UMin = ulo;             rv[0].m_UMax = uhi;
-            rv[0].m_WMin = vmax - TMAGIC;   rv[0].m_WMax = vmax;
-            rv[0].m_WOff = 0.0;
-
-            rv[1].m_UMin = ulo;             rv[1].m_UMax = uhi;
-            rv[1].m_WMin = vmin;            rv[1].m_WMax = vmin + TMAGIC;
-            rv[1].m_WOff = vmin - vmax;
-
-            regionvec.push_back( rv );
-        }
-
-        surfvec.emplace_back( sle );
-        regionvec.push_back( MakeIdentityRegion( ulo, uhi, vmid - TMAGIC, vmid + TMAGIC ) );
-
-        wsup.push_back( vmid );
-        wsup.push_back( vmax );
-
-        surfvec.emplace_back( slower );
-        regionvec.push_back( MakeIdentityRegion( ulo, uhi, vmin + TMAGIC, vmid - TMAGIC ) );
-
-        surfvec.emplace_back( supper );
-        regionvec.push_back( MakeIdentityRegion( ulo, uhi, vmid + TMAGIC, vmax - TMAGIC ) );
-    }
-    else if ( splitjoin && GetSurfType() == vsp::NORMAL_SURF && IsClosedW() && !IsHalfBOR() )
-    {
-        // A body's w goes once around it, with feature lines at the quarter points.  Cutting
-        // at all of them leaves four quadrant patches; two are wanted, one for each side, so
-        // that a seam does not run down the middle of either side.
-        //
-        // Which pair of quarter lines to cut along depends on where w starts, and that is
-        // decided by how the surface was built rather than by where the body now sits.  A
-        // body of revolution starts w on the curve it was turned from, which lies in the
-        // body's own centre plane, so its start and half lines run along the top and bottom.
-        // A skinned body starts w at the side of its sections, so its quarter and
-        // three-quarter lines do.  Cut along whichever pair lies in the centre plane and the
-        // halves come out left and right, in the body's own frame -- which holds however the
-        // body is turned or moved afterwards.
-        //
-        // It matters beyond tidiness.  A half mesh throws away whole surfaces lying in -y and
-        // cuts the rest at y = 0.  Left and right halves are each wholly on one side, so on a
-        // body down the centreline the far half goes as a piece and the near one is never cut.
-        // Split the other way and both halves straddle the plane, the seam runs along it, and
-        // the mesher is left intersecting a surface with a plane that lies exactly on a line
-        // the surface was joined along.
-        double umin = m_Surface.get_u0();
-        double umax = m_Surface.get_umax();
-
-        double vmin = m_Surface.get_v0();
-        double vmax = m_Surface.get_vmax();
-        double vrng = vmax - vmin;
-
-        double vqtr = vmin + 0.25 * vrng;
-        double vmid = vmin + 0.50 * vrng;
-        double vthreeqtr = vmin + 0.75 * vrng;
-
-        // Which pair of lines to cut along is decided by where they lie, not by how the surface
-        // was built.  The cut has to run along the plane a half mesh is taken about: the two
-        // halves then sit wholly on one side of it, and the pair left inside a patch -- the pair
-        // recorded below as creases -- does not land on the cut.  A crease lying along the cut is
-        // two coincident curves, which opens a hole.
-        //
-        // Where neither pair is in the plane the body does not straddle it along a line, either
-        // choice will do, and how the surface was skinned decides: a body of revolution starts w
-        // on the curve it was turned from, a skinned body at the side of its sections.
-        BndBox bbox;
-        GetBoundingBox( bbox );
-        double symtol = 1.0e-8 * std::max( bbox.GetLargestDist(), 1.0 );
-
-        bool seam_in_plane = WLineInSymPlane( *this, umin, umax, vmin, symtol ) &&
-                             WLineInSymPlane( *this, umin, umax, vmid, symtol );
-
-        bool qtr_in_plane = WLineInSymPlane( *this, umin, umax, vqtr, symtol ) &&
-                            WLineInSymPlane( *this, umin, umax, vthreeqtr, symtol );
-
-        if ( seam_in_plane || ( !qtr_in_plane && GetSkinType() == SKIN_BODY_REV ) )
-        {
-            // w starts in the centre plane, so the two halves fall either side of a single cut
-            // at the half line -- the ends of w already meet along the other.  No join needed.
-            piecewise_surface_type sside0, sside1;
-
-            m_Surface.split_v( sside0, sside1, vmid );
-
-            surfvec.emplace_back( sside0 );
-            regionvec.push_back( MakeIdentityRegion( umin, umax, vmin, vmid ) );
-
-            surfvec.emplace_back( sside1 );
-            regionvec.push_back( MakeIdentityRegion( umin, umax, vmid, vmax ) );
-
-            // The quarter lines run up the sides and are now inside a patch.
-            joins.push_back( make_pair( vec3d( umin, vqtr, 0 ), vec3d( umax, vqtr, 0 ) ) );
-            joins.push_back( make_pair( vec3d( umin, vthreeqtr, 0 ), vec3d( umax, vthreeqtr, 0 ) ) );
-
-            wsup.push_back( vqtr );
-            wsup.push_back( vthreeqtr );
-        }
-        else
-        {
-            // w starts at the side of the sections.  The middle stretch is one half; the two
-            // end stretches are the other, reached either way round the seam at the start of
-            // w, so they are joined back into one -- the piece above the three-quarter line first and the
-            // piece below the quarter line second, which keeps w running the way it did.
-            // Neither piece is reversed.
-            piecewise_surface_type sbelow, srest, smiddle, sabove;
-
-            m_Surface.split_v( sbelow, srest, vqtr );
-            srest.split_v( smiddle, sabove, vthreeqtr );
-
-            surfvec.emplace_back( smiddle );
-            regionvec.push_back( MakeIdentityRegion( umin, umax, vqtr, vthreeqtr ) );
-
-            piecewise_surface_type sjoined;
-            sjoined.join_v( sabove, sbelow );
-
-            surfvec.emplace_back( sjoined );
-
-            // join_v lays the second piece out past the end of the first, so the joined
-            // patch's own w runs from the three-quarter line to vmax and then on again by a
-            // quarter of the range, while that second stretch names the piece at the bottom
-            // of the original.
-            {
-                vector < UWRegion > rv( 2 );
-
-                rv[0].m_UMin = umin;        rv[0].m_UMax = umax;
-                rv[0].m_WMin = vthreeqtr;   rv[0].m_WMax = vmax;
-                rv[0].m_WOff = 0.0;
-
-                rv[1].m_UMin = umin;    rv[1].m_UMax = umax;
-                rv[1].m_WMin = vmin;    rv[1].m_WMax = vqtr;
-                rv[1].m_WOff = vmin - vmax;
-
-                regionvec.push_back( rv );
-            }
-
-            // The seam at the start of w now runs down the middle of the joined patch, and the
-            // half line down the middle of the other.
-            joins.push_back( make_pair( vec3d( umin, vmax, 0 ), vec3d( umax, vmax, 0 ) ) );
-            joins.push_back( make_pair( vec3d( umin, vmid, 0 ), vec3d( umax, vmid, 0 ) ) );
-
-            wsup.push_back( vmin );
-            wsup.push_back( vmid );
-            wsup.push_back( vmax );
-        }
+        SplitSurfsU( surfvec, lines.m_UCut, regionvec );
+        SplitSurfsW( surfvec, lines.m_WCut, regionvec );
     }
     else
     {
         surfvec.push_back( m_Surface );
         regionvec.push_back( MakeIdentityRegion( m_Surface.get_u0(), m_Surface.get_umax(),
                                                  m_Surface.get_v0(), m_Surface.get_vmax() ) );
-    }
 
-    SplitSurfs( surfvec, usup, wsup, regionvec );
+        SplitSurfs( surfvec, usuppress, wsuppress, regionvec );
+
+        vector < double > ucap;
+        if ( cfdcapumin )
+        {
+            ucap.push_back( m_Surface.get_u0() + 1.0 );
+        }
+        if ( cfdcapumax )
+        {
+            ucap.push_back( m_Surface.get_umax() - 1.0 );
+        }
+        if ( !ucap.empty() )
+        {
+            SplitSurfsU( surfvec, ucap, regionvec );
+        }
+    }
 
     int num_sections = surfvec.size();
 
     int ivalid = 0;
     for ( int isect = 0; isect < num_sections; isect++ )
     {
-        const piecewise_surface_type & surf = surfvec[isect];
+        piecewise_surface_type & surf = surfvec[isect];
 
         if ( !CheckValidPatch( surf ) )
         {
@@ -4300,12 +4606,12 @@ void VspSurf::FetchXFerSurf( const std::string &geom_id, const std::string &name
         // Made it through all checks, keep surface.
         XferSurf xsurf;
         xsurf.m_FlipNormal = m_FlipNormal;
-        xsurf.m_Surface = surf;
+        xsurf.m_Surface = std::move( surf );
         xsurf.m_GeomID = geom_id;
         xsurf.m_Name = name;
         xsurf.m_SplitNum = ivalid;
 
-        xsurf.m_UWRegions = regionvec[isect];
+        xsurf.m_UWRegions = std::move( regionvec[isect] );
         xsurf.m_JoinLines = joins;
 
         if ( !utess.empty() )
@@ -4329,7 +4635,7 @@ void VspSurf::FetchXFerSurf( const std::string &geom_id, const std::string &name
         xsurf.m_CompIndx = comp_ind;
         xsurf.m_FeaPartSurfNum = part_surf_num;
         xsurf.m_FeaSymmIndex = m_FeaSymmIndex;
-        xfersurfs.push_back( xsurf );
+        xfersurfs.push_back( std::move( xsurf ) );
         ivalid++;
     }
 }
@@ -4853,7 +5159,8 @@ double VspSurf::InvertUMapping( double u ) const
 {
     if ( m_UMapMax >= 0 )
     {
-        return m_UMapping.Invert( u );
+        // A surface trimmed by an engine model can be shorter than its mapping; stay on the surface.
+        return clamp( m_UMapping.Invert( u ), 0.0, GetUMax() );
     }
     return u;
 }

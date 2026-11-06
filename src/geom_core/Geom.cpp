@@ -109,8 +109,11 @@ GeomBase::GeomBase( Vehicle* vehicle_ptr )
 
     m_XFormDirty = true;
     m_SurfDirty = true;
+    m_PostSurfDirty = true;
     m_TessDirty = true;
     m_HighlightDirty = true;
+    m_MarkerDirty = true;
+    m_UpdateMarker = false;
     m_FeaDirty = true;
     m_AppearanceDirty = true;
     m_UpdateAppearance = false;
@@ -140,6 +143,7 @@ GeomBase::~GeomBase()
 // Surf - everything else (requires re-lofting m_MainSurfVec)
 // Tess - tessellation resolution (requires re-tessellation)
 // Highlight - active section highlighting
+// PostSurf - placing the finished surfaces again (set by subclasses, e.g. moving propeller blades)
 //
 // This works in conjunction with strategic caching.  m_MainSurfVec, m_SurfVec, m_MainTessVec, m_TessVec are all
 // cached to allow minimal updates according to the classified dirty flags.
@@ -672,11 +676,12 @@ xmlNodePtr GeomBase::DecodeXml( xmlNodePtr & node )
         xmlNodePtr cl_node = XmlUtil::GetNode( geombase_node, "Child_List", 0 );
         if ( cl_node )
         {
-            int num_children = XmlUtil::GetNumNames( cl_node, "Child" );
+            vector< xmlNodePtr > child_nodes = XmlUtil::GetNodes( cl_node, "Child" );
+            int num_children = ( int )child_nodes.size();
 
             for ( int i = 0 ; i < num_children ; i++ )
             {
-                xmlNodePtr n = XmlUtil::GetNode( cl_node, "Child", i );
+                xmlNodePtr n = child_nodes[i];
                 string child = IDMgr.RemapCopiedID( XmlUtil::FindString( n, "ID", string() ) );
                 if ( !child.empty() )
                 {
@@ -690,11 +695,12 @@ xmlNodePtr GeomBase::DecodeXml( xmlNodePtr & node )
         xmlNodePtr scl_node = XmlUtil::GetNode( geombase_node, "Step_Child_List", 0 );
         if ( scl_node )
         {
-            int num_stepchildren = XmlUtil::GetNumNames( scl_node, "Step_Child" );
+            vector< xmlNodePtr > step_child_nodes = XmlUtil::GetNodes( scl_node, "Step_Child" );
+            int num_stepchildren = ( int )step_child_nodes.size();
 
             for ( int i = 0 ; i < num_stepchildren ; i++ )
             {
-                xmlNodePtr n = XmlUtil::GetNode( scl_node, "Step_Child", i );
+                xmlNodePtr n = step_child_nodes[i];
                 string child = IDMgr.RemapCopiedID( XmlUtil::FindString( n, "ID", string() ) );
                 if ( !child.empty() )
                 {
@@ -2019,7 +2025,13 @@ void Geom::Update( bool fullupdate )
         UpdatePreTess();
     }
 
-    if ( m_XFormDirty || m_SurfDirty )
+    // The surface passes above do not run for m_PostSurfDirty alone, so this comes after them.
+    if ( m_SurfDirty || m_PostSurfDirty )
+    {
+        UpdatePostSurf();
+    }
+
+    if ( m_XFormDirty || m_SurfDirty || m_PostSurfDirty )
     {
         UpdateSymmAttach();  // Needs to happen for both XForm and Surf updates.
 
@@ -2035,7 +2047,7 @@ void Geom::Update( bool fullupdate )
 
     if ( fullupdate ) // Option to make FitModel and similar things faster.
     {
-        if ( m_XFormDirty || m_SurfDirty || m_SubSurfDirty ) // Everything except m_TessDirty
+        if ( m_XFormDirty || m_SurfDirty || m_PostSurfDirty || m_SubSurfDirty ) // Everything except m_TessDirty
         {
             for ( int i = 0 ; i < ( int )m_SubSurfVec.size() ; i++ )
             {
@@ -2043,7 +2055,7 @@ void Geom::Update( bool fullupdate )
             }
         }
 
-        if ( m_XFormDirty || m_SurfDirty ) // Everything except m_TessDirty
+        if ( m_XFormDirty || m_SurfDirty || m_PostSurfDirty ) // Everything except m_TessDirty
         {
             for ( int i = 0; i < (int)m_FeaStructVec.size(); i++ )
             {
@@ -2055,7 +2067,7 @@ void Geom::Update( bool fullupdate )
     if ( fullupdate )
     {
         // Tessellate MainSurfVec
-        if ( m_SurfDirty || m_TessDirty )
+        if ( m_SurfDirty || m_PostSurfDirty || m_TessDirty )
         {
             if ( m_GuiDraw.GetDisplayType() == DISPLAY_TYPE::DISPLAY_BEZIER )
             {
@@ -2068,7 +2080,7 @@ void Geom::Update( bool fullupdate )
         }
 
         // Copy Tessellation for symmetry and XForm
-        if ( m_XFormDirty || m_SurfDirty || m_TessDirty )
+        if ( m_XFormDirty || m_SurfDirty || m_PostSurfDirty || m_TessDirty )
         {
             if ( m_GuiDraw.GetDisplayType() == DISPLAY_TYPE::DISPLAY_BEZIER )
             {
@@ -2081,20 +2093,24 @@ void Geom::Update( bool fullupdate )
         }
     }
 
-    if ( m_XFormDirty || m_SurfDirty )
+    if ( m_XFormDirty || m_SurfDirty || m_PostSurfDirty )
     {
         UpdateBBox();  // Needs to happen for both XForm and Surf updates.
     }
 
     if ( fullupdate )
     {
-        if ( m_XFormDirty || m_SurfDirty || m_TessDirty )
+        if ( m_XFormDirty || m_SurfDirty || m_PostSurfDirty || m_TessDirty )
         {
             UpdateDrawObj();  // Needs to happen for both XForm and Surf updates.
             UpdateMarkerDrawObj();
         }
+        else if ( m_MarkerDirty )
+        {
+            UpdateMarkerDrawObj();
+        }
 
-        if ( m_XFormDirty || m_SurfDirty || m_HighlightDirty )
+        if ( m_XFormDirty || m_SurfDirty || m_PostSurfDirty || m_HighlightDirty )
         {
             UpdateHighlightDrawObj();
         }
@@ -2106,9 +2122,10 @@ void Geom::Update( bool fullupdate )
     m_XFormDirty = false;
 
     m_UpdateSurf = false;
-    if ( m_SurfDirty )
+    if ( m_SurfDirty || m_PostSurfDirty )
         m_UpdateSurf = true;
     m_SurfDirty = false;
+    m_PostSurfDirty = false;
 
     m_UpdateTess = false;
     if ( m_TessDirty )
@@ -2116,6 +2133,11 @@ void Geom::Update( bool fullupdate )
     m_TessDirty = false;
 
     m_HighlightDirty = false;
+
+    m_UpdateMarker = false;
+    if ( m_MarkerDirty )
+        m_UpdateMarker = true;
+    m_MarkerDirty = false;
 
     m_GlobalScaleDirty = false;
 
@@ -2199,7 +2221,7 @@ void Geom::UpdateSplitTesselate( const VspSurf &surf, bool capUMinSuccess, bool 
     surf.SplitTesselate( m_TessU(), m_TessW(), pnts, norms, m_CapUMinTess(), m_TessU() );
 }
 
-void Geom::UpdateEndCaps( int ncap )
+void Geom::UpdateEndCaps()
 {
     if ( m_CappingDone )
     {
@@ -2208,28 +2230,32 @@ void Geom::UpdateEndCaps( int ncap )
     m_CappingDone = true;
 
     unsigned int nmain = m_MainSurfVec.size();
-    if ( ncap < 0 || ncap > ( int )nmain )
-    {
-        ncap = nmain;
-    }
-    // Size the flags to the number of surfaces actually capped.  A caller that caps fewer than all
-    // main surfaces (e.g. a prop that caps one blade and then duplicates it) is responsible for
-    // extending these vectors to cover the copies.
-    m_CapUMinSuccess.resize( ncap );
-    m_CapUMaxSuccess.resize( ncap );
+    m_CapUMinSuccess.resize( nmain );
+    m_CapUMaxSuccess.resize( nmain );
 
-    // cycle through the first ncap vspsurfs, check if wing type then cap using new Code-Eli cap surface creator
-    for ( int i = 0; i < ncap; i++ )
+    // cycle through all vspsurfs, check if wing type then cap using new Code-Eli cap surface creator
+    for ( int i = 0; i < nmain; i++ )
     {
-        m_CapUMinSuccess[i] = false;
-        m_CapUMaxSuccess[i] = false;
-
-        vec3d ptoff;
-        // NOTE: These return a bool that is true if it modified the surface to create a cap
-        m_CapUMinSuccess[i] = m_MainSurfVec[i].CapUMin(m_CapUMinOption(), m_CapUMinLength(), m_CapUMinStrength(), m_CapUMinOffset(), ptoff, m_CapUMinSweepFlag());
-        m_CapUMaxSuccess[i] = m_MainSurfVec[i].CapUMax(m_CapUMaxOption(), m_CapUMaxLength(), m_CapUMaxStrength(), m_CapUMaxOffset(), ptoff, m_CapUMaxSweepFlag());
+        bool umin, umax;
+        CapSurf( m_MainSurfVec[i], umin, umax );
+        m_CapUMinSuccess[i] = umin;
+        m_CapUMaxSuccess[i] = umax;
     }
 
+    UpdateCapParms();
+}
+
+// Cap one surface by the end cap parms.  Each flag is true where the surface was given a cap.
+void Geom::CapSurf( VspSurf & surf, bool & umin_success, bool & umax_success )
+{
+    vec3d ptoff;
+    umin_success = surf.CapUMin(m_CapUMinOption(), m_CapUMinLength(), m_CapUMinStrength(), m_CapUMinOffset(), ptoff, m_CapUMinSweepFlag());
+    umax_success = surf.CapUMax(m_CapUMaxOption(), m_CapUMaxLength(), m_CapUMaxStrength(), m_CapUMaxOffset(), ptoff, m_CapUMaxSweepFlag());
+}
+
+// Set the end cap parms each cap option fixes.
+void Geom::UpdateCapParms()
+{
     switch( m_CapUMinOption() ){
         case NO_END_CAP:
         case FLAT_END_CAP:
@@ -2553,6 +2579,11 @@ void Geom::UpdateChildren( bool fullupdate )
                 {
                     child->m_XFormDirty = true;
                 }
+                // A human's design eye point, which a super cone hangs off, moves with its surface.
+                else if ( m_UpdateSurf && Geom::CastTo< HumanVertRole >( this ) )
+                {
+                    child->m_XFormDirty = true;
+                }
             }
 
             // We provide a joint, children are force attached.
@@ -2647,6 +2678,11 @@ void Geom::UpdateStepChildren( bool fullupdate )
                 if ( m_UpdateTess )
                 {
                     child->m_TessDirty = true;
+                }
+                // A Clone draws the markers this Geom builds for it.
+                if ( m_UpdateMarker )
+                {
+                    child->m_MarkerDirty = true;
                 }
                 // Name, colours and subsurfaces are not Parms, so they are flagged explicitly.
                 if ( m_UpdateAppearance )
@@ -2779,20 +2815,26 @@ void Geom::UpdateFlags( )
 
     for( int i = 0; i < (int)m_MainSurfVec.size(); i++ )
     {
-        if ( m_MainSurfVec[i].GetSurfCfdType() == vsp::CFD_TRANSPARENT )
-        {
-            // Transparent surfaces (actuator disks) can't be negative
-            continue;
-        }
+        UpdateSurfFlags( m_MainSurfVec[i] );
+    }
+}
 
-        if ( m_MainSurfVec[i].GetSurfCfdType() == vsp::CFD_NORMAL && m_NegativeVolumeFlag.Get() )
-        {
-            m_MainSurfVec[i].SetSurfCfdType( vsp::CFD_NEGATIVE );
-        }
-        else if ( m_MainSurfVec[i].GetSurfCfdType() == vsp::CFD_NEGATIVE && !m_NegativeVolumeFlag.Get() )
-        {
-            m_MainSurfVec[i].SetSurfCfdType( vsp::CFD_NORMAL );
-        }
+// Make a surface negative or normal by the negative volume flag.
+void Geom::UpdateSurfFlags( VspSurf & surf )
+{
+    if ( surf.GetSurfCfdType() == vsp::CFD_TRANSPARENT )
+    {
+        // Transparent surfaces (actuator disks) can't be negative
+        return;
+    }
+
+    if ( surf.GetSurfCfdType() == vsp::CFD_NORMAL && m_NegativeVolumeFlag.Get() )
+    {
+        surf.SetSurfCfdType( vsp::CFD_NEGATIVE );
+    }
+    else if ( surf.GetSurfCfdType() == vsp::CFD_NEGATIVE && !m_NegativeVolumeFlag.Get() )
+    {
+        surf.SetSurfCfdType( vsp::CFD_NORMAL );
     }
 }
 
@@ -3944,6 +3986,58 @@ void Geom::UpdateDegenGeomPreview()
     ApplySymm( m_MainDegenGeomPreviewVec, m_DegenGeomPreviewVec );
 }
 
+// The tessellation in Bezier display, patch by patch and row by row; the surface of the DegenGeom
+// preview in the degen displays, row by row, and none for a surface without a preview.  False if
+// isurf is out of range.
+bool Geom::GetDisplayTessPnts( int isurf, vector< vec3d > & pnts )
+{
+    pnts.clear();
+
+    if ( m_GuiDraw.GetDisplayType() == DISPLAY_TYPE::DISPLAY_BEZIER )
+    {
+        if ( isurf < 0 || isurf >= ( int )m_TessVec.size() )
+        {
+            return false;
+        }
+
+        const vector< vector< vector< vec3d > > > & patches = m_TessVec[ isurf ].m_pnts;
+        for ( int i = 0; i < ( int )patches.size(); i++ )
+        {
+            for ( int j = 0; j < ( int )patches[i].size(); j++ )
+            {
+                pnts.insert( pnts.end(), patches[i][j].begin(), patches[i][j].end() );
+            }
+        }
+        return true;
+    }
+
+    if ( isurf < 0 || isurf >= ( int )m_MainSurfIndxVec.size() )
+    {
+        return false;
+    }
+
+    // A preview with fewer main surfaces than the Geom holds their copies main by main, as ApplySymm
+    // makes them.
+    int idegen = isurf;
+    if ( m_DegenGeomPreviewVec.size() != m_MainSurfIndxVec.size() )
+    {
+        int ncopy = GetNumSymmCopies();
+        int imain = m_MainSurfIndxVec[ isurf ];
+        if ( ncopy < 1 || imain >= ( int )m_DegenGeomPreviewVec.size() / ncopy )
+        {
+            return true;
+        }
+        idegen = imain * ncopy + m_SurfCopyIndx[ isurf ];
+    }
+
+    const vector< vector< vec3d > > & rows = m_DegenGeomPreviewVec[ idegen ].getDegenSurf().x;
+    for ( int i = 0; i < ( int )rows.size(); i++ )
+    {
+        pnts.insert( pnts.end(), rows[i].begin(), rows[i].end() );
+    }
+    return true;
+}
+
 //==== Encode Data Into XML Data Struct ====//
 xmlNodePtr Geom::EncodeXml( xmlNodePtr & node )
 {
@@ -4014,11 +4108,12 @@ xmlNodePtr Geom::DecodeXml( xmlNodePtr & node )
     {
         m_SetFlags = XmlUtil::ExtractVectorBoolNode( geom_node, "Set_List" );
 
-        int num_source = XmlUtil::GetNumNames( geom_node, "Source" );
+        vector< xmlNodePtr > src_nodes = XmlUtil::GetNodes( geom_node, "Source" );
+        int num_source = ( int )src_nodes.size();
 
         for ( int i = 0 ; i < num_source ; i++ )
         {
-            xmlNodePtr src_node = XmlUtil::GetNode( geom_node, "Source", i );
+            xmlNodePtr src_node = src_nodes[i];
             if ( src_node )
             {
                 int type = XmlUtil::FindInt( src_node, "Type", POINT_SOURCE );
@@ -4037,11 +4132,12 @@ xmlNodePtr Geom::DecodeXml( xmlNodePtr & node )
         xmlNodePtr subsurfs_node = XmlUtil::GetNode( geom_node, "SubSurfaces", 0 );
         if ( subsurfs_node )
         {
-            int num_ss = XmlUtil::GetNumNames( subsurfs_node, "SubSurface" );
+            vector< xmlNodePtr > ss_nodes = XmlUtil::GetNodes( subsurfs_node, "SubSurface" );
+            int num_ss = ( int )ss_nodes.size();
 
             for ( int ss = 0 ; ss < num_ss ; ss++ )
             {
-                xmlNodePtr ss_node = XmlUtil::GetNode( subsurfs_node, "SubSurface", ss );
+                xmlNodePtr ss_node = ss_nodes[ss];
                 if ( ss_node )
                 {
                     xmlNodePtr ss_info_node = XmlUtil::GetNode( ss_node, "SubSurfaceInfo", 0 );
@@ -4062,11 +4158,12 @@ xmlNodePtr Geom::DecodeXml( xmlNodePtr & node )
         xmlNodePtr structvecnode = XmlUtil::GetNode( geom_node, "FeaStructures", 0 );
         if ( structvecnode )
         {
-            int num_struct = XmlUtil::GetNumNames( structvecnode, "FeaStructureInfo" );
+            vector< xmlNodePtr > struct_nodes = XmlUtil::GetNodes( structvecnode, "FeaStructureInfo" );
+            int num_struct = ( int )struct_nodes.size();
 
             for ( int i = 0; i < num_struct; i++ )
             {
-                xmlNodePtr structnode = XmlUtil::GetNode( structvecnode, "FeaStructureInfo", i );
+                xmlNodePtr structnode = struct_nodes[i];
 
                 if ( structnode )
                 {
@@ -4297,20 +4394,22 @@ void Geom::ReadV2File( xmlNodePtr &root )
     }
 
     m_ChildIDVec.clear();
-    int numChildren =  XmlUtil::GetNumNames( root, "Children_PtrID" );
+    vector< xmlNodePtr > child_nodes = XmlUtil::GetNodes( root, "Children_PtrID" );
+    int numChildren = ( int )child_nodes.size();
     for (  i = 0 ; i < numChildren ; i++ )
     {
-        xmlNodePtr child_node = XmlUtil::GetNode( root, "Children_PtrID", i );
+        xmlNodePtr child_node = child_nodes[i];
         m_ChildIDVec.push_back( IDMgr.ForceRemapID( XmlUtil::ExtractString( child_node ) , 10 ) );
     }
 
     //==== Read CFD Mesh Sources ====//
     DelAllSources();
 
-    int numSources = XmlUtil::GetNumNames( root, "CFD_Mesh_Source" );
+    vector< xmlNodePtr > source_nodes = XmlUtil::GetNodes( root, "CFD_Mesh_Source" );
+    int numSources = ( int )source_nodes.size();
     for ( i = 0 ; i < numSources ; i++ )
     {
-        xmlNodePtr source_node = XmlUtil::GetNode( root, "CFD_Mesh_Source", i );
+        xmlNodePtr source_node = source_nodes[i];
         int type = XmlUtil::FindInt( source_node, "Type", -1 );
 
         BaseSource* src_ptr = CreateSource( type );
@@ -4363,10 +4462,11 @@ void Geom::ReadV2File( xmlNodePtr &root )
 
     partVec.clear();
 
-    int numParts = XmlUtil::GetNumNames( root, "Structure_Part" );
+    vector< xmlNodePtr > part_nodes = XmlUtil::GetNodes( root, "Structure_Part" );
+    int numParts = ( int )part_nodes.size();
     for ( i = 0 ; i < numParts ; i++ )
     {
-        xmlNodePtr part_node = XmlUtil::GetNode( root, "Structure_Part", i );
+        xmlNodePtr part_node = part_nodes[i];
 
         int type = XmlUtil::FindInt( part_node, "Type", -1 );
 
@@ -5838,6 +5938,7 @@ void Geom::WriteAirfoilFiles( FILE* meta_fid, const string &name, const string &
             }
 
             double u_global = umin + ( i  * ustep ) + ( ustep * ( (double)j / ( utess_vec[i] - 1.0 ) ) ); // Get u value on main surface
+            u_global = std::clamp( u_global, 0.0, 1.0 );
 
             vec3d le_pnt = m_MainSurfVec[0].CompPnt01( u_global, ( Vle / Vmax ) );
             vec3d te_pnt = m_MainSurfVec[0].CompPnt01( u_global, ( Vmin / Vmax ) );
@@ -8187,16 +8288,16 @@ void GeomXSec::NormalizeFlaps()
 
     for ( int i = 0 ; i < nxsec ; i++ )
     {
-        WingSect* ws = dynamic_cast < WingSect* > ( m_XSecSurf.FindXSec( i ) );
-        if ( ws )
+        XSec* xs = m_XSecSurf.FindXSec( i );
+        if ( xs )
         {
-            XSecCurve* xsc = ws->GetXSecCurve();
+            XSecCurve* xsc = xs->GetXSecCurve();
             if ( xsc )
             {
                 string width_id = xsc->GetWidthParmID();
                 Parm* width_parm = ParmMgr.FindParm( width_id );
 
-                double w = ws->m_TipChord();
+                double w = xsc->GetWidth();
 
                 if ( width_parm && xsc->m_TEFlapType() != vsp::FLAP_NONE )
                 {
@@ -8226,19 +8327,34 @@ void GeomXSec::NormalizeFlaps()
         flapxchord = round( flapxchord * fac ) / fac;
         double fac2 = 1000;
         arclen = round( arclen * fac2 ) / fac2;
+
+        // The flap and its arc fit within a side's parameter span.
+        if ( flapxchord > 0.95 )
+        {
+            flapxchord = 0.95;
+        }
+        double arcmax = 0.95 - flapxchord;
+        if ( arcmax < 0 )
+        {
+            arcmax = 0;
+        }
+        if ( arclen > arcmax )
+        {
+            arclen = arcmax;
+        }
     }
 
 
 
     for ( int i = 0 ; i < nxsec ; i++ )
     {
-        WingSect* ws = dynamic_cast < WingSect* > ( m_XSecSurf.FindXSec( i ) );
-        if ( ws )
+        XSec* xs = m_XSecSurf.FindXSec( i );
+        if ( xs )
         {
-            XSecCurve* xsc = ws->GetXSecCurve();
+            XSecCurve* xsc = xs->GetXSecCurve();
             if ( xsc )
             {
-                if ( nflap > 0 )
+                if ( nflap > 0 && flapxchord > 0 )
                 {
                     xsc->m_TEFlapFlag = true;
                     xsc->m_TEFlapT = flapxchord;

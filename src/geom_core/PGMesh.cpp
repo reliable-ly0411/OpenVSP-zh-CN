@@ -296,6 +296,23 @@ bool PGNode::ColinearNode() const
     return false;
 }
 
+// Count the number of intersection edges that use this node.  Interior nodes of an
+// intersection curve will have exactly two.  Other counts indicate curve end points
+// or junctions between multiple intersection curves.
+int PGNode::IntersectionEdgeCount() const
+{
+    int cnt = 0;
+    for ( int i = 0; i < m_EdgeVec.size(); i++ )
+    {
+        PGEdge *e = m_EdgeVec[i];
+        if ( e && e->IntersectionEdge() )
+        {
+            cnt++;
+        }
+    }
+    return cnt;
+}
+
 bool PGNode::Check() const
 {
     if ( m_DeleteMeFlag )
@@ -858,6 +875,24 @@ bool PGEdge::SilouetteEdge( const PGMesh *m, const vec3d &v ) const
     return false;
 }
 
+bool PGEdge::IntersectionEdge() const
+{
+    int nface = m_FaceVec.size();
+
+    if ( nface == 2 )
+    {
+        PGFace *f0 = m_FaceVec[ 0 ];
+        PGFace *f1 = m_FaceVec[ 1 ];
+
+        if ( f0->m_Tag != f1->m_Tag )
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool PGEdge::WingWakeEdge( const PGMesh *m, int &part ) const
 {
     const double tol = 1e-5; // Typical wmin value TMAGIC == 0.004
@@ -941,8 +976,12 @@ PGFace::PGFace()
     m_iQuad = -1;
     m_Tag = -1;
     m_Region = -1;
+    m_RegionDir = -1;
+    m_kref_max = -1;
+    m_jref_max = -1;
     m_jref = 0;
     m_kref = 0;
+    m_FanID = -1;
 
     m_Parent = this;
 }
@@ -1211,7 +1250,8 @@ void PGFace::Triangulate_triangle( const vector < PGNode* > &nodVec, const vec3d
 
     if ( tristatus == TRI_OK )
     {
-        triangle_mesh_copy( ctx, &out, 1, 1 );
+        // The points and triangles only: no edge or neighbor lists.
+        triangle_mesh_copy( ctx, &out, 0, 0 );
 
         // Place result into node pointer vector.
         triNodeVec.resize( out.numberoftriangles * 3 );
@@ -1596,6 +1636,28 @@ void PGFace::DumpMatlab() const
 
 }
 
+void PGFace::PrintUWNodes() const
+{
+    vector< PGNode* > nodVec;
+    GetNodes( nodVec );
+
+    for ( int i = 0; i + 1 < nodVec.size(); i++ )
+    {
+        if ( nodVec[i] )
+        {
+            vec2d uw;
+            nodVec[i]->GetUW( m_Tag, uw );
+            printf( "%d %g %g\n", i, uw.x(), uw.y() );
+        }
+        else
+        {
+            printf( "X\n" );
+        }
+    }
+    printf( "\n" );
+
+}
+
 void PGFace::Diagnostics() const
 {
     printf( "Face %d\n", m_ID );
@@ -1941,18 +2003,70 @@ void QuadFaceMergeProps( PGFace *f0, PGFace *f1 )
 {
 }
 
+void RegionMergeProps( PGFace *f0, PGFace *f1 )
+{
+    // Both faces lie in one fan block, so the merged face spans the union of their index ranges.
+    if ( f0->m_RegionDir == 1 )
+    {
+        f0->m_kref_max = std::max( f0->m_kref_max, f1->m_kref_max );
+    }
+    else
+    {
+        f0->m_jref_max = std::max( f0->m_jref_max, f1->m_jref_max );
+    }
+
+    f0->m_jref = std::min( f0->m_jref, f1->m_jref );
+    f0->m_kref = std::min( f0->m_kref, f1->m_kref );
+}
+
 void JrefMergeProps( PGFace *f0, PGFace *f1 )
 {
-    f0->m_jref = f0->m_jref / 2;
-    f0->m_ID = -f0->m_ID;
+    // Preserve the K-type region's own jref so JrefTagMatch keeps working across the full row.
+    if ( f1->m_RegionDir == 1 )
+    {
+        f0->m_jref = f1->m_jref;
+        f0->m_kref_max = f1->m_kref_max;
+    }
+    else if ( f0->m_RegionDir != 1 )
+    {
+        f0->m_jref = std::min( f0->m_jref, f1->m_jref );
+    }
+    f0->m_kref = std::min( f0->m_kref, f1->m_kref );
+
+    if ( f1->m_RegionDir != -1 )
+    {
+        f0->m_Region = f1->m_Region;
+        f0->m_RegionDir = f1->m_RegionDir;
+    }
     f0->m_ChildVec.insert( f0->m_ChildVec.end(), f1->m_ChildVec.begin(), f1->m_ChildVec.end() );
 }
 
 void KrefMergeProps( PGFace *f0, PGFace *f1 )
 {
-    f0->m_kref = f0->m_kref / 2;
-    f0->m_ID = -f0->m_ID;
+    // Preserve the J-type region's own kref so KrefTagMatch keeps working across the full row.
+    if ( f1->m_RegionDir == 0 )
+    {
+        f0->m_kref = f1->m_kref;
+        f0->m_jref_max = f1->m_jref_max;
+    }
+    else if ( f0->m_RegionDir != 0 )
+    {
+        f0->m_kref = std::min( f0->m_kref, f1->m_kref );
+    }
+    f0->m_jref = std::min( f0->m_jref, f1->m_jref );
+
+    if ( f1->m_RegionDir != -1 )
+    {
+        f0->m_Region = f1->m_Region;
+        f0->m_RegionDir = f1->m_RegionDir;
+    }
     f0->m_ChildVec.insert( f0->m_ChildVec.end(), f1->m_ChildVec.begin(), f1->m_ChildVec.end() );
+}
+
+bool RegionMatch( PGFace *f0, PGFace *f1 )
+{
+    return f0->m_Region != -1 &&
+           f0->m_Region == f1->m_Region;
 }
 
 bool QuadTagMatch( PGFace *f0, PGFace *f1 )
@@ -1964,20 +2078,78 @@ bool QuadTagMatch( PGFace *f0, PGFace *f1 )
 
 bool JrefTagMatch( PGFace *f0, PGFace *f1 )
 {
-    return f0->m_Tag ==       f1->m_Tag &&
+    // K-type regions (dir=1) absorb J-row quads within their k-span; J-type regions block J merges entirely.
+    bool has_k_region = ( f0->m_RegionDir == 1 ) || ( f1->m_RegionDir == 1 );
+    bool has_j_region = ( f0->m_RegionDir == 0 ) || ( f1->m_RegionDir == 0 );
+    bool both_region  = ( f0->m_RegionDir != -1 ) && ( f1->m_RegionDir != -1 );
+
+    bool kref_ok;
+    if ( has_k_region )
+    {
+        PGFace *reg;
+        PGFace *quad;
+        if ( f0->m_RegionDir == 1 )
+        {
+            reg  = f0;
+            quad = f1;
+        }
+        else
+        {
+            reg  = f1;
+            quad = f0;
+        }
+        kref_ok = ( quad->m_kref >= reg->m_kref && quad->m_kref <= reg->m_kref_max );
+    }
+    else
+    {
+        kref_ok = ( f0->m_kref == f1->m_kref );
+    }
+
+    return !has_j_region &&
+           !both_region  &&
+           f0->m_Tag ==       f1->m_Tag &&
            f0->m_jref >= 1 && f1->m_jref >= 1 &&
            f0->m_jref !=      f1->m_jref &&
            f0->m_jref / 2 ==  f1->m_jref / 2 &&
-           f0->m_ID > 0 &&    f1->m_ID > 0;
+           kref_ok;
 }
 
 bool KrefTagMatch( PGFace *f0, PGFace *f1 )
 {
-    return f0->m_Tag ==       f1->m_Tag &&
+    // J-type regions (dir=0) absorb K-row quads within their j-span; K-type regions block K merges entirely.
+    bool has_j_region = ( f0->m_RegionDir == 0 ) || ( f1->m_RegionDir == 0 );
+    bool has_k_region = ( f0->m_RegionDir == 1 ) || ( f1->m_RegionDir == 1 );
+    bool both_region  = ( f0->m_RegionDir != -1 ) && ( f1->m_RegionDir != -1 );
+
+    bool jref_ok;
+    if ( has_j_region )
+    {
+        PGFace *reg;
+        PGFace *quad;
+        if ( f0->m_RegionDir == 0 )
+        {
+            reg  = f0;
+            quad = f1;
+        }
+        else
+        {
+            reg  = f1;
+            quad = f0;
+        }
+        jref_ok = ( quad->m_jref >= reg->m_jref && quad->m_jref <= reg->m_jref_max );
+    }
+    else
+    {
+        jref_ok = ( f0->m_jref == f1->m_jref );
+    }
+
+    return !has_k_region &&
+           !both_region  &&
+           f0->m_Tag ==       f1->m_Tag &&
            f0->m_kref >= 1 && f1->m_kref >= 1 &&
            f0->m_kref !=      f1->m_kref &&
            f0->m_kref / 2 ==  f1->m_kref / 2 &&
-           f0->m_ID > 0 &&    f1->m_ID > 0;
+           jref_ok;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -2433,7 +2605,7 @@ PGFace* PGMesh::AddFace()
 
 PGFace* PGMesh::AddFace( PGNode* n0, PGNode* n1, PGNode* n2,
                          const vec2d &uw0, const vec2d &uw1, const vec2d &uw2,
-                         const vec3d & norm, const int iQuad, const int tag, const int jref, const int kref )
+                         const vec3d & norm, const int iQuad, const int tag, const int jref, const int kref, const int fanid )
 {
     PGFace *f = AddFace( );
     f->m_Nvec = norm;
@@ -2441,6 +2613,7 @@ PGFace* PGMesh::AddFace( PGNode* n0, PGNode* n1, PGNode* n2,
     f->m_Tag = tag;
     f->m_jref = jref;
     f->m_kref = kref;
+    f->m_FanID = fanid;
 
     PGEdge *e1 = AddEdge( n0, n1 );
     PGEdge *e2 = AddEdge( n1, n2 );
@@ -2767,6 +2940,43 @@ void PGMesh::RemoveNodeMergeEdges( PGNode* n )
     }
 }
 
+// Edges with fewer than two faces, edges with more than two, and node pairs joined by more than
+// one edge.  A closed mesh of thick surfaces should have none.  A duplicated edge splits the faces
+// either side of it, each edge holding one, while a file written by node looks closed.
+void PGMesh::CountNonManifoldEdges( int &n_one, int &n_many, int &n_dup ) const
+{
+    n_one = 0;
+    n_many = 0;
+    n_dup = 0;
+
+    std::set< std::pair< const PGNode*, const PGNode* > > seen;
+
+    list< PGEdge* >::const_iterator e;
+    for ( e = m_EdgeList.begin() ; e != m_EdgeList.end(); ++e )
+    {
+        int nface = ( *e )->m_FaceVec.size();
+        if ( nface < 2 )
+        {
+            n_one++;
+        }
+        else if ( nface > 2 )
+        {
+            n_many++;
+        }
+
+        const PGNode* a = ( *e )->m_N0;
+        const PGNode* b = ( *e )->m_N1;
+        if ( b < a )
+        {
+            std::swap( a, b );
+        }
+        if ( !seen.insert( std::make_pair( a, b ) ).second )
+        {
+            n_dup++;
+        }
+    }
+}
+
 bool PGMesh::Check()
 {
     list< PGFace* >::iterator f;
@@ -2825,6 +3035,7 @@ void PGMesh::CopyFaces( const vector < PGFace* > &faces, const vector < PGNode* 
             f->m_Tag = forig->m_Tag;
             f->m_jref = forig->m_jref;
             f->m_kref = forig->m_kref;
+            f->m_FanID = forig->m_FanID;
 
             e0->AddConnectFace( f );
             e1->AddConnectFace( f );
@@ -3078,6 +3289,66 @@ void PGMesh::IdentifySilhouettes( vector < vector < PGEdge * > > &silhouetteLoop
             ExtendSilhouette( silhouette, (*e), (*e)->m_N1, v );
 
             silhouetteLoopVec.push_back( silhouette );
+        }
+    }
+
+    ResetEdgeLoopFlags();
+}
+
+void PGMesh::ExtendIntersection( vector < PGEdge * > & intersection, PGEdge *e, const PGNode *n )
+{
+    e->m_InCurrentLoopFlag = true;
+
+    // A curve ends at a junction, so which curve it would carry on into does not matter.
+    if ( n->IntersectionEdgeCount() != 2 )
+    {
+        e->m_InCurrentLoopFlag = false;
+        return;
+    }
+
+    int nedg = n->m_EdgeVec.size();
+
+    for ( int i = 0; i < nedg; i++ )
+    {
+        PGEdge * ei = n->m_EdgeVec[ i ];
+        if ( ei && ei != e && !ei->m_InLoopFlag && !ei->m_InCurrentLoopFlag )
+        {
+            if ( ei->IntersectionEdge() )
+            {
+                PGNode * ni = ei->OtherNode( n );
+
+                intersection.push_back( ei );
+                ei->m_InLoopFlag = true;
+
+                ExtendIntersection( intersection, ei, ni );
+                return;
+            }
+        }
+    }
+
+    e->m_InCurrentLoopFlag = false;
+}
+
+void PGMesh::IdentifyIntersections( vector < vector < PGEdge * > > &intersectionVec )
+{
+    list< PGEdge* >::iterator e;
+    for ( e = m_EdgeList.begin() ; e != m_EdgeList.end(); ++e )
+    {
+
+        if ( !( ( *e )->m_InLoopFlag ) && ( *e )->IntersectionEdge() )
+        {
+            (*e)->m_InLoopFlag = true;
+
+            vector < PGEdge * > intersection;
+            intersection.push_back( *e );
+
+            ExtendIntersection( intersection, (*e), (*e)->m_N0 );
+
+            std::reverse( intersection.begin(), intersection.end() );
+
+            ExtendIntersection( intersection, (*e), (*e)->m_N1 );
+
+            intersectionVec.push_back( intersection );
         }
     }
 
@@ -3343,8 +3614,13 @@ void PGMesh::SplitFaceFromDoubleBackNode( PGFace *f, const PGEdge *e, PGNode *n 
     {
         PGEdge* eh = ehull[i];
 
-        double s, t;
-        line_line_intersect( nother->m_Pt->m_Pnt, n->m_Pt->m_Pnt, eh->m_N0->m_Pt->m_Pnt, eh->m_N1->m_Pt->m_Pnt, &s, &t );
+        // Skip a hull edge parallel to the double-back edge, or either one of no length.
+        double s = 0.0;
+        double t = 0.0;
+        if ( !line_line_intersect( nother->m_Pt->m_Pnt, n->m_Pt->m_Pnt, eh->m_N0->m_Pt->m_Pnt, eh->m_N1->m_Pt->m_Pnt, &s, &t ) )
+        {
+            continue;
+        }
 
         vec3d p = ( 1.0 - t ) * eh->m_N0->m_Pt->m_Pnt + t * eh->m_N1->m_Pt->m_Pnt;
 
@@ -3370,6 +3646,24 @@ void PGMesh::SplitFaceFromDoubleBackNode( PGFace *f, const PGEdge *e, PGNode *n 
         PGEdge * enew = AddEdge( n, newnode );
 
         SplitFace( f, enew );
+    }
+}
+
+void PGMesh::SplitLEGeom()
+{
+    // Make vector copy of list so faces can be removed from list without invalidating active list iterator.
+    vector< PGFace* > fVec( m_FaceList.begin(), m_FaceList.end() );
+
+    for ( int i = 0; i < fVec.size(); i++ )
+    {
+        PGFace *f = fVec[i];
+
+        PGEdge *e = NULL;
+        PGNode *n = f->FindDoubleBackNode( e );
+        if ( n )
+        {
+            SplitFaceFromDoubleBackNode( f, e, n );
+        }
     }
 }
 
@@ -3436,6 +3730,7 @@ void PGMesh::SplitFace( PGFace *f0, PGEdge *e )
     f1->m_Tag = f0->m_Tag;
     f1->m_jref = f0->m_jref;
     f1->m_kref = f0->m_kref;
+    f1->m_FanID = f0->m_FanID;
 
     // Build two new edge vectors.
     vector < PGEdge * > ev0;
@@ -3464,6 +3759,398 @@ void PGMesh::SplitFace( PGFace *f0, PGEdge *e )
     e->AddConnectFace( f1 );
 }
 
+// Test whether an edge of length l is short relative to its neighbors along an
+// intersection curve.  CSG intersection curves pick up sliver edges where the curve
+// passes close to a vertex of the underlying structured mesh -- the curve's natural
+// segment length is set by the mesh spacing, so a segment much shorter than both of
+// its neighbors is a sliver.  Comparing against the shorter neighbor prevents
+// cascading collapses where the mesh is legitimately fine.  A negative neighbor
+// length indicates no neighbor (end of an open curve).
+bool ShortIntersectionEdge( double lprev, double l, double lnext, double lenratio )
+{
+    double lref = DBL_MAX;
+    if ( lprev >= 0 )
+    {
+        lref = min( lref, lprev );
+    }
+    if ( lnext >= 0 )
+    {
+        lref = min( lref, lnext );
+    }
+
+    if ( lref == DBL_MAX ) // Isolated edge, no neighbors to compare against.
+    {
+        return false;
+    }
+
+    return l < lenratio * lref;
+}
+
+// Find the nearest surviving chain edge before/after index i, wrapping around for
+// closed loops so the loop's start/end edge pair is also checked.  Returns -1 if
+// there is no surviving neighbor in that direction.
+static int PrevAliveEdge( const vector < bool > &alive, int i, bool closed )
+{
+    int ne = alive.size();
+    if ( closed )
+    {
+        for ( int k = 1; k < ne; k++ )
+        {
+            int j = ( i - k + ne ) % ne;
+            if ( alive[j] )
+            {
+                return j;
+            }
+        }
+    }
+    else
+    {
+        for ( int j = i - 1; j >= 0; j-- )
+        {
+            if ( alive[j] )
+            {
+                return j;
+            }
+        }
+    }
+    return -1;
+}
+
+static int NextAliveEdge( const vector < bool > &alive, int i, bool closed )
+{
+    int ne = alive.size();
+    if ( closed )
+    {
+        for ( int k = 1; k < ne; k++ )
+        {
+            int j = ( i + k ) % ne;
+            if ( alive[j] )
+            {
+                return j;
+            }
+        }
+    }
+    else
+    {
+        for ( int j = i + 1; j < ne; j++ )
+        {
+            if ( alive[j] )
+            {
+                return j;
+            }
+        }
+    }
+    return -1;
+}
+
+// Collapse edges that are short compared to their neighbors along an intersection
+// chain, shortest first, so the result does not depend on where the chain starts.
+// Returns the number of edges collapsed.  Housekeeping of the degenerate topology left
+// behind by MergeNodes is deferred to the caller -- deleted objects are flagged but not
+// dumped, so pointers remain safe to test throughout.  junctions holds every node that
+// joined more or fewer than two intersection edges before any collapse.
+int PGMesh::CleanIntersectionChain( const vector < PGEdge * > &chain, double lenratio, const set < PGNode * > &junctions )
+{
+    int ne = chain.size();
+    if ( ne < 2 ) // Single edge chain has no neighbors to compare against.
+    {
+        return 0;
+    }
+
+    vector < PGNode* > nodVec;
+    GetNodes( chain, nodVec );
+
+    if ( nodVec.size() != ne + 1 ) // Chain walk failed.
+    {
+        return 0;
+    }
+
+    bool closed = ( nodVec.front() == nodVec.back() );
+
+    // Working copies updated as collapses modify the chain.  Edge ie spans
+    // nodVec[ie] to nodVec[ie+1].
+    vector < PGEdge* > eVec = chain;
+    vector < double > len( ne );
+    vector < bool > alive( ne, true );
+
+    // An edge between two tags of one part is a subsurface boundary.
+    vector < bool > subsurf( ne, false );
+
+    for ( int ie = 0; ie < ne; ie++ )
+    {
+        len[ie] = dist( nodVec[ie]->m_Pt->m_Pnt, nodVec[ie + 1]->m_Pt->m_Pnt );
+        PGEdge *e = chain[ie];
+        subsurf[ie] = m_PGMulti->GetPart( e->m_FaceVec[0]->m_Tag ) == m_PGMulti->GetPart( e->m_FaceVec[1]->m_Tag );
+    }
+
+    int ntotal = 0;
+    bool collapsed = true;
+    while ( collapsed )
+    {
+        collapsed = false;
+
+        // Every short edge, shortest relative to its neighbors first.
+        vector < pair < double, int > > order;
+        for ( int ie = 0; ie < ne; ie++ )
+        {
+            if ( !alive[ie] )
+            {
+                continue;
+            }
+
+            // An edge deleted by a collapse elsewhere (e.g. merged away through a
+            // shared junction) is dead -- do not let its stale length serve as a
+            // neighbor reference.
+            if ( eVec[ie]->m_DeleteMeFlag )
+            {
+                alive[ie] = false;
+                continue;
+            }
+
+            int iprev = PrevAliveEdge( alive, ie, closed );
+            int inxt = NextAliveEdge( alive, ie, closed );
+
+            double lprev = -1.0;
+            double lnxt = -1.0;
+            double lref = DBL_MAX;
+            if ( iprev >= 0 )
+            {
+                lprev = len[iprev];
+                lref = min( lref, lprev );
+            }
+            if ( inxt >= 0 )
+            {
+                lnxt = len[inxt];
+                lref = min( lref, lnxt );
+            }
+
+            if ( ShortIntersectionEdge( lprev, len[ie], lnxt, lenratio ) )
+            {
+                order.push_back( make_pair( len[ie] / lref, ie ) );
+            }
+        }
+        std::sort( order.begin(), order.end() );
+
+        for ( int io = 0; io < order.size() && !collapsed; io++ )
+        {
+            int ie = order[io].second;
+            int iprev = PrevAliveEdge( alive, ie, closed );
+            int inxt = NextAliveEdge( alive, ie, closed );
+
+            PGNode * na = nodVec[ie];
+            PGNode * nb = nodVec[ie + 1];
+
+            // A node must be preserved if it terminates an open intersection curve,
+            // joins more or fewer than two intersection edges (a junction with
+            // another intersection curve), or is a corner of the curve.  A missing
+            // neighbor (defensive, should not happen here) reads as a corner.
+            vec3d vab = nb->m_Pt->m_Pnt - na->m_Pt->m_Pnt;
+            double cosa = -1.0;
+            double cosb = -1.0;
+            bool asub = subsurf[ie];
+            bool bsub = subsurf[ie];
+            if ( iprev >= 0 )
+            {
+                cosa = cos_angle( na->m_Pt->m_Pnt - nodVec[iprev]->m_Pt->m_Pnt, vab );
+                asub = asub || subsurf[iprev];
+            }
+            if ( inxt >= 0 )
+            {
+                cosb = cos_angle( vab, nodVec[inxt + 1]->m_Pt->m_Pnt - nb->m_Pt->m_Pnt );
+                bsub = bsub || subsurf[inxt];
+            }
+
+            double cosacorner = cos( CLEAN_CORNER_ANGLE * M_PI / 180.0 );
+            if ( asub )
+            {
+                cosacorner = cos( CLEAN_SUBSURF_CORNER_ANGLE * M_PI / 180.0 );
+            }
+            double cosbcorner = cos( CLEAN_CORNER_ANGLE * M_PI / 180.0 );
+            if ( bsub )
+            {
+                cosbcorner = cos( CLEAN_SUBSURF_CORNER_ANGLE * M_PI / 180.0 );
+            }
+
+            bool afixed = junctions.count( na ) > 0 || cosa < cosacorner;
+            bool bfixed = junctions.count( nb ) > 0 || cosb < cosbcorner;
+            if ( !closed )
+            {
+                if ( na == nodVec.front() )
+                {
+                    afixed = true;
+                }
+                if ( nb == nodVec.back() )
+                {
+                    bfixed = true;
+                }
+            }
+
+            if ( afixed && bfixed ) // Both nodes must survive, can not collapse.
+            {
+                continue;
+            }
+
+            PGNode * nkeep = na;
+            PGNode * ngone = nb;
+            if ( bfixed )
+            {
+                nkeep = nb;
+                ngone = na;
+            }
+            else if ( !afixed )
+            {
+                // Neither node is required.  Keep the one more edges meet at, so a node
+                // that only lies on the curve drops out and no mesh line moves.  Between
+                // equals, keep the node where the curve turns more sharply -- removing
+                // the straighter one changes the geometry least.
+                int na_edges = na->m_EdgeVec.size();
+                int nb_edges = nb->m_EdgeVec.size();
+                if ( na_edges < nb_edges || ( na_edges == nb_edges && cosa > cosb ) )
+                {
+                    nkeep = nb;
+                    ngone = na;
+                }
+            }
+
+            if ( !CollapseKeepsFaces( nkeep, ngone, eVec[ie] ) )
+            {
+                continue;
+            }
+
+            MergeNodes( nkeep, ngone );
+            alive[ie] = false;
+            collapsed = true;
+            ntotal++;
+
+            for ( int j = 0; j < nodVec.size(); j++ )
+            {
+                if ( nodVec[j] == ngone )
+                {
+                    nodVec[j] = nkeep;
+                }
+            }
+
+            // Refresh the surviving neighbors.  The neighbor on the removed node's
+            // side changed length, and was merged into the third edge of any
+            // triangle it shared with the collapsed edge -- recover the surviving
+            // edge from the updated node chain.
+            int sides[2] = { iprev, inxt };
+            for ( int is = 0; is < 2; is++ )
+            {
+                int j = sides[is];
+                if ( j >= 0 )
+                {
+                    eVec[j] = FindEdge( nodVec[j], nodVec[j + 1] );
+                    if ( eVec[j] )
+                    {
+                        len[j] = dist( nodVec[j]->m_Pt->m_Pnt, nodVec[j + 1]->m_Pt->m_Pnt );
+                    }
+                    else
+                    {
+                        alive[j] = false;
+                    }
+                }
+            }
+        }
+    }
+
+    return ntotal;
+}
+
+// Normal of a face's loop with node from replaced by node to.
+static vec3d LoopNormal( const vector < PGNode* > &loop, const PGNode *from, const PGNode *to )
+{
+    vec3d n;
+    int nn = loop.size();
+    for ( int i = 0; i < nn; i++ )
+    {
+        const PGNode *a = loop[i];
+        const PGNode *b = loop[( i + 1 ) % nn];
+        if ( a == from )
+        {
+            a = to;
+        }
+        if ( b == from )
+        {
+            b = to;
+        }
+        n = n + cross( a->m_Pt->m_Pnt, b->m_Pt->m_Pnt );
+    }
+    return n;
+}
+
+// True when merging ngone into nkeep leaves every face a simple loop facing the way it did.
+// A face holding both must hold the edge between them, or nkeep would appear in it twice.  A
+// face that gains nkeep in ngone's place must not turn over.
+bool PGMesh::CollapseKeepsFaces( const PGNode *nkeep, const PGNode *ngone, const PGEdge *e ) const
+{
+    vector < PGFace* > fvec;
+    ngone->GetConnectFaces( fvec );
+
+    for ( int i = 0; i < fvec.size(); i++ )
+    {
+        if ( fvec[i]->Contains( nkeep ) )
+        {
+            if ( !fvec[i]->Contains( e ) )
+            {
+                return false;
+            }
+        }
+        else
+        {
+            vector < PGNode* > loop;
+            fvec[i]->GetNodes( loop );
+            // A face whose edges do not form a closed loop is left as it is.
+            if ( loop.size() < 2 || loop.front() != loop.back() || vector_contains_val( loop, ( PGNode* ) NULL ) )
+            {
+                return false;
+            }
+            loop.pop_back();
+            vec3d before = LoopNormal( loop, ngone, ngone );
+            vec3d after = LoopNormal( loop, ngone, nkeep );
+            if ( dot( before, after ) <= 0.0 )
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void PGMesh::CleanIntersections( double lenratio )
+{
+    vector < vector < PGEdge * > > intersectionVec;
+    IdentifyIntersections( intersectionVec );
+
+    // Junctions are found once, before any collapse.  Part way through, a collapsed edge
+    // can leave a degenerate face that hides an intersection edge from the count.
+    set < PGNode * > junctions;
+    list< PGNode* >::iterator n;
+    for ( n = m_NodeList.begin(); n != m_NodeList.end(); ++n )
+    {
+        int cnt = ( *n )->IntersectionEdgeCount();
+        if ( cnt > 0 && cnt != 2 )
+        {
+            junctions.insert( *n );
+        }
+    }
+
+    int ncollapse = 0;
+    for ( int i = 0; i < intersectionVec.size(); i++ )
+    {
+        ncollapse += CleanIntersectionChain( intersectionVec[ i ], lenratio, junctions );
+    }
+
+    if ( ncollapse > 0 )
+    {
+        // Collapses leave degenerate topology behind -- a triangle bounded by a
+        // collapsed edge becomes a two-edge face with both slots holding the same
+        // edge.  Housekeeping is deferred until all chains are processed.
+        RemoveDegenEdges();
+        RemoveDegenFaces();
+    }
+}
+
 void PGMesh::MakeManifoldRegions()
 {
     m_Regions.clear();
@@ -3484,6 +4171,51 @@ void PGMesh::MakeManifoldRegions()
             m_Regions.push_back( *f );
             (*f)->m_Region = reg;
             (*f)->WalkManifoldRegion();
+        }
+    }
+}
+
+void PGMesh::MakeTriangleRegions()
+{
+    m_Regions.clear();
+
+    // One region per fan block and tag.  Faces outside every fan are in no region.
+    map < pair < int, int >, int > fanregion;
+
+    list< PGFace* >::iterator fit;
+    for ( fit = m_FaceList.begin() ; fit != m_FaceList.end(); ++fit )
+    {
+        PGFace *f = *fit;
+        f->m_Region = -1;
+        f->m_RegionDir = -1;
+
+        if ( f->m_FanID >= 0 )
+        {
+            pair < int, int > key( f->m_FanID, f->m_Tag );
+            map < pair < int, int >, int >::iterator it = fanregion.find( key );
+            if ( it == fanregion.end() )
+            {
+                int reg = m_Regions.size();
+                m_Regions.push_back( f );
+                fanregion[ key ] = reg;
+                f->m_Region = reg;
+            }
+            else
+            {
+                f->m_Region = it->second;
+            }
+
+            // Codes 0 and 1 collapsed a K edge, so the fan runs along K; 2 and 3 run along J.
+            if ( f->m_FanID % 4 < 2 )
+            {
+                f->m_RegionDir = 1;
+                f->m_kref_max = f->m_kref;
+            }
+            else
+            {
+                f->m_RegionDir = 0;
+                f->m_jref_max = f->m_jref;
+            }
         }
     }
 }
@@ -3510,6 +4242,99 @@ void PGMesh::MakeRegions()
             (*f)->WalkRegion();
         }
     }
+}
+
+void PGMesh::PrintRegions()
+{
+    int nreg = m_Regions.size();
+
+    for ( int i = 0; i < nreg; i++ )
+    {
+        printf( "Region %d\n", i );
+        list< PGFace* >::iterator fit;
+        for ( fit = m_FaceList.begin() ; fit != m_FaceList.end(); ++fit )
+        {
+            if ( ( *fit )->m_Region == i )
+            {
+                ( *fit )->PrintUWNodes();
+                printf( "\n" );
+            }
+        }
+        printf( "\n\n" );
+    }
+}
+
+void PGMesh::DumpTriDiagnostic( const string & fname ) const
+{
+    FILE *fp = fopen( fname.c_str(), "w" );
+    if ( !fp )
+    {
+        return;
+    }
+
+    fprintf( fp, "tag,jref,kref,region,u0,w0,u1,w1,u2,w2\n" );
+
+    list< PGFace* >::const_iterator f;
+    for ( f = m_FaceList.begin(); f != m_FaceList.end(); ++f )
+    {
+        if ( (*f)->m_EdgeVec.size() != 3 )
+        {
+            continue;
+        }
+
+        int tag = (*f)->m_Tag;
+
+        // Gather nodes from the edge loop.
+        vector< PGNode* > nodVec;
+        (*f)->GetNodes( nodVec );
+        if ( nodVec.size() < 3 )
+        {
+            continue;
+        }
+
+        vec2d uw0, uw1, uw2;
+        nodVec[0]->GetUW( tag, uw0 );
+        nodVec[1]->GetUW( tag, uw1 );
+        nodVec[2]->GetUW( tag, uw2 );
+
+        fprintf( fp, "%d,%d,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+                 tag,
+                 (*f)->m_jref,
+                 (*f)->m_kref,
+                 (*f)->m_Region,
+                 uw0.x(), uw0.y(),
+                 uw1.x(), uw1.y(),
+                 uw2.x(), uw2.y() );
+    }
+
+    fclose( fp );
+}
+
+void PGMesh::DumpDiagnostic( const string & fname ) const
+{
+    FILE *fp = fopen( fname.c_str(), "w" );
+    if ( !fp )
+    {
+        return;
+    }
+
+    fprintf( fp, "n_edges,tag,jref,kref,region,region_dir,kref_max,jref_max\n" );
+
+    list< PGFace* >::const_iterator f;
+    for ( f = m_FaceList.begin(); f != m_FaceList.end(); ++f )
+    {
+        fprintf( fp, "%d,%d,%d,%d,%d,%d,%d,%d\n",
+                 (int)(*f)->m_EdgeVec.size(),
+                 (*f)->m_Tag,
+                 (*f)->m_jref,
+                 (*f)->m_kref,
+                 (*f)->m_Region,
+                 (*f)->m_RegionDir,
+                 (*f)->m_kref_max,
+                 (*f)->m_jref_max );
+    }
+
+    fclose( fp );
 }
 
 void PGMesh::CullOrphanThinRegions( const double tol )
@@ -3642,6 +4467,7 @@ void PGMesh::Triangulate()
                 f->m_Tag = fpoly->m_Tag;
                 f->m_jref = fpoly->m_jref;
                 f->m_kref = fpoly->m_kref;
+                f->m_FanID = fpoly->m_FanID;
 
                 PGEdge *e1 = AddEdge( nodVec [ inod ], nodVec[ inod + 1 ] );
                 PGEdge *e2 = AddEdge( nodVec [ inod + 1 ], nodVec[ inod + 2 ] );
@@ -3877,40 +4703,63 @@ void PGMesh::MergeFaces( bool ( * facemergetest ) ( PGFace *f0, PGFace *f1 ), vo
 
 void PGMesh::Coarsen1()
 {
-    ResetFaceNumbers();
     MergeFaces( &JrefTagMatch, &JrefMergeProps );
 
     for ( list< PGFace* >::iterator f = m_FaceList.begin(); f != m_FaceList.end(); ++f )
     {
-        if ( ( *f )->m_ID > 0 )
+        ( *f )->m_jref = ( *f )->m_jref / 2;
+        if ( ( *f )->m_jref_max >= 0 )
         {
-            ( *f )->m_jref = ( *f )->m_jref / 2;
-            ( *f )->m_ID = -( *f )->m_ID;
+            ( *f )->m_jref_max = ( *f )->m_jref_max / 2;
         }
     }
 
     CleanColinearVerts();
     DumpGarbage();
-    ResetFaceNumbers();
 }
 
 void PGMesh::Coarsen2()
 {
-    ResetFaceNumbers();
     MergeFaces( &KrefTagMatch, &KrefMergeProps );
 
     for ( list< PGFace* >::iterator f = m_FaceList.begin(); f != m_FaceList.end(); ++f )
     {
-        if ( ( *f )->m_ID > 0 )
+        ( *f )->m_kref = ( *f )->m_kref / 2;
+        if ( ( *f )->m_kref_max >= 0 )
         {
-            ( *f )->m_kref = ( *f )->m_kref / 2;
-            ( *f )->m_ID = -( *f )->m_ID;
+            ( *f )->m_kref_max = ( *f )->m_kref_max / 2;
         }
     }
 
     CleanColinearVerts();
     DumpGarbage();
-    ResetFaceNumbers();
+}
+
+void PGMesh::MergeRegions()
+{
+    MergeFaces( &RegionMatch, &RegionMergeProps );
+
+    // Coarsening takes a region to be one face.  A region left in pieces -- a degenerate face
+    // inside the fan, from a row of zero width, blocks a merge -- is coarsened as plain faces.
+    map < int, int > nface;
+    list< PGFace* >::iterator f;
+    for ( f = m_FaceList.begin(); f != m_FaceList.end(); ++f )
+    {
+        if ( ( *f )->m_Region >= 0 )
+        {
+            nface[ ( *f )->m_Region ]++;
+        }
+    }
+    for ( f = m_FaceList.begin(); f != m_FaceList.end(); ++f )
+    {
+        if ( ( *f )->m_Region >= 0 && nface[ ( *f )->m_Region ] > 1 )
+        {
+            ( *f )->m_Region = -1;
+            ( *f )->m_RegionDir = -1;
+            ( *f )->m_jref_max = -1;
+            ( *f )->m_kref_max = -1;
+        }
+    }
 }
 
 void PGMesh::PolygonizeMesh()
@@ -4471,7 +5320,8 @@ void PGMesh::BuildFromTMesh( const TMesh* tmi )
                              ts->m_iQuad,
                              tag,
                              ts->m_jref,
-                             ts->m_kref );
+                             ts->m_kref,
+                             ts->m_FanID );
                 }
             }
         }
@@ -4490,7 +5340,8 @@ void PGMesh::BuildFromTMesh( const TMesh* tmi )
                          tj->m_iQuad,
                          tag,
                          tj->m_jref,
-                         tj->m_kref  );
+                         tj->m_kref,
+                         tj->m_FanID );
             }
         }
     }
@@ -4552,7 +5403,8 @@ void PGMesh::BuildFromTMeshVec( const vector< TMesh* > &tmv )
                                  ts->m_iQuad,
                                  tag,
                                  ts->m_jref,
-                                 ts->m_kref );
+                                 ts->m_kref,
+                                 ts->m_FanID );
                     }
                 }
             }
@@ -4571,7 +5423,8 @@ void PGMesh::BuildFromTMeshVec( const vector< TMesh* > &tmv )
                              tj->m_iQuad,
                              tag,
                              tj->m_jref,
-                             tj->m_kref );
+                             tj->m_kref,
+                             tj->m_FanID );
                 }
             }
         }
@@ -4629,7 +5482,11 @@ void PGMesh::BuildFromPGMesh( const PGMesh* pgm )
         fnew->m_Tag = (*f)->m_Tag;
         fnew->m_jref = (*f)->m_jref;
         fnew->m_kref = (*f)->m_kref;
+        fnew->m_FanID = (*f)->m_FanID;
         fnew->m_Region = (*f)->m_Region;
+        fnew->m_RegionDir = (*f)->m_RegionDir;
+        fnew->m_kref_max = (*f)->m_kref_max;
+        fnew->m_jref_max = (*f)->m_jref_max;
         fnew->m_ChildVec.push_back( (*f) );
 
         vector < PGEdge * >::iterator ei;
@@ -5554,7 +6411,7 @@ bool PGMulti::MatchAnyPart( const vector < int > & tags, const vector < int > &p
 
 bool PGMulti::MatchAnyPart( int singletag, const vector < int > &parts ) const
 {
-    if ( m_TagKeys.size() >= singletag )
+    if ( singletag >= 1 && singletag <= ( int )m_TagKeys.size() )
     {
         return MatchAnyPart( m_TagKeys[ singletag - 1 ], parts );
     }
@@ -5578,7 +6435,7 @@ bool PGMulti::MatchPartAndTag( const vector < int > & tags, const int part, cons
 
 bool PGMulti::MatchPartAndTag( const int singletag, const int part, const int tag ) const
 {
-    if ( m_TagKeys.size() >= singletag )
+    if ( singletag >= 1 && singletag <= ( int )m_TagKeys.size() )
     {
         return MatchPartAndTag( m_TagKeys[ singletag - 1 ], part, tag );
     }
@@ -5664,36 +6521,64 @@ vector< int > PGMulti::GetTagVec( const int &tin )
 
 int PGMulti::GetType( const int part ) const
 {
+    if ( part < 1 || part > ( int )m_TypeVec.size() )
+    {
+        return -1;
+    }
     return m_TypeVec[ part - 1 ];
 }
 
 int PGMulti::GetPlate( const int part ) const
 {
+    if ( part < 1 || part > ( int )m_PlateVec.size() )
+    {
+        return -1;
+    }
     return m_PlateVec[ part - 1 ];
 }
 
 int PGMulti::GetCopyIndex( int part ) const
 {
+    if ( part < 1 || part > ( int )m_CopyIndxVec.size() )
+    {
+        return -1;
+    }
     return m_CopyIndxVec[ part - 1 ];
 }
 
 int PGMulti::GetThickThin( const int part ) const
 {
+    if ( part < 1 || part > ( int )m_ThickVec.size() )
+    {
+        return -1;
+    }
     return m_ThickVec[ part - 1 ];
 }
 
 double PGMulti::GetWmin( const int part ) const
 {
+    if ( part < 1 || part > ( int )m_WminVec.size() )
+    {
+        return 0.0;
+    }
     return m_WminVec[ part - 1 ];
 }
 
 double PGMulti::GetUscale( const int part ) const
 {
+    if ( part < 1 || part > ( int )m_UscaleVec.size() )
+    {
+        return 1.0;
+    }
     return m_UscaleVec[ part - 1 ];
 }
 
 double PGMulti::GetWscale( const int part ) const
 {
+    if ( part < 1 || part > ( int )m_WscaleVec.size() )
+    {
+        return 1.0;
+    }
     return m_WscaleVec[ part - 1 ];
 }
 
@@ -5708,7 +6593,7 @@ int PGMulti::GetPart( const vector<int> & tags )
 
 int PGMulti::GetPart( int tag ) const
 {
-    if ( m_TagKeys.size() >= tag )
+    if ( tag >= 1 && tag <= ( int )m_TagKeys.size() )
     {
         vector < int > tags = m_TagKeys[ tag - 1 ];
         return GetPart( tags );

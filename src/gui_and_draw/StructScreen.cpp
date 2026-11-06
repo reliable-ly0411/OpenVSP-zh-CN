@@ -1697,6 +1697,7 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
 
     int actionToggleButtonWidth = 45;
     int normalButtonWidth = 175;
+    int toggleButtonWidth = 17;
 
     m_MeshTabLayout.SetFitWidthFlag( false );
     m_MeshTabLayout.SetSameLineFlag( true );
@@ -1759,6 +1760,22 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     m_MeshTabLayout.SetButtonWidth( normalButtonWidth );
 
     m_MeshTabLayout.AddSlider( m_NumCircleSegments, "Num Circle Segments", 100.0, "%7.5f" );
+
+    m_MeshTabLayout.SetFitWidthFlag( false );
+    m_MeshTabLayout.SetSameLineFlag( true );
+
+    m_MeshTabLayout.SetButtonWidth( toggleButtonWidth );
+    m_MeshTabLayout.AddButton( m_WidthLimit, "" );
+
+    m_MeshTabLayout.SetFitWidthFlag( true );
+    m_MeshTabLayout.SetButtonWidth( normalButtonWidth - toggleButtonWidth );
+    m_MeshTabLayout.AddSlider( m_NumWidthSegments, "Num Width Segments", 10.0, "%7.5f" );
+
+    m_MeshTabLayout.ForceNewLine();
+    m_MeshTabLayout.SetSameLineFlag( false );
+
+    m_MeshTabLayout.SetButtonWidth( normalButtonWidth );
+
     m_MeshTabLayout.AddSlider( m_GrowthRatio, "Growth Ratio", 2.0, "%7.5f" );
 
     m_MeshTabLayout.AddYGap();
@@ -1935,7 +1952,7 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     m_FemTabLayout.SetFitWidthFlag( false );
     m_FemTabLayout.SetSameLineFlag( true );
 
-    m_FemTabLayout.SetButtonWidth( m_FemTabLayout.GetW() / 3.0 );
+    m_FemTabLayout.SetButtonWidth( m_FemTabLayout.GetW() / 4.0 );
 
     m_FemTabLayout.AddButton( m_GrowLimitCurvGapLabel, "Growth Ratio" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::GROW_LIMIT_CURV_GAP ) );
@@ -1944,6 +1961,10 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     m_FemTabLayout.AddButton( m_GrowLimitNCircSegLabel, "Growth Ratio" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::GROW_LIMIT_CURV_NCIRCSEG ) );
     m_GrowLimitNCircSegLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
+
+    m_FemTabLayout.AddButton( m_GrowLimitSurfWidthLabel, "Growth Ratio" );
+    c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::GROW_LIMIT_SURF_WIDTH ) );
+    m_GrowLimitSurfWidthLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
 
     m_FemTabLayout.AddButton( m_GrowLimitSourcesLabel, "Growth Ratio" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::GROW_LIMIT_SOURCES ) );
@@ -1958,6 +1979,10 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     m_FemTabLayout.AddButton( m_NCircSegLabel, "Num Circle Segments" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::CURV_NCIRCSEG ) );
     m_NCircSegLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
+
+    m_FemTabLayout.AddButton( m_SurfWidthLabel, "Surface Width" );
+    c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::SURF_WIDTH ) );
+    m_SurfWidthLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
 
     m_FemTabLayout.AddButton( m_SourcesLabel, "Sources" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::SOURCES ) );
@@ -1974,6 +1999,13 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::MIN_LEN_CONSTRAINT_CURV_NCIRCSEG ) );
     m_MinLenCurvNCircSegLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
     m_MinLenCurvNCircSegLabel.SetLabelColor( FL_WHITE );
+
+    m_FemTabLayout.AddButton( m_MinLenSurfWidthLabel, "Min Edge Len" );
+    c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::MIN_LEN_CONSTRAINT_SURF_WIDTH ) );
+    m_MinLenSurfWidthLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
+    m_MinLenSurfWidthLabel.SetLabelColor( FL_WHITE );
+
+    m_FemTabLayout.ForceNewLine();
 
 
 
@@ -3594,6 +3626,8 @@ bool StructScreen::Update()
             m_NumCircleSegments.Update( curr_struct->GetFeaGridDensityPtr()->m_NCircSeg.GetID() );
             m_GrowthRatio.Update( curr_struct->GetFeaGridDensityPtr()->m_GrowRatio.GetID() );
             m_Rig3dGrowthLimit.Update( curr_struct->GetFeaGridDensityPtr()->m_RigorLimit.GetID() );
+            m_WidthLimit.Update( curr_struct->GetFeaGridDensityPtr()->m_WidthLimit.GetID() );
+            m_NumWidthSegments.Update( curr_struct->GetFeaGridDensityPtr()->m_NWidthSeg.GetID() );
 
             //===== Geometry Control =====//
             m_HalfMeshButton.Update( curr_struct->GetStructSettingsPtr()->m_HalfMeshFlag.GetID() );

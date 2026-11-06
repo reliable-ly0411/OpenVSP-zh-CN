@@ -315,8 +315,11 @@ public:
         return m_VehProjectVec3d[dir_index];
     }
 
-    void FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs, int n_ref = 0, bool splitjoin = true );
-    void FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &xfersurfs, int n_ref = 0, bool splitjoin = true );
+    // nthread surfaces are split at once.  The list comes out the same however many there are.
+    void FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs, int n_ref = 0, bool splitjoin = true, bool symcut = false, bool cfdcaps = false,
+                         int nthread = 1 );
+    void FetchXFerSurfs(int normal_set, int degen_set, vector< XferSurf > &xfersurfs, int n_ref = 0, bool splitjoin = true, bool symcut = false, bool cfdcaps = false,
+                        int nthread = 1 );
     //==== Computation File Names ====//
     string getExportFileName( int type );
     void setExportFileName( int type, const string &f_name );
@@ -589,6 +592,14 @@ public:
     IntParm m_NewHeightValue;
     BoolParm m_TransparentBGFlag;
     BoolParm m_AutoCropFlag;
+
+    // VectorScreenshotScreen
+    IntParm m_VecFileType;
+    BoolParm m_VecAutoCropFlag;
+    BoolParm m_VecScaleToPageFlag;
+    Parm m_VecPageWidth;
+    Parm m_VecPageHeight;
+    IntParm m_VecPageUnits;
 
     // UserParmScreen
     Parm m_UserParmVal;

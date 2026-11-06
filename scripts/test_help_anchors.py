@@ -8,6 +8,7 @@ Reproducibility: node src/help/build_help_zh.js <node_modules> --check
 
 from collections import Counter
 from html.parser import HTMLParser
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -25,6 +26,7 @@ class HelpPage(HTMLParser):
         self.fragments = []
         self.headings = 0
         self.errors = []
+        self.elements = []
         self.feed(text)
         self.close()
 
@@ -37,12 +39,29 @@ class HelpPage(HTMLParser):
             self.ids[attrs["id"]] += 1
         if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
             self.headings += 1
-            if not attrs.get("id"):
+            # Pandoc's metadata title is not a section heading. Its container
+            # already has an id; all actual section headings still require ids.
+            pandoc_title = (
+                tag == "h1" and attrs.get("class") == "title"
+                and self.elements and self.elements[-1] == ("header", "title-block-header")
+            )
+            if not attrs.get("id") and not pandoc_title:
                 self.errors.append(f"line {line}: <{tag}> is missing an id")
         if tag == "a" and attrs.get("href") and "#" in attrs["href"]:
             self.fragments.append((line, attrs["href"]))
 
-    handle_startendtag = handle_starttag
+        if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
+            self.elements.append((tag, attrs.get("id")))
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.elements) - 1, -1, -1):
+            if self.elements[index][0] == tag:
+                del self.elements[index:]
+                break
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        self.handle_endtag(tag)
 
 
 def check_help_anchors(html_dir):
@@ -102,9 +121,33 @@ class BundledHelpTests(unittest.TestCase):
         self.assertTrue(sources, "No Markdown help sources found")
         self.assertEqual(sources, outputs)
 
+    def test_localized_page_manifest_and_language_boundary(self):
+        names = json.loads((HELP / "localized_pages.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(names), {
+            "AdvLink.md", "AttributeExplorer.md", "GeometryAnalysis.md",
+            "SetEdit.md", "StackPresets.md", "index.md",
+        })
+        self.assertEqual(len(names), 6)
+        for name in names:
+            with self.subTest(page=name):
+                self.assertEqual(Path(name).name, name)
+                self.assertTrue((HELP / name).is_file())
+                html = HELP / "html" / (Path(name).stem + ".html")
+                self.assertTrue(html.is_file())
+                self.assertIn('<html lang="zh-CN">', html.read_text(encoding="utf-8"))
+        # Remaining pages retain upstream English Pandoc output, not an implied
+        # Chinese translation or marked's incompatible math rendering.
+        for source in HELP.glob("*.md"):
+            if source.name not in names:
+                html = (HELP / "html" / (source.stem + ".html")).read_text(encoding="utf-8")
+                with self.subTest(upstream_page=source.name):
+                    self.assertIn('name="generator" content="pandoc ', html)
+                    self.assertNotIn('<html lang="zh-CN">', html)
+
     def test_all_headings_and_fragment_targets(self):
         errors, counts = check_help_anchors(HELP / "html")
         self.assertEqual(errors, [], "\n".join(errors))
+        self.assertGreaterEqual(len(counts), 35, "All localized and upstream help pages must be checked")
         # Keep the original regression cases visible; do not accidentally pass
         # by deleting the contents tables or the two inline geometry links.
         self.assertGreaterEqual(counts["GeometryAnalysis.html"]["fragments"], 22)
@@ -146,6 +189,35 @@ class AnchorCheckerTests(unittest.TestCase):
         self.assertEqual(len(errors), 2, errors)
         self.assertIn("missing an id", errors[0])
         self.assertIn("no id '中文'", errors[1])
+
+    def test_pandoc_metadata_title_uses_container_anchor(self):
+        errors, counts = self.check_pages({"upstream.html": '''
+            <header id="title-block-header"><h1 class="title">English</h1></header>
+            <h2 id="section">Section</h2><a href="#title-block-header">Title</a>
+            <a href="#section">Section</a>
+        '''})
+        self.assertEqual(errors, [])
+        self.assertEqual(counts["upstream.html"], {"headings": 2, "fragments": 2})
+
+    def test_title_exception_does_not_hide_missing_section_ids(self):
+        for heading in [
+            '<h1 class="title">Outside header</h1>',
+            '<header><h1 class="title">No container id</h1></header>',
+            '<header id="title-block-header"><h2 class="title">Section</h2></header>',
+            '<header id="title-block-header"><h1>Section</h1></header>',
+            '<header id="title-block-header"></header><h1 class="title">After header</h1>',
+        ]:
+            with self.subTest(heading=heading):
+                errors, _ = self.check_pages({"upstream.html": heading})
+                self.assertTrue(any("missing an id" in error for error in errors), errors)
+
+    def test_pandoc_title_exception_still_checks_broken_links(self):
+        errors, _ = self.check_pages({"upstream.html": '''
+            <header id="title-block-header"><h1 class="title">English</h1></header>
+            <a href="#missing">Broken</a><a href="translated.html#missing">Broken cross-page</a>
+        ''', "translated.html": '<h1 id="中文">中文</h1>'})
+        self.assertEqual(len(errors), 2, errors)
+        self.assertTrue(all("no id" in error for error in errors), errors)
 
     def test_every_broken_link_is_reported(self):
         errors, _ = self.check_pages({"test.html": '<a href="#one">1</a><a href="#two">2</a>'})

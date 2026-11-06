@@ -42,7 +42,6 @@ public:
     double m_RootTwist;
 
     double m_Twist;
-    double m_Feather;
     double m_ZRotate;
 
     bool m_CurveSection;
@@ -100,11 +99,38 @@ public:
     virtual double GetRotorDiameter() const = 0;
     virtual double GetRotorR0() const = 0;
 
+    // The flap hinge's radial place, fraction of radius.
+    virtual double GetRotorFlapRadiusFract() const = 0;
+
     // Which way the blades turn.
     virtual bool GetRotorReverseFlag() const = 0;
 
     // The hub, if this rotor describes one; false otherwise.
     virtual bool GetRotorHubDiameter( double &hubdia ) const = 0;
+
+    // The angle the blades are turned to.
+    virtual double GetRotorRotate() const = 0;
+    virtual void SetRotorRotate( double rotate ) = 0;
+
+    // The main surfaces, their tessellation and their preview with the blades turned to rotate.
+    virtual void GetMainSurfVecAtRotate( double rotate, vector< VspSurf > &surfs ) = 0;
+    virtual void GetMainTessVecAtRotate( double rotate, vector< SimpleTess > &tess, vector< SimpleFeatureTess > &ftess ) = 0;
+    virtual void GetMainDegenGeomPreviewAtRotate( double rotate, vector< DegenGeom > &degen ) = 0;
+
+    // The blades placed as main surfaces, and blade iblade's placement at rotate: from the blade as
+    // built to where it sits, before the Geom's own placement.
+    virtual int NumPlacedBlades() = 0;
+    virtual Matrix4d GetBladePlacement( int iblade, double rotate ) = 0;
+};
+
+//==== A hinge between a propeller's hub and blade ====//
+struct BladeHinge
+{
+    double m_Radius;    // Radial place, fraction of radius.
+    int m_Type;         // One of PropGeom's hinge types.
+    vec3d m_Origin;     // A point on the hinge line, all hinges undeflected.
+    vec3d m_Axis;
+    double m_Angle;     // Turns right-handed about m_Axis, as Matrix4d::rotateAbout does.
 };
 
 //==== Propeller Geom ====//
@@ -121,6 +147,20 @@ public:
     virtual void SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec );
 
     virtual void ComputeCenter();
+
+    // Blade hinge types, in their order where hinges share a radial place.
+    enum
+    {
+        FLAP_HINGE,
+        LAG_HINGE,
+        FOLD_HINGE,
+        FEATHER_HINGE,
+        NUM_HINGE_TYPES
+    };
+
+    // The DrawObj colour each hinge type's marker is drawn in.  Shared with the Motion tab, which
+    // keys its dividers with the same answer.
+    static int HingeDrawColor( int type );
 
     virtual xmlNodePtr EncodeXml( xmlNodePtr & node );
     virtual xmlNodePtr DecodeXml( xmlNodePtr & node );
@@ -167,6 +207,9 @@ public:
 
     virtual void ResetThickness();
 
+    // Replace the sections, blade curves, pitch and rotation with a starting design (PROP_PRESETS).
+    virtual void InitPreset( int preset );
+
     virtual double GetR0();
     virtual double ComputeMAC();
 
@@ -178,12 +221,30 @@ public:
     {
         return const_cast< PropGeom* >( this )->GetR0();
     }
+    virtual double GetRotorFlapRadiusFract() const
+    {
+        return m_RadFlapAxis();
+    }
     virtual bool GetRotorReverseFlag() const
     {
         return m_ReverseFlag();
     }
     virtual bool GetRotorHubDiameter( double &hubdia ) const;
+    virtual double GetRotorRotate() const
+    {
+        return m_Rotate();
+    }
+    virtual void SetRotorRotate( double rotate )
+    {
+        m_Rotate.Set( rotate );
+    }
+    virtual void GetMainSurfVecAtRotate( double rotate, vector< VspSurf > &surfs );
+    virtual void GetMainTessVecAtRotate( double rotate, vector< SimpleTess > &tess, vector< SimpleFeatureTess > &ftess );
+    virtual void GetMainDegenGeomPreviewAtRotate( double rotate, vector< DegenGeom > &degen );
+    virtual int NumPlacedBlades();
+    virtual Matrix4d GetBladePlacement( int iblade, double rotate );
     virtual double UtoEta( const double &u, bool ignoreCap = false );
+    virtual int FeatherMode();
     virtual double EtatoU( const double &eta, bool ignoreCap = false );
 
     Parm m_Diameter;
@@ -200,8 +261,33 @@ public:
 
     Parm m_FeatherOffset;
     Parm m_FeatherAxis;
+    Parm m_RadFeatherAxis;
 
     BoolParm m_ReverseFlag;
+
+    Parm m_RadFlapAxis;
+    Parm m_AxialFlapAxis;
+    Parm m_OffsetFlapAxis;
+    Parm m_AzimuthFlapDir;
+    Parm m_ElevationFlapDir;
+    Parm m_FlapAngle;
+
+    vector< Parm* > m_FlapAngleParmVec;
+    Parm m_FlapMean;
+    vector< Parm* > m_FlapCosParmVec;
+    vector< Parm* > m_FlapSinParmVec;
+
+    Parm m_RadLagAxis;
+    Parm m_AxialLagAxis;
+    Parm m_OffsetLagAxis;
+    Parm m_AzimuthLagDir;
+    Parm m_CantLagDir;
+    Parm m_LagAngle;
+
+    vector< Parm* > m_LagAngleParmVec;
+    Parm m_LagMean;
+    vector< Parm* > m_LagCosParmVec;
+    vector< Parm* > m_LagSinParmVec;
 
     Parm m_RadFoldAxis;
     Parm m_AxialFoldAxis;
@@ -212,10 +298,29 @@ public:
 
     BoolParm m_IndividualBladeFoldFlag;
     vector< Parm* > m_FoldAngleParmVec;
+
+    vector< Parm* > m_FeatherParmVec;
+    Parm m_FeatherMean;
+    vector< Parm* > m_FeatherCosParmVec;
+    vector< Parm* > m_FeatherSinParmVec;
     IntParm m_ActiveBlade;
+    Parm m_PsiRef;
+
+    // How the blades take the flap, lag and feather angles, and the harmonics of the harmonic mode.
+    IntParm m_BladeMotionMode;
+    IntParm m_NumHarmonics;
+
+    vec3d m_FlapAxOrigin;
+    vec3d m_FlapAxDirection;
+
+    vec3d m_LagAxOrigin;
+    vec3d m_LagAxDirection;
 
     vec3d m_FoldAxOrigin;
     vec3d m_FoldAxDirection;
+
+    vec3d m_FeatherAxOrigin;
+    vec3d m_FeatherAxDirection;
 
     IntParm m_Nblade;
 
@@ -267,6 +372,13 @@ protected:
     virtual void ChangeID( const string &id );
 
     virtual void UpdateSurf();
+    virtual void UpdateEndCaps();
+    virtual void UpdateFeatureLines();
+    virtual void UpdateLCurve();
+    virtual void UpdateFlags();
+    virtual void UpdatePostSurf();
+    virtual void SetDirtyFlags( Parm* parm_ptr );
+    virtual bool MovesBladesOnly( Parm* parm_ptr );
     virtual void UpdateMainTessVec();
     virtual void UpdateMainDegenGeomPreview();
     virtual void UpdateBladeAzimuth();
@@ -277,7 +389,17 @@ protected:
 
     virtual void CheckBalance();
 
-    virtual void RigidBladeMotion( Matrix4d & mat, double foldangle );
+    virtual double GetBladeFlapAngle( int iblade, double rotate );
+    virtual double GetBladeLagAngle( int iblade, double rotate );
+    virtual double GetBladeFoldAngle( int iblade );
+    virtual double GetBladeFeather( int iblade, double rotate );
+    virtual double GetBladePsi( int iblade, double rotate );
+    virtual void UpdateBladeMotion( int mode, Parm & angle, vector< Parm* > & bladevec, Parm & mean,
+                                    vector< Parm* > & cosvec, vector< Parm* > & sinvec );
+    // Each places blade iblade, counting from zero, as it sits with the propeller turned to rotate.
+    virtual void BladeRootMotion( Matrix4d & mat, int iblade, double rotate );
+    virtual vector< BladeHinge > GetBladeHinges( int iblade, double rotate );
+    virtual void RigidBladeMotion( Matrix4d & mat, int iblade, double rotate );
 
     virtual void EnforceOrder( PropXSec* xs, int indx );
     virtual void EnforcePCurveOrder( double rfirst, double rlast );
@@ -289,21 +411,43 @@ protected:
 
     virtual void ReserveBlades( int n );
     virtual void AddBlade();
+    virtual void ReserveHarmonics();
+    virtual void ReserveHarmonicParms( vector< Parm* > & cosvec, vector< Parm* > & sinvec, const string & name,
+                                       const string & angle, int n );
+    virtual void AddBladeParm( vector< Parm* > & vec, const string & name, const string & group, int num, double val, double lower, double upper, const string & descript );
 
     virtual void CalculateMeshMetrics();
 
-    enum { PROP_MARKER_LINES, PROP_MARKER_HEADS, NUM_PROP_MARKERS };
+    // The thrust and rotation markers, then the lines and heads of each hinge type in turn.
+    enum { PROP_MARKER_LINES, PROP_MARKER_HEADS, PROP_MARKER_HINGES,
+           NUM_PROP_MARKERS = PROP_MARKER_HINGES + 2 * NUM_HINGE_TYPES };
     BndBox m_MainBladeBBox;
     DrawObj m_HighlightBladeDrawObj;
 
     Vsp1DCurve m_rtou;
     VspSurf m_FoilSurf;
+    // The one blade and the disk.  UpdateSurf builds them and the finishing passes work on them;
+    // UpdatePostSurf copies them into the main surfaces.
     VspSurf m_BladeSurf;
+    VspSurf m_DiskSurf;
+    bool m_BladeCapUMinSuccess;
+    bool m_BladeCapUMaxSuccess;
 
-    // Tessellation of the single computed blade, kept across updates so the per-blade duplicate
-    // tessellations can be assigned into existing buffers rather than cleared and reallocated.
+    // Twist at 3/4 of radius, or zero for a blade that starts outboard of it.
+    double m_Twist34;
+    double m_BladeRootChord;
+
+    // Tessellation of the single computed blade and of the disk, kept across updates so the per-blade
+    // duplicate tessellations can be assigned into existing buffers rather than cleared and reallocated.
     SimpleTess m_BladeTess;
     SimpleFeatureTess m_BladeFeatureTess;
+    SimpleTess m_DiskTess;
+    SimpleFeatureTess m_DiskFeatureTess;
+    bool m_BladeTessDirty;
+
+    // Preview of the single computed blade, kept for the same reason.
+    DegenGeom m_BladeDegenGeom;
+    bool m_BladeDegenDirty;
 
     vector < double > m_UPseudo;
 

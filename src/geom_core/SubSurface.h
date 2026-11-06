@@ -31,7 +31,6 @@ public:
 
     virtual void Update( Geom *geom, int indx );
 
-    enum { GT, LT, NO };
     int m_TestType;
 
     virtual ~SSLineSeg();
@@ -348,8 +347,6 @@ public:
     // A control surface needs a wing-like surface: a Wing, a Prop, or a Clone of one.
     static bool IsValidParent( Geom* geom );
 
-    enum SS_CONTROL_SUBTYPE { UPPER_SURF, LOWER_SURF, BOTH_SURF };
-
     IntParm m_Tess; // Number of line segments to break shape into
 
     Parm m_UStart; // U Starting location for control surface
@@ -400,11 +397,6 @@ class SSLineArray : public SubSurface
 
     SSLineArray( const string& compID, int type = vsp::SS_LINE_ARRAY );
     virtual ~SSLineArray();
-
-    enum
-    {
-        CONST_U, CONST_W
-    };
 
     virtual void Update();
 

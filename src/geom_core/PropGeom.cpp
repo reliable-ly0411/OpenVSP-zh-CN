@@ -45,7 +45,6 @@ PropPositioner::PropPositioner()
     m_RootTwist = 0.0;
 
     m_Twist = 0.0;
-    m_Feather = 0.0;
     m_ZRotate = 0.0;
 
     m_CurveSection = false;
@@ -124,12 +123,10 @@ void PropPositioner::Update()
         m_TransformedCurve.ProjectOntoCylinder( m_Radius, true, 1e-6 * m_Chord );
     }
 
-    mat.loadIdentity();  // Reset to handle rigid body motion of lofted prop sections.
+    mat.loadIdentity();
 
-
-    mat.translatef( 0, 0, m_RootChord * m_FeatherOffset );
-
-    mat.rotateY( m_Reverse * m_Feather );
+    // Offset the blade from its feather axis.  Feathering itself is rigid motion of the blade.
+    mat.translatef( 0, 0, m_Reverse * m_RootChord * m_FeatherOffset );
 
     m_TransformedCurve.Transform( mat );
 }
@@ -147,6 +144,30 @@ VspCurve PropPositioner::GetCurve()
         Update();
     }
     return m_TransformedCurve;
+}
+
+// Blade axes: x aft (toward the trailing edge), y radial, z toward the thrust.  With reverse
+// rotation (rev -1) the map to propeller axes is a reflection, so anything given in blade axes
+// mirrors with the propeller.
+static vec3d BladeToProp( const vec3d & b, double rev )
+{
+    return vec3d( -b.z(), b.y(), rev * b.x() );
+}
+
+// An axis of rotation also changes sign under the reflection.
+static vec3d BladeAxisToProp( const vec3d & a, double rev )
+{
+    return BladeToProp( a, rev ) * rev;
+}
+
+// Delete the parms past the first n.
+static void TrimParmVec( vector< Parm* > & vec, int n )
+{
+    while ( ( int )vec.size() > n )
+    {
+        delete vec.back();
+        vec.pop_back();
+    }
 }
 
 //==========================================================================//
@@ -288,6 +309,51 @@ PropGeom::PropGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     m_FeatherOffset.Init( "FeatherOffsetXoC", "Design", this, 0.0, -100.0, 100.0 );
     m_FeatherOffset.SetDescript( "Offset of feather axis line." );
 
+    m_RadFeatherAxis.Init( "RFeatherAx", "Articulation", this, 0.15, 0.0, 1.0 );
+    m_RadFeatherAxis.SetDescript( "Radial position of feather bearing as fraction of radius; orders it among the hinges" );
+
+    m_RadFlapAxis.Init( "RFlapAx", "Articulation", this, 0.05, 0.0, 1.0 );
+    m_RadFlapAxis.SetDescript( "Radial position of flap axis as fraction of radius" );
+
+    m_AxialFlapAxis.Init( "AxFlapAx", "Articulation", this, 0, -1.0, 1.0 );
+    m_AxialFlapAxis.SetDescript( "Axial position of flap axis as fraction of radius" );
+
+    m_OffsetFlapAxis.Init( "OffFlapAx", "Articulation", this, 0, -1.0, 1.0 );
+    m_OffsetFlapAxis.SetDescript( "Offset position of flap axis as fraction of radius" );
+
+    m_AzimuthFlapDir.Init( "AzFlapDir", "Articulation", this, 0.0, -90.0, 90.0 );
+    m_AzimuthFlapDir.SetDescript( "Azimuth angle of flap axis direction vector, theta_F" );
+
+    m_ElevationFlapDir.Init( "ElFlapDir", "Articulation", this, 0.0, -90.0, 90.0 );
+    m_ElevationFlapDir.SetDescript( "Elevation angle of flap axis direction vector, delta_3" );
+
+    m_FlapAngle.Init( "FlapAngle", "Articulation", this, 0.0, -1.0e12, 1.0e12 );
+    m_FlapAngle.SetDescript( "Blade flap angle" );
+
+    m_FlapMean.Init( "FlapMean", "Articulation", this, 0.0, -180.0, 180.0 );
+    m_FlapMean.SetDescript( "Mean flap angle of the harmonic blade motion" );
+
+    m_RadLagAxis.Init( "RLagAx", "Articulation", this, 0.1, 0.0, 1.0 );
+    m_RadLagAxis.SetDescript( "Radial position of lag axis as fraction of radius" );
+
+    m_AxialLagAxis.Init( "AxLagAx", "Articulation", this, 0, -1.0, 1.0 );
+    m_AxialLagAxis.SetDescript( "Axial position of lag axis as fraction of radius" );
+
+    m_OffsetLagAxis.Init( "OffLagAx", "Articulation", this, 0, -1.0, 1.0 );
+    m_OffsetLagAxis.SetDescript( "Offset position of lag axis as fraction of radius" );
+
+    m_AzimuthLagDir.Init( "AzLagDir", "Articulation", this, 0.0, -90.0, 90.0 );
+    m_AzimuthLagDir.SetDescript( "Azimuth angle of lag axis direction vector, theta_L" );
+
+    m_CantLagDir.Init( "CantLagDir", "Articulation", this, 0.0, -90.0, 90.0 );
+    m_CantLagDir.SetDescript( "Cant angle of lag axis direction vector, alpha_1" );
+
+    m_LagAngle.Init( "LagAngle", "Articulation", this, 0.0, -1.0e12, 1.0e12 );
+    m_LagAngle.SetDescript( "Blade lag angle" );
+
+    m_LagMean.Init( "LagMean", "Articulation", this, 0.0, -180.0, 180.0 );
+    m_LagMean.SetDescript( "Mean lag angle of the harmonic blade motion" );
+
     m_RadFoldAxis.Init( "RFoldAx", "Design", this, 0.2, 0.0, 1.0 );
     m_RadFoldAxis.SetDescript( "Radial position of fold axis as fraction of radius" );
 
@@ -309,10 +375,23 @@ PropGeom::PropGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     m_IndividualBladeFoldFlag.Init( "IndividualBladeFoldFlag", "Design", this, false, 0, 1 );
     m_IndividualBladeFoldFlag.SetDescript( "Flag to enable individual blade fold angles" );
 
-    m_Beta34.Init( "Beta34", "Design", this, 20.0, -400.0, 400.0 );
+    m_PsiRef.Init( "PsiRef", "Articulation", this, 0.0, -360.0, 360.0 );
+    m_PsiRef.SetDescript( "Azimuth where psi is zero, in the direction of rotation; Rotate turns blade 1 from it" );
+
+    m_BladeMotionMode.Init( "BladeMotionMode", "Articulation", this, vsp::PROP_BLADE_COLLECTIVE, vsp::PROP_BLADE_COLLECTIVE,
+                            vsp::NUM_PROP_BLADE_MOTION - 1 );
+    m_BladeMotionMode.SetDescript( "How the blades take the flap, lag and feather angles" );
+
+    m_NumHarmonics.Init( "NumHarmonics", "Articulation", this, 1, 0, 20 );
+    m_NumHarmonics.SetDescript( "Number of harmonics of the flap, lag and feather angles" );
+
+    m_FeatherMean.Init( "FeatherMean", "Articulation", this, 0.0, -400.0, 400.0 );
+    m_FeatherMean.SetDescript( "Mean feather angle of the harmonic blade motion" );
+
+    m_Beta34.Init( "Beta34", "Design", this, 20.0, -1.0e12, 1.0e12 );
     m_Beta34.SetDescript( "Blade pitch at 3/4 of radius" );
 
-    m_Feather.Init( "Feather", "Design", this, 0.0, -400.0, 400.0 );
+    m_Feather.Init( "Feather", "Design", this, 0.0, -1.0e12, 1.0e12 );
     m_Feather.SetDescript( "Blade feather angle" );
 
     m_UseBeta34Flag.Init( "UseBeta34Flag", "Design", this, 1, 0, 1 );
@@ -336,22 +415,22 @@ PropGeom::PropGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     m_CLi.Init( "CLi", "Design", this, 0.5, 0, 1e12 );
     m_CLi.SetDescript( "Integrated design lift coefficient" );
 
-    m_Solidity.Init( "Solidity", "Design", this, 0.5, 0, 1.0 );
+    m_Solidity.Init( "Solidity", "Design", this, 0.5, 0, 1.0e12 );
     m_Solidity.SetDescript( "Geometric blade solidity" );
 
-    m_TSolidity.Init( "TSolidity", "Design", this, 0.5, 0, 1.0 );
+    m_TSolidity.Init( "TSolidity", "Design", this, 0.5, 0, 1.0e12 );
     m_TSolidity.SetDescript( "Thrust weighted blade solidity" );
 
-    m_PSolidity.Init( "PSolidity", "Design", this, 0.5, 0, 1.0 );
+    m_PSolidity.Init( "PSolidity", "Design", this, 0.5, 0, 1.0e12 );
     m_PSolidity.SetDescript( "Power weighted blade solidity" );
 
-    m_Chord.Init( "Chord", "Design", this, 0.5, 0, 1.0 );
+    m_Chord.Init( "Chord", "Design", this, 0.5, 0, 1.0e12 );
     m_Chord.SetDescript( "Geometric blade chord" );
 
-    m_TChord.Init( "TChord", "Design", this, 0.5, 0, 1.0 );
+    m_TChord.Init( "TChord", "Design", this, 0.5, 0, 1.0e12 );
     m_TChord.SetDescript( "Thrust weighted blade chord" );
 
-    m_PChord.Init( "PChord", "Design", this, 0.5, 0, 1.0 );
+    m_PChord.Init( "PChord", "Design", this, 0.5, 0, 1.0e12 );
     m_PChord.SetDescript( "Power weighted blade chord" );
 
     m_LECluster.Init( "LECluster", "Design", this, 0.25, 1e-4, 10.0 );
@@ -381,146 +460,68 @@ PropGeom::PropGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
 
     m_ActiveXSec = 0;
 
+    m_Twist34 = 0.0;
+    m_BladeRootChord = 0.0;
+    m_BladeCapUMinSuccess = false;
+    m_BladeCapUMaxSuccess = false;
+    m_BladeTessDirty = true;
+    m_BladeDegenDirty = true;
+
     m_XSecSurf.SetXSecType( XSEC_PROP );
-
-    m_XSecSurf.AddXSec( XS_ELLIPSE );
-    m_XSecSurf.AddXSec( XS_ONE_SIX_SERIES );
-    m_XSecSurf.AddXSec( XS_ONE_SIX_SERIES );
-
-    int j;
-    PropXSec* xs;
-
-    j = 0;
-    xs = ( PropXSec* ) m_XSecSurf.FindXSec( j );
-    xs->SetGroupDisplaySuffix( j );
-    xs->m_RadiusFrac = 0.2;
-
-    ++j;
-    xs = ( PropXSec* ) m_XSecSurf.FindXSec( j );
-    xs->SetGroupDisplaySuffix( j );
-    xs->m_RadiusFrac = 0.4;
-
-    ++j;
-    xs = ( PropXSec* ) m_XSecSurf.FindXSec( j );
-    xs->SetGroupDisplaySuffix( j );
-    xs->m_RadiusFrac = 1.0;
 
     m_ChordCurve.SetParentContainer( GetID() );
     m_ChordCurve.SetDispNames( "r/R", "Chord/R" );
     m_ChordCurve.SetParmNames( "r", "crd" );
     m_ChordCurve.SetCurveName( "Chord" );
     m_ChordCurve.InitParms();
-    m_ChordCurve.m_CurveType = vsp::CEDIT;
-    static const double t1[] = {0.2, 0.2 + 0.4 / 3.0,
-               0.6 - 0.4 / 3.0, 0.6, 0.6 + 0.35 / 3.0,
-               0.95 - 0.35 / 3.0, 0.95, 0.95 + 0.05 / 3.0,
-               1.0 - 0.05 / 3.0, 1.0};
-    static const double v1[] = {0.08, 0.15,
-                           0.2, 0.2, 0.2,
-                           0.2, 0.2, 0.2,
-                           0.2, 0.13};
-    vector < double > tv1( t1, t1 + sizeof( t1 ) / sizeof( t1[0] ) );
-    vector < double > vv1( v1, v1 + sizeof( v1 ) / sizeof( v1[0] ) );
-    m_ChordCurve.InitCurve( tv1, vv1 );
-
-    // Prevent negative values in m_Chord
-    for ( size_t i = 0; i < m_ChordCurve.m_ValParmVec.size(); i++ )
-    {
-        m_ChordCurve.m_ValParmVec[i]->SetLowerLimit( 1e-8 );
-    }
 
     m_TwistCurve.SetParentContainer( GetID() );
     m_TwistCurve.SetDispNames( "r/R", "Twist" );
     m_TwistCurve.SetParmNames( "r", "tw" );
     m_TwistCurve.SetCurveName( "Twist" );
     m_TwistCurve.InitParms();
-    m_TwistCurve.m_CurveType = vsp::PCHIP;
-    static const double t2[] = {0.2, 0.75, 1.0};
-    static const double v2[] = {46.75, 20.0, 13.0};
-    vector < double > tv2( t2, t2 + sizeof( t2 ) / sizeof( t2[0] ) );
-    vector < double > vv2( v2, v2 + sizeof( v2 ) / sizeof( v2[0] ) );
-    m_TwistCurve.InitCurve( tv2, vv2 );
-
-    static const double t3[] = {0.2, 1.0};
-    static const double v3[] = {0.0, 0.0};
-    vector < double > tv3( t3, t3 + sizeof( t3 ) / sizeof( t3[0] ) );
-    vector < double > vv3( v3, v3 + sizeof( v3 ) / sizeof( v3[0] ) );
 
     m_RakeCurve.SetParentContainer( GetID() );
     m_RakeCurve.SetDispNames( "r/R", "Rake/R" );
     m_RakeCurve.SetParmNames( "r", "rak" );
     m_RakeCurve.SetCurveName( "Rake" );
     m_RakeCurve.InitParms();
-    m_RakeCurve.m_CurveType = vsp::LINEAR;
-    m_RakeCurve.InitCurve( tv3, vv3 );
 
     m_SkewCurve.SetParentContainer( GetID() );
     m_SkewCurve.SetDispNames( "r/R", "Skew/R" );
     m_SkewCurve.SetParmNames( "r", "skw" );
     m_SkewCurve.SetCurveName( "Skew" );
     m_SkewCurve.InitParms();
-    m_SkewCurve.m_CurveType = vsp::LINEAR;
-    m_SkewCurve.InitCurve( tv3, vv3 );
 
     m_SweepCurve.SetParentContainer( GetID() );
     m_SweepCurve.SetDispNames( "r/R", "Sweep" );
     m_SweepCurve.SetParmNames( "r", "sw" );
     m_SweepCurve.SetCurveName( "Sweep" );
     m_SweepCurve.InitParms();
-    m_SweepCurve.m_CurveType = vsp::LINEAR;
-    m_SweepCurve.InitCurve( tv3, vv3 );
 
     m_ThickCurve.SetParentContainer( GetID() );
     m_ThickCurve.SetDispNames( "r/R", "Thick/C" );
     m_ThickCurve.SetParmNames( "r", "toc" );
     m_ThickCurve.SetCurveName( "Thick" );
     m_ThickCurve.InitParms();
-    m_ThickCurve.m_CurveType = vsp::CEDIT;
-    static const double t4[] =                    {0.2, 0.2 + 0.1 / 3.0,
-                                  0.3 - 0.1 / 3.0, 0.3, 0.3 + 0.3 / 3.0,
-                                  0.6 - 0.3 / 3.0, 0.6, 0.6 + 0.4 / 3.0,
-                                  1.0 - 0.4 / 3.0, 1.0};
-    static const double v4[] =        {0.50, 0.300,
-                                0.225, 0.20, 0.125,
-                                0.115, 0.10, 0.075,
-                                0.055, 0.03};
-    vector < double > tv4( t4, t4 + sizeof( t4 ) / sizeof( t4[0] ) );
-    vector < double > vv4( v4, v4 + sizeof( v4 ) / sizeof( v4[0] ) );
-    m_ThickCurve.InitCurve( tv4, vv4 );
 
     m_CLICurve.SetParentContainer( GetID() );
     m_CLICurve.SetDispNames( "r/R", "CLi" );
     m_CLICurve.SetParmNames( "r", "cli" );
     m_CLICurve.SetCurveName( "CLI" );
     m_CLICurve.InitParms();
-    m_CLICurve.m_CurveType = vsp::CEDIT;
-    static const double t5[] =                    {0.2, 0.2 + 0.2 / 3.0,
-                                  0.4 - 0.2 / 3.0, 0.4, 0.4 + 0.2 / 3.0,
-                                  0.6 - 0.2 / 3.0, 0.6, 0.6 + 0.4 / 3.0,
-                                  1.0 - 0.4 / 3.0, 1.0};
-    static const double v5[] =       {0.0, 0.7,
-                                 0.7, 0.7, 0.7,
-                                 0.7, 0.7, 0.7,
-                                 0.7, 0.2};
-    vector < double > tv5( t5, t5 + sizeof( t5 ) / sizeof( t5[0] ) );
-    vector < double > vv5( v5, v5 + sizeof( v5 ) / sizeof( v5[0] ) );
-    m_CLICurve.InitCurve( tv5, vv5 );
 
     m_AxialCurve.SetParentContainer( GetID() );
     m_AxialCurve.SetDispNames( "r/R", "Axial/R" );
     m_AxialCurve.SetParmNames( "r", "ax" );
     m_AxialCurve.SetCurveName( "Axial" );
     m_AxialCurve.InitParms();
-    m_AxialCurve.m_CurveType = vsp::LINEAR;
-    m_AxialCurve.InitCurve( tv3, vv3 );
 
     m_TangentialCurve.SetParentContainer(GetID() );
     m_TangentialCurve.SetDispNames("r/R", "Tan/R" );
     m_TangentialCurve.SetParmNames("r", "tan" );
     m_TangentialCurve.SetCurveName("Tangential" );
     m_TangentialCurve.InitParms();
-    m_TangentialCurve.m_CurveType = vsp::LINEAR;
-    m_TangentialCurve.InitCurve(tv3, vv3 );
 
     // Set up vector to allow treatment as a group.
     m_pcurve_vec.resize( NUM_PROP_PCURVE );
@@ -534,28 +535,129 @@ PropGeom::PropGeom( Vehicle* vehicle_ptr ) : GeomXSec( vehicle_ptr )
     m_pcurve_vec[ PROP_AXIAL ] = &m_AxialCurve;
     m_pcurve_vec[ PROP_TANGENTIAL ] = &m_TangentialCurve;
 
+    InitPreset( PROP_PRESET_PROPELLER );
+}
+
+//==== Replace the sections, the blade curves, the pitch and the Y rotation with a starting design ====//
+void PropGeom::InitPreset( int preset )
+{
+    m_XSecSurf.DeleteAllXSecs();
+    m_ActiveXSec = 0;
+
+    vector < int > xstype;
+    vector < double > xsrad;
+
+    vector < double > t3 = { 0.2, 1.0 };
+    vector < double > zero = { 0.0, 0.0 };
+    double yrot = 0.0;
+
+    if ( preset == PROP_PRESET_HELICOPTER )
+    {
+        // A rotor blade: NACA 0012 from root to tip, constant chord, linear twist.
+        xstype = { XS_FOUR_SERIES, XS_FOUR_SERIES };
+        xsrad = { 0.2, 1.0 };
+
+        m_ChordCurve.SetCurve( t3, { 0.06, 0.06 }, vsp::LINEAR );
+        m_TwistCurve.SetCurve( t3, { 0.0, -8.0 }, vsp::LINEAR );
+        m_ThickCurve.SetCurve( t3, { 0.12, 0.12 }, vsp::LINEAR );
+        m_CLICurve.SetCurve( t3, zero, vsp::LINEAR );
+
+        m_UseBeta34Flag.Set( 0 );
+        m_Feather.Set( 8.0 );
+        m_PsiRef.Set( 270.0 );
+
+        // Thrust up.
+        yrot = 90.0;
+    }
+    else
+    {
+        xstype = { XS_ELLIPSE, XS_ONE_SIX_SERIES, XS_ONE_SIX_SERIES };
+        xsrad = { 0.2, 0.4, 1.0 };
+
+        vector < double > t1 = { 0.2, 0.2 + 0.4 / 3.0,
+                                 0.6 - 0.4 / 3.0, 0.6, 0.6 + 0.35 / 3.0,
+                                 0.95 - 0.35 / 3.0, 0.95, 0.95 + 0.05 / 3.0,
+                                 1.0 - 0.05 / 3.0, 1.0 };
+        vector < double > v1 = { 0.08, 0.15,
+                                 0.2, 0.2, 0.2,
+                                 0.2, 0.2, 0.2,
+                                 0.2, 0.13 };
+        m_ChordCurve.SetCurve( t1, v1, vsp::CEDIT );
+
+        m_TwistCurve.SetCurve( { 0.2, 0.75, 1.0 }, { 46.75, 20.0, 13.0 }, vsp::PCHIP );
+
+        vector < double > t4 = { 0.2, 0.2 + 0.1 / 3.0,
+                                 0.3 - 0.1 / 3.0, 0.3, 0.3 + 0.3 / 3.0,
+                                 0.6 - 0.3 / 3.0, 0.6, 0.6 + 0.4 / 3.0,
+                                 1.0 - 0.4 / 3.0, 1.0 };
+        vector < double > v4 = { 0.50, 0.300,
+                                 0.225, 0.20, 0.125,
+                                 0.115, 0.10, 0.075,
+                                 0.055, 0.03 };
+        m_ThickCurve.SetCurve( t4, v4, vsp::CEDIT );
+
+        vector < double > t5 = { 0.2, 0.2 + 0.2 / 3.0,
+                                 0.4 - 0.2 / 3.0, 0.4, 0.4 + 0.2 / 3.0,
+                                 0.6 - 0.2 / 3.0, 0.6, 0.6 + 0.4 / 3.0,
+                                 1.0 - 0.4 / 3.0, 1.0 };
+        vector < double > v5 = { 0.0, 0.7,
+                                 0.7, 0.7, 0.7,
+                                 0.7, 0.7, 0.7,
+                                 0.7, 0.2 };
+        m_CLICurve.SetCurve( t5, v5, vsp::CEDIT );
+
+        m_UseBeta34Flag.Set( 1 );
+        m_Beta34.Set( 20.0 );
+        m_Feather.Set( 0.0 );
+        m_PsiRef.Set( 0.0 );
+    }
+
+    m_RakeCurve.SetCurve( t3, zero, vsp::LINEAR );
+    m_SkewCurve.SetCurve( t3, zero, vsp::LINEAR );
+    m_SweepCurve.SetCurve( t3, zero, vsp::LINEAR );
+    m_AxialCurve.SetCurve( t3, zero, vsp::LINEAR );
+    m_TangentialCurve.SetCurve( t3, zero, vsp::LINEAR );
+
+    // Prevent negative values in m_Chord
+    for ( size_t i = 0; i < m_ChordCurve.m_ValParmVec.size(); i++ )
+    {
+        m_ChordCurve.m_ValParmVec[i]->SetLowerLimit( 1e-8 );
+    }
+
+    // The Y rotation in the frame the propeller is placed in.
+    if ( m_AbsRelFlag() == vsp::REL )
+    {
+        m_YRelRot.Set( yrot );
+    }
+    else
+    {
+        m_YRot.Set( yrot );
+    }
+
+    for ( int j = 0; j < (int) xstype.size(); j++ )
+    {
+        m_XSecSurf.AddXSec( xstype[ j ] );
+        PropXSec* xs = ( PropXSec* ) m_XSecSurf.FindXSec( j );
+        xs->SetGroupDisplaySuffix( j );
+        xs->m_RadiusFrac = xsrad[ j ];
+    }
 }
 
 //==== Destructor ====//
 PropGeom::~PropGeom()
 {
-    for ( int i = 0; i < m_FoldAngleParmVec.size(); i++ )
-    {
-        delete m_FoldAngleParmVec[i];
-    }
-    m_FoldAngleParmVec.clear();
-
-    for ( int i = 0; i < m_BladeAzimuthParmVec.size(); i++ )
-    {
-        delete m_BladeAzimuthParmVec[i];
-    }
-    m_BladeAzimuthParmVec.clear();
-
-    for ( int i = 0; i < m_BladeDeltaAzimuthParmVec.size(); i++ )
-    {
-        delete m_BladeDeltaAzimuthParmVec[i];
-    }
-    m_BladeDeltaAzimuthParmVec.clear();
+    TrimParmVec( m_FlapAngleParmVec, 0 );
+    TrimParmVec( m_LagAngleParmVec, 0 );
+    TrimParmVec( m_FoldAngleParmVec, 0 );
+    TrimParmVec( m_FeatherParmVec, 0 );
+    TrimParmVec( m_FlapCosParmVec, 0 );
+    TrimParmVec( m_FlapSinParmVec, 0 );
+    TrimParmVec( m_LagCosParmVec, 0 );
+    TrimParmVec( m_LagSinParmVec, 0 );
+    TrimParmVec( m_FeatherCosParmVec, 0 );
+    TrimParmVec( m_FeatherSinParmVec, 0 );
+    TrimParmVec( m_BladeAzimuthParmVec, 0 );
+    TrimParmVec( m_BladeDeltaAzimuthParmVec, 0 );
 }
 
 void PropGeom::UpdateDrawObj()
@@ -574,7 +676,7 @@ void PropGeom::UpdateDrawObj()
     invRelTrans.affineInverse();
 
     Matrix4d rigid;
-    RigidBladeMotion( rigid, m_FoldAngle() );
+    RigidBladeMotion( rigid, 0, m_Rotate() );
     for ( int i = 0 ; i < m_XSecDrawObj_vec.size() ; i++ )
     {
         invRelTrans.xformvec( m_XSecDrawObj_vec[ i ].m_PntVec );
@@ -592,7 +694,7 @@ void PropGeom::UpdateDrawObj()
     }
 }
 
-// The thrust, rotation direction and fold axis at each of placer's symmetric copies.  The
+// The thrust, rotation direction and blade hinges at each of placer's symmetric copies.  The
 // rotation direction follows each copy's orientation, flip included.
 void PropGeom::BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec )
 {
@@ -611,6 +713,13 @@ void PropGeom::BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec 
 
     arrow_lines.m_GeomChanged = true;
     arrow_heads.m_GeomChanged = true;
+
+    for ( int i = PROP_MARKER_HINGES; i < NUM_PROP_MARKERS; i++ )
+    {
+        marker_vec[i].m_PntVec.clear();
+        marker_vec[i].m_NormVec.clear();
+        marker_vec[i].m_GeomChanged = true;
+    }
 
     double axlen = 1.0;
     double rot_axlen = 1.0;
@@ -655,23 +764,52 @@ void PropGeom::BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec 
         thrustdir = trans_mat.xform( thrustdir ) - cen;
         refdir = trans_mat.xform( refdir ) - cen;
 
-        Matrix4d mat;
-        mat.loadIdentity();
-        mat.rotateX( -1 * m_Rotate() );
-        mat.rotateZ( m_Precone() );
-        mat.postMult( trans_mat );
-
-        vec3d pmid = mat.xform( m_FoldAxOrigin );
-        vec3d ptstart = mat.xform( m_FoldAxOrigin + rev * m_FoldAxDirection * axlen / 2.0 );
-        vec3d ptend = mat.xform( m_FoldAxOrigin - rev * m_FoldAxDirection * axlen / 2.0 );
-
-        vec3d dir = ptend - ptstart;
-        dir.normalize();
-
+        // Each hinge of the active blade where the hinges inboard of it carry it.
         if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
         {
-            arrow_lines.m_PntVec.push_back( ptstart );
-            arrow_lines.m_PntVec.push_back( ptend );
+            // A Clone may be turned apart from its original.
+            double rotate = m_Rotate();
+            RotorRole* rotor = Geom::CastTo< RotorRole >( placer );
+            if ( rotor )
+            {
+                rotate = rotor->GetRotorRotate();
+            }
+
+            int iblade = m_ActiveBlade() - 1;
+            Matrix4d mat;
+            BladeRootMotion( mat, iblade, rotate );
+
+            // The hinge axes already mirror with reverse rotation, so their arrows turn with the
+            // copy's own mirror alone.
+            double hrev = rev;
+            if ( m_ReverseFlag() )
+            {
+                hrev = -rev;
+            }
+
+            vector< BladeHinge > hinges = GetBladeHinges( iblade, rotate );
+            for ( int j = 0; j < ( int )hinges.size(); j++ )
+            {
+                const BladeHinge & h = hinges[j];
+                DrawObj &hinge_lines = marker_vec[ PROP_MARKER_HINGES + 2 * h.m_Type ];
+                DrawObj &hinge_heads = marker_vec[ PROP_MARKER_HINGES + 2 * h.m_Type + 1 ];
+
+                Matrix4d hmat = mat;
+                hmat.postMult( trans_mat );
+
+                vec3d pmid = hmat.xform( h.m_Origin );
+                vec3d ptstart = hmat.xform( h.m_Origin - h.m_Axis * hrev * axlen / 2.0 );
+                vec3d ptend = hmat.xform( h.m_Origin + h.m_Axis * hrev * axlen / 2.0 );
+
+                vec3d dir = ptend - ptstart;
+                dir.normalize();
+
+                hinge_lines.m_PntVec.push_back( ptstart );
+                hinge_lines.m_PntVec.push_back( ptend );
+                MakeCircleArrow( pmid, dir, 0.5 * axlen, 0.5 * axlen, hinge_lines, hinge_heads );
+
+                mat.rotateAbout( h.m_Angle, h.m_Axis, h.m_Origin );
+            }
         }
 
         arrow_lines.m_PntVec.push_back( cen );
@@ -680,11 +818,6 @@ void PropGeom::BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec 
         arrow_lines.m_PntVec.push_back( cen + thrustdir * axlen );
         MakeArrowhead( cen + thrustdir * axlen, thrustdir, 0.25 * axlen, arrow_heads.m_PntVec, arrow_heads.m_NormVec );
         MakeCircleArrow( cen, rotdir, rot_axlen, axlen, arrow_lines, arrow_heads );
-
-        if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
-        {
-            MakeCircleArrow( pmid, dir, 0.5 * axlen, 0.5 * axlen, arrow_lines, arrow_heads );
-        }
 
 
 
@@ -709,6 +842,58 @@ void PropGeom::BuildMarkerDrawObjs( Geom* placer, vector< DrawObj > &marker_vec 
     arrow_lines.m_Screen = DrawObj::VSP_MAIN_SCREEN;
     arrow_lines.m_LineWidth = 2.0;
     arrow_lines.m_Type = DrawObj::VSP_LINES;
+
+    // Each hinge type in its own colour, heads shaded to match their lines.
+    for ( int t = 0; t < NUM_HINGE_TYPES; t++ )
+    {
+        DrawObj &hinge_lines = marker_vec[ PROP_MARKER_HINGES + 2 * t ];
+        DrawObj &hinge_heads = marker_vec[ PROP_MARKER_HINGES + 2 * t + 1 ];
+        vec3d c = DrawObj::Color( HingeDrawColor( t ) );
+
+        char str[32];
+        snprintf( str, sizeof( str ), "%d", t );
+
+        hinge_lines.m_GeomID = placer->GetID() + "HingeLines" + str;
+        hinge_lines.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+        hinge_lines.m_LineWidth = 2.0;
+        hinge_lines.m_LineColor = c;
+        hinge_lines.m_Type = DrawObj::VSP_LINES;
+
+        hinge_heads.m_GeomID = placer->GetID() + "HingeArrows" + str;
+        hinge_heads.m_Screen = DrawObj::VSP_MAIN_SCREEN;
+        hinge_heads.m_LineWidth = 1.0;
+        hinge_heads.m_Type = DrawObj::VSP_SHADED_TRIS;
+
+        for ( int i = 0; i < 3; i++ )
+        {
+            hinge_heads.m_MaterialInfo.Ambient[i] = 0.2f * ( float )c.v[i];
+            hinge_heads.m_MaterialInfo.Diffuse[i] = ( float )c.v[i];
+            hinge_heads.m_MaterialInfo.Specular[i] = 0.7f;
+            hinge_heads.m_MaterialInfo.Emission[i] = 0.0f;
+        }
+        hinge_heads.m_MaterialInfo.Ambient[3] = 0.2f;
+        hinge_heads.m_MaterialInfo.Diffuse[3] = 0.5f;
+        hinge_heads.m_MaterialInfo.Specular[3] = 0.7f;
+        hinge_heads.m_MaterialInfo.Emission[3] = 0.0f;
+        hinge_heads.m_MaterialInfo.Shininess = 5.0f;
+    }
+}
+
+int PropGeom::HingeDrawColor( int type )
+{
+    switch ( type )
+    {
+        case FLAP_HINGE:
+            return DrawObj::DODGER_BLUE;
+        case LAG_HINGE:
+            return DrawObj::ORANGE_RED;
+        case FOLD_HINGE:
+            return DrawObj::MEDIUM_ORCHID;
+        case FEATHER_HINGE:
+            return DrawObj::LIME_GREEN;
+    }
+
+    return DrawObj::BLACK;
 }
 
 void PropGeom::SetMarkerVisibility( Geom* placer, vector< DrawObj > &marker_vec )
@@ -736,42 +921,17 @@ void PropGeom::UpdateHighlightDrawObj()
     invRelTrans.affineInverse();
 
     Matrix4d rigid;
-    RigidBladeMotion( rigid, m_FoldAngle() );
+    RigidBladeMotion( rigid, 0, m_Rotate() );
 
     invRelTrans.xformvec( m_HighlightXSecDrawObj.m_PntVec );
     rigid.xformvec( m_HighlightXSecDrawObj.m_PntVec );
     relTrans.xformvec( m_HighlightXSecDrawObj.m_PntVec );
 
-
-    double rev = 1.0;
-    if ( m_ReverseFlag() )
-    {
-        rev = -1.0;
-    }
-
     m_HighlightBladeDrawObj.m_PntVec = m_MainBladeBBox.GetBBoxDrawLines();
 
-    int i = m_ActiveBlade() - 1;
-    if ( m_IndividualBladeFoldFlag() && ( i > 0 ) && m_FoldAngleParmVec[ i - 1 ] )
-    {
-        RigidBladeMotion( rigid, m_FoldAngleParmVec[ i - 1 ]->Get() );
-    }
-    else
-    {
-        RigidBladeMotion( rigid, m_FoldAngle() );
-    }
+    RigidBladeMotion( rigid, m_ActiveBlade() - 1, m_Rotate() );
 
     rigid.xformvec( m_HighlightBladeDrawObj.m_PntVec );
-
-    Matrix4d rot;
-    rot.loadIdentity();
-
-    if ( i > 0 )
-    {
-        rot.rotateX( -rev * m_BladeAzimuthParmVec[  i - 1  ]->Get() );
-    }
-
-    rot.xformvec( m_HighlightBladeDrawObj.m_PntVec );
 
     relTrans.xformvec( m_HighlightBladeDrawObj.m_PntVec );
 
@@ -917,25 +1077,6 @@ void InterpXSecCurve( VspCurve & cout, XSecCurve *c1, XSecCurve *c2, const doubl
 //==== Update Fuselage And Cross Section Placement ====//
 void PropGeom::UpdateSurf()
 {
-    ReserveBlades( m_Nblade() - 1 );
-
-    UpdateBladeAzimuth();
-
-    CheckBalance();
-
-    NormalizeFlaps();
-
-    if ( !m_IndividualBladeFoldFlag() )
-    {
-        m_ActiveBlade.Set( 1 );
-        for ( int i = 0; i < m_FoldAngleParmVec.size(); i++ )
-        {
-            m_FoldAngleParmVec[i]->Set( m_FoldAngle() );
-        }
-    }
-
-    m_ActiveBlade.SetUpperLimit( m_Nblade() );
-
     unsigned int nxsec = m_XSecSurf.NumXSec();
 
     double radius = m_Diameter() / 2.0;
@@ -1014,51 +1155,19 @@ void PropGeom::UpdateSurf()
     m_TChord.Set( 3.0 * m_ChordCurve.IntegrateCrv_rsq( rfirst ) / ( 1.0 - r03 ) );
     m_PChord.Set( 4.0 * m_ChordCurve.IntegrateCrv_rcub( rfirst ) / ( 1.0 - r04 ) );
 
-    m_Solidity.Set( m_Chord() * m_Nblade() / M_PI );
-    m_TSolidity.Set( m_TChord() * m_Nblade() / M_PI );
-    m_PSolidity.Set( m_PChord() * m_Nblade() / M_PI );
-
-    if ( m_UseBeta34Flag() == 1 )
+    // Beta34 less the feather angle.
+    m_Twist34 = 0.0;
+    if ( rfirst <= 0.75 )
     {
-        if ( rfirst <= 0.75 )
-        {
-            double theta34 = m_TwistCurve.Comp( 0.75 );
-            m_Feather = m_Beta34() - theta34;
-        }
-        else
-        {
-            m_Feather = m_Beta34();
-        }
-        m_Beta34.Activate();
-        m_Feather.Deactivate();
+        m_Twist34 = m_TwistCurve.Comp( 0.75 );
     }
-    else
-    {
-        if ( rfirst <= 0.75 )
-        {
-            double theta34 = m_TwistCurve.Comp( 0.75 );
-            m_Beta34 = m_Feather() + theta34;
-        }
-        else
-        {
-            m_Beta34 = m_Feather();
-        }
-        m_Beta34.Deactivate();
-        m_Feather.Activate();
-    }
-
-    // Set up fold axis & store for visualization.
-    Matrix4d fold, foldrot;
-    fold.loadIdentity();
-    fold.rotateY( m_AzimuthFoldDir() );
-    fold.rotateX( m_ElevationFoldDir() );
-    m_FoldAxDirection = fold.xform( vec3d( 0, 0, 1 ) );
-    m_FoldAxOrigin = vec3d( m_AxialFoldAxis() * radius, m_RadFoldAxis() * radius, m_OffsetFoldAxis() * radius );
 
 
     //==== Cross Section Curves & joint info ====//
     vector< XSecCurve* > xsc_vec;
     xsc_vec.resize( nxsec, nullptr );
+    vector< double > w_vec;
+    w_vec.resize( nxsec, 0.0 );
 
     vector< VspCurve > base_crv_vec;
     base_crv_vec.resize( nxsec );
@@ -1078,6 +1187,7 @@ void PropGeom::UpdateSurf()
             double cli = m_CLICurve.Comp( r );
 
             xsc_vec[i] = xsc;
+            w_vec[i] = w;
 
             if ( xsc )
             {
@@ -1131,19 +1241,24 @@ void PropGeom::UpdateSurf()
                     }
 
                 }
-
-                base_crv_vec[i] = xsc->GetCurve();
-                if ( w != 0 )
-                {
-                    base_crv_vec[i].Scale( 1.0 / w );
-                }
             }
         }
     }
 
-    // Do not clear m_MainSurfVec.  The blades below are duplicates of a single computed blade;
-    // assigning into the existing surfaces reuses their control-point storage across updates
-    // instead of freeing and rebuilding it.  Disk-only mode (no blades) is reset in the else.
+    // The flaps are sized from the section widths just set.
+    NormalizeFlaps();
+
+    for ( int i = 0 ; i < nxsec ; i++ )
+    {
+        if ( xsc_vec[i] )
+        {
+            base_crv_vec[i] = xsc_vec[i]->GetCurve();
+            if ( w_vec[i] != 0 )
+            {
+                base_crv_vec[i].Scale( 1.0 / w_vec[i] );
+            }
+        }
+    }
 
     if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
     {
@@ -1213,6 +1328,8 @@ void PropGeom::UpdateSurf()
             twroot = m_TwistCurve.Comp( r );
         }
 
+        m_BladeRootChord = croot;
+
         //==== Update XSec Prop Positioner for highlight curves ====//
         for ( int i = 0 ; i < nxsec ; i++ )
         {
@@ -1244,7 +1361,6 @@ void PropGeom::UpdateSurf()
                 xs->m_PropPos.m_Sweep = m_SweepCurve.Comp( r );
                 xs->m_PropPos.m_Axial = m_AxialCurve.Comp( r ) * radius;
                 xs->m_PropPos.m_Tangential = m_TangentialCurve.Comp( r ) * radius;
-                xs->m_PropPos.m_Feather = m_Feather();
 
                 xs->m_PropPos.m_Reverse = rev;
             }
@@ -1324,8 +1440,6 @@ void PropGeom::UpdateSurf()
             pp.m_Axial = m_AxialCurve.Comp( r ) * radius;
             pp.m_Tangential = m_TangentialCurve.Comp( r ) * radius;
 
-            pp.m_Feather = m_Feather();
-
             pp.m_Reverse = rev;
 
             // Set a bunch of other pp variables.
@@ -1344,114 +1458,49 @@ void PropGeom::UpdateSurf()
         m_FoilSurf = VspSurf();
         m_FoilSurf.SkinC0Uniform(crv_vec, m_UPseudo, false );
 
-        m_MainSurfVec.reserve( m_Nblade() + 1 );
+        // Build the one blade.  UpdatePostSurf makes a copy of it for each blade.
+        m_BladeSurf = VspSurf();
 
-        // Build blade 0 in a clean surface in slot 0, keeping any existing duplicate slots alive
-        // for reuse below.  Slot 0 is skinned from scratch regardless, so resetting it is free.
-        if ( m_MainSurfVec.empty() )
-        {
-            m_MainSurfVec.resize( 1 );
-        }
-        m_MainSurfVec[0] = VspSurf();
+        m_BladeSurf.SetMagicVParm( false );
+        m_BladeSurf.SkinCubicSpline(rib_vec, m_UPseudo, tdisc, false );
 
-        m_MainSurfVec[0].SetMagicVParm( false );
-        m_MainSurfVec[0].SkinCubicSpline(rib_vec, m_UPseudo, tdisc, false );
-
-        m_MainSurfVec[0].SetMagicVParm( true );
-        m_MainSurfVec[0].SetSurfType( WING_SURF );
-        m_MainSurfVec[0].SetSurfCfdType( vsp::CFD_NORMAL );  // Make sure set to default, can be updated later.
+        m_BladeSurf.SetMagicVParm( true );
+        m_BladeSurf.SetSurfType( WING_SURF );
+        m_BladeSurf.SetSurfCfdType( vsp::CFD_NORMAL );  // Make sure set to default, can be updated later.
 
         m_FoilSurf.SetMagicVParm( true );
 
-        m_MainSurfVec[0].SetFoilSurf( &m_FoilSurf );
+        m_BladeSurf.SetFoilSurf( &m_FoilSurf );
 
         if ( m_XSecSurf.GetFlipUD() )
         {
-            m_MainSurfVec[0].FlipNormal();
+            m_BladeSurf.FlipNormal();
         }
 
         if ( this->m_ReverseFlag() )
         {
-            m_MainSurfVec[0].FlipNormal();
+            m_BladeSurf.FlipNormal();
         }
 
-        // Cap only blade 0 here so we only have to cap one blade; the copies inherit its caps.
-        UpdateEndCaps( 1 );
-
-        m_BladeSurf = m_MainSurfVec[0];
-
-        // Duplicate blade 0 into the remaining blade slots, assigning in place so the existing
-        // surface storage is reused rather than reallocated.
-        m_MainSurfVec.resize( m_Nblade() );
-        for ( int i = 1; i < m_Nblade(); i++ )
-        {
-            m_MainSurfVec[i] = m_BladeSurf;
-        }
-
-        // Duplicate capping variables (all blades share blade 0's cap result).
-        m_CapUMinSuccess.resize( m_Nblade() );
-        m_CapUMaxSuccess.resize( m_Nblade() );
-        for ( int i = 1; i < m_Nblade(); i++ )
-        {
-            m_CapUMinSuccess[i] = m_CapUMinSuccess[0];
-            m_CapUMaxSuccess[i] = m_CapUMaxSuccess[0];
-        }
+        // Cap the one blade; the copies inherit its caps.
+        UpdateEndCaps();
 
         m_MainBladeBBox.Reset();
         m_BladeSurf.GetBoundingBox( m_MainBladeBBox );
-
-
-
-        Matrix4d rigid;
-        Matrix4d rot;
-        for ( int i = 0; i < m_Nblade(); i++ )
-        {
-            if ( m_IndividualBladeFoldFlag() && ( i > 0 ) && m_FoldAngleParmVec[ i - 1 ] )
-            {
-                RigidBladeMotion( rigid, m_FoldAngleParmVec[ i - 1 ]->Get() );
-            }
-            else
-            {
-                RigidBladeMotion( rigid, m_FoldAngle() );
-            }
-            m_MainSurfVec[i].Transform( rigid );
-
-            if ( i > 0 )
-            {
-                rot.loadIdentity();
-                rot.rotateX( -rev * m_BladeAzimuthParmVec[ i - 1 ]->Get() );
-
-                m_MainSurfVec[i].Transform( rot );
-            }
-        }
-    }
-    else
-    {
-        // Disk-only mode: no blades.  Reset so the disk becomes the sole main surface below.
-        m_MainSurfVec.resize( 0 );
     }
 
     // Build disk surface.
     if ( m_PropMode() >= PROP_MODE::PROP_BOTH )
     {
-        unsigned int nsurf = m_MainSurfVec.size() + 1;
-        unsigned int idisk = nsurf - 1;
-
-        m_MainSurfVec.resize( nsurf );
-        m_CapUMinSuccess.resize( nsurf );
-        m_CapUMaxSuccess.resize( nsurf );
-
-        m_MainSurfVec[ idisk ].CreateDisk( m_Diameter(), Y_DIR, Z_DIR );
-        m_MainSurfVec[ idisk ].SetSurfType( vsp::DISK_SURF );
-        m_MainSurfVec[ idisk ].SetSurfCfdType( vsp::CFD_TRANSPARENT );
-        m_MainSurfVec[ idisk ].SetMagicVParm( false );
-
-        m_CapUMinSuccess[ idisk ] = false;
-        m_CapUMaxSuccess[ idisk ] = false;
+        m_DiskSurf = VspSurf();
+        m_DiskSurf.CreateDisk( m_Diameter(), Y_DIR, Z_DIR );
+        m_DiskSurf.SetSurfType( vsp::DISK_SURF );
+        m_DiskSurf.SetSurfCfdType( vsp::CFD_TRANSPARENT );
+        m_DiskSurf.SetMagicVParm( false );
 
         if ( !m_ReverseFlag() )
         {
-            m_MainSurfVec[idisk].FlipNormal();
+            m_DiskSurf.FlipNormal();
         }
 
         if ( m_PropMode() == PROP_MODE::PROP_DISK )
@@ -1463,9 +1512,185 @@ void PropGeom::UpdateSurf()
             m_CappingDone = true;
         }
     }
-    
-    //When props blades are removed we need to remove its sub-surface from list of sub-surfaces
-    //If sub-surface index is greater then amount of GetNumMainSurfs(), we remove sub-surface 
+}
+
+// Cap the one blade; its copies take its caps.
+void PropGeom::UpdateEndCaps()
+{
+    if ( m_CappingDone )
+    {
+        return;
+    }
+    m_CappingDone = true;
+
+    CapSurf( m_BladeSurf, m_BladeCapUMinSuccess, m_BladeCapUMaxSuccess );
+    UpdateCapParms();
+}
+
+void PropGeom::UpdateFeatureLines()
+{
+    if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+    {
+        m_BladeSurf.BuildFeatureLines( m_ForceXSecFlag );
+    }
+    if ( m_PropMode() >= PROP_MODE::PROP_BOTH )
+    {
+        m_DiskSurf.BuildFeatureLines( m_ForceXSecFlag );
+    }
+}
+
+void PropGeom::UpdateLCurve()
+{
+    if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+    {
+        m_BladeSurf.InitUMapping();
+        m_BladeSurf.BuildLCurve();
+    }
+    if ( m_PropMode() >= PROP_MODE::PROP_BOTH )
+    {
+        m_DiskSurf.InitUMapping();
+        m_DiskSurf.BuildLCurve();
+    }
+}
+
+void PropGeom::UpdateFlags()
+{
+    if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+    {
+        UpdateSurfFlags( m_BladeSurf );
+    }
+    if ( m_PropMode() >= PROP_MODE::PROP_BOTH )
+    {
+        UpdateSurfFlags( m_DiskSurf );
+    }
+}
+
+// Make and place the blades: the per-blade values, the hinges, then each blade's rigid motion.
+void PropGeom::UpdatePostSurf()
+{
+    ReserveBlades( m_Nblade() - 1 );
+    ReserveHarmonics();
+
+    m_ActiveBlade.SetUpperLimit( m_Nblade() );
+
+    m_Solidity.Set( m_Chord() * m_Nblade() / M_PI );
+    m_TSolidity.Set( m_TChord() * m_Nblade() / M_PI );
+    m_PSolidity.Set( m_PChord() * m_Nblade() / M_PI );
+
+    UpdateBladeAzimuth();
+
+    CheckBalance();
+
+    UpdateBladeMotion( m_BladeMotionMode(), m_FlapAngle, m_FlapAngleParmVec, m_FlapMean, m_FlapCosParmVec,
+                       m_FlapSinParmVec );
+
+    UpdateBladeMotion( m_BladeMotionMode(), m_LagAngle, m_LagAngleParmVec, m_LagMean, m_LagCosParmVec,
+                       m_LagSinParmVec );
+
+    if ( m_BladeMotionMode() == vsp::PROP_BLADE_HARMONIC )
+    {
+        m_NumHarmonics.Activate();
+    }
+    else
+    {
+        m_NumHarmonics.Deactivate();
+    }
+
+    if ( !m_IndividualBladeFoldFlag() )
+    {
+        for ( int i = 0; i < m_FoldAngleParmVec.size(); i++ )
+        {
+            m_FoldAngleParmVec[i]->Set( m_FoldAngle() );
+        }
+    }
+
+    if ( m_UseBeta34Flag() == 1 )
+    {
+        m_Feather = m_Beta34() - m_Twist34;
+    }
+
+    // While Beta34 drives every blade takes its feather, but blades given their own keep them.
+    int feather_mode = FeatherMode();
+    if ( m_BladeMotionMode() == vsp::PROP_BLADE_INDIVIDUAL )
+    {
+        feather_mode = vsp::PROP_BLADE_INDIVIDUAL;
+    }
+    UpdateBladeMotion( feather_mode, m_Feather, m_FeatherParmVec, m_FeatherMean, m_FeatherCosParmVec,
+                       m_FeatherSinParmVec );
+
+    if ( m_UseBeta34Flag() == 1 )
+    {
+        m_Beta34.Activate();
+        m_Feather.Deactivate();
+        for ( int i = 0; i < ( int )m_FeatherParmVec.size(); i++ )
+        {
+            m_FeatherParmVec[i]->Deactivate();
+        }
+    }
+    else
+    {
+        m_Beta34 = m_Feather() + m_Twist34;
+        m_Beta34.Deactivate();
+    }
+
+    // The Blade counter goes back to the first blade while no blade is given its own angles.
+    bool individual = m_IndividualBladeFoldFlag();
+    individual = individual || m_BladeMotionMode() == vsp::PROP_BLADE_INDIVIDUAL;
+    if ( !individual )
+    {
+        m_ActiveBlade.Set( 1 );
+    }
+
+    double radius = m_Diameter() / 2.0;
+
+    double rev = 1.0;
+    if ( m_ReverseFlag() )
+    {
+        rev = -1.0;
+    }
+
+    // Flap hinge.  Its vector starts aft (+x); azimuth then elevation turn it, as for the fold
+    // hinge.
+    Matrix4d flap;
+    flap.rotateY( m_AzimuthFlapDir() );
+    flap.rotateZ( -m_ElevationFlapDir() );
+    m_FlapAxDirection = BladeAxisToProp( flap.xform( vec3d( 1, 0, 0 ) ), rev );
+    m_FlapAxOrigin = BladeToProp( vec3d( m_OffsetFlapAxis(), m_RadFlapAxis(), -m_AxialFlapAxis() ) * radius, rev );
+
+    // Lag hinge.  Its vector starts away from the thrust (-z); azimuth turns it about the radial
+    // axis, cant about the chord.
+    Matrix4d lag;
+    lag.rotateY( m_AzimuthLagDir() );
+    lag.rotateX( -m_CantLagDir() );
+    m_LagAxDirection = BladeAxisToProp( lag.xform( vec3d( 0, 0, -1 ) ), rev );
+    m_LagAxOrigin = BladeToProp( vec3d( m_OffsetLagAxis(), m_RadLagAxis(), -m_AxialLagAxis() ) * radius, rev );
+
+    // Fold hinge.  Its vector starts forward (-x).
+    Matrix4d fold;
+    fold.rotateY( m_AzimuthFoldDir() );
+    fold.rotateZ( -m_ElevationFoldDir() );
+    m_FoldAxDirection = BladeAxisToProp( fold.xform( vec3d( -1, 0, 0 ) ), rev );
+    m_FoldAxOrigin = BladeToProp( vec3d( m_OffsetFoldAxis(), m_RadFoldAxis(), -m_AxialFoldAxis() ) * radius, rev );
+
+    // The feather axis is radial, at the feather offset from the blade; the bearing sits on it
+    // at its radial place.  Its vector is +y.
+    m_FeatherAxOrigin = BladeToProp( vec3d( m_BladeRootChord * m_FeatherOffset(), m_RadFeatherAxis() * radius, 0 ), rev );
+    m_FeatherAxDirection = BladeAxisToProp( vec3d( 0, 1, 0 ), rev );
+
+    GetMainSurfVecAtRotate( m_Rotate(), m_MainSurfVec );
+
+    // The blades take the blade's caps; the disk has none.
+    int nblade = NumPlacedBlades();
+    int nsurf = m_MainSurfVec.size();
+    m_CapUMinSuccess.resize( nsurf );
+    m_CapUMaxSuccess.resize( nsurf );
+    for ( int i = 0; i < nsurf; i++ )
+    {
+        m_CapUMinSuccess[i] = i < nblade && m_BladeCapUMinSuccess;
+        m_CapUMaxSuccess[i] = i < nblade && m_BladeCapUMaxSuccess;
+    }
+
+    // Remove the sub-surfaces of blades that are gone.
     int count = 0;
     vector<SubSurface*> subsurf_vec_temp = GetSubSurfVec();
     for ( int i = 0; i < subsurf_vec_temp.size(); i++ )
@@ -1479,137 +1704,157 @@ void PropGeom::UpdateSurf()
     }
 }
 
-void PropGeom::UpdateMainTessVec()
+// The parms that only move the finished blades.
+bool PropGeom::MovesBladesOnly( Parm* parm_ptr )
 {
-    int nmain = GetNumMainSurfs();
-    int nblade = m_Nblade();
-
-    // Do not clear m_MainTessVec / m_MainFeatureTessVec.  Resizing and assigning into the
-    // existing SimpleTess elements lets their nested point/normal/texture buffers be reused
-    // across updates instead of being freed and reallocated every time.  The blades are all
-    // copies of a single computed blade, and the disk (if any) is handled below.
-
-    if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+    // The articulation parms have their own group.
+    if ( parm_ptr->GetGroupName() == string( "Articulation" ) )
     {
-        // Copy non-surface data from m_MainSurfVec.  Geom::Update() does various 'things' to m_MainSurfVec
-        // between UpdateSurf() (when it is copied to m_BladeSurf) and here (UpdateMainTessVec).
-        // Some of these need to be applied to m_BladeSurf before the calls to UpdateSplitTesselate and
-        // TessU/WFeatureLine.  These include: VspSurf::InitUMapping(); and
-        // VspSurf::BuildFeatureLines( m_ForceXSecFlag );.  Rather than attempting to only copy exactly the
-        // required information, CopyNonSurfaceData takes an everything-but-the-kitchen-sink approach.
-        m_BladeSurf.CopyNonSurfaceData( m_MainSurfVec[ 0 ] );
-
-        // Tessellate the single blade into reusable scratch members, then copy it into each
-        // blade slot in place.  Resize to nmain (not nblade) so a trailing disk slot, if any,
-        // is retained for reuse below rather than destroyed and rebuilt.
-        UpdateTess( m_BladeSurf, m_CapUMinSuccess[ 0 ], m_CapUMaxSuccess[ 0 ], m_BladeTess, m_BladeFeatureTess );
-
-        m_MainTessVec.resize( nmain );
-        m_MainFeatureTessVec.resize( nmain );
-        for ( int i = 0; i < nblade; i++ )
-        {
-            m_MainTessVec[i] = m_BladeTess;
-            m_MainFeatureTessVec[i] = m_BladeFeatureTess;
-        }
-
-        double rev = 1.0;
-        if ( m_ReverseFlag() )
-        {
-            rev = -1.0;
-        }
-
-        Matrix4d rigid;
-        Matrix4d rot;
-        for ( int i = 0; i < nblade; i++ )
-        {
-            if ( m_IndividualBladeFoldFlag() && ( i > 0 ) && m_FoldAngleParmVec[ i - 1 ] )
-            {
-                RigidBladeMotion( rigid, m_FoldAngleParmVec[ i - 1 ]->Get() );
-            }
-            else
-            {
-                RigidBladeMotion( rigid, m_FoldAngle() );
-            }
-            m_MainTessVec[i].Transform( rigid );
-            m_MainFeatureTessVec[i].Transform( rigid );
-
-            if ( i > 0 )
-            {
-                double theta = -rev * m_BladeAzimuthParmVec[ i - 1 ]->Get();
-                rot.loadIdentity();
-                rot.rotateX( theta );
-
-                m_MainTessVec[i].Transform( rot );
-                m_MainFeatureTessVec[i].Transform( rot );
-            }
-        }
+        return true;
     }
 
+    vector< Parm* > movers = { &m_Nblade, &m_Rotate, &m_Precone,
+                               &m_Feather, &m_Beta34, &m_UseBeta34Flag,
+                               &m_FoldAngle, &m_IndividualBladeFoldFlag, &m_RadFoldAxis, &m_AxialFoldAxis,
+                               &m_OffsetFoldAxis, &m_AzimuthFoldDir, &m_ElevationFoldDir,
+                               &m_BladeAzimuthMode, &m_BladeAzimuthDeltaFlag, &m_BalanceX1, &m_BalanceX2 };
+    movers.insert( movers.end(), m_FoldAngleParmVec.begin(), m_FoldAngleParmVec.end() );
+    movers.insert( movers.end(), m_BladeAzimuthParmVec.begin(), m_BladeAzimuthParmVec.end() );
+    movers.insert( movers.end(), m_BladeDeltaAzimuthParmVec.begin(), m_BladeDeltaAzimuthParmVec.end() );
+
+    return std::find( movers.begin(), movers.end(), parm_ptr ) != movers.end();
+}
+
+void PropGeom::SetDirtyFlags( Parm* parm_ptr )
+{
+    if ( parm_ptr && MovesBladesOnly( parm_ptr ) )
+    {
+        m_PostSurfDirty = true;
+        return;
+    }
+
+    // The hinge markers are drawn on the active blade.
+    if ( parm_ptr == &m_ActiveBlade )
+    {
+        m_MarkerDirty = true;
+    }
+
+    GeomXSec::SetDirtyFlags( parm_ptr );
+}
+
+// The blades placed as main surfaces: none in disk-only mode.
+int PropGeom::NumPlacedBlades()
+{
+    if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+    {
+        return m_Nblade();
+    }
+    return 0;
+}
+
+// A copy of the blade for each blade, turned into place, then the disk, if any.  The surfaces
+// that stay keep their storage, so copying into them does not allocate.
+void PropGeom::GetMainSurfVecAtRotate( double rotate, vector< VspSurf > &surfs )
+{
+    int nblade = NumPlacedBlades();
+    int nsurf = nblade;
     if ( m_PropMode() >= PROP_MODE::PROP_BOTH )
     {
-        unsigned int idisk = nmain - 1;
+        nsurf++;
+    }
 
-        m_MainTessVec.resize( nmain );
-        m_MainFeatureTessVec.resize( nmain );
+    surfs.resize( nsurf );
 
-        UpdateTess( m_MainSurfVec[idisk], false, false, m_MainTessVec[idisk], m_MainFeatureTessVec[idisk] );
+    Matrix4d rigid;
+    for ( int i = 0; i < nblade; i++ )
+    {
+        surfs[i] = m_BladeSurf;
+        RigidBladeMotion( rigid, i, rotate );
+        surfs[i].Transform( rigid );
+    }
+
+    if ( nsurf > nblade )
+    {
+        surfs[ nblade ] = m_DiskSurf;
     }
 }
 
+// The blade's tessellation copied and turned into place for each blade, then the disk's, assigned
+// into the existing elements so their buffers are reused.
+void PropGeom::GetMainTessVecAtRotate( double rotate, vector< SimpleTess > &tess, vector< SimpleFeatureTess > &ftess )
+{
+    int nblade = NumPlacedBlades();
+    int nmain = nblade;
+    if ( m_PropMode() >= PROP_MODE::PROP_BOTH )
+    {
+        nmain++;
+    }
+
+    tess.resize( nmain );
+    ftess.resize( nmain );
+
+    Matrix4d rigid;
+    for ( int i = 0; i < nblade; i++ )
+    {
+        tess[i] = m_BladeTess;
+        ftess[i] = m_BladeFeatureTess;
+        RigidBladeMotion( rigid, i, rotate );
+        tess[i].Transform( rigid );
+        ftess[i].Transform( rigid );
+    }
+
+    if ( nmain > nblade )
+    {
+        tess[ nblade ] = m_DiskTess;
+        ftess[ nblade ] = m_DiskFeatureTess;
+    }
+}
+
+// The blade's preview copied and turned into place for each blade.  The disk has none.
+void PropGeom::GetMainDegenGeomPreviewAtRotate( double rotate, vector< DegenGeom > &degen )
+{
+    int nblade = NumPlacedBlades();
+    degen.resize( nblade );
+
+    Matrix4d rigid;
+    for ( int i = 0; i < nblade; i++ )
+    {
+        degen[i] = m_BladeDegenGeom;
+        RigidBladeMotion( rigid, i, rotate );
+        degen[i].Transform( rigid );
+    }
+}
+
+// Moving the blades leaves the blade's and the disk's own tessellations as they were.
+void PropGeom::UpdateMainTessVec()
+{
+    if ( m_BladeTessDirty )
+    {
+        if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+        {
+            UpdateTess( m_BladeSurf, m_BladeCapUMinSuccess, m_BladeCapUMaxSuccess, m_BladeTess, m_BladeFeatureTess );
+        }
+        if ( m_PropMode() >= PROP_MODE::PROP_BOTH )
+        {
+            UpdateTess( m_DiskSurf, false, false, m_DiskTess, m_DiskFeatureTess );
+        }
+        m_BladeTessDirty = false;
+    }
+
+    GetMainTessVecAtRotate( m_Rotate(), m_MainTessVec, m_MainFeatureTessVec );
+}
+
+// Moving the blades leaves the blade's own preview as it was.
 void PropGeom::UpdateMainDegenGeomPreview()
 {
-    if ( m_PropMode() <= PROP_MODE::PROP_BOTH )
+    if ( m_PropMode() <= PROP_MODE::PROP_BOTH && m_BladeDegenDirty )
     {
-
-        DegenGeom degenGeom;
-        CreateDegenGeom( m_BladeSurf, 0, degenGeom, true, 1 );
-
-        int nblade = m_Nblade();
-
-        // Reuse existing preview buffers: resize and assign into the existing elements rather
-        // than clearing and rebuilding.  The blades are all copies of the single computed blade.
-        m_MainDegenGeomPreviewVec.resize( nblade );
-        for ( int i = 0; i < nblade; i++ )
-        {
-            m_MainDegenGeomPreviewVec[i] = degenGeom;
-        }
-
-        double rev = 1.0;
-        if ( m_ReverseFlag() )
-        {
-            rev = -1.0;
-        }
-
-        Matrix4d rigid;
-        Matrix4d rot;
-        for ( int i = 0; i < nblade; i++ )
-        {
-            if ( m_IndividualBladeFoldFlag() && ( i > 0 ) && m_FoldAngleParmVec[ i - 1 ] )
-            {
-                RigidBladeMotion( rigid, m_FoldAngleParmVec[ i - 1 ]->Get() );
-            }
-            else
-            {
-                RigidBladeMotion( rigid, m_FoldAngle() );
-            }
-            m_MainDegenGeomPreviewVec[i].Transform( rigid );
-
-            if ( i > 0 )
-            {
-                double theta = -rev * m_BladeAzimuthParmVec[ i - 1 ]->Get();
-                rot.loadIdentity();
-                rot.rotateX( theta );
-
-                m_MainDegenGeomPreviewVec[i].Transform( rot );
-            }
-        }
-
+        m_BladeDegenGeom = DegenGeom();
+        CreateDegenGeom( m_BladeSurf, 0, m_BladeDegenGeom, true, 1 );
+        m_BladeDegenDirty = false;
     }
-    else
-    {
-        // Disk-only mode has no blade previews.
-        m_MainDegenGeomPreviewVec.clear();
-    }
+
+    GetMainDegenGeomPreviewAtRotate( m_Rotate(), m_MainDegenGeomPreviewVec );
 }
 
 void PropGeom::UpdateBladeAzimuth()
@@ -1947,7 +2192,140 @@ void PropGeom::CheckBalance()
     m_BalanceX2.Set( s / n );
 }
 
-void PropGeom::RigidBladeMotion( Matrix4d & mat, double foldangle )
+// Blade iblade's own value with individual on, counting blades from zero; master otherwise.
+static double GetBladeValue( const vector< Parm* > & vec, bool individual, int iblade, double master )
+{
+    if ( individual && iblade > 0 && iblade <= ( int )vec.size() && vec[ iblade - 1 ] )
+    {
+        return vec[ iblade - 1 ]->Get();
+    }
+    return master;
+}
+
+// mean plus the harmonics at azimuth psi, degrees: cos_n cos( n psi ) + sin_n sin( n psi ).
+static double HarmonicValue( double mean, const vector< Parm* > & cosvec, const vector< Parm* > & sinvec, double psi )
+{
+    double val = mean;
+    double p = psi * M_PI / 180.0;
+    for ( int n = 1; n <= ( int )cosvec.size() && n <= ( int )sinvec.size(); n++ )
+    {
+        val += cosvec[ n - 1 ]->Get() * cos( n * p ) + sinvec[ n - 1 ]->Get() * sin( n * p );
+    }
+    return val;
+}
+
+// Blade iblade's azimuth psi with the propeller turned to rotate: rotate plus the blade's azimuth, in
+// the direction of rotation.  PsiRef turns psi's zero with the blades.
+double PropGeom::GetBladePsi( int iblade, double rotate )
+{
+    double psi = rotate;
+    if ( iblade > 0 && iblade <= ( int )m_BladeAzimuthParmVec.size() )
+    {
+        psi += m_BladeAzimuthParmVec[ iblade - 1 ]->Get();
+    }
+    return psi;
+}
+
+// Set the angles a mode makes outputs: in harmonic mode blade 1's and the other blades', from the
+// harmonics at Rotate, greyed; in collective mode the other blades', to blade 1's.  The harmonic parms
+// are greyed in the other modes.
+void PropGeom::UpdateBladeMotion( int mode, Parm & angle, vector< Parm* > & bladevec, Parm & mean,
+                                  vector< Parm* > & cosvec, vector< Parm* > & sinvec )
+{
+    bool harmonic = ( mode == vsp::PROP_BLADE_HARMONIC );
+    if ( harmonic )
+    {
+        angle.Set( HarmonicValue( mean(), cosvec, sinvec, GetBladePsi( 0, m_Rotate() ) ) );
+    }
+
+    for ( int i = 0; i < ( int )bladevec.size(); i++ )
+    {
+        if ( harmonic )
+        {
+            bladevec[i]->Set( HarmonicValue( mean(), cosvec, sinvec, GetBladePsi( i + 1, m_Rotate() ) ) );
+        }
+        else if ( mode == vsp::PROP_BLADE_COLLECTIVE )
+        {
+            bladevec[i]->Set( angle() );
+        }
+    }
+
+    vector< Parm* > outputs = bladevec;
+    outputs.push_back( &angle );
+
+    vector< Parm* > inputs = cosvec;
+    inputs.insert( inputs.end(), sinvec.begin(), sinvec.end() );
+    inputs.push_back( &mean );
+
+    for ( int i = 0; i < ( int )outputs.size(); i++ )
+    {
+        if ( harmonic )
+        {
+            outputs[i]->Deactivate();
+        }
+        else
+        {
+            outputs[i]->Activate();
+        }
+    }
+
+    for ( int i = 0; i < ( int )inputs.size(); i++ )
+    {
+        if ( harmonic )
+        {
+            inputs[i]->Activate();
+        }
+        else
+        {
+            inputs[i]->Deactivate();
+        }
+    }
+}
+
+double PropGeom::GetBladeFlapAngle( int iblade, double rotate )
+{
+    if ( m_BladeMotionMode() == vsp::PROP_BLADE_HARMONIC )
+    {
+        return HarmonicValue( m_FlapMean(), m_FlapCosParmVec, m_FlapSinParmVec, GetBladePsi( iblade, rotate ) );
+    }
+    return GetBladeValue( m_FlapAngleParmVec, m_BladeMotionMode() == vsp::PROP_BLADE_INDIVIDUAL, iblade, m_FlapAngle() );
+}
+
+double PropGeom::GetBladeLagAngle( int iblade, double rotate )
+{
+    if ( m_BladeMotionMode() == vsp::PROP_BLADE_HARMONIC )
+    {
+        return HarmonicValue( m_LagMean(), m_LagCosParmVec, m_LagSinParmVec, GetBladePsi( iblade, rotate ) );
+    }
+    return GetBladeValue( m_LagAngleParmVec, m_BladeMotionMode() == vsp::PROP_BLADE_INDIVIDUAL, iblade, m_LagAngle() );
+}
+
+double PropGeom::GetBladeFoldAngle( int iblade )
+{
+    return GetBladeValue( m_FoldAngleParmVec, m_IndividualBladeFoldFlag(), iblade, m_FoldAngle() );
+}
+
+// The feather's mode in use: collective while Beta34 drives, whatever the mode is set to.
+int PropGeom::FeatherMode()
+{
+    if ( m_UseBeta34Flag() )
+    {
+        return vsp::PROP_BLADE_COLLECTIVE;
+    }
+    return m_BladeMotionMode();
+}
+
+double PropGeom::GetBladeFeather( int iblade, double rotate )
+{
+    if ( FeatherMode() == vsp::PROP_BLADE_HARMONIC )
+    {
+        return HarmonicValue( m_FeatherMean(), m_FeatherCosParmVec, m_FeatherSinParmVec, GetBladePsi( iblade, rotate ) );
+    }
+    return GetBladeValue( m_FeatherParmVec, FeatherMode() == vsp::PROP_BLADE_INDIVIDUAL, iblade, m_Feather() );
+}
+
+// The blade's azimuth, the propeller rotation from PsiRef and the precone: the motion inboard of the hinges.
+void PropGeom::BladeRootMotion( Matrix4d & mat, int iblade, double rotate )
 {
     double rev = 1.0;
     if ( m_ReverseFlag() )
@@ -1955,17 +2333,56 @@ void PropGeom::RigidBladeMotion( Matrix4d & mat, double foldangle )
         rev = -1.0;
     }
 
-    mat.loadIdentity();  // Reset to handle rigid body motion of lofted prop sections.
+    mat.loadIdentity();
 
-    // Propeller rotation first because order is reversed.
-    mat.rotateX( -rev * m_Rotate() );
+    if ( iblade > 0 && iblade <= ( int )m_BladeAzimuthParmVec.size() )
+    {
+        mat.rotateX( -rev * m_BladeAzimuthParmVec[ iblade - 1 ]->Get() );
+    }
+
+    mat.rotateX( -rev * m_PsiRef() );
+    mat.rotateX( -rev * rotate );
 
     mat.rotateZ( m_Precone() );
+}
 
-    mat.translatef( m_FoldAxOrigin.x(), m_FoldAxOrigin.y(), m_FoldAxOrigin.z() );
-    mat.rotate( foldangle * M_PI / 180.0, m_FoldAxDirection );
-    mat.translatef( -m_FoldAxOrigin.x(), -m_FoldAxOrigin.y(), -m_FoldAxOrigin.z() );
+// The blade's hinges, hub to tip by radial place; hinges at one place go in the order of their types.
+vector< BladeHinge > PropGeom::GetBladeHinges( int iblade, double rotate )
+{
+    vector< BladeHinge > hinges;
+    hinges.push_back( { m_RadFlapAxis(), FLAP_HINGE, m_FlapAxOrigin, m_FlapAxDirection, GetBladeFlapAngle( iblade, rotate ) } );
+    hinges.push_back( { m_RadLagAxis(), LAG_HINGE, m_LagAxOrigin, m_LagAxDirection, GetBladeLagAngle( iblade, rotate ) } );
+    hinges.push_back( { m_RadFoldAxis(), FOLD_HINGE, m_FoldAxOrigin, m_FoldAxDirection, GetBladeFoldAngle( iblade ) } );
+    hinges.push_back( { m_RadFeatherAxis(), FEATHER_HINGE, m_FeatherAxOrigin, m_FeatherAxDirection, GetBladeFeather( iblade, rotate ) } );
 
+    std::sort( hinges.begin(), hinges.end(), []( const BladeHinge & a, const BladeHinge & b )
+    {
+        if ( a.m_Radius != b.m_Radius )
+        {
+            return a.m_Radius < b.m_Radius;
+        }
+        return a.m_Type < b.m_Type;
+    } );
+
+    return hinges;
+}
+
+Matrix4d PropGeom::GetBladePlacement( int iblade, double rotate )
+{
+    Matrix4d mat;
+    RigidBladeMotion( mat, iblade, rotate );
+    return mat;
+}
+
+void PropGeom::RigidBladeMotion( Matrix4d & mat, int iblade, double rotate )
+{
+    BladeRootMotion( mat, iblade, rotate );
+
+    vector< BladeHinge > hinges = GetBladeHinges( iblade, rotate );
+    for ( int i = 0; i < ( int )hinges.size(); i++ )
+    {
+        mat.rotateAbout( hinges[i].m_Angle, hinges[i].m_Axis, hinges[i].m_Origin );
+    }
 }
 
 void PropGeom::ReserveBlades( int n ) // Note:  n is m_Nblade() - 1
@@ -1977,26 +2394,12 @@ void PropGeom::ReserveBlades( int n ) // Note:  n is m_Nblade() - 1
 
     if ( n < m_FoldAngleParmVec.size() )
     {
-        vector< Parm* > faparms( n );
-        vector< Parm* > baparms( n );
-        vector< Parm* > badparms( n );
-
-        int i;
-        for ( i = 0; i < n; i++ )
-        {
-            faparms[i] = m_FoldAngleParmVec[i];
-            baparms[i] = m_BladeAzimuthParmVec[i];
-            badparms[i] = m_BladeDeltaAzimuthParmVec[i];
-        }
-        for ( ; i < m_FoldAngleParmVec.size(); i++ )
-        {
-            delete m_FoldAngleParmVec[i];
-            delete m_BladeAzimuthParmVec[i];
-            delete m_BladeDeltaAzimuthParmVec[i];
-        }
-        m_FoldAngleParmVec = faparms;
-        m_BladeAzimuthParmVec = baparms;
-        m_BladeDeltaAzimuthParmVec = badparms;
+        TrimParmVec( m_FlapAngleParmVec, n );
+        TrimParmVec( m_LagAngleParmVec, n );
+        TrimParmVec( m_FoldAngleParmVec, n );
+        TrimParmVec( m_FeatherParmVec, n );
+        TrimParmVec( m_BladeAzimuthParmVec, n );
+        TrimParmVec( m_BladeDeltaAzimuthParmVec, n );
     }
     else
     {
@@ -2012,52 +2415,80 @@ void PropGeom::ReserveBlades( int n ) // Note:  n is m_Nblade() - 1
     m_BladeAzimuthDeltaFlag.Set( flag_before );
 }
 
+// Add the parm name_num, in group, to vec.
+void PropGeom::AddBladeParm( vector< Parm* > & vec, const string & name, const string & group, int num, double val, double lower, double upper, const string & descript )
+{
+    Parm *p = ParmMgr.CreateParm( vsp::PARM_DOUBLE_TYPE );
+    if ( p )
+    {
+        char str[255];
+        snprintf( str, sizeof( str ), "%s_%d", name.c_str(), num );
+        p->Init( string( str ), group, this, val, lower, upper );
+        p->SetDescript( descript );
+        vec.push_back( p );
+    }
+}
+
+// The coefficient parms each harmonic count asks for.
+void PropGeom::ReserveHarmonics()
+{
+    ReserveHarmonicParms( m_FlapCosParmVec, m_FlapSinParmVec, "Flap", "flap angle", m_NumHarmonics() );
+    ReserveHarmonicParms( m_LagCosParmVec, m_LagSinParmVec, "Lag", "lag angle", m_NumHarmonics() );
+    ReserveHarmonicParms( m_FeatherCosParmVec, m_FeatherSinParmVec, "Feather", "feather angle", m_NumHarmonics() );
+}
+
+// Make or delete the parms nameCos_k and nameSin_k so there are n harmonics.
+void PropGeom::ReserveHarmonicParms( vector< Parm* > & cosvec, vector< Parm* > & sinvec, const string & name,
+                                     const string & angle, int n )
+{
+    TrimParmVec( cosvec, n );
+    TrimParmVec( sinvec, n );
+    while ( ( int )cosvec.size() < n )
+    {
+        int k = cosvec.size() + 1;
+        char str[255];
+        snprintf( str, sizeof( str ), " of harmonic %d of the %s", k, angle.c_str() );
+        AddBladeParm( cosvec, name + "Cos", "Articulation", k, 0.0, -180.0, 180.0, string( "Cosine coefficient" ) + str );
+        AddBladeParm( sinvec, name + "Sin", "Articulation", k, 0.0, -180.0, 180.0, string( "Sine coefficient" ) + str );
+        if ( ( int )cosvec.size() < k || ( int )sinvec.size() < k )
+        {
+            break;
+        }
+    }
+}
+
 void PropGeom::AddBlade()
 {
-    Parm *p;
-    p = ParmMgr.CreateParm( vsp::PARM_DOUBLE_TYPE );
-    if ( p )
-    {
-        int i = m_FoldAngleParmVec.size();
-        char str[255];
-        snprintf( str, sizeof( str ),  "FoldAngle_%d", i+1 );
-        p->Init( string( str ), "Design", this, m_FoldAngle(), -180, 180 );
-        p->SetDescript( "Propeller fold angle" );
-        m_FoldAngleParmVec.push_back( p );
-    }
+    int i = m_FoldAngleParmVec.size();
 
-    p = ParmMgr.CreateParm( vsp::PARM_DOUBLE_TYPE );
-    if ( p )
-    {
-        int i = m_BladeAzimuthParmVec.size();
-        double theta_nom = 360.0 * i / ( double )m_Nblade();
-        char str[255];
-        snprintf( str, sizeof( str ),  "BladeAz_%d", i + 2 );
-        p->Init( string( str ), "Design", this, theta_nom, 0, 360 );
-        p->SetDescript( "Propeller blade azimuth" );
-        m_BladeAzimuthParmVec.push_back( p );
-    }
+    // The parms of blade i + 2, named _( i + 1 ) except for the azimuths.
+    char str[255];
+    snprintf( str, sizeof( str ), " of blade %d", i + 2 );
+    string blade( str );
 
-    p = ParmMgr.CreateParm( vsp::PARM_DOUBLE_TYPE );
-    if ( p )
-    {
-        int i = m_BladeDeltaAzimuthParmVec.size();
-        char str[255];
-        snprintf( str, sizeof( str ),  "DeltaAz_%d", i + 2 );
-        p->Init( string( str ), "Design", this, 0, -180, 180 );
-        p->SetDescript( "Propeller blade azimuth delta" );
-        m_BladeDeltaAzimuthParmVec.push_back( p );
-    }
+    AddBladeParm( m_FlapAngleParmVec, "FlapAngle", "Articulation", i + 1, m_FlapAngle(), -1.0e12, 1.0e12, "Flap angle" + blade );
+    AddBladeParm( m_LagAngleParmVec, "LagAngle", "Articulation", i + 1, m_LagAngle(), -1.0e12, 1.0e12, "Lag angle" + blade );
+    AddBladeParm( m_FoldAngleParmVec, "FoldAngle", "Design", i + 1, m_FoldAngle(), -180, 180, "Fold angle" + blade );
+    AddBladeParm( m_FeatherParmVec, "Feather", "Articulation", i + 1, m_Feather(), -1.0e12, 1.0e12, "Feather angle" + blade );
+    AddBladeParm( m_BladeAzimuthParmVec, "BladeAz", "Design", i + 2, 360.0 * i / ( double )m_Nblade(), 0, 360, "Propeller blade azimuth" );
+    AddBladeParm( m_BladeDeltaAzimuthParmVec, "DeltaAz", "Design", i + 2, 0, -180, 180, "Propeller blade azimuth delta" );
 }
 
 void PropGeom::CalculateMeshMetrics()
 {
+    // The blade, or the disk in disk-only mode.
+    const VspSurf * surf = &m_BladeSurf;
+    if ( m_PropMode() == PROP_MODE::PROP_DISK )
+    {
+        surf = &m_DiskSurf;
+    }
+
     std::vector<double> vcheck( 8 );
 
     double vmin, vmax, vle, vlelow, vleup, vtruemax;
 
     vmin = 0.0;
-    vmax = GetMainWMax(0);
+    vmax = surf->GetWMax();
     vtruemax = vmax;
 
     vle = ( vmin + vmax ) * 0.5;
@@ -2093,7 +2524,7 @@ void PropGeom::CalculateMeshMetrics()
         {
             double u = m_UPseudo[ j ];
 
-            double d = dist( m_MainSurfVec[0].CompPnt( u, v1 ), m_MainSurfVec[0].CompPnt( u, v2 ) );
+            double d = dist( surf->CompPnt( u, v1 ), surf->CompPnt( u, v2 ) );
             mind = min( mind, d );
         }
     }
@@ -2175,6 +2606,18 @@ xmlNodePtr PropGeom::DecodeXml( xmlNodePtr & node )
                 ReserveBlades( (int) nblade - 1 );
             }
         }
+
+        // The harmonic count, so the coefficient parms exist to be read.
+        gnode = XmlUtil::GetNode( child_node, "Articulation", 0 );
+        if ( gnode )
+        {
+            xmlNodePtr n = XmlUtil::GetNode( gnode, "NumHarmonics", 0 );
+            if ( n )
+            {
+                m_NumHarmonics.Set( XmlUtil::FindDoubleProp( n, "Value", m_NumHarmonics() ) );
+            }
+        }
+        ReserveHarmonics();
     }
 
     Geom::DecodeXml( node );
@@ -2625,8 +3068,14 @@ void PropGeom::UpdateSplitTesselate( const VspSurf &surf, bool
 
 void PropGeom::UpdatePreTess()
 {
+    // The surface or its tessellation changed, so the blade is tessellated again.
+    m_BladeTessDirty = true;
+    m_BladeDegenDirty = true;
+
     // Update clustering before symmetry is applied for m_SurfVec
     m_FoilSurf.SetClustering( m_LECluster(), m_TECluster() );
+    m_BladeSurf.SetClustering( m_LECluster(), m_TECluster() );
+    m_DiskSurf.SetClustering( m_LECluster(), m_TECluster() );
 
     int nsurf = GetNumMainSurfs();
     for ( int i = 0; i < nsurf; i++ )
@@ -2678,11 +3127,13 @@ string PropGeom::BuildBEMResults()
     double rspan = rlast - rfirst;
     for ( int i = 0; i < n; i++ )
     {
+        // The foil surface's u runs linearly from the root to the tip, so the section at radius r is at u.
         double t = static_cast < double > ( i ) / ( n - 1 );
-        double r = rfirst + rspan * Cluster( t, m_RootCluster(), m_TipCluster() );
+        double u = Cluster( t, m_RootCluster(), m_TipCluster() );
+        double r = rfirst + rspan * u;
 
         VspCurve c;
-        m_FoilSurf.GetUConstCurve( c, t );
+        m_FoilSurf.GetUConstCurve( c, u );
         vec3d v = c.CompPnt( 0 );
         c.OffsetZ( -v.z() );
 

@@ -12,6 +12,7 @@
 #define _HAS_STD_BYTE 0
 #endif
 
+#include <algorithm>
 #include <cmath>
 
 #include "APIDefines.h"
@@ -88,6 +89,15 @@ VSPAEROMgrSingleton::VSPAEROMgrSingleton() : ParmContainer()
 
     m_FindBodyWakesFlag.Init( "FindBodyWakesFlag", groupname, this, false, false, true );
     m_FindBodyWakesFlag.SetDescript( "Flag to control whether body wakes are detected." );
+
+    m_MergeDegenTriRegionsFlag.Init( "MergeDegenTriRegions", groupname, this, false, false, true );
+    m_MergeDegenTriRegionsFlag.SetDescript( "Flag to control whether merge degenerate triangle regions." );
+
+    m_CleanIntersectionsFlag.Init( "CleanIntersections", groupname, this, false, false, true );
+    m_CleanIntersectionsFlag.SetDescript( "Flag to clean intersections." );
+
+    m_CleanIntersectionsLenRatio.Init( "CleanIntersectionsLenRatio", groupname, this, 0.1, 0.0, 0.5 );
+    m_CleanIntersectionsLenRatio.SetDescript( "Length ratio of intersection segments to clean." );
 
     m_LastPanelMeshGeomId = string();
 
@@ -245,7 +255,7 @@ VSPAEROMgrSingleton::VSPAEROMgrSingleton() : ParmContainer()
     m_Vref.Init( "Vref", groupname, this, 100, 0, 1e12 );
     m_Vref.SetDescript( "Reference Velocity. Set to Rotor Tip Speed for Hover Analysis (Vinf = 0)" );
     m_ManualVrefFlag.Init( "ManualVrefFlag", groupname, this, false, false, true );
-    m_ManualVrefFlag.SetDescript( "Flag to Set Vref Manually or Automatiacally Equal to Vinf" );
+    m_ManualVrefFlag.SetDescript( "Flag to Set Vref Manually or Automatically Equal to Vinf" );
 
     m_Machref.Init( "Machref", groupname, this, 0.3, 0, 1e12 );
     m_Machref.SetDescript( "Reference Mach Number. Set to Rotor Tip Mach Number for Hover Analysis (Vinf = 0)" );
@@ -504,9 +514,14 @@ xmlNodePtr VSPAEROMgrSingleton::DecodeXml( xmlNodePtr & node )
 
         // Decode Control Surface Groups using Internal Decode Method
         int num_groups = XmlUtil::FindInt( VSPAEROsetnode, "ControlSurfaceGroupCount", 0 );
+        vector< xmlNodePtr > csg_nodes = XmlUtil::GetNodes( VSPAEROsetnode, "Control_Surface_Group" );
         for ( size_t i = 0; i < num_groups; ++i )
         {
-            xmlNodePtr csgnode = XmlUtil::GetNode( VSPAEROsetnode, "Control_Surface_Group", i );
+            xmlNodePtr csgnode = nullptr;
+            if ( i < csg_nodes.size() )
+            {
+                csgnode = csg_nodes[i];
+            }
             if ( csgnode )
             {
                 AddControlSurfaceGroup();
@@ -516,9 +531,14 @@ xmlNodePtr VSPAEROMgrSingleton::DecodeXml( xmlNodePtr & node )
 
         // Decode Rotor Disks using Internal Decode Method
         int num_rotor = XmlUtil::FindInt( VSPAEROsetnode, "RotorDiskCount", 0 );
+        vector< xmlNodePtr > rotor_nodes = XmlUtil::GetNodes( VSPAEROsetnode, "Rotor" );
         for ( size_t i = 0; i < num_rotor; ++i )
         {
-            xmlNodePtr rotornode = XmlUtil::GetNode( VSPAEROsetnode, "Rotor", i );
+            xmlNodePtr rotornode = nullptr;
+            if ( i < rotor_nodes.size() )
+            {
+                rotornode = rotor_nodes[i];
+            }
             if ( rotornode )
             {
                 AddRotorDisk();
@@ -531,9 +551,14 @@ xmlNodePtr VSPAEROMgrSingleton::DecodeXml( xmlNodePtr & node )
         ClearCpSliceVec();
         // Decode CpSlices using Internal Decode Method
         int num_slice = XmlUtil::FindInt( VSPAEROsetnode, "CpSliceCount", 0 );
+        vector< xmlNodePtr > cpslice_nodes = XmlUtil::GetNodes( VSPAEROsetnode, "CpSlice" );
         for ( size_t i = 0; i < num_slice; ++i )
         {
-            xmlNodePtr cpslicenode = XmlUtil::GetNode( VSPAEROsetnode, "CpSlice", i );
+            xmlNodePtr cpslicenode = nullptr;
+            if ( i < cpslice_nodes.size() )
+            {
+                cpslicenode = cpslice_nodes[i];
+            }
             if ( cpslicenode )
             {
                 AddCpSlice();
@@ -543,9 +568,14 @@ xmlNodePtr VSPAEROMgrSingleton::DecodeXml( xmlNodePtr & node )
 
         // Decode Unsteady Groups using Internal Decode Method
         int num_unsteady_groups = XmlUtil::FindInt( VSPAEROsetnode, "UnsteadyGroupCount", 0 );
+        vector< xmlNodePtr > unsteady_nodes = XmlUtil::GetNodes( VSPAEROsetnode, "Unsteady_Group" );
         for ( size_t i = 0; i < num_unsteady_groups; ++i )
         {
-            xmlNodePtr unsteady_node = XmlUtil::GetNode( VSPAEROsetnode, "Unsteady_Group", i );
+            xmlNodePtr unsteady_node = nullptr;
+            if ( i < unsteady_nodes.size() )
+            {
+                unsteady_node = unsteady_nodes[i];
+            }
             if ( unsteady_node )
             {
                 AddUnsteadyGroup();
@@ -1306,7 +1336,12 @@ string VSPAEROMgrSingleton::ComputeGeometry()
 
     if ( mesh_geom )
     {
-        m_LastPanelMeshGeomId = mesh_geom->CreateNGonMeshGeom( m_CullFracFlag(), m_CullFrac(), m_NRef(), m_FindBodyWakesFlag() );
+        m_LastPanelMeshGeomId = mesh_geom->CreateNGonMeshGeom( m_CullFracFlag(), m_CullFrac(),
+                                                               m_NRef(),
+                                                               m_FindBodyWakesFlag(),
+                                                               m_MergeDegenTriRegionsFlag(),
+                                                               m_CleanIntersectionsFlag(),
+                                                               m_CleanIntersectionsLenRatio() );
 
         NGonMeshGeom* ngon_mesh_geom = ( NGonMeshGeom * ) veh->FindGeom( m_LastPanelMeshGeomId );
 
@@ -1354,6 +1389,18 @@ string VSPAEROMgrSingleton::ComputeGeometry()
     res->Add( new NameValData( "ThinGeometrySet", degenset, "Thin surface geometry Set for analysis." ) );
     res->Add( new NameValData( "VSPGeomFileName", m_VSPGeomFileFull, "CompGeom *.vspgeom file name." ) );
     res->Add( new NameValData( "Mesh_GeomID", m_LastPanelMeshGeomId, "MeshGeom GeomID of mesh created in process." ) );
+
+    int n_one = -1;
+    int n_many = -1;
+    int n_dup = -1;
+    NGonMeshGeom* panel_mesh = dynamic_cast< NGonMeshGeom* >( veh->FindGeom( m_LastPanelMeshGeomId ) );
+    if ( panel_mesh && panel_mesh->m_PGMulti.GetActiveMesh() )
+    {
+        panel_mesh->m_PGMulti.GetActiveMesh()->CountNonManifoldEdges( n_one, n_many, n_dup );
+    }
+    res->Add( new NameValData( "Num_Edges_One_Face", n_one, "Panel mesh edges with fewer than two faces; -1 when there is no panel mesh." ) );
+    res->Add( new NameValData( "Num_Edges_Many_Faces", n_many, "Panel mesh edges with more than two faces; -1 when there is no panel mesh." ) );
+    res->Add( new NameValData( "Num_Duplicate_Edges", n_dup, "Panel mesh node pairs joined by more than one edge; -1 when there is no panel mesh." ) );
 
     return res->GetID();
 
@@ -2558,6 +2605,93 @@ void VSPAEROMgrSingleton::ReadHistoryFile( const string &filename, vector <strin
 Read .polar file output from VSPAERO
 See: VSP_Solver.C in vspaero project
 *******************************************************/
+//==== A VSPAERO History Result by Its Flow Condition ====//
+struct HistoryCase
+{
+    double m_Alpha;
+    double m_Mach;
+    double m_Beta;
+    int m_Index;          // Its place among the run's results
+    Results* m_Res;
+};
+
+static bool HistoryCaseAlphaLess( const HistoryCase & a, const HistoryCase & b )
+{
+    return a.m_Alpha < b.m_Alpha;
+}
+
+static bool HistoryCaseBelowAlpha( const HistoryCase & c, double alpha )
+{
+    return c.m_Alpha < alpha;
+}
+
+// The history results among res_id_vector, sorted by alpha.
+static vector< HistoryCase > FindHistoryCases( const vector < string > &res_id_vector, double tol )
+{
+    vector< HistoryCase > cases;
+
+    for ( int i = 0; i < ( int )res_id_vector.size(); i++ )
+    {
+        Results* history_res = ResultsMgr.FindResultsPtr( res_id_vector[i] );
+
+        if ( !history_res || history_res->GetName() != "VSPAERO_History" )
+        {
+            continue;
+        }
+
+        NameValData* mach_ptr = history_res->FindPtr( "FC_Mach_" );
+        NameValData* alpha_ptr = history_res->FindPtr( "Alpha" );
+        NameValData* beta_ptr = history_res->FindPtr( "FC_Beta_" );
+
+        if ( !mach_ptr || !alpha_ptr || !beta_ptr )
+        {
+            continue;
+        }
+
+        HistoryCase c;
+        c.m_Mach = mach_ptr->GetDouble( 0 );
+        c.m_Alpha = alpha_ptr->GetDouble( 0 );
+        c.m_Beta = beta_ptr->GetDouble( 0 );
+        c.m_Index = i;
+        c.m_Res = history_res;
+
+        if ( c.m_Mach <= ( 0.001 + tol ) )
+        {
+            // Mach is reported as 0 in the polar but 0.001 in the history file
+            c.m_Mach = 0;
+        }
+
+        cases.push_back( c );
+    }
+
+    std::sort( cases.begin(), cases.end(), HistoryCaseAlphaLess );
+    return cases;
+}
+
+// The first of the cases within tol of mach, alpha and beta, or nullptr.
+static Results* FindHistoryCase( const vector< HistoryCase > & cases, double mach, double alpha, double beta, double tol )
+{
+    Results* found = nullptr;
+    int found_index = 0;
+
+    // Twice tol, so no case within tol is missed by the rounding of the bounds.
+    vector< HistoryCase >::const_iterator iter = std::lower_bound( cases.begin(), cases.end(), alpha - 2 * tol,
+                                                                   HistoryCaseBelowAlpha );
+    for ( ; iter != cases.end() && iter->m_Alpha <= alpha + 2 * tol; ++iter )
+    {
+        if ( ( abs( iter->m_Mach - mach ) < tol ) && ( abs( iter->m_Alpha - alpha ) < tol ) && ( abs( iter->m_Beta - beta ) < tol ) )
+        {
+            if ( !found || iter->m_Index < found_index )
+            {
+                found = iter->m_Res;
+                found_index = iter->m_Index;
+            }
+        }
+    }
+
+    return found;
+}
+
 void VSPAEROMgrSingleton::ReadPolarFile( const string &filename, vector <string> &res_id_vector ) const
 {
     FILE *fp = nullptr;
@@ -2577,7 +2711,9 @@ void VSPAEROMgrSingleton::ReadPolarFile( const string &filename, vector <string>
     int num_polar_col = 48; // number of columns in the file
 
     double tol = 1e-8; // tolerance for comparing values to account for machine precision errors
-    int num_history_res = ResultsMgr.GetNumResults( "VSPAERO_History" );
+
+    // This run's history results, which the rows of the other ReCref copy.
+    vector< HistoryCase > history_cases = FindHistoryCases( res_id_vector, tol );
 
     // Read in all of the data into the results manager
     char seps[] = " :,\t\n";
@@ -2696,111 +2832,13 @@ void VSPAEROMgrSingleton::ReadPolarFile( const string &filename, vector <string>
                         Ew.push_back(      std::stod( data_string_array[icol] ) ); icol++;
                         StallFactor.push_back(      std::stod( data_string_array[icol] ) ); icol++;
 
-                        if ( ( abs( Re_1e6.back() - Re_1e6[0] ) > tol ) && num_history_res > 0 )
+                        if ( ( abs( Re_1e6.back() - Re_1e6[0] ) > tol ) && !history_cases.empty() )
                         {
                             // Find history result with matching mach, beta, and alpha
-                            for ( size_t i = 0; i < num_history_res; i++ )
+                            Results* history_res = FindHistoryCase( history_cases, Mach.back(), Alpha.back(), Beta.back(), tol );
+                            if ( history_res )
                             {
-                                Results* history_res = ResultsMgr.FindResults( "VSPAERO_History", i );
-
-                                if ( !history_res )
-                                {
-                                    continue;
-                                }
-
-                                NameValData* mach_ptr = history_res->FindPtr( "FC_Mach_" );
-                                NameValData* alpha_ptr = history_res->FindPtr( "Alpha" );
-                                NameValData* beta_ptr = history_res->FindPtr( "FC_Beta_" );
-
-                                if ( !mach_ptr || !alpha_ptr || !beta_ptr )
-                                {
-                                    continue;
-                                }
-
-                                double mach = mach_ptr->GetDouble( 0 );
-                                double alpha = alpha_ptr->GetDouble( 0 );
-                                double beta = beta_ptr->GetDouble( 0 );
-
-                                if ( mach <= ( 0.001 + tol ) )
-                                {
-                                    // Mach is reported as 0 in the polar but 0.001 in the history file
-                                    mach = 0;
-                                }
-
-                                if ( ( abs( mach - Mach.back() ) < tol ) && ( abs( alpha - Alpha.back() ) < tol ) && ( abs( beta - Beta.back() ) < tol ) )
-                                {
-                                    // Generate new *.history results for multiple ReCref inputs since VSPAERO only outputs a result for the first ReCref
-                                    Results* new_history_res = ResultsMgr.CreateResults( "VSPAERO_History", "VSPAERO additional history results to capture ReCref variation." );
-                                    res_id_vector.push_back( new_history_res->GetID() );
-
-                                    new_history_res->Add( new NameValData( "FC_ReCref_", ( 1e6 * Re_1e6.back() ), "Reynolds number." ) );
-
-                                    int num_wake = (int)alpha_ptr->GetDoubleData().size();
-
-                                    NameValData* cdo_ptr = history_res->FindPtr( "CDo" );
-                                    NameValData* cdtot_ptr = history_res->FindPtr( "CDtot" );
-                                    NameValData* l_d_ptr = history_res->FindPtr( "L/D" );
-
-                                    vector < string > data_names = history_res->GetAllDataNames();
-
-                                    // Copy ReCref dependent results from polar to history file. Copy non-dependent results from 
-                                    // history case that matches alpha, beta, and mach
-                                    for ( size_t j = 0; j < data_names.size(); j++ )
-                                    {
-                                        // Calculate wake iteration convergence differences - ReCref scales CDo, CDtot, and L_D
-                                        if ( cdo_ptr && strcmp( data_names[j].c_str(), "CDo" ) == 0 )
-                                        {
-                                            vector < double > history_cdo_vec = cdo_ptr->GetDoubleData();
-                                            vector < double > cdo_vec( num_wake, CDo.back() );
-
-                                            for ( size_t k = 0; k < history_cdo_vec.size() - 1; k++ )
-                                            {
-                                                cdo_vec[k] = cdo_vec[k] - ( history_cdo_vec.back() - history_cdo_vec[k] );
-                                            }
-
-                                            new_history_res->Add( new NameValData( data_names[j], cdo_vec, "Parasite drag coefficient." ) );
-                                        }
-                                        else if ( cdtot_ptr && strcmp( data_names[j].c_str(), "CDtot" ) == 0 )
-                                        {
-                                            vector < double > history_ctot_vec = cdtot_ptr->GetDoubleData();
-                                            vector < double > ctot_vec( num_wake, CDtot.back() );
-
-                                            for ( size_t k = 0; k < history_ctot_vec.size() - 1; k++ )
-                                            {
-                                                ctot_vec[k] = ctot_vec[k] - ( history_ctot_vec.back() - history_ctot_vec[k] );
-                                            }
-
-                                            new_history_res->Add( new NameValData( data_names[j], ctot_vec, "Total drag coefficient." ) );
-                                        }
-                                        else if ( l_d_ptr && strcmp( data_names[j].c_str(), "L/D" ) == 0 )
-                                        {
-                                            vector < double > history_l_d_vec = l_d_ptr->GetDoubleData();
-                                            vector < double > ld_vec( num_wake, LoD.back() );
-
-                                            for ( size_t k = 0; k < history_l_d_vec.size() - 1; k++ )
-                                            {
-                                                ld_vec[k] = ld_vec[k] - ( history_l_d_vec.back() - history_l_d_vec[k] );
-                                            }
-
-                                            new_history_res->Add( new NameValData( data_names[j], ld_vec, "Lift to drag ratio." ) );
-                                        }
-                                        else if ( strcmp( data_names[j].c_str(), "FC_ReCref_" ) != 0 )
-                                        {
-                                            NameValData* nvd = history_res->FindPtr( data_names[j] );
-                                            if ( !nvd )
-                                            {
-                                                continue;
-                                            }
-
-                                            NameValData* nvdcopy = new NameValData();
-                                            nvdcopy->CopyFrom( nvd );
-
-                                            new_history_res->Add( nvdcopy ); // q: do we need a copy here?
-                                        }
-                                    }
-
-                                    break;
-                                }
+                                AddReCrefHistory( history_res, Re_1e6.back(), CDo.back(), CDtot.back(), LoD.back(), res_id_vector );
                             }
                         }
 
@@ -2859,6 +2897,82 @@ void VSPAEROMgrSingleton::ReadPolarFile( const string &filename, vector <string>
     } //end for while !feof(fp)
 
     std::fclose( fp );
+}
+
+//==== Copy a History Result For Another ReCref ====//
+void VSPAEROMgrSingleton::AddReCrefHistory( Results* history_res, double recref_1e6, double cdo, double cdtot, double lod,
+                                            vector < string > &res_id_vector ) const
+{
+    // Generate new *.history results for multiple ReCref inputs since VSPAERO only outputs a result for the first ReCref
+    Results* new_history_res = ResultsMgr.CreateResults( "VSPAERO_History", "VSPAERO additional history results to capture ReCref variation." );
+    res_id_vector.push_back( new_history_res->GetID() );
+
+    new_history_res->Add( new NameValData( "FC_ReCref_", ( 1e6 * recref_1e6 ), "Reynolds number." ) );
+
+    NameValData* alpha_ptr = history_res->FindPtr( "Alpha" );
+    int num_wake = (int)alpha_ptr->GetDoubleData().size();
+
+    NameValData* cdo_ptr = history_res->FindPtr( "CDo" );
+    NameValData* cdtot_ptr = history_res->FindPtr( "CDtot" );
+    NameValData* l_d_ptr = history_res->FindPtr( "L/D" );
+
+    vector < string > data_names = history_res->GetAllDataNames();
+
+    // Copy ReCref dependent results from polar to history file. Copy non-dependent results from 
+    // history case that matches alpha, beta, and mach
+    for ( size_t j = 0; j < data_names.size(); j++ )
+    {
+        // Calculate wake iteration convergence differences - ReCref scales CDo, CDtot, and L_D
+        if ( cdo_ptr && strcmp( data_names[j].c_str(), "CDo" ) == 0 )
+        {
+            vector < double > history_cdo_vec = cdo_ptr->GetDoubleData();
+            vector < double > cdo_vec( num_wake, cdo );
+
+            for ( size_t k = 0; k + 1 < history_cdo_vec.size(); k++ )
+            {
+                cdo_vec[k] = cdo_vec[k] - ( history_cdo_vec.back() - history_cdo_vec[k] );
+            }
+
+            new_history_res->Add( new NameValData( data_names[j], cdo_vec, "Parasite drag coefficient." ) );
+        }
+        else if ( cdtot_ptr && strcmp( data_names[j].c_str(), "CDtot" ) == 0 )
+        {
+            vector < double > history_ctot_vec = cdtot_ptr->GetDoubleData();
+            vector < double > ctot_vec( num_wake, cdtot );
+
+            for ( size_t k = 0; k + 1 < history_ctot_vec.size(); k++ )
+            {
+                ctot_vec[k] = ctot_vec[k] - ( history_ctot_vec.back() - history_ctot_vec[k] );
+            }
+
+            new_history_res->Add( new NameValData( data_names[j], ctot_vec, "Total drag coefficient." ) );
+        }
+        else if ( l_d_ptr && strcmp( data_names[j].c_str(), "L/D" ) == 0 )
+        {
+            vector < double > history_l_d_vec = l_d_ptr->GetDoubleData();
+            vector < double > ld_vec( num_wake, lod );
+
+            for ( size_t k = 0; k + 1 < history_l_d_vec.size(); k++ )
+            {
+                ld_vec[k] = ld_vec[k] - ( history_l_d_vec.back() - history_l_d_vec[k] );
+            }
+
+            new_history_res->Add( new NameValData( data_names[j], ld_vec, "Lift to drag ratio." ) );
+        }
+        else if ( strcmp( data_names[j].c_str(), "FC_ReCref_" ) != 0 )
+        {
+            NameValData* nvd = history_res->FindPtr( data_names[j] );
+            if ( !nvd )
+            {
+                continue;
+            }
+
+            NameValData* nvdcopy = new NameValData();
+            nvdcopy->CopyFrom( nvd );
+
+            new_history_res->Add( nvdcopy ); // q: do we need a copy here?
+        }
+    }
 }
 
 /*******************************************************
@@ -5477,16 +5591,16 @@ void VSPAEROMgrSingleton::ReadRotorResFile( const string &filename, vector <stri
                 res->Add( new NameValData( "Diameter", Diameter, "Rotor diameter." ) );
                 res->Add( new NameValData( "RPM", RPM, "Rotation speed, revolutions per minute." ) );
                 res->Add( new NameValData( "TipVel", TipVel, "Rotor tip speed." ) );
-                res->Add( new NameValData( "CNo_H", CNo_H, "Viscous contribution to normal force coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CSo_H", CSo_H, "Viscous contribution to side force coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CTo_H", CTo_H, "Viscous contribution to thrust coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CQo_H", CQo_H, "Viscous contribution to torque coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CPo_H", CPo_H, "Viscous contribution to power coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CN_H", CN_H, "Normal force coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CS_H", CS_H, "Side force coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CT_H", CT_H, "Thrust coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CQ_H", CQ_H, "Torque coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CP_H", CP_H, "Power coefficient, helicoter convention." ) );
+                res->Add( new NameValData( "CNo_H", CNo_H, "Viscous contribution to normal force coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CSo_H", CSo_H, "Viscous contribution to side force coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CTo_H", CTo_H, "Viscous contribution to thrust coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CQo_H", CQo_H, "Viscous contribution to torque coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CPo_H", CPo_H, "Viscous contribution to power coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CN_H", CN_H, "Normal force coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CS_H", CS_H, "Side force coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CT_H", CT_H, "Thrust coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CQ_H", CQ_H, "Torque coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CP_H", CP_H, "Power coefficient, helicopter convention." ) );
             }
             else if ( data_string_array.size() == num_load_last_rev_data_col )
             {
@@ -5552,16 +5666,16 @@ void VSPAEROMgrSingleton::ReadRotorResFile( const string &filename, vector <stri
                 res->Add( new NameValData( "Diameter", Diameter, "Rotor diameter" ) );
                 res->Add( new NameValData( "RPM", RPM, "Rotation speed, revolutions per minute." ) );
                 res->Add( new NameValData( "TipVel", TipVel, "Rotor tip speed." ) );
-                res->Add( new NameValData( "CNo_H", CNo_H, "Viscous contribution to normal force coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CSo_H", CSo_H, "Viscous contribution to side force coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CTo_H", CTo_H, "Viscous contribution to thrust coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CQo_H", CQo_H, "Viscous contribution to torque coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CPo_H", CPo_H, "Viscous contribution to power coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CN_H", CN_H, "Normal force coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CS_H", CS_H, "Side force coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CT_H", CT_H, "Thrust coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CQ_H", CQ_H, "Torque coefficient, helicoter convention." ) );
-                res->Add( new NameValData( "CP_H", CP_H, "Power coefficient, helicoter convention." ) );
+                res->Add( new NameValData( "CNo_H", CNo_H, "Viscous contribution to normal force coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CSo_H", CSo_H, "Viscous contribution to side force coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CTo_H", CTo_H, "Viscous contribution to thrust coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CQo_H", CQo_H, "Viscous contribution to torque coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CPo_H", CPo_H, "Viscous contribution to power coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CN_H", CN_H, "Normal force coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CS_H", CS_H, "Side force coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CT_H", CT_H, "Thrust coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CQ_H", CQ_H, "Torque coefficient, helicopter convention." ) );
+                res->Add( new NameValData( "CP_H", CP_H, "Power coefficient, helicopter convention." ) );
             }
         }
     } //end for while !feof(fp)
@@ -6377,9 +6491,14 @@ xmlNodePtr ControlSurfaceGroup::DecodeXml( xmlNodePtr & node )
         m_ParentGeomBaseID = IDMgr.RemapRefID( XmlUtil::FindString( node, "ParentGeomBase", ParentGeomID ) );
 
         nControlSubSurfaces = XmlUtil::FindInt( node, "NumberOfControlSubSurfaces", nControlSubSurfaces );
+        vector< xmlNodePtr > cs_nodes = XmlUtil::GetNodes( node, "Control_Surface" );
         for ( size_t i = 0; i < nControlSubSurfaces; ++i )
         {
-            xmlNodePtr csnode = XmlUtil::GetNode( node, "Control_Surface", i );
+            xmlNodePtr csnode = nullptr;
+            if ( i < cs_nodes.size() )
+            {
+                csnode = cs_nodes[i];
+            }
 
             newSurf.SSID = IDMgr.RemapRefID( XmlUtil::FindString( csnode, "SSID", SSID ) );
             newSurf.parentGeomId = IDMgr.RemapRefID( XmlUtil::FindString( csnode, "ParentGeomID", ParentGeomID ) );
@@ -6555,9 +6674,14 @@ xmlNodePtr UnsteadyGroup::DecodeXml( xmlNodePtr& node )
     {
         unsigned int nComponents = XmlUtil::FindInt( node, "NumberOfComponents", 0 );
 
+        vector< xmlNodePtr > comp_nodes = XmlUtil::GetNodes( node, "Component" );
         for ( size_t i = 0; i < nComponents; ++i )
         {
-            xmlNodePtr csnode = XmlUtil::GetNode( node, "Component", i );
+            xmlNodePtr csnode = nullptr;
+            if ( i < comp_nodes.size() )
+            {
+                csnode = comp_nodes[i];
+            }
 
             string compID = IDMgr.RemapRefID( XmlUtil::FindString( csnode, "CompID", "" ) );
             int surf_index = XmlUtil::FindInt( csnode, "SurfIndex", 1 );

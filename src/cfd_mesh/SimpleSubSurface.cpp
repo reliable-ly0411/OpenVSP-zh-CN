@@ -47,9 +47,8 @@ void SimpleSubSurface::CopyFrom( SubSurface *ss, const vector < string > & prop_
         m_CreateBeamElements = ss->m_CreateBeamElements.Get();
         m_KeepDelShellElements = ss->m_KeepDelShellElements.Get();
         m_FeaPropertyID = ss->m_FeaPropertyID;
-        m_FeaPropertyIndex = vector_find_val( prop_id_vec, ss->m_FeaPropertyID );
         m_CapFeaPropertyID = ss->m_CapFeaPropertyID;
-        m_CapFeaPropertyIndex = vector_find_val( prop_id_vec, ss->m_CapFeaPropertyID );
+        IndexFeaProperties( prop_id_vec );
         m_FeaOrientationType = ss->m_FeaOrientationType();
         m_FeaOrientationVec = ss->m_FeaOrientationVec;
 
@@ -65,6 +64,12 @@ void SimpleSubSurface::CopyFrom( SubSurface *ss, const vector < string > & prop_
     }
 }
 
+void SimpleSubSurface::IndexFeaProperties( const vector < string > & prop_id_vec )
+{
+    m_FeaPropertyIndex = vector_find_val( prop_id_vec, m_FeaPropertyID );
+    m_CapFeaPropertyIndex = vector_find_val( prop_id_vec, m_CapFeaPropertyID );
+}
+
 void SimpleSubSurface::SetAsFiniteLine( const string &compid, int mainsurfindx,
                                        const string &name, const vec3d &uw0, const vec3d &uw1 )
 {
@@ -74,7 +79,7 @@ void SimpleSubSurface::SetAsFiniteLine( const string &compid, int mainsurfindx,
     m_SSID = string();
     m_Type = vsp::SS_FINITE_LINE;
 
-    m_TestType = SSLineSeg::NO;         // Tags nothing on either side of itself.
+    m_TestType = vsp::SS_LINE_TEST_NONE;         // Tags nothing on either side of itself.
     m_PolyFlag = false;                 // A line, not a closed boundary.
     m_CreateBeamElements = false;       // No FEA beam is built along it.
     m_Tag = 0;
@@ -82,7 +87,7 @@ void SimpleSubSurface::SetAsFiniteLine( const string &compid, int mainsurfindx,
     SSLineSeg seg;
     seg.SetP0( uw0 );
     seg.SetP1( uw1 );
-    seg.m_TestType = SSLineSeg::NO;
+    seg.m_TestType = vsp::SS_LINE_TEST_NONE;
 
     m_LVec.clear();
     m_LVec.push_back( seg );

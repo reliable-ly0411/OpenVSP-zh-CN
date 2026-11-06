@@ -60,6 +60,7 @@
 
 #include <atomic>
 #include <functional>
+#include <unordered_map>
 #include "Surf.h"
 #include "Mesh.h"
 #include "SCurve.h"
@@ -209,7 +210,61 @@ public:
     vector< IPntEdge > m_Edges;     // The edge each of m_IPnts lies on
 };
 
+// The points the segments of one pair of quads end at, each found on the two patches once.  The
+// segments of one pair often share an end, and finding a point on a patch is the costly part of
+// making a segment.  Points are told apart bit for bit, so a point is only ever reused for itself.
+class QuadPairPnts
+{
+public:
+    QuadPairPnts()
+    {
+        m_N = 0;
+    }
+
+    // The point's slot, filled with where it lies on the planes of pA and pB if it is new
+    int Find( const SurfPatch& pA, const SurfPatch& pB, const vec3d &p );
+
+    // Where the point in slot k lies on pA and pB themselves
+    void Project( const SurfPatch& pA, const SurfPatch& pB, int k );
+
+    // Four segments of two ends each
+    enum { MAX_PNTS = 8 };
+
+    int m_N;
+    vec3d m_Pnt[ MAX_PNTS ];
+    vec2d m_PlaneA[ MAX_PNTS ];
+    vec2d m_PlaneB[ MAX_PNTS ];
+    vec2d m_ProjA[ MAX_PNTS ];
+    vec2d m_ProjB[ MAX_PNTS ];
+    bool m_Projected[ MAX_PNTS ];
+};
+
 class SurfaceIntersectionSingleton;
+
+// One stage's progress bar, up from construction to destruction.  Step counts finished work and
+// may be called from any thread; the bar is redrawn some two hundred times at most.  There is
+// one bar, so a stage run while another stage's bar is up -- a stage called from inside
+// another -- draws and counts nothing.  Construct and end it on the thread that runs the stage.
+class ProgressStage
+{
+public:
+    ProgressStage( SurfaceIntersectionSingleton *mgr, const string &label, int n );
+    ~ProgressStage();
+
+    void Step( int count = 1 );
+
+    // Take the bar down before the destructor would, for a stage followed by another in one scope.
+    void End();
+
+    // Count again from nothing, under a new label, on the same line: one pass of several.
+    void Restart( const string &label );
+
+protected:
+    SurfaceIntersectionSingleton *m_Mgr;
+    bool m_Live;
+    int m_N;
+    int m_Stride;
+};
 
 // Offers one analysis to AnalysisMgr when it asks for the meshing ones.
 //
@@ -340,7 +395,7 @@ public:
     virtual void UpdateDisplaySettings();
 
     virtual void FetchXFerSurfs( const vector < string > & geomvec, vector< XferSurf > &xfersurfs );
-    virtual void FetchSurfs( vector< XferSurf > &xfersurfs, int n_ref = 0 );
+    virtual void FetchSurfs( vector< XferSurf > &xfersurfs, int n_ref = 0, bool cfdcaps = false );
 
     virtual void LoadSurfs( vector< XferSurf > &xfersurfs, double scale = 1.0, int start_surf_id = 0 );
 
@@ -353,6 +408,26 @@ public:
                                 bool label_id = false, bool label_surf_num = false, bool label_split_num = false,
                                 bool label_name = false, const string &label_delim = "", int representation = 0 );
 
+    // The label a CAD file gives a surface
+    string CADSurfLabel( const NURBS_Surface &nurbs_surf, bool label_id, bool label_surf_num, bool label_split_num,
+                         bool label_name, const string &label_delim );
+
+    // The same files written from m_NURBSSurfVec as BuildNURBSSurfMap last built it
+    void WriteNURBSSurfsIGES( const string &filename, int len_unit,
+                              bool label_id, bool label_surf_num, bool label_split_num,
+                              bool label_name, const string &label_delim );
+    void WriteNURBSSurfsIGES( vector < NURBS_Surface > &surf_vec, const string &filename, int len_unit,
+                              bool label_id, bool label_surf_num, bool label_split_num,
+                              bool label_name, const string &label_delim );
+    void WriteNURBSSurfsSTEP( const string& filename, int len_unit, double tol, bool merge_pnts,
+                              bool label_id, bool label_surf_num, bool label_split_num,
+                              bool label_name, const string &label_delim, int representation );
+
+    // Either or both, each as asked for; both are written at once
+    void WriteNURBSSurfsCAD( bool iges_flag, const string &iges_fn, bool step_flag, const string &step_fn,
+                             int len_unit, double tol, bool merge_pnts, bool label_id, bool label_surf_num,
+                             bool label_split_num, bool label_name, const string &label_delim, int representation );
+
     virtual void ExportFiles();
     //virtual void CheckDupOrAdd( Node* node, vector< Node* > & nodeVec );
 
@@ -360,6 +435,7 @@ public:
     virtual int FindSurfIndx( int surf_id ); // Find surface given surf ID
 
     virtual void DeleteDuplicateSurfs();
+    virtual void PairCoincidentFaces();
     virtual void SplitBordersToMatch();
     virtual void BuildGrid();
 
@@ -374,7 +450,7 @@ public:
     // A segment of the intersection of patches pA and pB, found between triangle triA of pA's
     // corners qa and triangle triB of pB's corners qb (1 is corners 0 2 3, 2 is corners 0 1 2)
     virtual void AddIntersectionSeg( const SurfPatch& pA, const SurfPatch& pB, const vec3d & ip0, const vec3d & ip1,
-                                     const vec3d qa[4], const vec3d qb[4], int triA, int triB );
+                                     const vec3d qa[4], const vec3d qb[4], int triA, int triB, QuadPairPnts &pnts );
 //  virtual ISeg* CreateSurfaceSeg( Surf* sPtr, vec3d & p0, vec3d & p1, vec2d & uw0, vec2d & uw1 );
     virtual ISeg* CreateSurfaceSeg( Surf* surfA, vec2d & uwA0, vec2d & uwA1, Surf* surfB, vec2d & uwB0, vec2d & uwB1  );
 
@@ -387,13 +463,14 @@ public:
     virtual void CleanChain( ISegChain* c );
     virtual void RefineChains();
 
-    void RefineISegChainSeg( ISegChain* c, IPnt* ipnt, bool endpnt );
-    void RefineISegChain( ISegChain* c );
+    void RefineISegChainSeg( ISegChain* c, IPnt* ipnt, bool endpnt, const SurfCore* coreA, const SurfCore* coreB );
+    void RefineISegChain( ISegChain* c, const SurfCore* coreA, const SurfCore* coreB );
 
     virtual void ExpandChain( ISegChain* chain, PNTree* PN_tree );
 
     virtual void BuildCurves();
     virtual void IntersectSplitChains();
+    virtual void SplitNearlyTouchingChains();
 
     virtual void BuildIntChain( const string &id, vector < vector < vec3d > > & ptchains, vector < vector < vec3d > > & uwchains );
 
@@ -433,6 +510,27 @@ public:
     void AddPossCoPlanarSurf( Surf* surfA, Surf* surfB );
     vector< Surf* > GetPossCoPlanarSurfs( Surf* surfPtr );
 
+    // Flat surfaces of different components lying in one plane, intersected in that plane.
+    // Only the CFD mesher does this, since only it removes the triangles it decides between.
+    virtual bool CoplanarSurfsMeshed() const
+    {
+        return false;
+    }
+
+    // Whether this tool meshes the surfaces and removes the triangles inside other components
+    virtual bool RemovesInteriorTris() const
+    {
+        return false;
+    }
+    double CoplanarTol( const Surf* a, const Surf* b ) const;
+    void FindCoplanarSurfs();
+    void SplitCoplanarBorders();
+    void AddCoplanarChains();
+    void CoplanarVerdicts( Surf* s, const vec3d &p, vector< pair< int, bool > > &verdicts );
+    void CoincidentVerdict( Surf* s, int &comp, bool &inside ) const;
+    void JoinedComps( int comp, vector< int > &comps ) const;
+    bool InsideByThreeRays( int comp, const vec3d &p, double len ) const;
+
     virtual void MergeFeaPartSSEdgeOverlap()    {}; // Only for FeaMesh; do nothing for CfdMesh
     virtual void CheckFixPointIntersects()    {}; // Only for FeaMesh; do nothing for CfdMesh
     virtual void SetFixPointBorderNodes()    {}; // Only for FeaMesh; do nothing for CfdMesh
@@ -448,6 +546,11 @@ public:
         return m_ICurveVec;
     }
     virtual void SetICurveVec( ICurve* newcurve, int loc );
+    // Holds an ICurve that m_ICurveVec does not, for CleanUp to delete
+    void KeepICurve( ICurve* icrv )
+    {
+        m_DelICurveVec.push_back( icrv );
+    }
 
     virtual string GetWakeGeomID()
     {
@@ -505,13 +608,35 @@ public:
     // stage needs them too.
     static int MeshThreadCount();
     int StageThreadCount( int nitem );
-    void RunIndexed( int n, int nthread, const std::function< void( int ) > &body );
+    void RunIndexed( int n, int nthread, const std::function< void( int ) > &body, ProgressStage *bar = nullptr );
+
+    // Run body( i ) for every i below n on several threads, under a progress bar of its own.  The
+    // runners above count each item on a bar when given one, for a stage of several runs.
+    void RunStage( const string &label, int n, const std::function< void( int ) > &body );
+
+    // Run body( k ) for every chain k on several threads, where chain k evaluates surfaces sa[k]
+    // and sb[k] and nothing another chain writes.  A surface may be evaluated by one thread at a
+    // time, so the chains on any one surface run one at a time, in order.  A null surface is one
+    // the caller has seen to itself, and holds up nothing.
+    void RunChainsBySurface( const vector< Surf* > &sa, const vector< Surf* > &sb, const std::function< void( int ) > &body,
+                             ProgressStage *bar = nullptr );
+
+    // Run body( k ) for every item k on several threads, where item k evaluates surface s[k] only
+    // and writes nothing another item reads.  The items on one surface run one at a time, in order.
+    void RunBySurface( const vector< Surf* > &s, const std::function< void( int ) > &body, ProgressStage *bar = nullptr );
 
     // Write n items to fp, formatting them on several threads and writing them out in order.
     // body( ibeg, iend, out ) appends items [ibeg,iend) to out, and must depend on nothing
     // but those items.  The chunks go to the file in order, so the result is byte for byte
-    // the file the plain loop wrote.
-    void WriteChunked( FILE* fp, int n, const std::function< void( int, int, string & ) > &body );
+    // the file the plain loop wrote.  A bar, if given, counts the items as they are written; if
+    // not, the bar of the WriteFileStage the call is made from does.
+    void WriteChunked( FILE* fp, int n, const std::function< void( int, int, string & ) > &body, ProgressStage *bar = nullptr );
+
+    // Run write() under one bar of n items, counted by every WriteChunked call it makes however
+    // deep, for a file written from many places.  n need only be about right: the count drawn
+    // stops at n, and the bar ends full.
+    void WriteFileStage( const string &label, int n, const std::function< void() > &write );
+    ProgressStage *m_WriteBar;
 
     virtual SimpleMeshCommonSettings* GetSettingsPtr()
     {
@@ -579,6 +704,7 @@ protected:
     vector< IPnt* > m_DelIPntVec;
     vector< IPntGroup* > m_DelIPntGroupVec;
     vector< ISegChain* > m_DelISegChainVec;
+    vector< ICurve* > m_DelICurveVec;
 
     vector < vector < vec3d > > m_IPatchADrawLines;
     vector < vector < vec3d > > m_IPatchBDrawLines;
@@ -598,6 +724,28 @@ protected:
 
     //==== Vector of Surfs that may have a border that lies on Surf A ====//
     unordered_map< Surf*, vector< Surf* > > m_PossCoPlanarSurfMap;
+
+    // Flat faces two bodies shared, found by where they lie, kept until the borders around them
+    // are matched
+    vector< Surf* > m_RemovedFlatFaces;
+
+    // The components of the two bodies each removed flat face was shared by
+    vector< pair< int, int > > m_RemovedFaceComps;
+
+    bool FlatGroupWithin( const vector< int > &ga, const vector< int > &gb, double tol );
+    void MatchFlatFaceGroups( vector< bool > &delflag, vector< bool > &flatface,
+                              map < pair < string, string >, int > &dupboth,
+                              map < pair < string, string >, int > &dupone );
+    bool OnRemovedFaceRim( SCurve* c );
+    bool OnRemovedFaceRimKept( SCurve* c, std::unordered_map< SCurve*, bool > &onrim );
+    void SplitFaceRimsToMatch();
+
+    // Each pair of coplanar surfaces once, the first earlier in m_SurfVec
+    vector< pair< Surf*, Surf* > > m_CoplanarPairs;
+
+    void AddCoplanarSplit( ISegChain* c, Surf* s, double t );
+    void SplitCoplanarPair( ISegChain* ca, Surf* a, ISegChain* cb, Surf* b, double tol );
+    void CopyCoplanarBorders( Surf* from, Surf* to, double tol );
 
     string m_MessageName; // Either "SurfIntersectMessage", "CFDMessage", or "FEAMessage"
 

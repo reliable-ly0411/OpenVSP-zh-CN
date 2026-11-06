@@ -1,6 +1,9 @@
 {
   "repository": "OpenVSP/OpenVSP",
   "branch": "main",
-  "base_commit": "5240ef210f41c5d6aeed0ba7687f6fab0ca0cafb",
-  "version": "3.55.0"
+  "base_commit": "ca4958f2cf98d5e787a2a3fa37efb497e4903902",
+  "version": "3.56.0",
+  "source_ref": "main",
+  "source_kind": "development-snapshot",
+  "upstream_publication_verified": false
 }

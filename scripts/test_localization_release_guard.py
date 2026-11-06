@@ -16,7 +16,12 @@ VERSION_SOURCE = (ROOT / 'src/cmake/VSP_Version.cmake').read_text(encoding='utf-
 VERSION = '.'.join(re.search(rf'SET\(\s*VSPVER_{key}\s+(\d+)\s*\)', VERSION_SOURCE)[1]
                    for key in ('MAJOR', 'MINOR', 'PATCH'))
 ABOUT_SOURCE = (ROOT / 'src/gui_and_draw/MainVSPScreen.cpp').read_text(encoding='utf-8')
-CANDIDATE = re.search(r'汉化版本：(\d+\.\d+\.\d+-zh-CN\.rc\.[1-9]\d*)\\n', ABOUT_SOURCE)[1]
+# Source-only syncs intentionally use dev/candidate identities, not release rc tags.
+# Capture the displayed identity, then validate it with the same production grammar.
+CANDIDATE_MATCH = re.search(r'汉化版本：([^"\n]+)\\n', ABOUT_SOURCE)
+if not CANDIDATE_MATCH or not release_guard.TAG_RE.fullmatch(CANDIDATE_MATCH[1]):
+    raise ValueError('About window does not contain a valid localized source identity')
+CANDIDATE = CANDIDATE_MATCH[1]
 
 class CandidateIdentityTests(unittest.TestCase):
     def run_guard(self, *args):
@@ -46,7 +51,26 @@ class CandidateIdentityTests(unittest.TestCase):
         self.assertNotEqual(self.run_guard('--expected-tag', '99.99.99-zh-CN.rc.1').returncode, 0)
 
     def test_other_revision_is_rejected(self):
-        self.assertNotEqual(self.run_guard('--expected-tag', VERSION + '-zh-CN.rc.' + str(int(CANDIDATE.rsplit('.', 1)[1]) + 1)).returncode, 0)
+        if '-zh-CN.rc.' in CANDIDATE:
+            other = VERSION + '-zh-CN.rc.' + str(int(CANDIDATE.rsplit('.', 1)[1]) + 1)
+        else:
+            # A different hash must not impersonate this exact source snapshot.
+            other = CANDIDATE[:-1] + ('0' if CANDIDATE[-1] != '0' else '1')
+        self.assertNotEqual(self.run_guard('--expected-tag', other).returncode, 0)
+
+    def test_source_only_identity_cannot_impersonate_rc(self):
+        if '-zh-CN.rc.' not in CANDIDATE:
+            self.assertNotEqual(self.run_guard('--expected-tag', VERSION + '-zh-CN.rc.1').returncode, 0)
+
+    def test_source_identity_grammar_keeps_rc_and_snapshot_boundaries(self):
+        for identity in (VERSION + '-zh-CN.rc.1', VERSION + '-zh-CN.dev.0123456789ab',
+                         VERSION + '-zh-CN.candidate.0123456789ab'):
+            with self.subTest(identity=identity):
+                self.assertIsNotNone(release_guard.TAG_RE.fullmatch(identity))
+        for identity in (VERSION + '-zh-CN.rc.0', VERSION + '-zh-CN.dev.0123456789a',
+                         VERSION + '-zh-CN.candidate.0123456789AB', VERSION + '-zh-CN.dev.main'):
+            with self.subTest(identity=identity):
+                self.assertIsNone(release_guard.TAG_RE.fullmatch(identity))
 
     def test_current_source_cannot_impersonate_historical_release(self):
         self.assertNotEqual(self.run_guard('--expected-tag', VERSION + '-Codex-AI-zh-CN').returncode, 0)

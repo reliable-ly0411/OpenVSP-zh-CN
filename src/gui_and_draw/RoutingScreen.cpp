@@ -13,7 +13,7 @@
 #include "APIDefines.h"
 
 //==== Constructor ====//
-RoutingScreen::RoutingScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Routing", string(""), false )
+RoutingScreen::RoutingScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Routing", "Routing.html", false )
 {
 
     m_MassPropLayout.AddYGap();
@@ -229,7 +229,7 @@ RoutingScreen::RoutingScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Rou
 
 
     m_DesignLayout.AddYGap();
-    m_DesignLayout.AddDividerBox( "Offset" );
+    m_DesignLayout.AddDividerBox( "Corner" );
 
     m_DesignLayout.AddSlider( m_RoutePtRadiusSlider, "Radius", 1, " %7.6f" );
 
@@ -824,6 +824,7 @@ void RoutingScreen::Set( const vec3d &placement, const std::string &targetGeomId
                     uprm = u;
                 }
 
+                rpt->m_CoordType = vsp::ROUTE_PT_UV;
                 rpt->m_U = uprm;
                 rpt->m_W = w;
 
@@ -939,6 +940,18 @@ void RoutingScreen::UpdatePickList()
                 currDrawObj->m_Routing.LiveIndex = m_LiveIndex;
             }
         }
+    }
+}
+
+// Selects the first routing point, so its panel is filled
+void RoutingScreen::PrepareDump()
+{
+    GeomScreen::PrepareDump();
+
+    RoutingGeom* routing_ptr = dynamic_cast< RoutingGeom* >( m_ScreenMgr->GetCurrGeom() );
+    if ( routing_ptr && routing_ptr->GetNumPt() > 0 )
+    {
+        routing_ptr->m_ActivePointIndex = 0;
     }
 }
 

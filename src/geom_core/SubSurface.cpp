@@ -851,7 +851,7 @@ void SubSurface::PrepareSplitVec()
 
 SSLineSeg::SSLineSeg()
 {
-    m_TestType = GT;
+    m_TestType = vsp::SS_LINE_TEST_GREATER;
 }
 
 SSLineSeg::~SSLineSeg()
@@ -865,16 +865,16 @@ bool SSLineSeg::Subtag( const vec3d & center ) const
     vec3d line = m_P1 - m_P0;
     vec3d c_prod = cross( line, v0c );
 
-    if ( m_TestType == NO )
+    if ( m_TestType == vsp::SS_LINE_TEST_NONE )
     {
         return false;
     }
 
-    if ( m_TestType == GT && c_prod.z() > 0 )
+    if ( m_TestType == vsp::SS_LINE_TEST_GREATER && c_prod.z() > 0 )
     {
         return true;
     }
-    if ( m_TestType == LT && c_prod.z() < 0 )
+    if ( m_TestType == vsp::SS_LINE_TEST_LESS && c_prod.z() < 0 )
     {
         return true;
     }
@@ -1054,7 +1054,7 @@ SSLine::SSLine( const string& comp_id, int type ) : SubSurface( comp_id, type )
     m_ConstVal.Init( "Const_Line_Value", "SubSurface", this, 0.5, 0, 1 );
     m_ConstVal.SetDescript( "Either the U or V value of the line depending on what constant line type is chosen in [0, 1] basis." );
 
-    m_TestType.Init( "Test_Type", "SubSurface", this, SSLineSeg::GT, SSLineSeg::GT, SSLineSeg::NO );
+    m_TestType.Init( "Test_Type", "SubSurface", this, vsp::SS_LINE_TEST_GREATER, vsp::SS_LINE_TEST_GREATER, vsp::SS_LINE_TEST_NONE );
     m_TestType.SetDescript( "Tag surface as being either greater than or less than const value line" );
 
     m_Val01.Init( "Value_01", "SubSurface", this, true, false, true );
@@ -1918,7 +1918,7 @@ SSControlSurf::SSControlSurf( const string& compID, int type ) : SubSurface( com
     m_TestType.Init( "Test_Type", "SS_Control", this, vsp::INSIDE, vsp::INSIDE, vsp::NONE );
     m_TestType.SetDescript( "Determines whether or not the inside or outside of the region is tagged" );
 
-    m_SurfType.Init( "Surf_Type", "SS_Control", this, BOTH_SURF, UPPER_SURF, BOTH_SURF );
+    m_SurfType.Init( "Surf_Type", "SS_Control", this, vsp::SS_CONTROL_BOTH_SURF, vsp::SS_CONTROL_UPPER_SURF, vsp::SS_CONTROL_BOTH_SURF );
     m_SurfType.SetDescript( "Flag to determine whether the control surface is on the upper,lower, or both surface(s) of the wing" );
 
     m_ConstFlag.Init( "SE_Const_Flag", "SS_Control", this, true, 0, 1 );
@@ -2109,7 +2109,7 @@ void SSControlSurf::Update()
 
     double u, v;
 
-    if ( m_SurfType() != LOWER_SURF )
+    if ( m_SurfType() != vsp::SS_CONTROL_LOWER_SURF )
     {
         if ( !m_LEFlag() )
         {
@@ -2180,7 +2180,7 @@ void SSControlSurf::Update()
         m_UWStart01.push_back( c_uws_upper );
     }
 
-    if ( m_SurfType() != UPPER_SURF )
+    if ( m_SurfType() != vsp::SS_CONTROL_UPPER_SURF )
     {
         if ( !m_LEFlag() )
         {
@@ -2301,7 +2301,7 @@ void SSControlSurf::Update()
 
     ucs = m_UEnd() * umax;
 
-    if ( m_SurfType() != LOWER_SURF )
+    if ( m_SurfType() != vsp::SS_CONTROL_LOWER_SURF )
     {
         if ( !m_LEFlag() )
         {
@@ -2372,7 +2372,7 @@ void SSControlSurf::Update()
         m_UWEnd01.push_back( c_uwe_upper );
     }
 
-    if ( m_SurfType() != UPPER_SURF )
+    if ( m_SurfType() != vsp::SS_CONTROL_UPPER_SURF )
     {
         if ( !m_LEFlag() )
         {
@@ -2543,7 +2543,7 @@ void SSControlSurf::Update()
 
     ucs = umid * umax;
 
-    if ( m_SurfType() != LOWER_SURF )
+    if ( m_SurfType() != vsp::SS_CONTROL_LOWER_SURF )
     {
         if ( !m_LEFlag() )
         {
@@ -2589,7 +2589,7 @@ void SSControlSurf::Update()
         }
     }
 
-    if ( m_SurfType() != UPPER_SURF )
+    if ( m_SurfType() != vsp::SS_CONTROL_UPPER_SURF )
     {
         if ( !m_LEFlag() )
         {
@@ -2655,7 +2655,7 @@ void SSControlSurf::Update()
 
     ucs = umid * umax;
 
-    if ( m_SurfType() != LOWER_SURF )
+    if ( m_SurfType() != vsp::SS_CONTROL_LOWER_SURF )
     {
         if ( !m_LEFlag() )
         {
@@ -2701,7 +2701,7 @@ void SSControlSurf::Update()
         }
     }
 
-    if ( m_SurfType() != UPPER_SURF )
+    if ( m_SurfType() != vsp::SS_CONTROL_UPPER_SURF )
     {
         if ( !m_LEFlag() )
         {
@@ -2779,7 +2779,7 @@ void SSControlSurf::Update()
     low_pnt_vec.reserve( 13 );
     if ( !m_LEFlag() )
     {
-        if ( m_SurfType() == UPPER_SURF )
+        if ( m_SurfType() == vsp::SS_CONTROL_UPPER_SURF )
         {
             up_pnt_vec.push_back( vec3d( m_UStart(), 1, 0 ) );
             up_pnt_vec.push_back( c_uws1_upper );
@@ -2792,7 +2792,7 @@ void SSControlSurf::Update()
             up_pnt_vec.push_back( c_uwe1_upper );
             up_pnt_vec.push_back( vec3d( m_UEnd(), 1, 0 ) );
         }
-        else if ( m_SurfType() == LOWER_SURF )
+        else if ( m_SurfType() == vsp::SS_CONTROL_LOWER_SURF )
         {
             low_pnt_vec.push_back( vec3d( m_UStart(), 0, 0 ) );
             low_pnt_vec.push_back( c_uws1_lower );
@@ -2833,7 +2833,7 @@ void SSControlSurf::Update()
     }
     else
     {
-        if ( m_SurfType() == UPPER_SURF )
+        if ( m_SurfType() == vsp::SS_CONTROL_UPPER_SURF )
         {
             up_pnt_vec.push_back( vec3d( m_UEnd(), 0.5, 0 ) );
             up_pnt_vec.push_back( c_uwe1_upper );
@@ -2849,7 +2849,7 @@ void SSControlSurf::Update()
             up_pnt_vec.push_back( vec3d( m_UStart() + 2.0 * ( m_UEnd() - m_UStart() ) / 3.0, 0.5, 0 ) );
             up_pnt_vec.push_back( up_pnt_vec[0] );
         }
-        else if ( m_SurfType() == LOWER_SURF )
+        else if ( m_SurfType() == vsp::SS_CONTROL_LOWER_SURF )
         {
             low_pnt_vec.push_back( vec3d( m_UEnd(), 0.5, 0 ) );
             low_pnt_vec.push_back( c_uwe1_lower );
@@ -3095,7 +3095,7 @@ void SSControlSurf::UpdatePolygonPnts()
         return;
     }
 
-    if ( m_SurfType() == UPPER_SURF || m_SurfType() == LOWER_SURF )
+    if ( m_SurfType() == vsp::SS_CONTROL_UPPER_SURF || m_SurfType() == vsp::SS_CONTROL_LOWER_SURF )
     {
         SubSurface::UpdatePolygonPnts();
         vec3d pnt = m_LVec[0].GetP0();
@@ -3160,7 +3160,7 @@ void SSControlSurf::PrepareSplitVec()
 
 SSLineArray::SSLineArray( const string& comp_id, int type ) : SubSurface( comp_id, type )
 {
-    m_ConstType.Init( "ConstLineType", "SS_LineArray", this, CONST_U, CONST_U, CONST_W );
+    m_ConstType.Init( "ConstLineType", "SS_LineArray", this, vsp::CONST_U, vsp::CONST_U, vsp::CONST_W );
     m_ConstType.SetDescript( "Either Constant U or Constant W SSLines" );
 
     m_PositiveDirectionFlag.Init( "PositiveDirectionFlag", "SS_LineArray", this, true, false, true );
@@ -3176,7 +3176,7 @@ SSLineArray::SSLineArray( const string& comp_id, int type ) : SubSurface( comp_i
     m_EndLocation.SetDescript( "Location for Final SSLine in Array" );
 
     // Set to only Beam elements (cap) with no tags (tris)
-    m_TestType = SSLineSeg::NO;
+    m_TestType = vsp::SS_LINE_TEST_NONE;
     m_CreateBeamElements = true;
 
     m_NumLines = 0;
@@ -3202,12 +3202,12 @@ void SSLineArray::Update()
 
         double const_val = m_StartLocation() + dir * i * m_Spacing();
 
-        if ( m_ConstType() == CONST_U )
+        if ( m_ConstType() == vsp::CONST_U )
         {
             m_LVec[i].SetSP0( vec3d( const_val, 1, 0 ) );
             m_LVec[i].SetSP1( vec3d( const_val, 0, 0 ) );
         }
-        else if ( m_ConstType() == CONST_W )
+        else if ( m_ConstType() == vsp::CONST_W )
         {
             m_LVec[i].SetSP0( vec3d( 0, const_val, 0 ) );
             m_LVec[i].SetSP1( vec3d( 1, const_val, 0 ) );
@@ -3311,11 +3311,11 @@ SSLine* SSLineArray::AddSSLine( double location, int ind )
 
 int SSLineArray::CompNumDrawPnts( Geom* geom )
 {
-    if ( m_ConstType() == CONST_W )
+    if ( m_ConstType() == vsp::CONST_W )
     {
         return (int)( geom->GetUMax(0) * ( geom->m_TessU() - 2 ) );
     }
-    else if ( m_ConstType() == CONST_U )
+    else if ( m_ConstType() == vsp::CONST_U )
     {
         return (int)( geom->GetWMax(0) * ( geom->m_TessW() - 4 ) );
     }
@@ -3341,7 +3341,7 @@ SSFiniteLine::SSFiniteLine( const string& comp_id, int type ) : SubSurface( comp
     m_WEnd.Init( "WEnd", "SS_FiniteLine", this, 0.3, 0, 1 );
     m_WEnd.SetDescript( "The W ending location of the finite line" );
 
-    m_TestType.Init( "Test_Type", "SubSurface", this, SSLineSeg::NO, SSLineSeg::NO, SSLineSeg::NO );
+    m_TestType.Init( "Test_Type", "SubSurface", this, vsp::SS_LINE_TEST_NONE, vsp::SS_LINE_TEST_NONE, vsp::SS_LINE_TEST_NONE );
     m_TestType.SetDescript( "Tag surface as being either greater than or less than const value line" );
 
     m_CreateBeamElements = true;

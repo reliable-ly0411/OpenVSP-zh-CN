@@ -793,6 +793,8 @@ double GetCFDMeshVal( int type )
         ret = GetVehicle()->GetCfdSettingsPtr()->m_ParallelMeshFlag();
     else if ( type == CFD_POGS_NUM_REFINE )
         ret = GetVehicle()->GetCfdSettingsPtr()->m_POGSNRef();
+    else if ( type == CFD_TOPO_INTERIOR_FLAG )
+        ret = GetVehicle()->GetCfdSettingsPtr()->m_TopoInteriorFlag();
     else
     {
         ErrorMgr.AddError( VSP_CANT_FIND_TYPE, "GetCFDMeshVal::Can't Find Type " + to_string( ( long long )type ) );
@@ -857,6 +859,8 @@ void SetCFDMeshVal( int type, double val )
         GetVehicle()->GetCfdSettingsPtr()->m_ParallelMeshFlag = ToBool(val);
     else if ( type == CFD_POGS_NUM_REFINE )
         GetVehicle()->GetCfdSettingsPtr()->m_POGSNRef = val;
+    else if ( type == CFD_TOPO_INTERIOR_FLAG )
+        GetVehicle()->GetCfdSettingsPtr()->m_TopoInteriorFlag = ToBool(val);
     else
     {
         ErrorMgr.AddError( VSP_CANT_FIND_TYPE, "SetCFDMeshVal::Can't Find Type " + to_string( ( long long )type ) );
@@ -3791,6 +3795,40 @@ void ScreenGrab( const std::string & fname, int w, int h, bool transparentBG, bo
 #endif
 }
 
+void VectorScreenGrab( const std::string & fname, int filetype, bool autocrop, bool scaletopage, double pagewidth, double pageheight, int pageunits )
+{
+    if ( filetype < VEC_SVG || filetype >= VEC_NUM_TYPES )
+    {
+        ErrorMgr.AddError( VSP_INVALID_TYPE, "VectorScreenGrab::Invalid file type " + to_string( filetype ) );
+        return;
+    }
+
+    if ( scaletopage )
+    {
+        if ( pageunits < LEN_MM || pageunits > LEN_IN )
+        {
+            ErrorMgr.AddError( VSP_INVALID_TYPE, "VectorScreenGrab::Invalid page units " + to_string( pageunits ) );
+            return;
+        }
+
+        if ( pagewidth <= 0.0 || pageheight <= 0.0 )
+        {
+            ErrorMgr.AddError( VSP_INVALID_INPUT_VAL, "VectorScreenGrab::Page width and height must be positive" );
+            return;
+        }
+    }
+
+#ifdef VSP_USE_FLTK
+    if ( !GuiInterface::getInstance().VectorScreenGrab( fname, filetype, autocrop, scaletopage, pagewidth, pageheight, pageunits ) )
+    {
+        ErrorMgr.AddError( VSP_FILE_WRITE_FAILURE, "VectorScreenGrab::Failure writing " + fname );
+        return;
+    }
+#endif
+
+    ErrorMgr.NoError();
+}
+
 void SetViewAxis( bool vaxis )
 {
 #ifdef VSP_USE_FLTK
@@ -3884,6 +3922,28 @@ int GetGeomDisplayType( const std::string &geom_id )
 
     ErrorMgr.NoError();
     return geom_ptr->m_GuiDraw.GetDisplayType();
+}
+
+std::vector< vec3d > GetGeomDisplayTessPnts( const std::string &geom_id, int surf_index )
+{
+    std::vector< vec3d > pnts;
+
+    Vehicle* veh = GetVehicle();
+    Geom* geom_ptr = veh->FindGeom( geom_id );
+    if ( !geom_ptr )
+    {
+        ErrorMgr.AddError( VSP_INVALID_GEOM_ID, "GetGeomDisplayTessPnts::Can't Find Geom " + geom_id );
+        return pnts;
+    }
+
+    if ( !geom_ptr->GetDisplayTessPnts( surf_index, pnts ) )
+    {
+        ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, "GetGeomDisplayTessPnts::Surface Index " + to_string( surf_index ) + " Out of Range" );
+        return pnts;
+    }
+
+    ErrorMgr.NoError();
+    return pnts;
 }
 
 vec3d GetGeomWireColor( const std::string &geom_id )
@@ -13888,7 +13948,7 @@ int GetIntParmVal( const std::string & parm_id )
         return 0;
     }
     ErrorMgr.NoError();
-    return (int)(p->Get()+0.5);
+    return toint( p->Get() );
 }
 
 /// Get the value of a bool parm
@@ -13978,6 +14038,19 @@ int GetParmType( const std::string & parm_id )
     }
     ErrorMgr.NoError();
     return p->GetType();
+}
+
+/// Get whether the parm is active
+bool GetParmActiveFlag( const std::string & parm_id )
+{
+    Parm* p = ParmMgr.FindParm( parm_id );
+    if ( !p )
+    {
+        ErrorMgr.AddError( VSP_CANT_FIND_PARM, "GetParmActiveFlag::Can't Find Parm " + parm_id );
+        return false;
+    }
+    ErrorMgr.NoError();
+    return p->GetActiveFlag();
 }
 
 /// Get the parm name
@@ -16226,6 +16299,34 @@ void ResetPropellerThickness( const std::string & geom_id )
     ErrorMgr.NoError();
 }
 
+void InitPropPreset( const std::string & geom_id, int preset )
+{
+    Vehicle* veh = GetVehicle();
+    Geom* geom_ptr = veh->FindGeom( geom_id );
+    if ( !geom_ptr )
+    {
+        ErrorMgr.AddError( VSP_INVALID_GEOM_ID, "InitPropPreset::Can't Find Geom " + geom_id );
+        return;
+    }
+
+    PropGeom* prop_ptr = dynamic_cast< PropGeom* >( geom_ptr );
+    if ( !prop_ptr )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, "InitPropPreset::Geom " + geom_id + " is not a propeller" );
+        return;
+    }
+
+    if ( preset < PROP_PRESET_PROPELLER || preset > PROP_PRESET_HELICOPTER )
+    {
+        ErrorMgr.AddError( VSP_INVALID_TYPE, "InitPropPreset::Invalid Preset " + to_string( preset ) );
+        return;
+    }
+
+    prop_ptr->InitPreset( preset );
+
+    ErrorMgr.NoError();
+}
+
 void ApproximateAllPropellerPCurves( const std::string & geom_id )
 {
     Vehicle* veh = GetVehicle();
@@ -16284,6 +16385,87 @@ void ResetPropellerThicknessCurve( const std::string & geom_id )
     }
 
     ErrorMgr.NoError();
+}
+
+// Blade blade_index of a rotor at rotate, from the blade as built to the model: the Geom's placement
+// of that symmetric copy after the blade's own placement.  False, with an error, on a bad argument.
+static bool PropBladeXForm( const string & caller, const std::string & geom_id, int blade_index, int symm_index,
+                            double rotate, Matrix4d & mat )
+{
+    Vehicle* veh = GetVehicle();
+    Geom* geom_ptr = veh->FindGeom( geom_id );
+    if ( !geom_ptr )
+    {
+        ErrorMgr.AddError( VSP_INVALID_GEOM_ID, caller + "::Can't Find Geom " + geom_id );
+        return false;
+    }
+
+    RotorRole* rotor = Geom::CastTo< RotorRole >( geom_ptr );
+    if ( !rotor )
+    {
+        ErrorMgr.AddError( VSP_WRONG_GEOM_TYPE, caller + "::Geom not a propeller or a Clone of one " + geom_id );
+        return false;
+    }
+
+    // The blades the last Update built, which the symmetric copies describe.
+    int nbuilt = 0;
+    for ( int i = 0; i < geom_ptr->GetNumMainSurfs(); i++ )
+    {
+        if ( geom_ptr->GetMainSurfType( i ) != vsp::DISK_SURF )
+        {
+            nbuilt++;
+        }
+    }
+
+    if ( blade_index < 0 || blade_index >= rotor->NumPlacedBlades() || blade_index >= nbuilt )
+    {
+        ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, caller + "::Blade Index " + to_string( blade_index ) + " Out of Range" );
+        return false;
+    }
+
+    // The Geom's own numbering of the copies, which DegenGeom reports as sym_copy_index.
+    vector< int > surfs;
+    geom_ptr->GetSymmIndexs( blade_index, surfs );
+    vector< Matrix4d > trans_vec = geom_ptr->GetTransMatVec();
+    if ( symm_index < 0 || symm_index >= ( int )surfs.size() || surfs[ symm_index ] >= ( int )trans_vec.size() )
+    {
+        ErrorMgr.AddError( VSP_INDEX_OUT_RANGE, caller + "::Symmetric Copy Index " + to_string( symm_index ) + " Out of Range" );
+        return false;
+    }
+
+    mat = trans_vec[ surfs[ symm_index ] ];
+    mat.matMult( rotor->GetBladePlacement( blade_index, rotate ) );
+    return true;
+}
+
+Matrix4d GetPropBladeXForm( const std::string & geom_id, int blade_index, int symm_index, double rotate )
+{
+    Matrix4d mat;
+    if ( !PropBladeXForm( "GetPropBladeXForm", geom_id, blade_index, symm_index, rotate, mat ) )
+    {
+        return Matrix4d();
+    }
+
+    ErrorMgr.NoError();
+    return mat;
+}
+
+Matrix4d GetPropBladeMotionXForm( const std::string & geom_id, int blade_index, int symm_index, double rotate )
+{
+    Matrix4d mat;
+    Matrix4d mat0;
+    if ( !PropBladeXForm( "GetPropBladeMotionXForm", geom_id, blade_index, symm_index, rotate, mat ) ||
+         !PropBladeXForm( "GetPropBladeMotionXForm", geom_id, blade_index, symm_index, 0.0, mat0 ) )
+    {
+        return Matrix4d();
+    }
+
+    // The motion from the blade's place at psi = 0.
+    mat0.affineInverse();
+    mat.matMult( mat0 );
+
+    ErrorMgr.NoError();
+    return mat;
 }
 
 //===================================================================//
@@ -16888,6 +17070,9 @@ void CompCurvature01(const std::string &geom_id, const int &surf_indx, const dou
 
 double ProjPnt01(const std::string &geom_id, const int &surf_indx, const vec3d &pt, double &u_out, double &w_out)
 {
+    u_out = 0.0;
+    w_out = 0.0;
+
     Vehicle* vPtr = VehicleMgr.GetVehicle();
     Geom * geom = vPtr->FindGeom( geom_id );
 
@@ -16915,6 +17100,10 @@ double ProjPnt01(const std::string &geom_id, const int &surf_indx, const vec3d &
 double ProjPnt01I(const std::string &geom_id, const vec3d &pt, int &surf_indx,
                   double &u_out, double &w_out)
 {
+    surf_indx = -1;
+    u_out = 0.0;
+    w_out = 0.0;
+
     Vehicle* vPtr = VehicleMgr.GetVehicle();
     Geom * geom = vPtr->FindGeom( geom_id );
 
@@ -16935,6 +17124,12 @@ double ProjPnt01I(const std::string &geom_id, const vec3d &pt, int &surf_indx,
 
 double ProjPnt01Guess(const std::string &geom_id, const int &surf_indx, const vec3d &pt, const double &u0, const double &w0, double &u_out, double &w_out)
 {
+    // The inputs are copied before the outputs are set, so the same variable may be passed as both
+    double u0_in = u0;
+    double w0_in = w0;
+    u_out = 0.0;
+    w_out = 0.0;
+
     Vehicle* vPtr = VehicleMgr.GetVehicle();
     Geom * geom = vPtr->FindGeom( geom_id );
 
@@ -16952,7 +17147,7 @@ double ProjPnt01Guess(const std::string &geom_id, const int &surf_indx, const ve
         return dmin;
     }
 
-    dmin = geom->GetSurfPtr( surf_indx )->FindNearest01( u_out, w_out, pt, clamp( u0, 0.0, 1.0 ), clamp( w0, 0.0, 1.0 ) );
+    dmin = geom->GetSurfPtr( surf_indx )->FindNearest01( u_out, w_out, pt, clamp( u0_in, 0.0, 1.0 ), clamp( w0_in, 0.0, 1.0 ) );
 
     ErrorMgr.NoError();
 
@@ -17103,6 +17298,10 @@ vec3d CompPntRST( const std::string &geom_id, const int &surf_indx, const double
 
 double FindRST( const std::string &geom_id, const int &surf_indx, const vec3d &pt, double &r_out, double &s_out, double &t_out )
 {
+    r_out = 0.0;
+    s_out = 0.0;
+    t_out = 0.0;
+
     Vehicle* vPtr = VehicleMgr.GetVehicle();
     Geom * geom = vPtr->FindGeom( geom_id );
 
@@ -17129,6 +17328,14 @@ double FindRST( const std::string &geom_id, const int &surf_indx, const vec3d &p
 
 double FindRSTGuess( const std::string &geom_id, const int &surf_indx, const vec3d &pt, const double &r0, const double &s0, const double &t0, double &r_out, double &s_out, double &t_out )
 {
+    // The inputs are copied before the outputs are set, so the same variable may be passed as both
+    double r0_in = r0;
+    double s0_in = s0;
+    double t0_in = t0;
+    r_out = 0.0;
+    s_out = 0.0;
+    t_out = 0.0;
+
     Vehicle* vPtr = VehicleMgr.GetVehicle();
     Geom * geom = vPtr->FindGeom( geom_id );
 
@@ -17146,7 +17353,7 @@ double FindRSTGuess( const std::string &geom_id, const int &surf_indx, const vec
         return dist;
     }
 
-    dist = geom->GetSurfPtr( surf_indx )->FindRST( pt, clamp( r0, 0.0, 1.0 ), clamp( s0, 0.0, 1.0 ), clamp( t0, 0.0, 1.0 ), r_out, s_out, t_out );
+    dist = geom->GetSurfPtr( surf_indx )->FindRST( pt, clamp( r0_in, 0.0, 1.0 ), clamp( s0_in, 0.0, 1.0 ), clamp( t0_in, 0.0, 1.0 ), r_out, s_out, t_out );
 
     ErrorMgr.NoError();
 
@@ -17155,6 +17362,14 @@ double FindRSTGuess( const std::string &geom_id, const int &surf_indx, const vec
 
 void ConvertRSTtoLMN( const std::string &geom_id, const int &surf_indx, const double &r, const double &s, const double &t, double &l_out, double &m_out, double &n_out )
 {
+    // The inputs are copied before the outputs are set, so the same variable may be passed as both
+    double r_in = r;
+    double s_in = s;
+    double t_in = t;
+    l_out = 0.0;
+    m_out = 0.0;
+    n_out = 0.0;
+
     Vehicle* vPtr = VehicleMgr.GetVehicle();
     Geom * geom = vPtr->FindGeom( geom_id );
 
@@ -17170,7 +17385,7 @@ void ConvertRSTtoLMN( const std::string &geom_id, const int &surf_indx, const do
         return;
     }
 
-    geom->GetSurfPtr( surf_indx )->ConvertRSTtoLMN( r, s, t, l_out, m_out, n_out );
+    geom->GetSurfPtr( surf_indx )->ConvertRSTtoLMN( r_in, s_in, t_in, l_out, m_out, n_out );
 
     ErrorMgr.NoError();
 
@@ -17179,6 +17394,10 @@ void ConvertRSTtoLMN( const std::string &geom_id, const int &surf_indx, const do
 
 void ConvertRtoL( const std::string &geom_id, const int &surf_indx, const double &r, double &l_out )
 {
+    // The inputs are copied before the outputs are set, so the same variable may be passed as both
+    double r_in = r;
+    l_out = 0.0;
+
     Vehicle* vPtr = VehicleMgr.GetVehicle();
     Geom * geom = vPtr->FindGeom( geom_id );
 
@@ -17194,7 +17413,7 @@ void ConvertRtoL( const std::string &geom_id, const int &surf_indx, const double
         return;
     }
 
-    geom->GetSurfPtr( surf_indx )->ConvertRtoL( r, l_out );
+    geom->GetSurfPtr( surf_indx )->ConvertRtoL( r_in, l_out );
 
     ErrorMgr.NoError();
 
@@ -17203,6 +17422,14 @@ void ConvertRtoL( const std::string &geom_id, const int &surf_indx, const double
 
 void ConvertLMNtoRST( const std::string &geom_id, const int &surf_indx, const double &l, const double &m, const double &n, double &r_out, double &s_out, double &t_out )
 {
+    // The inputs are copied before the outputs are set, so the same variable may be passed as both
+    double l_in = l;
+    double m_in = m;
+    double n_in = n;
+    r_out = 0.0;
+    s_out = 0.0;
+    t_out = 0.0;
+
     Vehicle* vPtr = VehicleMgr.GetVehicle();
     Geom * geom = vPtr->FindGeom( geom_id );
 
@@ -17218,7 +17445,7 @@ void ConvertLMNtoRST( const std::string &geom_id, const int &surf_indx, const do
         return;
     }
 
-    geom->GetSurfPtr( surf_indx )->ConvertLMNtoRST( l, m, n, r_out, s_out, t_out );
+    geom->GetSurfPtr( surf_indx )->ConvertLMNtoRST( l_in, m_in, n_in, r_out, s_out, t_out );
 
     ErrorMgr.NoError();
 
@@ -17227,6 +17454,10 @@ void ConvertLMNtoRST( const std::string &geom_id, const int &surf_indx, const do
 
 void ConvertLtoR( const std::string &geom_id, const int &surf_indx, const double &l, double &r_out )
 {
+    // The inputs are copied before the outputs are set, so the same variable may be passed as both
+    double l_in = l;
+    r_out = 0.0;
+
     Vehicle* vPtr = VehicleMgr.GetVehicle();
     Geom * geom = vPtr->FindGeom( geom_id );
 
@@ -17242,7 +17473,7 @@ void ConvertLtoR( const std::string &geom_id, const int &surf_indx, const double
         return;
     }
 
-    geom->GetSurfPtr( surf_indx )->ConvertLtoR( l, r_out );
+    geom->GetSurfPtr( surf_indx )->ConvertLtoR( l_in, r_out );
 
     ErrorMgr.NoError();
 

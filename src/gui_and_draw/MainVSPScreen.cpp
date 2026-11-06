@@ -31,6 +31,7 @@
 #include "ManageCORScreen.h"
 #include "ManageGeomScreen.h"
 #include "ManageViewScreen.h"
+#include "UnitConversion.h"
 #include "FileUtil.h"
 
 #include "CfdMeshScreen.h"
@@ -58,6 +59,7 @@ MainVSPScreen::MainVSPScreen( ScreenMgr* mgr ) : ActionScreen( mgr )
 
     m_FLTK_Window = nullptr;
     m_GlWin = nullptr;
+    m_DumpName = "Main";
 
     m_ShowXYZArrow = true;
     m_ShowBorder = true;
@@ -71,7 +73,14 @@ MainVSPScreen::MainVSPScreen( ScreenMgr* mgr ) : ActionScreen( mgr )
     m_FLTK_Window->resizable( m_FLTK_Window );
     VspScreen::SetFlWindow( m_FLTK_Window );
 
-    Fl::screen_xywh( x, y, w, h );
+    // Lay the windows out on the work area of the screen under the mouse, which leaves out the taskbar
+    // or menu bar.  Before it is shown, a window's coordinates are taken in the scale of its assigned
+    // screen, so the main window is assigned to this one.
+    int mx, my;
+    Fl::get_mouse( mx, my );
+    int screen = Fl::screen_num( mx, my );
+    Fl::screen_work_area( x, y, w, h, screen );
+    m_FLTK_Window->screen_num( screen );
 
     //==== Determine remaining screen width after geombrowser + geomscreen usage ====//
     int geom_group_width = 0;
@@ -83,15 +92,19 @@ MainVSPScreen::MainVSPScreen( ScreenMgr* mgr ) : ActionScreen( mgr )
         {
             geom_group_width = std::max( geom_group_width, geomscreen_vec[i]->GetFlWindow()->w() );
         }
+        // Add ManageGeomScreen's width
+        geom_group_width += mgs->GetFlWindow()->w();
     }
-    // Add ManageGeomScreen's width
-    geom_group_width += mgs->GetFlWindow()->w();
 
     //==== Figure out which is smaller, remaining width or the height ====//
-    int w_allow = w - geom_group_width - 20;
+    // Window frames lie outside these client sizes.  Leave a frame's width, enough at 200% scaling on
+    // Windows, at each end of the row of windows, and the 5 between the main window and the browser,
+    // so no frame reaches past the screen and the windows are not moved to fit another screen.
+    int frame = 16;
+    int w_allow = w - geom_group_width - 2 * frame - 5;
     int h_allow = 0.9 * h;
 
-    m_FLTK_Window->resize( x + 10, y + 30, w_allow, h_allow );
+    m_FLTK_Window->resize( x + frame, y + 30, w_allow, h_allow );
 
     m_FLTK_Window->callback( staticCloseCB, this );
 
@@ -131,6 +144,7 @@ MainVSPScreen::MainVSPScreen( ScreenMgr* mgr ) : ActionScreen( mgr )
     m_BackgroundMenuItem.Init( mgr, m_MenuBar, "Window/Background...", vsp::VSP_BACKGROUND_SCREEN );
     m_Background3DMenuItem.Init( mgr, m_MenuBar, "Window/3D Background...", vsp::VSP_BACKGROUND3D_SCREEN );
     m_ScreenshotMenuItem.Init( mgr, m_MenuBar, "Window/Screenshot...", vsp::VSP_SCREENSHOT_SCREEN );
+    m_VectorScreenshotMenuItem.Init( mgr, m_MenuBar, "Window/Vector Screenshot...", vsp::VSP_VECTOR_SCREENSHOT_SCREEN );
     m_AxisMenuItem.Init( this, m_MenuBar, "Window/Axis Toggle" );
     m_AxisMenuItem.Update( m_ShowXYZArrow );
     m_BorderMenuItem.Init( this, m_MenuBar, "Window/Border Toggle" );
@@ -702,7 +716,7 @@ void MainVSPScreen::ActionCB( void * data )
         const string localization_about =
             string( "OpenVSP 简体中文汉化版\n" ) +
             "软件版本：" + VSPVERSION4 + "\n"
-            "汉化版本：3.55.0-zh-CN.rc.3\n"
+            "汉化版本：3.56.0-zh-CN.dev.ca4958f2cf98\n"
             "汉化仓库：https://github.com/reliable-ly0411/OpenVSP-zh-CN\n\n"
             "汉化内容包括界面、动态标签、命令行帮助及离线帮助文档。\n\n"
             "OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，\n"
@@ -775,6 +789,45 @@ void MainVSPScreen::ScreenGrab( const string & fname, int w, int h, bool transpa
 
         m_GlWin->getGraphicEngine()->dumpScreenImage( fname, w, h, transparentBG, autocrop, framebufferSupported, VSPGraphic::GraphicEngine::PNG );
     }
+}
+
+bool MainVSPScreen::VectorScreenGrab( const string & fname, int filetype, bool autocrop, bool scaletopage,
+                                      double pagewidth, double pageheight, int pageunits )
+{
+    if ( !m_GlWin )
+    {
+        return false;
+    }
+
+    int type = VSPGraphic::GraphicEngine::SVG;
+    if ( filetype == vsp::VEC_PDF )
+    {
+        type = VSPGraphic::GraphicEngine::PDF;
+    }
+
+    double scale = VectorPageScale( m_GlWin->pixel_w(), m_GlWin->pixel_h(), scaletopage, pagewidth, pageheight,
+                                    pageunits );
+
+    return m_GlWin->WriteVector( fname, type, autocrop, scale );
+}
+
+double MainVSPScreen::VectorPageScale( int w, int h, bool scaletopage, double pagewidth, double pageheight,
+                                       int pageunits )
+{
+    if ( !scaletopage || w <= 0 || h <= 0 )
+    {
+        return 1.0;
+    }
+
+    // 72 points to the inch
+    double pw = ConvertLength( pagewidth, pageunits, vsp::LEN_IN ) * 72.0;
+    double ph = ConvertLength( pageheight, pageunits, vsp::LEN_IN ) * 72.0;
+    double scale = pw / w;
+    if ( ph / h < scale )
+    {
+        scale = ph / h;
+    }
+    return scale;
 }
 
 void MainVSPScreen::SetViewAxis( bool vaxis )

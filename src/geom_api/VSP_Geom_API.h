@@ -70,9 +70,10 @@
 
     \defgroup CustomGeom Custom Geometry Functions
     \brief This functions grouped here are used to create and manipulate Custom Components. Custom components
-    are defined in \\*.vsppart files included in the /"Custom Scripts/" directory. Examples of Custom Components
-    are available in the directory for reference. OpenVSP looks in 3 locations for the /"Custom Scripts/" folder,
-    where Custom Components are loaded: the root directory, the VSP executable directory, and the home directory.
+    are defined in \\*.vsppart files in a CustomScripts directory. Examples of Custom Components are in the
+    CustomScripts directory installed with OpenVSP. OpenVSP reads the CustomScripts folder in three places, in
+    this order, once when it starts: the working directory, the home directory, and the directory of the VSP
+    executable.
     Note, these functions are specific to defining Custom Components and can't be called from standard API scripts
     (i.e. \\*.vspscript). However, a Custom Component can be created as a \\*.vsppart file and then accessed through
     secondary API scripts.
@@ -11568,6 +11569,46 @@ extern void ScreenGrab( const std::string & fname, int w, int h, bool transparen
     \ingroup Visualization
 */
 /*!
+    Write the main window as a vector drawing, of every viewport of the layout, without the background,
+    in the file type given, SVG or PDF.  The file name is used as given; no extension is added.  A pixel of
+    the window is a point on the page, or with scaletopage the window is scaled, its aspect kept, to fit a
+    page of the width and height given, in millimeters, centimeters, meters or inches; without scaletopage
+    the page arguments are ignored.  With autocrop the page is cropped to what is drawn, at the same scale.
+    Textures and 3D backgrounds are left out.  The drawing reflects the model as of the last Update.  It
+    needs the GUI to be running, and does nothing otherwise.  Note, VSP_USE_FLTK must be defined
+    \forcpponly
+    \code{.cpp}
+    string fname = "test_vec_screen_grab.svg";
+
+    VectorScreenGrab( fname, VEC_SVG, true, true, 4.0, 3.0, LEN_IN ); // Write SVG drawing, 4x3 in page, cropped
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    fname = "test_vec_screen_grab.svg"
+
+    VectorScreenGrab( fname, VEC_SVG, True, True, 4.0, 3.0, LEN_IN ) # Write SVG drawing, 4x3 in page, cropped
+
+    \endcode
+    \endPythonOnly
+    \sa VEC_SCREENSHOT_TYPE, LEN_UNITS
+    \param [in] fname string Output file name
+    \param [in] filetype int File type enum (i.e. VEC_SVG)
+    \param [in] autocrop bool Crop the page to what is drawn flag
+    \param [in] scaletopage bool Scale the window to fit the page flag
+    \param [in] pagewidth double Page width
+    \param [in] pageheight double Page height
+    \param [in] pageunits int Page length unit enum, LEN_MM to LEN_IN (i.e. LEN_IN)
+*/
+
+extern void VectorScreenGrab( const std::string & fname, int filetype = VEC_SVG, bool autocrop = false,
+                              bool scaletopage = false, double pagewidth = 4.0, double pageheight = 3.0,
+                              int pageunits = LEN_IN );
+
+/*!
+    \ingroup Visualization
+*/
+/*!
     Toggle viewing the axis
     \forcpponly
     \code{.cpp}
@@ -11970,6 +12011,77 @@ extern int GetGeomDrawType( const std::string &geom_id );
 */
 
 extern int GetGeomDisplayType( const std::string &geom_id );
+
+/*!
+    \ingroup Visualization
+*/
+/*!
+    Get the points of one surface of a Geom as its display type sets them.  In Bezier display these are the points of
+    its tessellation, patch by patch and row by row.  In the degen display types they are the points of the surface's
+    DegenGeom preview, row by row, from which the plate and camber displays are drawn too; a surface without a
+    preview, such as a propeller's disk, gives none.  The surfaces include the symmetric copies, numbered as for the
+    Geom's other surface queries.  The points reflect the last Update, which makes the tessellation of the display
+    type that is set.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "POD" );
+    Update();
+
+    // The tessellation spans the pod's length, in either display.
+    double len = GetParmVal( FindParm( pid, "Length", "Design" ) );
+
+    for ( int i = 0; i < 2; i++ )
+    {
+        if ( i == 1 )
+        {
+            SetGeomDisplayType( pid, DISPLAY_DEGEN_SURF );
+            Update();
+        }
+
+        array < vec3d > @pnts = GetGeomDisplayTessPnts( pid, 0 );
+
+        double xmin = 1e12;
+        double xmax = -1e12;
+        for ( int j = 0; j < int( pnts.size() ); j++ )
+        {
+            xmin = Min( xmin, pnts[j].x() );
+            xmax = Max( xmax, pnts[j].x() );
+        }
+
+        if ( pnts.size() == 0 || abs( xmax - xmin - len ) > 1e-9 )
+        {
+            Print( "ERROR: GetGeomDisplayTessPnts did not span the pod" );
+            __failure++;
+        }
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "POD" )
+    Update()
+
+    # The tessellation spans the pod's length, in either display.
+    length = GetParmVal( FindParm( pid, "Length", "Design" ) )
+
+    for display in ( DISPLAY_BEZIER, DISPLAY_DEGEN_SURF ):
+        SetGeomDisplayType( pid, display )
+        Update()
+
+        pnts = GetGeomDisplayTessPnts( pid, 0 )
+        xs = [ p.x() for p in pnts ]
+
+        assert len( xs ) > 0 and abs( max( xs ) - min( xs ) - length ) < 1e-9, "GetGeomDisplayTessPnts did not span the pod"
+
+    \endcode
+    \endPythonOnly
+    \sa DISPLAY_TYPE, SetGeomDisplayType, GetTotalNumSurfs
+    \param [in] geom_id string Geom ID
+    \param [in] surf_index int Index of the surface, from 0 to the total number of surfaces - 1
+    \return vector\<vec3d\> Points of the surface, or an empty vector on an error
+*/
+
+extern std::vector< vec3d > GetGeomDisplayTessPnts( const std::string &geom_id, int surf_index );
 
 /*!
     \ingroup Visualization
@@ -18930,7 +19042,7 @@ extern std::string GetFeaSubSurfName( const std::string & subsurf_id );
     //==== Add LineArray ====//
     string line_array_id = AddFeaSubSurf( pod_id, struct_ind, SS_LINE_ARRAY );
 
-    SetParmVal( FindParm( line_array_id, "ConstLineType", "SS_LineArray" ), 1 ); // Constant W
+    SetParmVal( FindParm( line_array_id, "ConstLineType", "SS_LineArray" ), CONST_W );
 
     SetParmVal( FindParm( line_array_id, "Spacing", "SS_LineArray" ), 0.25 );
 
@@ -18952,7 +19064,7 @@ extern std::string GetFeaSubSurfName( const std::string & subsurf_id );
     #==== Add LineArray ====//
     line_array_id = AddFeaSubSurf( pod_id, struct_ind, SS_LINE_ARRAY )
 
-    SetParmVal( FindParm( line_array_id, "ConstLineType", "SS_LineArray" ), 1 ) # Constant W
+    SetParmVal( FindParm( line_array_id, "ConstLineType", "SS_LineArray" ), CONST_W )
 
     SetParmVal( FindParm( line_array_id, "Spacing", "SS_LineArray" ), 0.25 )
 
@@ -37177,6 +37289,61 @@ extern int GetParmType( const std::string & parm_id );
     \ingroup Parm
 */
 /*!
+    Get whether the specified Parm is active.  A Parm that has no effect in its component's current
+    settings is inactive, and is greyed in the GUI; its value can still be set.  The flag reflects the
+    last Update.
+    \forcpponly
+    \code{.cpp}
+    // Add Pod Geom
+    string pid = AddGeom( "POD", "" );
+
+    // A Geom placed relative to its parent takes its relative location; the absolute one is inactive
+    Update();
+
+    if ( GetParmActiveFlag( GetParm( pid, "X_Location", "XForm" ) ) )        { Print( "---> Error: API GetParmActiveFlag " ); __failure++; }
+    if ( !GetParmActiveFlag( GetParm( pid, "X_Rel_Location", "XForm" ) ) )   { Print( "---> Error: API GetParmActiveFlag " ); __failure++; }
+
+    SetParmVal( pid, "Abs_Or_Relitive_flag", "XForm", ABS );
+    Update();
+
+    if ( !GetParmActiveFlag( GetParm( pid, "X_Location", "XForm" ) ) )       { Print( "---> Error: API GetParmActiveFlag " ); __failure++; }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    # Add Pod Geom
+    pid = AddGeom( "POD", "" )
+
+    # A Geom placed relative to its parent takes its relative location; the absolute one is inactive
+    Update()
+
+    if  GetParmActiveFlag( GetParm( pid, "X_Location", "XForm" ) ) :
+        print( "---> Error: API GetParmActiveFlag " )
+        assert False, "---> Error: API GetParmActiveFlag"
+
+    if  not GetParmActiveFlag( GetParm( pid, "X_Rel_Location", "XForm" ) ) :
+        print( "---> Error: API GetParmActiveFlag " )
+        assert False, "---> Error: API GetParmActiveFlag"
+
+    SetParmVal( pid, "Abs_Or_Relitive_flag", "XForm", ABS )
+    Update()
+
+    if  not GetParmActiveFlag( GetParm( pid, "X_Location", "XForm" ) ) :
+        print( "---> Error: API GetParmActiveFlag " )
+        assert False, "---> Error: API GetParmActiveFlag"
+
+    \endcode
+    \endPythonOnly
+    \param [in] parm_id string Parm ID
+    \return bool True if the Parm is active
+*/
+
+extern bool GetParmActiveFlag( const std::string & parm_id );
+
+/*!
+    \ingroup Parm
+*/
+/*!
     Get the name for the specified Parm
     \forcpponly
     \code{.cpp}
@@ -45565,6 +45732,76 @@ extern void ApproximateAllPropellerPCurves( const std::string & geom_id );
 extern void ResetPropellerThickness( const std::string & geom_id );
 
 /*!
+    \ingroup Geom
+*/
+/*!
+    Replace a propeller's cross sections, blade curves, pitch and rotation with a starting design, the
+    way the Preset Set button on the Prop screen does.  The Y rotation is set in the frame the propeller
+    is placed in, relative or absolute.  The cross sections are made anew, so links to the old ones'
+    parameters are lost.  Every other parameter keeps its value, so a preset is meant for a new propeller.
+    PROP_PRESET_PROPELLER restores the default propeller, with Y rotation 0.  PROP_PRESET_HELICOPTER
+    gives a helicopter main rotor: NACA 0012 sections, constant chord, linear twist, the pitch driven
+    by Feather, and Y rotation 90 so the thrust points up.
+    PROP_PRESET_HELICOPTER also sets PsiRef 270, so that psi = 0 lies over the tail.
+    The geometry reflects the change after the next Update.
+    \forcpponly
+    \code{.cpp}
+    string prop_id = AddGeom( "PROP", "" );
+
+    InitPropPreset( prop_id, PROP_PRESET_HELICOPTER );
+
+    Update();
+
+    // The rotor blade has one section at the root and one at the tip.
+    string xsec_surf = GetXSecSurf( prop_id, 0 );
+
+    if ( GetNumXSec( xsec_surf ) != 2 )
+    {
+        Print( "ERROR: InitPropPreset did not rebuild the sections" );
+        __failure++;
+    }
+
+    if ( GetParmVal( prop_id, "PsiRef", "Articulation" ) != 270.0 )
+    {
+        Print( "ERROR: InitPropPreset did not set PsiRef" );
+        __failure++;
+    }
+
+    if ( GetParmVal( prop_id, "Y_Rel_Rotation", "XForm" ) != 90.0 )
+    {
+        Print( "ERROR: InitPropPreset did not turn the rotor thrust up" );
+        __failure++;
+    }
+
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    prop_id = AddGeom( "PROP", "" )
+
+    InitPropPreset( prop_id, PROP_PRESET_HELICOPTER )
+
+    Update()
+
+    # The rotor blade has one section at the root and one at the tip.
+    xsec_surf = GetXSecSurf( prop_id, 0 )
+
+    assert GetNumXSec( xsec_surf ) == 2, "InitPropPreset did not rebuild the sections"
+
+    assert GetParmVal( prop_id, "PsiRef", "Articulation" ) == 270.0, "InitPropPreset did not set PsiRef"
+
+    assert GetParmVal( prop_id, "Y_Rel_Rotation", "XForm" ) == 90.0, "InitPropPreset did not turn the rotor thrust up"
+
+    \endcode
+    \endPythonOnly
+    \sa PROP_PRESETS
+    \param [in] geom_id string Propeller Geom ID
+    \param [in] preset int Preset enum (see PROP_PRESETS)
+*/
+
+extern void InitPropPreset( const std::string & geom_id, int preset );
+
+/*!
     \ingroup PCurve
 */
 /*!
@@ -45685,6 +45922,135 @@ extern void ResetPropellerThickness( const std::string & geom_id );
     */
 
 extern void ResetPropellerThicknessCurve( const std::string & geom_id );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Get the matrix that places one blade of a propeller, or of a Clone of one, at a rotation angle.  It maps a
+    point of the blade as built -- in the propeller's own axes, before the blade is turned to its azimuth, rotated,
+    preconed or moved by any hinge -- to where that point sits in the model at the given rotation angle, after the
+    Geom's own placement and the given symmetric copy.
+
+    The rotation angle plays the part of Rotate, so it is psi, the azimuth of blade 1 from PsiRef, and may be any
+    value, not just one within Rotate's limits.  Harmonic blade motion is evaluated at it.  Rotate itself and the
+    propeller's geometry are left alone.  The blades, their hinges and the symmetric copies are those of the last
+    Update, and the hinge angles are read as they stand, so call Update after changing the propeller.
+
+    A program that moves its own mesh of the blades with time asks for the matrix at each step.  GetPropBladeMotionXForm
+    gives the motion from where the blade sits at psi = 0 instead, for a mesh made around the placed blade.
+    \forcpponly
+    \code{.cpp}
+    // A two-bladed propeller
+    string pid = AddGeom( "PROP" );
+    SetParmVal( FindParm( pid, "NumBlade", "Design" ), 2 );
+    Update();
+
+    // Blade 2 at psi = 0 sits where blade 1 sits half a turn later.
+    Matrix4d a = GetPropBladeXForm( pid, 1, 0, 0.0 );
+    Matrix4d b = GetPropBladeXForm( pid, 0, 0, 180.0 );
+
+    vec3d pa = a.xform( vec3d( 0.1, 2.0, 0.3 ) );
+    vec3d pb = b.xform( vec3d( 0.1, 2.0, 0.3 ) );
+
+    if ( abs( pa.x() - pb.x() ) > 1e-9 || abs( pa.y() - pb.y() ) > 1e-9 || abs( pa.z() - pb.z() ) > 1e-9 )
+    {
+        Print( "ERROR: GetPropBladeXForm did not place blade 2 where blade 1 goes half a turn later" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    # A two-bladed propeller
+    pid = AddGeom( "PROP" )
+    SetParmVal( FindParm( pid, "NumBlade", "Design" ), 2 )
+    Update()
+
+    # Blade 2 at psi = 0 sits where blade 1 sits half a turn later.
+    a = GetPropBladeXForm( pid, 1, 0, 0.0 )
+    b = GetPropBladeXForm( pid, 0, 0, 180.0 )
+
+    pa = a.xform( vec3d( 0.1, 2.0, 0.3 ) )
+    pb = b.xform( vec3d( 0.1, 2.0, 0.3 ) )
+
+    assert abs( pa.x() - pb.x() ) < 1e-9 and abs( pa.y() - pb.y() ) < 1e-9 and abs( pa.z() - pb.z() ) < 1e-9, "GetPropBladeXForm did not place blade 2 where blade 1 goes half a turn later"
+
+    \endcode
+    \endPythonOnly
+    \sa GetPropBladeMotionXForm
+    \param [in] geom_id string ID of a propeller, or of a Clone of one
+    \param [in] blade_index int Index of the blade, from 0 to the number of blades - 1; the blade's main surface index
+    \param [in] symm_index int Index of the symmetric copy, from 0 to the number of symmetric copies - 1, numbered as DegenGeom's sym_copy_index
+    \param [in] rotate double Rotation angle psi (degrees), any value
+    \return Matrix4d From the blade as built to where it sits in the model, or the identity on an error
+*/
+
+extern Matrix4d GetPropBladeXForm( const std::string & geom_id, int blade_index, int symm_index, double rotate );
+
+/*!
+    \ingroup Geom
+*/
+/*!
+    Get the matrix that moves one blade of a propeller, or of a Clone of one, from where it sits at psi = 0 to where
+    it sits at a rotation angle.  It maps a point of the blade as placed in the model with the rotation angle zero to
+    where that point sits at the given rotation angle, the given symmetric copy throughout.  It is
+    GetPropBladeXForm at the angle times the inverse of GetPropBladeXForm at zero.
+
+    This suits a mesh made around the blade as the model places it at psi = 0 -- one exported from OpenVSP, or a
+    structured overset mesh grown around one blade -- moved with time by a program that knows psi at each step.  The
+    rotation angle may be any value, and harmonic blade motion is evaluated at it, so the motion carries the blade's
+    flap, lag and feather as well as its rotation.
+    \forcpponly
+    \code{.cpp}
+    string pid = AddGeom( "PROP" );
+    SetParmVal( FindParm( pid, "FlapAngle", "Articulation" ), 5.0 );
+    Update();
+
+    // Move a point of blade 1 from psi = 0 to psi = 60, then turn the propeller there.
+    vec3d p0 = CompPnt01( pid, 0, 0.5, 0.25 );
+    Matrix4d m = GetPropBladeMotionXForm( pid, 0, 0, 60.0 );
+    vec3d p = m.xform( p0 );
+
+    SetParmVal( FindParm( pid, "Rotate", "Design" ), 60.0 );
+    Update();
+    vec3d want = CompPnt01( pid, 0, 0.5, 0.25 );
+
+    if ( abs( p.x() - want.x() ) > 1e-9 || abs( p.y() - want.y() ) > 1e-9 || abs( p.z() - want.z() ) > 1e-9 )
+    {
+        Print( "ERROR: GetPropBladeMotionXForm did not move the blade where Rotate puts it" );
+        __failure++;
+    }
+    \endcode
+    \endforcpponly
+    \beginPythonOnly
+    \code{.py}
+    pid = AddGeom( "PROP" )
+    SetParmVal( FindParm( pid, "FlapAngle", "Articulation" ), 5.0 )
+    Update()
+
+    # Move a point of blade 1 from psi = 0 to psi = 60, then turn the propeller there.
+    p0 = CompPnt01( pid, 0, 0.5, 0.25 )
+    m = GetPropBladeMotionXForm( pid, 0, 0, 60.0 )
+    p = m.xform( p0 )
+
+    SetParmVal( FindParm( pid, "Rotate", "Design" ), 60.0 )
+    Update()
+    want = CompPnt01( pid, 0, 0.5, 0.25 )
+
+    assert abs( p.x() - want.x() ) < 1e-9 and abs( p.y() - want.y() ) < 1e-9 and abs( p.z() - want.z() ) < 1e-9, "GetPropBladeMotionXForm did not move the blade where Rotate puts it"
+
+    \endcode
+    \endPythonOnly
+    \sa GetPropBladeXForm
+    \param [in] geom_id string ID of a propeller, or of a Clone of one
+    \param [in] blade_index int Index of the blade, from 0 to the number of blades - 1; the blade's main surface index
+    \param [in] symm_index int Index of the symmetric copy, from 0 to the number of symmetric copies - 1, numbered as DegenGeom's sym_copy_index
+    \param [in] rotate double Rotation angle psi (degrees), any value
+    \return Matrix4d From the blade at psi = 0 to the blade at the rotation angle, or the identity on an error
+*/
+
+extern Matrix4d GetPropBladeMotionXForm( const std::string & geom_id, int blade_index, int symm_index, double rotate );
 
 
 //======================== VSPAERO Functions ======================//
@@ -48899,9 +49265,9 @@ extern int GetNumUnsteadyRotorGroups();
     \endcode
     \endPythonOnly
     \sa EXCRES_TYPE
-    \param [in] excresName string Name of the Excressence
-    \param [in] excresType int Excressence type enum (i.e. EXCRESCENCE_PERCENT_GEOM)
-    \param [in] excresVal double Excressence value
+    \param [in] excresName string Name of the Excrescence
+    \param [in] excresType int Excrescence type enum (i.e. EXCRESCENCE_PERCENT_GEOM)
+    \param [in] excresVal double Excrescence value
 */
 
 extern void AddExcrescence(const std::string & excresName, const int & excresType, const double & excresVal);
@@ -48963,7 +49329,7 @@ extern void AddExcrescence(const std::string & excresName, const int & excresTyp
 
     \endcode
     \endPythonOnly
-    \param [in] index int Index of the Excressence to delete
+    \param [in] index int Index of the Excrescence to delete
 */
 
 /*!
@@ -49111,7 +49477,7 @@ extern void DeleteExcrescence(const int & index);
     \ingroup ParasiteDrag
 */
 /*!
-    Update any reference geometry, atmospheric properties, excressences, etc. in the Parasite Drag Tool
+    Update any reference geometry, atmospheric properties, excrescences, etc. in the Parasite Drag Tool
     \forcpponly
     \code{.cpp}
     string pid = AddGeom( "POD" );

@@ -87,6 +87,9 @@ public:
     void APIScreenGrabImplementation( const string & fname, int w, int h, bool transparentBG, bool autocrop );
     void APIScreenGrab( const string & fname, int w, int h, bool transparentBG, bool autocrop );
 
+    bool APIVectorScreenGrabImplementation( const string & fname, int filetype, bool autocrop, bool scaletopage, double pagewidth, double pageheight, int pageunits );
+    bool APIVectorScreenGrab( const string & fname, int filetype, bool autocrop, bool scaletopage, double pagewidth, double pageheight, int pageunits );
+
     bool IsGUIElementDisabled( int e ) const;
     void SetGUIElementDisable( int e, bool state );
     bool IsGUIScreenDisabled( int s ) const;
@@ -112,6 +115,9 @@ public:
     void LoadModeChoice( Choice & choice, vector < string > &modeIDVec, const string &selModeID );
 
     void LoadModeChoice( const vector < Choice* > &choicevec, vector < string > &modeIDVec, const vector <string> &selModeIDvec );
+
+    // Writes images of the screens for testing and documentation; see ScreenDumper::Dump
+    int DumpScreens( int screen, int geom_screen, const string &dir, double scale );
 
 protected:
 

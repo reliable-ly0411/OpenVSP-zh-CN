@@ -8,6 +8,8 @@
 #include "FeaMeshMgr.h"
 #include "FileUtil.h"
 #include "StringUtil.h"
+#include "StlHelper.h"
+#include "FastFormat.h"
 
 // Although this appears to be an angle comparison (via the dot product), it is actually the signed distance
 // between the point and the plane.  Hence, a comparison to the mesh minimum length as a tolerance is appropriate.
@@ -903,6 +905,106 @@ void FeaMesh::LoadDrawObjs( vector< DrawObj* > &draw_obj_vec, SimpleFeaMeshSetti
 
 }
 
+// The list at index, or an empty list when index is out of range.
+static const vector < int > & ListAt( const vector < vector < int > > &lists, long long int index )
+{
+    static const vector < int > none;
+    if ( index < 0 || index >= (long long int)lists.size() )
+    {
+        return none;
+    }
+    return lists[index];
+}
+
+void FeaMesh::IndexElements( vector < vector < int > > &part_elems, vector < vector < int > > &ss_elems )
+{
+    part_elems.assign( m_NumFeaParts, vector < int >() );
+    ss_elems.assign( m_NumFeaSubSurfs, vector < int >() );
+
+    for ( int j = 0; j < (int)m_FeaElementVec.size(); j++ )
+    {
+        int ipart = m_FeaElementVec[j]->GetFeaPartIndex();
+        if ( ipart >= 0 && ipart < (int)part_elems.size() )
+        {
+            part_elems[ipart].push_back( j );
+        }
+
+        int iss = m_FeaElementVec[j]->GetFeaSSIndex();
+        if ( iss >= 0 && iss < (int)ss_elems.size() )
+        {
+            ss_elems[iss].push_back( j );
+        }
+    }
+}
+
+void FeaMesh::SplitBySurf( const vector < int > &elems, int nsurf, vector < vector < int > > &surf_elems )
+{
+    surf_elems.assign( std::max( nsurf, 0 ), vector < int >() );
+
+    for ( size_t k = 0; k < elems.size(); k++ )
+    {
+        int isurf = m_FeaElementVec[ elems[k] ]->GetFeaPartSurfNum();
+        if ( isurf >= 0 && isurf < (int)surf_elems.size() )
+        {
+            surf_elems[isurf].push_back( elems[k] );
+        }
+    }
+}
+
+void FeaMesh::SplitByChain( const vector < int > &elems, int nchain, vector < vector < int > > &chain_elems )
+{
+    chain_elems.assign( std::max( nchain, 0 ), vector < int >() );
+
+    for ( size_t k = 0; k < elems.size(); k++ )
+    {
+        int ichain = m_FeaElementVec[ elems[k] ]->GetChainIndex();
+        if ( ichain >= 0 && ichain < (int)chain_elems.size() )
+        {
+            chain_elems[ichain].push_back( elems[k] );
+        }
+    }
+}
+
+void FeaMesh::IndexNodesByTag( vector < vector < int > > &single_nodes, vector < int > &untagged_nodes )
+{
+    single_nodes.assign( m_NumFeaParts + m_NumFeaSubSurfs, vector < int >() );
+    untagged_nodes.clear();
+
+    for ( int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
+    {
+        const vector < int > & tags = m_FeaNodeVec[j]->m_Tags;
+        if ( tags.empty() )
+        {
+            untagged_nodes.push_back( j );
+        }
+        else if ( tags.size() == 1 && tags[0] >= 0 && tags[0] < (int)single_nodes.size() )
+        {
+            single_nodes[ tags[0] ].push_back( j );
+        }
+    }
+}
+
+void FeaMesh::OnlyTagNodes( long long int tag, const vector < vector < int > > &single_nodes, const vector < int > &untagged_nodes, vector < int > &nodes )
+{
+    const vector < int > & single = ListAt( single_nodes, tag );
+    nodes.resize( single.size() + untagged_nodes.size() );
+    std::merge( single.begin(), single.end(), untagged_nodes.begin(), untagged_nodes.end(), nodes.begin() );
+}
+
+void FeaMesh::IndexFeaProperties( const vector < string > & prop_id_vec )
+{
+    for ( size_t i = 0; i < m_FeaPartPropertyIndexVec.size(); i++ )
+    {
+        m_FeaPartPropertyIndexVec[i] = vector_find_val( prop_id_vec, m_FeaPartPropertyIDVec[i] );
+        m_FeaPartCapPropertyIndexVec[i] = vector_find_val( prop_id_vec, m_FeaPartCapPropertyIDVec[i] );
+    }
+
+    for ( size_t i = 0; i < m_SimpleSubSurfaceVec.size(); i++ )
+    {
+        m_SimpleSubSurfaceVec[i].IndexFeaProperties( prop_id_vec );
+    }
+}
+
 void FeaMesh::ExportFeaMesh()
 {
     if ( !m_MeshReady )
@@ -910,24 +1012,25 @@ void FeaMesh::ExportFeaMesh()
         return;
     }
 
+    // Each file's bar counts about its nodes and elements, or its elements for STL.
     if ( GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_STL_FILE_NAME ) )
     {
-        WriteSTL();
+        FeaMeshMgr.WriteFileStage( "Write STL", ( int )m_NumEls, [&]() { WriteSTL(); } );
     }
 
     if ( GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_NASTRAN_FILE_NAME ) )
     {
-        WriteNASTRAN();
+        FeaMeshMgr.WriteFileStage( "Write NASTRAN", ( int )( m_NumNodes + m_NumEls ), [&]() { WriteNASTRAN(); } );
     }
 
     if ( GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_CALCULIX_FILE_NAME ) )
     {
-        WriteCalculix();
+        FeaMeshMgr.WriteFileStage( "Write Calculix", ( int )( m_NumNodes + m_NumEls ), [&]() { WriteCalculix(); } );
     }
 
     if ( GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_GMSH_FILE_NAME ) )
     {
-        WriteGmsh();
+        FeaMeshMgr.WriteFileStage( "Write GMSH", ( int )( m_NumNodes + m_NumEls ), [&]() { WriteGmsh(); } );
     }
 
     if ( GetStructSettingsPtr()->GetExportFileFlag( vsp::FEA_MASS_FILE_NAME ) )
@@ -1056,6 +1159,10 @@ void FeaMesh::WriteNASTRANNodes( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int 
         vector < long long int > node_id_vec;
         string name;
 
+        vector < vector < int > > single_nodes;
+        vector < int > untagged_nodes, nodes, sel;
+        IndexNodesByTag( single_nodes, untagged_nodes );
+
         //==== Write Fixed Points ====//
         for ( size_t i = 0; i < m_NumFeaFixPoints; i++ )
         {
@@ -1102,7 +1209,9 @@ void FeaMesh::WriteNASTRANNodes( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int 
                         {
                             int spider_ind = (int) fxpt.m_SpiderIndex[ j ][ ispider ];
 
-                            m_FeaNodeVec[ spider_ind ]->WriteNASTRAN( bdf_fp, noffset );
+                            string out;
+                            m_FeaNodeVec[ spider_ind ]->AppendNASTRAN( out, noffset );
+                            fputs( out.c_str(), bdf_fp );
                             node_id_vec.push_back( m_FeaNodeVec[ spider_ind ]->m_Index );
                         }
 
@@ -1123,8 +1232,10 @@ void FeaMesh::WriteNASTRANNodes( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int 
 
             if ( m_FeaPartTypeVec[i] != vsp::FEA_FIX_POINT )
             {
-                for ( unsigned int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
+                OnlyTagNodes( i, single_nodes, untagged_nodes, nodes );
+                for ( size_t k = 0; k < nodes.size(); k++ )
                 {
+                    int j = nodes[k];
                     if ( m_FeaNodeVecUsed[ j ] && m_FeaNodeVec[ j ]->m_Index > m_FixPtOffset )
                     {
                         if ( m_FeaNodeVec[ j ]->HasOnlyTag( i ) )
@@ -1137,12 +1248,15 @@ void FeaMesh::WriteNASTRANNodes( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int 
                                 fprintf( bdf_fp, "$ %s %s Gridpoints\n", m_FeaPartNameVec[i].c_str(), m_StructName.c_str() );
                             }
 
-                            m_FeaNodeVec[j]->WriteNASTRAN( bdf_fp, noffset );
+                            sel.push_back( j );
                             node_id_vec.push_back( m_FeaNodeVec[j]->m_Index );
                         }
                     }
                 }
             }
+
+            WriteNASTRANNodeList( bdf_fp, sel, noffset );
+            sel.clear();
 
             // Write FEA part node set
             name = m_FeaPartNameVec[i] + "_" + m_StructName + "_Gridpoints";
@@ -1156,8 +1270,10 @@ void FeaMesh::WriteNASTRANNodes( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int 
 
             node_id_vec.clear();
 
-            for ( unsigned int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
+            OnlyTagNodes( i + m_NumFeaParts, single_nodes, untagged_nodes, nodes );
+            for ( size_t k = 0; k < nodes.size(); k++ )
             {
+                int j = nodes[k];
                 if ( m_FeaNodeVecUsed[ j ] && m_FeaNodeVec[ j ]->m_Index > m_FixPtOffset )
                 {
                     if ( m_FeaNodeVec[ j ]->HasOnlyTag( i + m_NumFeaParts ) )
@@ -1169,11 +1285,14 @@ void FeaMesh::WriteNASTRANNodes( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int 
                             fprintf( bdf_fp, "\n" );
                             fprintf( bdf_fp, "$ %s %s Gridpoints\n", m_SimpleSubSurfaceVec[i].GetName().c_str(), m_StructName.c_str() );
                         }
-                        m_FeaNodeVec[j]->WriteNASTRAN( bdf_fp, noffset );
+                        sel.push_back( j );
                         node_id_vec.push_back( m_FeaNodeVec[j]->m_Index );
                     }
                 }
             }
+
+            WriteNASTRANNodeList( bdf_fp, sel, noffset );
+            sel.clear();
 
             // Write subsurface node set
             name = m_SimpleSubSurfaceVec[i].GetName() + "_" + m_StructName + "_Gridpoints";
@@ -1196,11 +1315,14 @@ void FeaMesh::WriteNASTRANNodes( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int 
                         fprintf( bdf_fp, "$ %s Intersections\n", m_StructName.c_str() );
                         IntersectHeader = true;
                     }
-                    m_FeaNodeVec[j]->WriteNASTRAN( bdf_fp, noffset );
+                    sel.push_back( j );
                     node_id_vec.push_back( m_FeaNodeVec[j]->m_Index );
                 }
             }
         }
+
+        WriteNASTRANNodeList( bdf_fp, sel, noffset );
+        sel.clear();
 
         // Write intersection node set
         name = m_StructName + "_Intersection_Gridpoints";
@@ -1222,15 +1344,40 @@ void FeaMesh::WriteNASTRANNodes( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int 
                     fprintf( bdf_fp, "$ %s Remainingnodes\n", m_StructName.c_str() );
                     RemainingHeader = true;
                 }
-                m_FeaNodeVec[i]->WriteNASTRAN( bdf_fp, noffset );
+                sel.push_back( i );
                 node_id_vec.push_back( m_FeaNodeVec[i]->m_Index );
             }
         }
+
+        WriteNASTRANNodeList( bdf_fp, sel, noffset );
+        sel.clear();
 
         // Write remaining node set
         name = m_StructName + "_Remaining_Gridpoints";
         WriteNASTRANSet( dat_fp, nkey_fp, set_cnt, node_id_vec, name, noffset );
     }
+}
+
+void FeaMesh::WriteNASTRANNodeList( FILE* bdf_fp, const vector < int > &nodes, long long int noffset )
+{
+    FeaMeshMgr.WriteChunked( bdf_fp, (int)nodes.size(), [&]( int ibeg, int iend, string &out )
+    {
+        for ( int k = ibeg; k < iend; k++ )
+        {
+            m_FeaNodeVec[ nodes[k] ]->AppendNASTRAN( out, noffset );
+        }
+    } );
+}
+
+void FeaMesh::WriteNASTRANElementList( FILE* bdf_fp, const vector < int > &elems, int first_id, int property_id, long long int noffset, long long int eoffset )
+{
+    FeaMeshMgr.WriteChunked( bdf_fp, (int)elems.size(), [&]( int ibeg, int iend, string &out )
+    {
+        for ( int k = ibeg; k < iend; k++ )
+        {
+            m_FeaElementVec[ elems[k] ]->AppendNASTRAN( out, first_id + k, property_id, noffset, eoffset );
+        }
+    } );
 }
 
 void FeaMesh::WriteNASTRANSPC1( FILE *bdf_fp )
@@ -1239,14 +1386,34 @@ void FeaMesh::WriteNASTRANSPC1( FILE *bdf_fp )
 
     if ( bdf_fp )
     {
+        vector < vector < int > > single_nodes;
+        vector < int > untagged_nodes, nodes;
+        IndexNodesByTag( single_nodes, untagged_nodes );
+
+        // The nodes that carry each tag, among others or alone, in order.
+        vector < vector < int > > tag_nodes( m_NumFeaParts + m_NumFeaSubSurfs );
+        for ( int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
+        {
+            const vector < int > & tags = m_FeaNodeVec[j]->m_Tags;
+            for ( size_t m = 0; m < tags.size(); m++ )
+            {
+                if ( tags[m] >= 0 && tags[m] < (int)tag_nodes.size() )
+                {
+                    tag_nodes[ tags[m] ].push_back( j );
+                }
+            }
+        }
+
         for ( unsigned int i = 0; i < m_NumFeaParts; i++ )
         {
             bool FPHeader = false;
 
             if ( m_FeaPartTypeVec[i] == vsp::FEA_FIX_POINT ) // FixedPoint Nodes
             {
-                for ( unsigned int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
+                const vector < int > & tagged = ListAt( tag_nodes, i );
+                for ( size_t k = 0; k < tagged.size(); k++ )
                 {
+                    int j = tagged[k];
                     if ( m_FeaNodeVecUsed[ j ] )
                     {
                         if ( m_FeaNodeVec[j]->m_Tags.size() > 0 && m_FeaNodeVec[j]->m_FixedPointFlag && m_FeaNodeVec[j]->HasTag( i ) )
@@ -1275,8 +1442,10 @@ void FeaMesh::WriteNASTRANSPC1( FILE *bdf_fp )
 
             if ( m_FeaPartTypeVec[i] != vsp::FEA_FIX_POINT )
             {
-                for ( unsigned int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
+                OnlyTagNodes( i, single_nodes, untagged_nodes, nodes );
+                for ( size_t k = 0; k < nodes.size(); k++ )
                 {
+                    int j = nodes[k];
                     if ( m_FeaNodeVecUsed[ j ] )
                     {
                         if ( m_FeaNodeVec[ j ]->HasOnlyTag( i ) )
@@ -1303,8 +1472,10 @@ void FeaMesh::WriteNASTRANSPC1( FILE *bdf_fp )
         {
             bool ssheader = false;
 
-            for ( unsigned int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
+            OnlyTagNodes( i + m_NumFeaParts, single_nodes, untagged_nodes, nodes );
+            for ( size_t k = 0; k < nodes.size(); k++ )
             {
+                int j = nodes[k];
                 if ( m_FeaNodeVecUsed[ j ] )
                 {
                     if ( m_FeaNodeVec[ j ]->HasOnlyTag( i + m_NumFeaParts ) )
@@ -1380,6 +1551,10 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
         vector < long long int > shell_elem_id_vec, beam_elem_id_vec;
         int elem_id = 1;
 
+        vector < vector < int > > part_elems, ss_elems;
+        IndexElements( part_elems, ss_elems );
+        vector < int > sel;
+
         // Write FeaFixPoints
         for ( unsigned int i = 0; i < m_NumFeaFixPoints; i++ )
         {
@@ -1389,9 +1564,11 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
                 bool FPHeader = false;
 
                 vector < long long int > mass_elem_id_vec;
+                const vector < int > & fp_elems = ListAt( part_elems, fxpt.m_FeaPartIndex );
 
-                for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                for ( size_t k = 0; k < fp_elems.size(); k++ )
                 {
+                    int j = fp_elems[k];
                     if ( m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_POINT_MASS && m_FeaElementVec[j]->GetFeaPartIndex() == fxpt.m_FeaPartIndex && m_FeaElementVec[j]->GetFeaSSIndex() < 0 )
                     {
                         if ( !FPHeader )
@@ -1402,11 +1579,14 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
                             fprintf( bdf_fp, "$ %s %s\n", m_FeaPartNameVec[fxpt.m_FeaPartIndex].c_str(), m_StructName.c_str() );
                         }
 
-                        m_FeaElementVec[j]->WriteNASTRAN( bdf_fp, elem_id, -1, noffset, eoffset ); // property ID ignored for Point Masses
+                        sel.push_back( j );
                         mass_elem_id_vec.push_back( elem_id );
                         elem_id++;
                     }
                 }
+
+                WriteNASTRANElementList( bdf_fp, sel, elem_id - (int)sel.size(), -1, noffset, eoffset ); // property ID ignored for Point Masses
+                sel.clear();
 
                 // Write mass element set
                 name = m_FeaPartNameVec[fxpt.m_FeaPartIndex] + "_" +  m_StructName + "_MassElements";
@@ -1423,12 +1603,16 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
 
                 int property_id = m_FeaPartPropertyIndexVec[i];
                 int cap_property_id = m_FeaPartCapPropertyIndexVec[i];
+                const vector < int > & part_list = ListAt( part_elems, i );
+                vector < vector < int > > part_chains;
+                SplitByChain( part_list, m_FeaPartNumChainsVec[ i ], part_chains );
 
                 // Write shell elements
                 bool partheader = false;
 
-                for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                for ( size_t k = 0; k < part_list.size(); k++ )
                 {
+                    int j = part_list[k];
                     if ( m_FeaElementVec[j]->GetFeaPartIndex() == i && m_FeaElementVec[j]->GetFeaSSIndex() < 0 && m_FeaElementVec[j]->GetElementType() != FeaElement::FEA_BEAM )
                     {
                         if ( !partheader )
@@ -1439,13 +1623,16 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
                             fprintf( bdf_fp, "$ %s %s shell\n", m_FeaPartNameVec[i].c_str(), m_StructName.c_str()  );
                         }
 
-                        m_FeaElementVec[j]->WriteNASTRAN( bdf_fp, elem_id, property_id, noffset, eoffset );
+                        sel.push_back( j );
                         shell_elem_id_vec.push_back( elem_id );
                         FeaMeshMgr.MarkPropMatUsed( property_id );
 
                         elem_id++;
                     }
                 }
+
+                WriteNASTRANElementList( bdf_fp, sel, elem_id - (int)sel.size(), property_id, noffset, eoffset );
+                sel.clear();
 
                 // Write shell element set
                 name = m_FeaPartNameVec[i] + "_" + m_StructName + "_ShellElements";
@@ -1458,9 +1645,11 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
 
                     // Write beam elements
                     partheader = false;
+                    const vector < int > & chain_list = ListAt( part_chains, ichain );
 
-                    for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                    for ( size_t k = 0; k < chain_list.size(); k++ )
                     {
+                        int j = chain_list[k];
                         if ( m_FeaElementVec[j]->GetFeaPartIndex() == i &&
                              m_FeaElementVec[j]->GetFeaSSIndex() < 0 &&
                              m_FeaElementVec[j]->GetChainIndex() == ichain &&
@@ -1474,13 +1663,16 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
                                 fprintf( bdf_fp, "$ %s %s %d beam\n", m_FeaPartNameVec[i].c_str(), m_StructName.c_str(), ichain );
                             }
 
-                            m_FeaElementVec[j]->WriteNASTRAN( bdf_fp, elem_id, cap_property_id, noffset, eoffset );
+                            sel.push_back( j );
                             beam_elem_id_vec.push_back( elem_id );
                             FeaMeshMgr.MarkPropMatUsed( cap_property_id );
 
                             elem_id++;
                         }
                     }
+                    WriteNASTRANElementList( bdf_fp, sel, elem_id - (int)sel.size(), cap_property_id, noffset, eoffset );
+                    sel.clear();
+
                     // Write beam element set
                     name = m_FeaPartNameVec[i] + "_" + m_StructName + "_" + to_string( ichain ) + "_BeamElements";
                     WriteNASTRANSet( dat_fp, nkey_fp, set_cnt, beam_elem_id_vec, name, eoffset );
@@ -1493,14 +1685,18 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
         {
             int property_id = m_SimpleSubSurfaceVec[i].GetFeaPropertyIndex();
             int cap_property_id = m_SimpleSubSurfaceVec[i].GetCapFeaPropertyIndex();
+            const vector < int > & ss_list = ListAt( ss_elems, i );
+            vector < vector < int > > ss_chains;
+            SplitByChain( ss_list, m_FeaSubSurfNumChainsVec[ i ], ss_chains );
 
             shell_elem_id_vec.clear();
 
             // Write shell elements
             bool ssheader = false;
 
-            for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+            for ( size_t k = 0; k < ss_list.size(); k++ )
             {
+                int j = ss_list[k];
                 if ( m_FeaElementVec[j]->GetFeaSSIndex() == i && m_FeaElementVec[j]->GetElementType() != FeaElement::FEA_BEAM )
                 {
                     if ( !ssheader )
@@ -1511,13 +1707,16 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
                         fprintf( bdf_fp, "$ %s %s shell\n", m_SimpleSubSurfaceVec[i].GetName().c_str(), m_StructName.c_str() );
                     }
 
-                    m_FeaElementVec[j]->WriteNASTRAN( bdf_fp, elem_id, property_id, noffset, eoffset );
+                    sel.push_back( j );
                     shell_elem_id_vec.push_back( elem_id );
                     FeaMeshMgr.MarkPropMatUsed( property_id );
 
                     elem_id++;
                 }
             }
+
+            WriteNASTRANElementList( bdf_fp, sel, elem_id - (int)sel.size(), property_id, noffset, eoffset );
+            sel.clear();
 
             // Write shell element set
             name = m_SimpleSubSurfaceVec[i].GetName() + "_" + m_StructName + "_ShellElements";
@@ -1530,9 +1729,11 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
 
                 // Write beam elements
                 ssheader = false;
+                const vector < int > & chain_list = ListAt( ss_chains, ichain );
 
-                for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                for ( size_t k = 0; k < chain_list.size(); k++ )
                 {
+                    int j = chain_list[k];
                     if ( m_FeaElementVec[j]->GetFeaSSIndex() == i &&
                          m_FeaElementVec[j]->GetChainIndex() == ichain &&
                          m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_BEAM )
@@ -1545,13 +1746,16 @@ void FeaMesh::WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, i
                             fprintf( bdf_fp, "$ %s %s %d beam\n", m_SimpleSubSurfaceVec[i].GetName().c_str(), m_StructName.c_str(), ichain );
                         }
 
-                        m_FeaElementVec[j]->WriteNASTRAN( bdf_fp, elem_id, cap_property_id, noffset, eoffset );
+                        sel.push_back( j );
                         beam_elem_id_vec.push_back( elem_id );
                         FeaMeshMgr.MarkPropMatUsed( cap_property_id );
 
                         elem_id++;
                     }
                 }
+                WriteNASTRANElementList( bdf_fp, sel, elem_id - (int)sel.size(), cap_property_id, noffset, eoffset );
+                sel.clear();
+
                 // Write beam element set
                 name = m_SimpleSubSurfaceVec[i].GetName() + "_" + m_StructName + "_" + to_string( ichain ) + "_BeamElements";
                 WriteNASTRANSet( dat_fp, nkey_fp, set_cnt, beam_elem_id_vec, name, eoffset );
@@ -1582,27 +1786,29 @@ void CloseNASTRAN( FILE *dat_fp, FILE *bdf_header_fp, FILE *bdf_fp, FILE *nkey_f
     }
 }
 
-void FeaMesh::WriteNASTRANSet( FILE* dat_fp, FILE* nkey_fp, int & set_num, vector < long long int > set_ids, const string &set_name, const long long int &offset )
+void FeaMesh::WriteNASTRANSet( FILE* dat_fp, FILE* nkey_fp, int & set_num, const vector < long long int > &set_ids, const string &set_name, const long long int &offset )
 {
     if ( set_ids.size() > 0 && dat_fp )
     {
         fprintf( dat_fp, "\n$ %d, %s\n", set_num, set_name.c_str() );
         fprintf( dat_fp, "SET %d = ", set_num );
 
+        string out;
         for ( size_t i = 0; i < set_ids.size(); i++ )
         {
-            fprintf( dat_fp, "%lld", set_ids[i] + offset );
+            FastFormat::AppendInt( out, set_ids[i] + offset );
 
             if ( i != set_ids.size() - 1 )
             {
-                fprintf( dat_fp, "," );
+                out += ',';
 
                 if ( ( i + 1 ) % 9 == 0 ) // 9 IDs per line
                 {
-                    fprintf( dat_fp, "\n" );
+                    out += '\n';
                 }
             }
         }
+        fwrite( out.data(), 1, out.size(), dat_fp );
 
         fprintf( dat_fp, "\n" );
 
@@ -1672,6 +1878,10 @@ void FeaMesh::WriteCalculixNodes( FILE* fp )
         int elem_id = 0;
         char str[256];
 
+        vector < vector < int > > single_nodes;
+        vector < int > untagged_nodes, nodes, sel;
+        IndexNodesByTag( single_nodes, untagged_nodes );
+
         //==== Write Fixed Points ====//
         for ( size_t i = 0; i < m_NumFeaFixPoints; i++ )
         {
@@ -1721,7 +1931,9 @@ void FeaMesh::WriteCalculixNodes( FILE* fp )
                         for ( int ispider = 0; ispider < fxpt.m_SpiderIndex[ j ].size(); ispider++ )
                         {
                             int spider_ind = (int) fxpt.m_SpiderIndex[ j ][ ispider ];
-                            m_FeaNodeVec[ spider_ind ]->WriteCalculix( fp, noffset );
+                            string out;
+                            m_FeaNodeVec[ spider_ind ]->AppendCalculix( out, noffset );
+                            fputs( out.c_str(), fp );
                         }
                     }
                 }
@@ -1737,8 +1949,10 @@ void FeaMesh::WriteCalculixNodes( FILE* fp )
             {
                 bool NodeHeader = false;
 
-                for ( unsigned int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
+                OnlyTagNodes( i, single_nodes, untagged_nodes, nodes );
+                for ( size_t k = 0; k < nodes.size(); k++ )
                 {
+                    int j = nodes[k];
                     if ( m_FeaNodeVecUsed[ j ] && m_FeaNodeVec[ j ]->m_Index > m_FixPtOffset )
                     {
                         if ( m_FeaNodeVec[ j ]->HasOnlyTag( i ) )
@@ -1749,10 +1963,13 @@ void FeaMesh::WriteCalculixNodes( FILE* fp )
                                 fprintf( fp, "*NODE, NSET=N%s_%s\n", m_FeaPartNameVec[i].c_str(), m_StructName.c_str() );
                                 NodeHeader = true;
                             }
-                            m_FeaNodeVec[j]->WriteCalculix( fp, noffset );
+                            sel.push_back( j );
                         }
                     }
                 }
+
+                WriteCalculixNodeList( fp, sel, noffset );
+                sel.clear();
 
                 fprintf( fp, "\n" );
             }
@@ -1763,8 +1980,10 @@ void FeaMesh::WriteCalculixNodes( FILE* fp )
         {
             bool SubSurfHeader = false;
 
-            for ( unsigned int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
+            OnlyTagNodes( i + m_NumFeaParts, single_nodes, untagged_nodes, nodes );
+            for ( size_t k = 0; k < nodes.size(); k++ )
             {
+                int j = nodes[k];
                 if ( m_FeaNodeVecUsed[ j ] && m_FeaNodeVec[ j ]->m_Index > m_FixPtOffset )
                 {
                     if ( m_FeaNodeVec[ j ]->HasOnlyTag( i + m_NumFeaParts ) )
@@ -1775,10 +1994,14 @@ void FeaMesh::WriteCalculixNodes( FILE* fp )
                             fprintf( fp, "*NODE, NSET=N%s_%s\n", m_SimpleSubSurfaceVec[i].GetName().c_str(), m_StructName.c_str() );
                             SubSurfHeader = true;
                         }
-                        m_FeaNodeVec[j]->WriteCalculix( fp, noffset );
+                        sel.push_back( j );
                     }
                 }
             }
+
+            WriteCalculixNodeList( fp, sel, noffset );
+            sel.clear();
+
             fprintf( fp, "\n" );
         }
 
@@ -1797,10 +2020,14 @@ void FeaMesh::WriteCalculixNodes( FILE* fp )
                         fprintf( fp, "*NODE, NSET=Nintersections_%s\n", m_StructName.c_str() );
                         IntersectHeader = true;
                     }
-                    m_FeaNodeVec[j]->WriteCalculix( fp, noffset );
+                    sel.push_back( j );
                 }
             }
         }
+
+        WriteCalculixNodeList( fp, sel, noffset );
+        sel.clear();
+
         if ( IntersectHeader )
         {
             fprintf( fp, "\n" );
@@ -1820,9 +2047,13 @@ void FeaMesh::WriteCalculixNodes( FILE* fp )
                     fprintf( fp, "*NODE, NSET=RemainingNodes_%s\n", m_StructName.c_str() );
                     RemainingHeader = true;
                 }
-                m_FeaNodeVec[i]->WriteCalculix( fp, noffset );
+                sel.push_back( i );
             }
         }
+
+        WriteCalculixNodeList( fp, sel, noffset );
+        sel.clear();
+
         if ( RemainingHeader )
         {
             fprintf( fp, "\n" );
@@ -1844,6 +2075,10 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
         int elem_id = 1;
         char str[256];
 
+        vector < vector < int > > part_elems, ss_elems;
+        IndexElements( part_elems, ss_elems );
+        vector < int > sel;
+
         //==== Write Fixed Points ====//
         for ( size_t i = 0; i < m_NumFeaFixPoints; i++ )
         {
@@ -1851,20 +2086,25 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
 
             if ( fxpt.m_PtMassFlag )
             {
+                const vector < int > & fp_elems = ListAt( part_elems, fxpt.m_FeaPartIndex );
                 fprintf( fp, "\n" );
                 fprintf( fp, "** Fixed Point: %s %s\n", m_FeaPartNameVec[fxpt.m_FeaPartIndex].c_str(), m_StructName.c_str() );
                 fprintf( fp, "*ELEMENT, TYPE=MASS, ELSET=EP%s_%s\n", m_FeaPartNameVec[fxpt.m_FeaPartIndex].c_str(), m_StructName.c_str() );
 
-                for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                for ( size_t k = 0; k < fp_elems.size(); k++ )
                 {
+                    int j = fp_elems[k];
                     if ( m_FeaElementVec[j]->GetFeaPartIndex() == fxpt.m_FeaPartIndex &&
                          m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_POINT_MASS &&
                          m_FeaElementVec[j]->GetFeaSSIndex() < 0 )
                     {
-                        m_FeaElementVec[j]->WriteCalculix( fp, elem_id, noffset, eoffset );
+                        sel.push_back( j );
                         elem_id++;
                     }
                 }
+
+                WriteCalculixElementList( fp, sel, elem_id - (int)sel.size(), noffset, eoffset );
+                sel.clear();
 
                 fprintf( fp, "\n" );
 
@@ -1882,9 +2122,13 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
                 fprintf( fp, "** %s %s\n", m_FeaPartNameVec[i].c_str(), m_StructName.c_str() );
 
                 int surf_num = m_FeaPartNumSurfVec[i];
+                vector < vector < int > > part_surfs;
+                SplitBySurf( ListAt( part_elems, i ), surf_num, part_surfs );
 
                 for ( int isurf = 0; isurf < surf_num; isurf++ )
                 {
+                    const vector < int > & surf_list = ListAt( part_surfs, isurf );
+
                     if ( !m_StructSettings.m_ConvertToQuadsFlag && m_FeaPartKeepDelShellElementsVec[i] == vsp::FEA_KEEP )
                     {
                         int nnode = 3;
@@ -1892,17 +2136,22 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
 
                         fprintf( fp, "*ELEMENT, TYPE=S%d, ELSET=E%s_%s_%d\n", nnode, m_FeaPartNameVec[i].c_str(), m_StructName.c_str(), isurf );
 
-                        for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                        for ( size_t k = 0; k < surf_list.size(); k++ )
                         {
+                            int j = surf_list[k];
                             if ( m_FeaElementVec[j]->GetFeaPartIndex() == i &&
                                  ( m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_TRI_3 || m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_TRI_6 ) &&
                                  m_FeaElementVec[j]->GetFeaSSIndex() < 0 &&
                                  m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
                             {
-                                m_FeaElementVec[j]->WriteCalculix( fp, elem_id, noffset, eoffset );
+                                sel.push_back( j );
                                 elem_id++;
                             }
                         }
+
+                        WriteCalculixElementList( fp, sel, elem_id - (int)sel.size(), noffset, eoffset );
+                        sel.clear();
+
                         fprintf( fp, "\n" );
                     }
 
@@ -1913,38 +2162,51 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
 
                         fprintf( fp, "*ELEMENT, TYPE=S%d, ELSET=E%s_%s_%d\n", nnode, m_FeaPartNameVec[i].c_str(), m_StructName.c_str(), isurf );
 
-                        for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                        for ( size_t k = 0; k < surf_list.size(); k++ )
                         {
+                            int j = surf_list[k];
                             if ( m_FeaElementVec[j]->GetFeaPartIndex() == i &&
                                  ( m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_QUAD_4 || m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_QUAD_8 ) &&
                                  m_FeaElementVec[j]->GetFeaSSIndex() < 0 &&
                                  m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
                             {
-                                m_FeaElementVec[j]->WriteCalculix( fp, elem_id, noffset, eoffset );
+                                sel.push_back( j );
                                 elem_id++;
                             }
                         }
+
+                        WriteCalculixElementList( fp, sel, elem_id - (int)sel.size(), noffset, eoffset );
+                        sel.clear();
+
                         fprintf( fp, "\n" );
                     }
 
                     if ( m_FeaPartCreateBeamElementsVec[i] )
                     {
+                        vector < vector < int > > surf_chains;
+                        SplitByChain( surf_list, m_FeaPartNumChainsVec[i], surf_chains );
+
                         for ( int ichain = 0; ichain < m_FeaPartNumChainsVec[i]; ichain++ )
                         {
+                            const vector < int > & chain_list = ListAt( surf_chains, ichain );
                             fprintf( fp, "*ELEMENT, TYPE=B32R, ELSET=EB%s_%s_%d_%d_CAP\n", m_FeaPartNameVec[i].c_str(), m_StructName.c_str(), isurf, ichain );
 
-                            for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                            for ( size_t k = 0; k < chain_list.size(); k++ )
                             {
+                                int j = chain_list[k];
                                 if ( m_FeaElementVec[j]->GetFeaPartIndex() == i &&
                                      m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_BEAM &&
                                      m_FeaElementVec[j]->GetFeaSSIndex() < 0 &&
                                      m_FeaElementVec[j]->GetChainIndex() == ichain &&
                                      m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
                                 {
-                                    m_FeaElementVec[j]->WriteCalculix( fp, elem_id, noffset, eoffset );
+                                    sel.push_back( j );
                                     elem_id++;
                                 }
                             }
+
+                            WriteCalculixElementList( fp, sel, elem_id - (int)sel.size(), noffset, eoffset );
+                            sel.clear();
 
                             if ( m_StructSettings.m_BeamPerElementNormal )
                             {
@@ -1952,8 +2214,9 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
                                 fprintf( fp, "\n" );
                                 fprintf( fp, "*NORMAL\n" );
 
-                                for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                                for ( size_t k = 0; k < chain_list.size(); k++ )
                                 {
+                                    int j = chain_list[k];
                                     if ( m_FeaElementVec[j]->GetFeaPartIndex() == i &&
                                          m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_BEAM &&
                                          m_FeaElementVec[j]->GetFeaSSIndex() < 0 &&
@@ -1978,9 +2241,13 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
         for ( unsigned int i = 0; i < m_NumFeaSubSurfs; i++ )
         {
             int surf_num = m_SimpleSubSurfaceVec[i].GetFeaOrientationVec().size();
+            vector < vector < int > > ss_surfs;
+            SplitBySurf( ListAt( ss_elems, i ), surf_num, ss_surfs );
 
             for ( int isurf = 0; isurf < surf_num; isurf++ )
             {
+                const vector < int > & surf_list = ListAt( ss_surfs, isurf );
+
                 if ( !m_StructSettings.m_ConvertToQuadsFlag && m_SimpleSubSurfaceVec[i].m_KeepDelShellElements == vsp::FEA_KEEP )
                 {
                     int nnode = 3;
@@ -1988,16 +2255,21 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
 
                     fprintf( fp, "\n*ELEMENT, TYPE=S%d, ELSET=E%s_%s_%d\n", nnode, m_SimpleSubSurfaceVec[i].GetName().c_str(), m_StructName.c_str(), isurf );
 
-                    for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                    for ( size_t k = 0; k < surf_list.size(); k++ )
                     {
+                        int j = surf_list[k];
                         if ( m_FeaElementVec[j]->GetFeaSSIndex() == i &&
                              ( m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_TRI_3 || m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_TRI_6 ) &&
                              m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
                         {
-                            m_FeaElementVec[j]->WriteCalculix( fp, elem_id, noffset, eoffset );
+                            sel.push_back( j );
                             elem_id++;
                         }
                     }
+
+                    WriteCalculixElementList( fp, sel, elem_id - (int)sel.size(), noffset, eoffset );
+                    sel.clear();
+
                     fprintf( fp, "\n" );
                 }
 
@@ -2008,38 +2280,51 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
 
                     fprintf( fp, "\n*ELEMENT, TYPE=S%d, ELSET=E%s_%s_%d\n", nnode, m_SimpleSubSurfaceVec[i].GetName().c_str(), m_StructName.c_str(), isurf );
 
-                    for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                    for ( size_t k = 0; k < surf_list.size(); k++ )
                     {
+                        int j = surf_list[k];
                         if ( m_FeaElementVec[j]->GetFeaSSIndex() == i &&
                              ( m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_QUAD_4 || m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_QUAD_8 ) &&
                              m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
                         {
-                            m_FeaElementVec[j]->WriteCalculix( fp, elem_id, noffset, eoffset );
+                            sel.push_back( j );
                             elem_id++;
                         }
                     }
+
+                    WriteCalculixElementList( fp, sel, elem_id - (int)sel.size(), noffset, eoffset );
+                    sel.clear();
+
                     fprintf( fp, "\n" );
                 }
 
                 if ( m_SimpleSubSurfaceVec[i].m_CreateBeamElements )
                 {
+                    vector < vector < int > > surf_chains;
+                    SplitByChain( surf_list, m_FeaSubSurfNumChainsVec[i], surf_chains );
+
                     for ( int ichain = 0; ichain < m_FeaSubSurfNumChainsVec[i]; ichain++ )
                     {
+                        const vector < int > & chain_list = ListAt( surf_chains, ichain );
 
                         fprintf( fp, "\n" );
                         fprintf( fp, "*ELEMENT, TYPE=B32R, ELSET=EB%s_%s_%d_%d_CAP\n", m_SimpleSubSurfaceVec[i].GetName().c_str(), m_StructName.c_str(), isurf, ichain );
 
-                        for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                        for ( size_t k = 0; k < chain_list.size(); k++ )
                         {
+                            int j = chain_list[k];
                             if ( m_FeaElementVec[j]->GetFeaSSIndex() == i &&
                                  m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_BEAM &&
                                  m_FeaElementVec[j]->GetChainIndex() == ichain &&
                                  m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
                             {
-                                m_FeaElementVec[j]->WriteCalculix( fp, elem_id, noffset, eoffset );
+                                sel.push_back( j );
                                 elem_id++;
                             }
                         }
+
+                        WriteCalculixElementList( fp, sel, elem_id - (int)sel.size(), noffset, eoffset );
+                        sel.clear();
 
 
                         if ( m_StructSettings.m_BeamPerElementNormal )
@@ -2048,8 +2333,9 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
                             fprintf( fp, "\n" );
                             fprintf( fp, "*NORMAL\n" );
 
-                            for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                            for ( size_t k = 0; k < chain_list.size(); k++ )
                             {
+                                int j = chain_list[k];
                                 if ( m_FeaElementVec[j]->GetFeaSSIndex() == i &&
                                      m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_BEAM &&
                                      m_FeaElementVec[j]->GetChainIndex() == ichain &&
@@ -2068,6 +2354,28 @@ void FeaMesh::WriteCalculixElements( FILE* fp )
             }
         }
     }
+}
+
+void FeaMesh::WriteCalculixNodeList( FILE* fp, const vector < int > &nodes, long long int noffset )
+{
+    FeaMeshMgr.WriteChunked( fp, (int)nodes.size(), [&]( int ibeg, int iend, string &out )
+    {
+        for ( int k = ibeg; k < iend; k++ )
+        {
+            m_FeaNodeVec[ nodes[k] ]->AppendCalculix( out, noffset );
+        }
+    } );
+}
+
+void FeaMesh::WriteCalculixElementList( FILE* fp, const vector < int > &elems, int first_id, long long int noffset, long long int eoffset )
+{
+    FeaMeshMgr.WriteChunked( fp, (int)elems.size(), [&]( int ibeg, int iend, string &out )
+    {
+        for ( int k = ibeg; k < iend; k++ )
+        {
+            m_FeaElementVec[ elems[k] ]->AppendCalculix( out, first_id + k, noffset, eoffset );
+        }
+    } );
 }
 
 void FeaMesh::WriteCalculixBCs( FILE* fp )
@@ -2099,6 +2407,9 @@ void FeaMesh::WriteCalculixProperties( FILE* fp )
     {
         char str[256];
 
+        vector < vector < int > > part_elems, ss_elems;
+        IndexElements( part_elems, ss_elems );
+
         fprintf( fp, "** Properties %s\n", m_StructName.c_str() );
 
         //==== FeaProperties ====//
@@ -2110,9 +2421,13 @@ void FeaMesh::WriteCalculixProperties( FILE* fp )
                 int cap_property_id = m_FeaPartCapPropertyIndexVec[i];
 
                 int surf_num = m_FeaPartNumSurfVec[i];
+                vector < vector < int > > part_surfs;
+                SplitBySurf( ListAt( part_elems, i ), surf_num, part_surfs );
 
                 for ( int isurf = 0; isurf < surf_num; isurf++ )
                 {
+                    const vector < int > & surf_list = ListAt( part_surfs, isurf );
+
                     if ( m_FeaPartKeepDelShellElementsVec[i] == vsp::FEA_KEEP )
                     {
                         FeaMeshMgr.MarkPropMatUsed( property_id );
@@ -2143,8 +2458,12 @@ void FeaMesh::WriteCalculixProperties( FILE* fp )
                     {
                         FeaMeshMgr.MarkPropMatUsed( cap_property_id );
 
+                        vector < vector < int > > surf_chains;
+                        SplitByChain( surf_list, m_FeaPartNumChainsVec[i], surf_chains );
+
                         for ( int ichain = 0; ichain < m_FeaPartNumChainsVec[i]; ichain++ )
                         {
+                            const vector < int > & chain_list = ListAt( surf_chains, ichain );
 
                             fprintf( fp, "\n" );
                             snprintf( str, sizeof( str ), "EB%s_%s_%d_%d_CAP", m_FeaPartNameVec[i].c_str(), m_StructName.c_str(), isurf, ichain );
@@ -2152,8 +2471,9 @@ void FeaMesh::WriteCalculixProperties( FILE* fp )
 
                             if ( !m_StructSettings.m_BeamPerElementNormal )
                             {
-                                for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                                for ( size_t k = 0; k < chain_list.size(); k++ )
                                 {
+                                    int j = chain_list[k];
                                     if ( m_FeaElementVec[ j ]->GetFeaPartIndex() == i &&
                                          m_FeaElementVec[ j ]->GetElementType() == FeaElement::FEA_BEAM &&
                                          m_FeaElementVec[ j ]->GetFeaSSIndex() < 0 &&
@@ -2180,8 +2500,12 @@ void FeaMesh::WriteCalculixProperties( FILE* fp )
 
             std::vector < vec3d > ovec = m_SimpleSubSurfaceVec[i].GetFeaOrientationVec();
             int surf_num = ovec.size();
+            vector < vector < int > > ss_surfs;
+            SplitBySurf( ListAt( ss_elems, i ), surf_num, ss_surfs );
             for ( int isurf = 0; isurf < surf_num; isurf++ )
             {
+                const vector < int > & surf_list = ListAt( ss_surfs, isurf );
+
                 if ( m_SimpleSubSurfaceVec[i].m_KeepDelShellElements == vsp::FEA_KEEP )
                 {
                     FeaMeshMgr.MarkPropMatUsed( property_id );
@@ -2218,8 +2542,9 @@ void FeaMesh::WriteCalculixProperties( FILE* fp )
 
                     if ( !m_StructSettings.m_BeamPerElementNormal )
                     {
-                        for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                        for ( size_t k = 0; k < surf_list.size(); k++ )
                         {
+                            int j = surf_list[k];
                             if ( m_FeaElementVec[ j ]->GetFeaSSIndex() == i &&
                                  m_FeaElementVec[ j ]->GetElementType() == FeaElement::FEA_BEAM &&
                                  m_FeaElementVec[ j ]->GetFeaPartSurfNum() == isurf )
@@ -2314,13 +2639,22 @@ void FeaMesh::WriteGmshNodes( FILE* fp )
 {
     unsigned long long int noffset = m_StructSettings.m_NodeOffset;
 
+    vector < int > sel;
     for ( unsigned int j = 0; j < (int)m_FeaNodeVec.size(); j++ )
     {
         if ( m_FeaNodeVecUsed[ j ] )
         {
-            m_FeaNodeVec[j]->WriteGmsh( fp, noffset );
+            sel.push_back( j );
         }
     }
+
+    FeaMeshMgr.WriteChunked( fp, (int)sel.size(), [&]( int ibeg, int iend, string &out )
+    {
+        for ( int k = ibeg; k < iend; k++ )
+        {
+            m_FeaNodeVec[ sel[k] ]->AppendGmsh( out, noffset );
+        }
+    } );
 }
 
 void FeaMesh::WriteGmshElements( FILE* fp, int & ele_cnt )
@@ -2328,16 +2662,33 @@ void FeaMesh::WriteGmshElements( FILE* fp, int & ele_cnt )
     unsigned long long int noffset = m_StructSettings.m_NodeOffset;
     unsigned long long int eoffset = m_StructSettings.m_ElementOffset;
 
+    vector < vector < int > > part_elems, ss_elems;
+    IndexElements( part_elems, ss_elems );
+    vector < int > sel;
+
     for ( unsigned int j = 0; j < m_NumFeaParts; j++ )
     {
-        for ( int i = 0; i < (int)m_FeaElementVec.size(); i++ )
+        const vector < int > & part_list = ListAt( part_elems, j );
+
+        for ( size_t k = 0; k < part_list.size(); k++ )
         {
+            int i = part_list[k];
             if ( m_FeaElementVec[i]->GetFeaPartIndex() == j )
             {
-                m_FeaElementVec[i]->WriteGmsh( fp, ele_cnt, j + 1, noffset, eoffset );
+                sel.push_back( i );
                 ele_cnt++;
             }
         }
+
+        int first_id = ele_cnt - (int)sel.size();
+        FeaMeshMgr.WriteChunked( fp, (int)sel.size(), [&]( int ibeg, int iend, string &out )
+        {
+            for ( int k = ibeg; k < iend; k++ )
+            {
+                m_FeaElementVec[ sel[k] ]->AppendGmsh( out, first_id + k, j + 1, noffset, eoffset );
+            }
+        } );
+        sel.clear();
     }
 }
 
@@ -2357,9 +2708,14 @@ void FeaMesh::WriteSTL( FILE* fp )
 {
     if ( fp )
     {
+        vector < vector < int > > part_elems, ss_elems;
+        IndexElements( part_elems, ss_elems );
+
         for ( unsigned int i = 0; i < m_NumFeaParts; i++ )
         {
             int surf_num = m_FeaPartNumSurfVec[i];
+            vector < vector < int > > part_surfs;
+            SplitBySurf( ListAt( part_elems, i ), surf_num, part_surfs );
 
             for ( int isurf = 0; isurf < surf_num; isurf++ )
             {
@@ -2367,15 +2723,20 @@ void FeaMesh::WriteSTL( FILE* fp )
                 {
                     fprintf( fp, "solid %s_%d\n", m_FeaPartNameVec[ i ].c_str(), isurf );
 
-                    for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                    const vector < int > & surf_list = ListAt( part_surfs, isurf );
+                    FeaMeshMgr.WriteChunked( fp, (int)surf_list.size(), [&]( int ibeg, int iend, string &out )
                     {
-                        if ( m_FeaElementVec[j]->GetFeaPartIndex() == i &&
-                             m_FeaElementVec[j]->GetFeaSSIndex() < 0 &&
-                             m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
+                        for ( int k = ibeg; k < iend; k++ )
                         {
-                            m_FeaElementVec[j]->WriteSTL( fp );
+                            int j = surf_list[k];
+                            if ( m_FeaElementVec[j]->GetFeaPartIndex() == i &&
+                                 m_FeaElementVec[j]->GetFeaSSIndex() < 0 &&
+                                 m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
+                            {
+                                m_FeaElementVec[j]->AppendSTL( out );
+                            }
                         }
-                    }
+                    } );
 
                     fprintf( fp, "endsolid %s_%d\n", m_FeaPartNameVec[ i ].c_str(), isurf );
                 }
@@ -2385,6 +2746,8 @@ void FeaMesh::WriteSTL( FILE* fp )
         for ( unsigned int i = 0; i < m_NumFeaSubSurfs; i++ )
         {
             int surf_num = m_SimpleSubSurfaceVec[i].GetFeaOrientationVec().size();
+            vector < vector < int > > ss_surfs;
+            SplitBySurf( ListAt( ss_elems, i ), surf_num, ss_surfs );
 
             for ( int isurf = 0; isurf < surf_num; isurf++ )
             {
@@ -2392,14 +2755,19 @@ void FeaMesh::WriteSTL( FILE* fp )
                 {
                     fprintf( fp, "solid %s_%d\n", m_SimpleSubSurfaceVec[i].GetName().c_str(), isurf );
 
-                    for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                    const vector < int > & surf_list = ListAt( ss_surfs, isurf );
+                    FeaMeshMgr.WriteChunked( fp, (int)surf_list.size(), [&]( int ibeg, int iend, string &out )
                     {
-                        if ( m_FeaElementVec[j]->GetFeaSSIndex() == i &&
-                             m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
+                        for ( int k = ibeg; k < iend; k++ )
                         {
-                            m_FeaElementVec[j]->WriteSTL( fp );
+                            int j = surf_list[k];
+                            if ( m_FeaElementVec[j]->GetFeaSSIndex() == i &&
+                                 m_FeaElementVec[j]->GetFeaPartSurfNum() == isurf )
+                            {
+                                m_FeaElementVec[j]->AppendSTL( out );
+                            }
                         }
-                    }
+                    } );
                     fprintf( fp, "endsolid %s_%d\n", m_SimpleSubSurfaceVec[i].GetName().c_str(), isurf );
                 }
             }
@@ -2425,6 +2793,9 @@ void FeaMesh::ComputeWriteMass( FILE* fp )
 
     if ( fp )
     {
+        vector < vector < int > > part_elems, ss_elems;
+        IndexElements( part_elems, ss_elems );
+
         fprintf( fp, "...FEA Mesh...\n" );
         fprintf( fp, "Mass_Unit: %s\n", m_MassUnit.c_str() );
         fprintf( fp, "Num_Els: %llu\n", m_NumEls );
@@ -2447,9 +2818,11 @@ void FeaMesh::ComputeWriteMass( FILE* fp )
                 double beam_mass = 0;
                 int property_id = m_FeaPartPropertyIndexVec[i];
                 int cap_property_id = m_FeaPartCapPropertyIndexVec[i];
+                const vector < int > & part_list = ListAt( part_elems, i );
 
-                for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                for ( size_t k = 0; k < part_list.size(); k++ )
                 {
+                    int j = part_list[k];
                     if ( m_FeaElementVec[j]->GetFeaPartIndex() == i && m_FeaElementVec[j]->GetFeaSSIndex() < 0 &&
                          ( m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_TRI_3 ||
                            m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_TRI_6 ||
@@ -2487,9 +2860,11 @@ void FeaMesh::ComputeWriteMass( FILE* fp )
                 double pnt_mass = 0;
                 string name = m_FeaPartNameVec[fxpt.m_FeaPartIndex];
                 vec3d pnt;
+                const vector < int > & fp_elems = ListAt( part_elems, fxpt.m_FeaPartIndex );
 
-                for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+                for ( size_t k = 0; k < fp_elems.size(); k++ )
                 {
+                    int j = fp_elems[k];
                     if ( m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_POINT_MASS && m_FeaElementVec[j]->GetFeaPartIndex() == fxpt.m_FeaPartIndex && m_FeaElementVec[j]->GetFeaSSIndex() < 0 )
                     {
                         pnt_mass += m_FeaElementVec[j]->ComputeMass( -1 ); // property ID ignored for point masses
@@ -2523,9 +2898,11 @@ void FeaMesh::ComputeWriteMass( FILE* fp )
             double beam_mass = 0;
             int property_id = m_SimpleSubSurfaceVec[i].GetFeaPropertyIndex();
             int cap_property_id = m_SimpleSubSurfaceVec[i].GetCapFeaPropertyIndex();
+            const vector < int > & ss_list = ListAt( ss_elems, i );
 
-            for ( int j = 0; j < m_FeaElementVec.size(); j++ )
+            for ( size_t k = 0; k < ss_list.size(); k++ )
             {
+                int j = ss_list[k];
                 if ( m_FeaElementVec[j]->GetFeaSSIndex() == i &&
                      ( m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_TRI_3 ||
                        m_FeaElementVec[j]->GetElementType() == FeaElement::FEA_TRI_6 ||

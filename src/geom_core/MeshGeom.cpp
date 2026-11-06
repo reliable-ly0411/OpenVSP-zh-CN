@@ -22,6 +22,7 @@
 #include "PtCloudGeom.h"
 #include "NGonMeshGeom.h"
 #include "LinkMgr.h"
+#include "MessageMgr.h"
 #include "Vehicle.h"
 #include "PntNodeMerge.h"
 
@@ -43,6 +44,11 @@ MeshGeom::MeshGeom( Vehicle* vehicle_ptr ) : Geom( vehicle_ptr )
     m_TessU.Deactivate();
     m_TessW.Deactivate();
     m_Origin.Deactivate();
+
+    // A mesh makes no symmetric copies.
+    m_SymPlanFlag.Deactivate();
+    m_SymAxFlag.Deactivate();
+    m_SymRotN.Deactivate();
 
     m_BBox.Update( vec3d( 0, 0, 0 ) );
 
@@ -126,6 +132,8 @@ xmlNodePtr MeshGeom::DecodeXml( xmlNodePtr & node )
         }
         m_TMeshVec.clear();
 
+        vector< xmlNodePtr > tmesh_nodes = XmlUtil::GetNodes( mesh_node, "TMesh" );
+
         xmlNodePtr numMeshes_node = XmlUtil::GetNode( mesh_node, "Num_Meshes", 0 );
         unsigned int numMeshes = 0;
         if ( numMeshes_node )
@@ -134,7 +142,7 @@ xmlNodePtr MeshGeom::DecodeXml( xmlNodePtr & node )
         }
         else
         {
-            numMeshes = XmlUtil::GetNumNames( mesh_node, "TMesh" );
+            numMeshes = tmesh_nodes.size();
         }
 
         m_TMeshVec.resize( numMeshes );
@@ -143,7 +151,11 @@ xmlNodePtr MeshGeom::DecodeXml( xmlNodePtr & node )
         for ( int i = 0 ; i < numMeshes ; i++ )
         {
             m_TMeshVec[i] = new TMesh();
-            xmlNodePtr tmesh_node = XmlUtil::GetNode( mesh_node, "TMesh", i );
+            xmlNodePtr tmesh_node = nullptr;
+            if ( i < tmesh_nodes.size() )
+            {
+                tmesh_node = tmesh_nodes[i];
+            }
             if ( tmesh_node )
             {
                 m_TMeshVec[i]->DecodeXml( tmesh_node );
@@ -234,7 +246,7 @@ int MeshGeom::ReadXSec( const char* file_name )
 
 int MeshGeom::ReadSTL( const char* file_name )
 {
-    FILE* file_id = fopen( file_name, "r" );
+    FILE* file_id = fopen( file_name, "rb" );
 
     char str[256];
     float nx, ny, nz;
@@ -248,17 +260,20 @@ int MeshGeom::ReadSTL( const char* file_name )
 
     if ( file_id )
     {
-        //==== Cheesy ASCII/Binary Test ====//
-        while ( fgets( str, 255, file_id ) )
+        //==== Binary When Any Byte Is NUL Or Above 127 ====//
+        unsigned char buf[4096];
+        size_t numRead = fread( buf, 1, sizeof( buf ), file_id );
+        while ( numRead > 0 && !binaryFlag )
         {
-            for ( int i = 0 ; i < ( int )strlen( str ) ; i++ )
+            for ( size_t i = 0 ; i < numRead ; i++ )
             {
-                if ( ( unsigned char )str[i] > 127 )
+                if ( buf[i] == 0 || buf[i] > 127 )
                 {
                     binaryFlag = 1;
                     break;
                 }
             }
+            numRead = fread( buf, 1, sizeof( buf ), file_id );
         }
         fclose( file_id );
     }
@@ -363,46 +378,29 @@ int MeshGeom::ReadSTL( const char* file_name )
             fclose( file_id );
             file_id = fopen( file_name, "rb" );         // Reopen as Binary
 
-            //==== Header ====//
-            fread( str, sizeof( char ), 80, file_id );
-
-            int numFacet = ReadBinInt( file_id );
-
-            for ( int i = 0 ; i < numFacet ; i++ )
+            int attSize = BinSTLAttSize( file_id );
+            if ( attSize == 2 )
             {
-                nx = ReadBinFloat( file_id );
-                ny = ReadBinFloat( file_id );
-                nz = ReadBinFloat( file_id );
+                ReadBinSTLBlock( file_id, tMesh, attSize );
+            }
+            else if ( attSize == 4 )
+            {
+                fseek( file_id, 0, SEEK_END );
+                long long fileSize = ftell( file_id );
+                fseek( file_id, 0, SEEK_SET );
 
-                v0[0] = ReadBinFloat( file_id );
-                v0[1] = ReadBinFloat( file_id );
-                v0[2] = ReadBinFloat( file_id );
-                v1[0] = ReadBinFloat( file_id );
-                v1[1] = ReadBinFloat( file_id );
-                v1[2] = ReadBinFloat( file_id );
-                v2[0] = ReadBinFloat( file_id );
-                v2[1] = ReadBinFloat( file_id );
-                v2[2] = ReadBinFloat( file_id );
-
-                //==== Padding ====//
-                fgetc( file_id );
-                fgetc( file_id );
-
-                //==== Add Valid Facet ====//
-                tPtr = new TTri( tMesh );
-                tPtr->m_Norm = vec3d( nx, ny, nz );
-                tMesh->m_TVec.push_back( tPtr );
-
-                //==== Put Nodes Into Tri ====//
-                tPtr->m_N0 = new TNode();
-                tPtr->m_N1 = new TNode();
-                tPtr->m_N2 = new TNode();
-                tPtr->m_N0->m_Pnt = vec3d( v0[0], v0[1], v0[2] );
-                tPtr->m_N1->m_Pnt = vec3d( v1[0], v1[1], v1[2] );
-                tPtr->m_N2->m_Pnt = vec3d( v2[0], v2[1], v2[2] );
-                tMesh->m_NVec.push_back( tPtr->m_N0 );
-                tMesh->m_NVec.push_back( tPtr->m_N1 );
-                tMesh->m_NVec.push_back( tPtr->m_N2 );
+                while ( ftell( file_id ) < fileSize )
+                {
+                    ReadBinSTLBlock( file_id, tMesh, attSize );
+                }
+            }
+            else
+            {
+                MessageData errMsgData;
+                errMsgData.m_String = "Error";
+                errMsgData.m_IntVec.push_back( vsp::VSP_FILE_READ_FAILURE );
+                errMsgData.m_StringVec.push_back( "Error:  Binary STL file '" + string( file_name ) + "' does not match its facet count." );
+                MessageMgr::getInstance().SendAll( errMsgData );
             }
         }
         fclose( file_id );
@@ -420,6 +418,100 @@ int MeshGeom::ReadSTL( const char* file_name )
 
     return 1;
 
+}
+
+// Attribute size of a binary STL file, 0 when its size fits no layout below.  The file is left at its start.
+// 2: one header and count, then 50 byte facets, 84 + 50 n bytes.
+// 4: a sequence of header, count and 52 byte facet blocks that ends at the end of the file.
+int MeshGeom::BinSTLAttSize( FILE* file_id )
+{
+    fseek( file_id, 0, SEEK_END );
+    long long fileSize = ftell( file_id );
+
+    int attSize = 0;
+    if ( fileSize >= 84 )
+    {
+        fseek( file_id, 80, SEEK_SET );
+        long long numFacet = ( unsigned int ) ReadBinInt( file_id );
+
+        if ( fileSize == 84 + 50 * numFacet )
+        {
+            attSize = 2;
+        }
+        else
+        {
+            long long blockStart = 0;
+            while ( blockStart + 84 <= fileSize )
+            {
+                fseek( file_id, blockStart + 80, SEEK_SET );
+                numFacet = ( unsigned int ) ReadBinInt( file_id );
+                blockStart += 84 + 52 * numFacet;
+            }
+
+            if ( blockStart == fileSize )
+            {
+                attSize = 4;
+            }
+        }
+    }
+
+    fseek( file_id, 0, SEEK_SET );
+    return attSize;
+}
+
+//==== Read One Binary STL Header With Its Facets ====//
+void MeshGeom::ReadBinSTLBlock( FILE* file_id, TMesh* tMesh, int attSize )
+{
+    char str[256];
+    float nx, ny, nz;
+    float v0[3];
+    float v1[3];
+    float v2[3];
+    TTri*  tPtr;
+
+    //==== Header ====//
+    fread( str, sizeof( char ), 80, file_id );
+
+    int numFacet = ReadBinInt( file_id );
+
+    for ( int i = 0 ; i < numFacet ; i++ )
+    {
+        nx = ReadBinFloat( file_id );
+        ny = ReadBinFloat( file_id );
+        nz = ReadBinFloat( file_id );
+
+        v0[0] = ReadBinFloat( file_id );
+        v0[1] = ReadBinFloat( file_id );
+        v0[2] = ReadBinFloat( file_id );
+        v1[0] = ReadBinFloat( file_id );
+        v1[1] = ReadBinFloat( file_id );
+        v1[2] = ReadBinFloat( file_id );
+        v2[0] = ReadBinFloat( file_id );
+        v2[1] = ReadBinFloat( file_id );
+        v2[2] = ReadBinFloat( file_id );
+
+        //==== Attribute ====//
+        for ( int j = 0 ; j < attSize ; j++ )
+        {
+            fgetc( file_id );
+        }
+
+        //==== Add Valid Facet ====//
+        tPtr = new TTri( tMesh );
+        tPtr->m_Norm = vec3d( nx, ny, nz );
+        tMesh->m_TVec.push_back( tPtr );
+
+        //==== Put Nodes Into Tri ====//
+        tPtr->m_N0 = new TNode();
+        tPtr->m_N1 = new TNode();
+        tPtr->m_N2 = new TNode();
+        tPtr->m_N0->m_Pnt = vec3d( v0[0], v0[1], v0[2] );
+        tPtr->m_N1->m_Pnt = vec3d( v1[0], v1[1], v1[2] );
+        tPtr->m_N2->m_Pnt = vec3d( v2[0], v2[1], v2[2] );
+        tMesh->m_NVec.push_back( tPtr->m_N0 );
+        tMesh->m_NVec.push_back( tPtr->m_N1 );
+        tMesh->m_NVec.push_back( tPtr->m_N2 );
+    }
 }
 
 //==== Write Fuse File ====//
@@ -769,7 +861,10 @@ int MeshGeom::ReadTriFile( const char * file_name )
         norm.normalize();
 
         //==== Add Valid Facet ====//
-        tMesh->AddTri( pnt_vec[n0], pnt_vec[n1], pnt_vec[n2], norm, -1 );
+        if ( !tMesh->AddTri( pnt_vec[n0], pnt_vec[n1], pnt_vec[n2], norm, -1 ) )
+        {
+            continue;
+        }
         ntri_added++;
 
         if ( i < ( int )tag_vec.size() )
@@ -1549,7 +1644,8 @@ void MeshGeom::CreatePtCloudGeom()
     }
 }
 
-string MeshGeom::CreateNGonMeshGeom( bool cullfracflag, double cullfrac, int n_ref, bool FindBodyWakes )
+string MeshGeom::CreateNGonMeshGeom( bool cullfracflag, double cullfrac, int n_ref, bool FindBodyWakes, bool mergeDegenTriRegionsFlag, bool
+                                     cleanIntersectionsFlag, double lenRatio )
 {
     GeomType type = GeomType( NGON_GEOM_TYPE, "NGON", true );
     string id = m_Vehicle->AddGeom( type );
@@ -1571,6 +1667,13 @@ string MeshGeom::CreateNGonMeshGeom( bool cullfracflag, double cullfrac, int n_r
 
         pgm->BuildFromTMeshVec( m_TMeshVec );
 
+        // The NGon mesh sits at the model origin, so its points are placed by this mesh's XForm.
+        list< PGPoint* >::iterator pit;
+        for ( pit = new_geom->m_PGMulti.m_PointList.begin(); pit != new_geom->m_PGMulti.m_PointList.end(); ++pit )
+        {
+            ( *pit )->m_Pnt = XFormMat.xform( ( *pit )->m_Pnt );
+        }
+
         pgm->MergeCoincidentNodes();
         // pgm->MergeDuplicateEdges();
 
@@ -1581,7 +1684,25 @@ string MeshGeom::CreateNGonMeshGeom( bool cullfracflag, double cullfrac, int n_r
         pgm->FindAllDoubleBackNodes();
         pgm->SealDoubleBackNodes();
 
-        new_geom->SplitLEGeom();
+        pgm->SplitLEGeom();
+
+        if ( cleanIntersectionsFlag )
+        {
+            pgm->CleanIntersections( lenRatio );
+        }
+
+        if ( mergeDegenTriRegionsFlag )
+        {
+            // A face a zero width tessellation row left with two nodes would split a fan.
+            pgm->RemoveDegenFaces();
+            // pgm->DumpTriDiagnostic( "pgmesh_00_pre_make_tri_regions.csv" );
+            pgm->MakeTriangleRegions();
+            // pgm->DumpTriDiagnostic( "pgmesh_00_post_make_tri_regions.csv" );
+            pgm->ClearTris();
+            pgm->MergeRegions();
+        }
+
+        // pgm->DumpDiagnostic( "pgmesh_00_after_merge_regions.csv" );
 
         if ( cullfracflag )
         {
@@ -1606,8 +1727,13 @@ string MeshGeom::CreateNGonMeshGeom( bool cullfracflag, double cullfrac, int n_r
 
             pgmi->BuildFromPGMesh( pgm_prev );
 
+            // pgmi->DumpDiagnostic( "pgmesh_" + to_string( iref + 1 ) + "_before_coarsen.csv" );
+
             pgmi->Coarsen1();
+            // pgmi->DumpDiagnostic( "pgmesh_" + to_string( iref + 1 ) + "_after_coarsen1.csv" );
+
             pgmi->Coarsen2();
+            // pgmi->DumpDiagnostic( "pgmesh_" + to_string( iref + 1 ) + "_after_coarsen2.csv" );
 
             pgmi->CleanUnused();
 
@@ -2355,6 +2481,7 @@ void MeshGeom::WaterTightCheck( FILE* fid )
                     {
                         TTri* tri = mesh->m_TVec[t]->m_SplitVec[i];
                         oneMesh->AddTri( tri->m_N0, tri->m_N1, tri->m_N2, mesh->m_TVec[t]->m_Norm, mesh->m_TVec[t]->m_iQuad, mesh->m_TVec[t]->m_jref, mesh->m_TVec[t]->m_kref );
+                        oneMesh->m_TVec.back()->m_FanID = mesh->m_TVec[t]->m_FanID;
                     }
                 }
             }
@@ -2362,6 +2489,7 @@ void MeshGeom::WaterTightCheck( FILE* fid )
             {
                 TTri* tri = mesh->m_TVec[t];
                 oneMesh->AddTri( tri->m_N0, tri->m_N1, tri->m_N2, tri->m_Norm, tri->m_iQuad, tri->m_jref, tri->m_kref );
+                oneMesh->m_TVec.back()->m_FanID = tri->m_FanID;
             }
         }
     }

@@ -15,6 +15,7 @@ INCLUDE_DIRECTORIES(
     ${VSP_GRAPHIC_INCLUDE_DIR}
     ${GLEW_INCLUDE_PATH}
     ${GLM_INCLUDE_DIR}
+    ${STB_INCLUDE_DIR}
     ${CodeEli_INCLUDE_DIRS}
     ${PROJECT_SOURCE_DIR}/geom_api
     ${GEOM_API_INCLUDE_DIR}
@@ -97,6 +98,7 @@ PtCloudScreen.cpp
 ResultsViewer.cpp
 RoutingScreen.cpp
 ScreenBase.cpp
+ScreenDump.cpp
 ScreenMgr.cpp
 ScreenshotScreen.cpp
 SelectFileScreen.cpp
@@ -117,6 +119,7 @@ TreeColumnWidget.cpp
 TreeIconWidget.cpp
 CustomGeomExportScreen.cpp
 UserParmScreen.cpp
+VectorScreenshotScreen.cpp
 VarPresetEditorScreen.cpp
 VehNotesScreen.cpp
 VSPAEROPlotScreen.cpp
@@ -196,6 +199,8 @@ PtCloudScreen.h
 ResultsViewer.h
 RoutingScreen.h
 ScreenBase.h
+ScreenDump.h
+ScreenDumpNames.h
 ScreenMgr.h
 ScreenshotScreen.h
 SelectFileScreen.h
@@ -216,6 +221,7 @@ TreeColumnWidget.h
 TreeIconWidget.h
 CustomGeomExportScreen.h
 UserParmScreen.h
+VectorScreenshotScreen.h
 VarPresetEditorScreen.h
 VehNotesScreen.h
 VSPAEROPlotScreen.h
@@ -235,6 +241,7 @@ ENDIF()
 
 ADD_DEPENDENCIES(gui_and_draw
 geom_core
+stb_image
 vsp_graphic
 util
 )

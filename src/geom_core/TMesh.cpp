@@ -460,6 +460,7 @@ TTri::TTri( TMesh* tmesh )
     m_ID = -1;
     m_jref = 0;
     m_kref = 0;
+    m_FanID = -1;
 }
 
 TTri::~TTri()
@@ -534,6 +535,7 @@ void TTri::CopyFrom( const TTri* tri )
     m_iQuad = tri->m_iQuad;
     m_jref = tri->m_jref;
     m_kref = tri->m_kref;
+    m_FanID = tri->m_FanID;
     m_ID = tri->m_ID;
 }
 
@@ -1407,6 +1409,7 @@ bool TTri::TriangulateSplit( int flattenAxis, const vector < vec3d > &ptvec, boo
             t->m_iQuad = m_iQuad;
             t->m_jref = m_jref;
             t->m_kref = m_kref;
+            // m_FanID stays -1: a piece of a fan triangle is not part of the fan.
             t->m_ID = m_ID;
             m_SplitVec.push_back( t );
         }
@@ -1585,7 +1588,8 @@ bool TTri::TriangulateSplit_TRI( int flattenAxis, const vector < vec3d > &ptvec,
 
     if ( tristatus == TRI_OK )
     {
-        triangle_mesh_copy( ctx, &out, 1, 1 );
+        // The points and triangles only: no edge or neighbor lists.
+        triangle_mesh_copy( ctx, &out, 0, 0 );
 
         connlist.reserve( out.numberoftriangles );
 
@@ -2274,7 +2278,6 @@ bool TBndBox::CheckIntersect( TBndBox* iBox  )
     }
     else
     {
-        int coplanarFlag = 0; // Must be initialized to 0 before use in tri_tri_intersection_test_3d
         vec3d e0;
         vec3d e1;
 
@@ -2286,6 +2289,7 @@ bool TBndBox::CheckIntersect( TBndBox* iBox  )
             {
                 TTri* t1 = iBox->m_TriVec[j];
 
+                int coplanarFlag = 0; // Must be initialized to 0 before use in tri_tri_intersection_test_3d
                 int iflag = tri_tri_intersection_test_3d(
                                 t0->m_N0->m_Pnt.v, t0->m_N1->m_Pnt.v, t0->m_N2->m_Pnt.v,
                                 t1->m_N0->m_Pnt.v, t1->m_N1->m_Pnt.v, t1->m_N2->m_Pnt.v,
@@ -2840,7 +2844,7 @@ double TBndBox::MinAngleTri( const vec3d &norm, const vec3d &v0, const vec3d &v1
             {
                 vec3d prot1, prot2;
                 double theta1, theta2;
-                angle_pnt_2_plane( v0, norm, ptaxis, axis, mesh_verts[j], ccw, prot1, prot2, theta1, theta2 );
+                angle_pnt_2_plane_or_nan( v0, norm, ptaxis, axis, mesh_verts[j], ccw, prot1, prot2, theta1, theta2 );
 
                 theta_m[j] = theta1;
                 m_back[j] = prot1;
@@ -2872,7 +2876,7 @@ double TBndBox::MinAngleTri( const vec3d &norm, const vec3d &v0, const vec3d &v1
             {
                 vec3d prot1, prot2;
                 double theta1, theta2;
-                angle_pnt_2_plane( m0, m_norm, ptaxis, axis, tri_verts[j], ccw, prot1, prot2, theta1, theta2 );
+                angle_pnt_2_plane_or_nan( m0, m_norm, ptaxis, axis, tri_verts[j], ccw, prot1, prot2, theta1, theta2 );
 
                 if ( angle_less( theta1, curr_min_angle ) && PtInTri( m0, m1, m2, prot1 ) )
                 {
@@ -2921,7 +2925,7 @@ double TBndBox::MinAngleTri( const vec3d &norm, const vec3d &v0, const vec3d &v1
                             vec3d pm = mesh_verts[ia] + tm * ( mesh_verts[ib] - mesh_verts[ia] );
                             vec3d prot1, prot2;
                             double theta1, theta2;
-                            angle_pnt_2_plane( v0, norm, ptaxis, axis, pm, ccw, prot1, prot2, theta1, theta2 );
+                            angle_pnt_2_plane_or_nan( v0, norm, ptaxis, axis, pm, ccw, prot1, prot2, theta1, theta2 );
                             double sm = dot( norm, cross( t_edge, prot1 - tri_verts[ja] ) );
                             if ( sm * sa >= 0.0 )
                             {
@@ -2937,7 +2941,7 @@ double TBndBox::MinAngleTri( const vec3d &norm, const vec3d &v0, const vec3d &v1
                         vec3d pm = mesh_verts[ia] + tm * ( mesh_verts[ib] - mesh_verts[ia] );
                         vec3d prot1, prot2;
                         double theta1, theta2;
-                        angle_pnt_2_plane( v0, norm, ptaxis, axis, pm, ccw, prot1, prot2, theta1, theta2 );
+                        angle_pnt_2_plane_or_nan( v0, norm, ptaxis, axis, pm, ccw, prot1, prot2, theta1, theta2 );
 
                         if ( angle_less( theta1, curr_min_angle ) && PtInTri( v0, v1, v2, prot1 ) )
                         {
@@ -2964,7 +2968,7 @@ double TBndBox::MinAngleTri( const vec3d &norm, const vec3d &v0, const vec3d &v1
                             vec3d pm = mesh_verts[ia] + tm * ( mesh_verts[ib] - mesh_verts[ia] );
                             vec3d prot1, prot2;
                             double theta1, theta2;
-                            angle_pnt_2_plane( v0, norm, ptaxis, axis, pm, ccw, prot1, prot2, theta1, theta2 );
+                            angle_pnt_2_plane_or_nan( v0, norm, ptaxis, axis, pm, ccw, prot1, prot2, theta1, theta2 );
                             double sm_b = dot( norm, cross( t_edge, prot2 - tri_verts[ja] ) );
                             if ( sm_b * sa_b >= 0.0 )
                             {
@@ -2980,7 +2984,7 @@ double TBndBox::MinAngleTri( const vec3d &norm, const vec3d &v0, const vec3d &v1
                         vec3d pm = mesh_verts[ia] + tm * ( mesh_verts[ib] - mesh_verts[ia] );
                         vec3d prot1, prot2;
                         double theta1, theta2;
-                        angle_pnt_2_plane( v0, norm, ptaxis, axis, pm, ccw, prot1, prot2, theta1, theta2 );
+                        angle_pnt_2_plane_or_nan( v0, norm, ptaxis, axis, pm, ccw, prot1, prot2, theta1, theta2 );
 
                         if ( angle_less( theta2, curr_min_angle ) && PtInTri( v0, v1, v2, prot2 ) )
                         {
@@ -3465,6 +3469,7 @@ void TMesh::copy( TMesh* m )
         tri->m_iQuad    = m->m_TVec[i]->m_iQuad;
         tri->m_jref     = m->m_TVec[i]->m_jref;
         tri->m_kref     = m->m_TVec[i]->m_kref;
+        tri->m_FanID    = m->m_TVec[i]->m_FanID;
         tri->m_ID    = m->m_TVec[i]->m_ID;
         tri->m_Tags = m->m_TVec[i]->m_Tags;
         tri->m_GeomID = m->m_TVec[i]->m_GeomID;
@@ -3507,6 +3512,7 @@ void TMesh::copyPlaced( TMesh* m, const Matrix4d &mat, bool flipnormal )
         tri->m_iQuad    = m->m_TVec[i]->m_iQuad;
         tri->m_jref     = m->m_TVec[i]->m_jref;
         tri->m_kref     = m->m_TVec[i]->m_kref;
+        tri->m_FanID    = m->m_TVec[i]->m_FanID;
         tri->m_ID    = m->m_TVec[i]->m_ID;
         tri->m_Tags = m->m_TVec[i]->m_Tags;
         tri->m_GeomID = m->m_TVec[i]->m_GeomID;
@@ -3563,6 +3569,7 @@ void TMesh::copyFewerNodes( TMesh* m )
         tri->m_iQuad = m->m_TVec[i]->m_iQuad;
         tri->m_jref = m->m_TVec[i]->m_jref;
         tri->m_kref = m->m_TVec[i]->m_kref;
+        tri->m_FanID = m->m_TVec[i]->m_FanID;
         tri->m_ID = m->m_TVec[i]->m_ID;
         tri->m_Tags = m->m_TVec[i]->m_Tags;
         tri->m_GeomID = m->m_TVec[i]->m_GeomID;
@@ -3593,6 +3600,7 @@ void TMesh::CopyFlatten( TMesh* m )
                     m_TVec.back()->m_Tags = s_tri->m_Tags;
                     m_TVec.back()->m_jref = s_tri->m_jref;
                     m_TVec.back()->m_kref = s_tri->m_kref;
+                    m_TVec.back()->m_FanID = s_tri->m_FanID;
                     m_TVec.back()->m_ID = s_tri->m_ID;
                     m_TVec.back()->m_GeomID = s_tri->m_GeomID;
                     m_TVec.back()->m_Density = s_tri->m_Density;
@@ -3607,6 +3615,7 @@ void TMesh::CopyFlatten( TMesh* m )
                 m_TVec.back()->m_Tags = orig_tri->m_Tags;
                 m_TVec.back()->m_jref = orig_tri->m_jref;
                 m_TVec.back()->m_kref = orig_tri->m_kref;
+                m_TVec.back()->m_FanID = orig_tri->m_FanID;
                 m_TVec.back()->m_ID = orig_tri->m_ID;
                 m_TVec.back()->m_GeomID = orig_tri->m_GeomID;
                 m_TVec.back()->m_Density = orig_tri->m_Density;
@@ -3692,6 +3701,7 @@ void TMesh::FlattenInPlace()
                     m_TVec.back()->m_Tags = s_tri->m_Tags;
                     m_TVec.back()->m_jref = s_tri->m_jref;
                     m_TVec.back()->m_kref = s_tri->m_kref;
+                    m_TVec.back()->m_FanID = s_tri->m_FanID;
                     m_TVec.back()->m_ID = s_tri->m_ID;
                     m_TVec.back()->m_GeomID = s_tri->m_GeomID;
                     m_TVec.back()->m_Density = s_tri->m_Density;
@@ -3706,6 +3716,7 @@ void TMesh::FlattenInPlace()
                 m_TVec.back()->m_Tags = orig_tri->m_Tags;
                 m_TVec.back()->m_jref = orig_tri->m_jref;
                 m_TVec.back()->m_kref = orig_tri->m_kref;
+                m_TVec.back()->m_FanID = orig_tri->m_FanID;
                 m_TVec.back()->m_ID = orig_tri->m_ID;
                 m_TVec.back()->m_GeomID = orig_tri->m_GeomID;
                 m_TVec.back()->m_Density = orig_tri->m_Density;
@@ -4223,10 +4234,14 @@ void TMesh::MakeFromPGMesh( PGMesh *m )
             vec3d uw2( uw.x(), uw.y(), 0.0 );
             inod++;
 
-            AddTri( v0, v1, v2, norm, uw0, uw1, uw2, iQuad, jref, kref );
+            if ( !AddTri( v0, v1, v2, norm, uw0, uw1, uw2, iQuad, jref, kref ) )
+            {
+                continue;
+            }
             TTri* tri = m_TVec.back();
 
             tri->m_Tags = tags;
+            tri->m_FanID = ( *f )->m_FanID;
         }
     }
 }
@@ -4306,6 +4321,7 @@ void TMesh::SubMesh( int imesh, TMesh *tm )
             t->m_iQuad = torig->m_iQuad;
             t->m_jref = torig->m_jref;
             t->m_kref = torig->m_kref;
+            t->m_FanID = torig->m_FanID;
             t->m_ID = torig->m_ID;
 
             m_TVec.push_back( t );
@@ -4357,6 +4373,7 @@ void TMesh::MakeUWTMesh( TMesh & tm )
         t->m_iQuad = ti->m_iQuad;
         t->m_jref = ti->m_jref;
         t->m_kref = ti->m_kref;
+        t->m_FanID = ti->m_FanID;
 
         tm.m_TVec.push_back( t );
     }

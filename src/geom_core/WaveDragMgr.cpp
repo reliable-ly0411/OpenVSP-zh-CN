@@ -16,6 +16,8 @@
 #include "IDMgr.h"
 #include "wavedragEL.h"
 #include "ModeMgr.h"
+#include "StlHelper.h"
+#include "SubSurfaceMgr.h"
 
 WaveDragSingleton::WaveDragSingleton() : ParmContainer()
 {
@@ -105,12 +107,18 @@ xmlNodePtr WaveDragSingleton::DecodeXml( xmlNodePtr & node )
 
         if ( flowSS_list_node )
         {
-            int num_flowSS =  XmlUtil::GetNumNames( flowSS_list_node, "FlowSS" );
-            for ( int i = 0 ; i < num_flowSS ; i++ )
+            // Each sub-surface is kept once, and only if it is in the model.
+            for ( xmlNodePtr flowSS_node = flowSS_list_node->xmlChildrenNode; flowSS_node; flowSS_node = flowSS_node->next )
             {
-                xmlNodePtr flowSS_node = XmlUtil::GetNode( flowSS_list_node, "FlowSS", i );
+                if ( xmlStrcmp( flowSS_node->name, ( const xmlChar * )"FlowSS" ) )
+                {
+                    continue;
+                }
                 string new_flowSS = IDMgr.RemapRefID( XmlUtil::FindString( flowSS_node, "flowSS_ID", string() ) );
-                m_SSFlow_vec.push_back( new_flowSS );
+                if ( SubSurfaceMgr.GetSubSurf( new_flowSS ) && !vector_contains_val( m_SSFlow_vec, new_flowSS ) )
+                {
+                    m_SSFlow_vec.push_back( new_flowSS );
+                }
             }
         }
     }
@@ -339,6 +347,12 @@ string WaveDragSingleton::SliceAndAnalyze( int set, int numSlices, int numRots, 
 
     // Run slicing routine
     m_lastmeshgeomID = WaveDragSlice( set, numSlices, numRots, Mach, Flow_vec, Symm );
+
+    // Terminates if the set has no surface to slice, as an engine representing none does
+    if ( m_lastmeshgeomID == "NONE" )
+    {
+        return string();
+    }
 
     // Send ambiguous flow face message if necessary
     if ( m_AmbigSubSurf )

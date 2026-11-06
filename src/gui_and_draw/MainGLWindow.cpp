@@ -178,9 +178,16 @@ void VspGlWindow::draw()
 
         //Make sure the current width and height update
         m_ScreenMgr->GetScreen( vsp::VSP_SCREENSHOT_SCREEN )->Update();
+        m_ScreenMgr->GetScreen( vsp::VSP_VECTOR_SCREENSHOT_SCREEN )->Update();
     }
 
     m_GEngine->draw( m_mouse_x, m_mouse_y );
+}
+
+bool VspGlWindow::WriteVector( const std::string & fname, int filetype, bool autocrop, double scale )
+{
+    make_current();
+    return m_GEngine->dumpScreenVector( fname, filetype, autocrop, scale );
 }
 
 int VspGlWindow::handle( int fl_event )
@@ -738,9 +745,19 @@ void VspGlWindow::_update( const std::vector<DrawObj *> &objects )
                 {
                     if ( objects[i]->m_VisibleDirFlag )
                     {
-                        if ( acos( std::abs( dot( objects[ i ]->m_VisibleDir, v ) ) ) * ( 180.0 / M_PI ) > objects[ i ]->m_VisTol )
+                        if ( objects[i]->m_VisibleDirBothFlag )
                         {
-                            objects[ i ]->m_Visible = false;
+                            if ( acos( std::abs( dot( objects[ i ]->m_VisibleDir, v ) ) ) * ( 180.0 / M_PI ) > objects[ i ]->m_VisTol )
+                            {
+                                objects[ i ]->m_Visible = false;
+                            }
+                        }
+                        else
+                        {
+                            if ( acos( dot( objects[ i ]->m_VisibleDir, v ) ) * ( 180.0 / M_PI ) > objects[ i ]->m_VisTol )
+                            {
+                                objects[ i ]->m_Visible = false;
+                            }
                         }
                     }
                 }
@@ -1440,10 +1457,10 @@ void VspGlWindow::_update( const std::vector<DrawObj *> &objects )
             id = 0xFFFFFFFF;
         }
 
-        VSPGraphic::Probe * probe;
-        VSPGraphic::Ruler * ruler;
-        VSPGraphic::Protractor * protractor;
-        VSPGraphic::Routing * routing;
+        VSPGraphic::Probe * probe = nullptr;
+        VSPGraphic::Ruler * ruler = nullptr;
+        VSPGraphic::Protractor * protractor = nullptr;
+        VSPGraphic::Routing * routing = nullptr;
 
         switch( objects[i]->m_Type )
         {
@@ -1664,7 +1681,7 @@ void VspGlWindow::_update( const std::vector<DrawObj *> &objects )
                 m_idMap[ idInfo.geomID ] = idInfo;
             }
             routing = dynamic_cast<VSPGraphic::Routing*> ( m_GEngine->getScene()->getObject( id ) );
-            if( ruler )
+            if( routing )
             {
                 routing->setVisibility( objects[i]->m_Visible );
 

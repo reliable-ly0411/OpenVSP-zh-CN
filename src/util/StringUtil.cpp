@@ -4,6 +4,7 @@
 //
 
 #include "StringUtil.h"
+#include "FastFormat.h"
 #include "APIDefines.h"
 #include <cctype>
 #include <algorithm>
@@ -51,12 +52,25 @@ void StringUtil::replace_all( string & str, const string & from, const string & 
     if(from.empty())
         return;
 
+    // Built anew, so each replacement costs its own length, not the rest of the string's.  The search resumes
+    // after each match in str, so a 'to' that contains 'from', like 'yx' for 'x', is not replaced again.
+    string out;
+    size_t last_pos = 0;
     size_t start_pos = 0;
-    while((start_pos = str.find(from, start_pos)) != std::string::npos)
+    while((start_pos = str.find(from, last_pos)) != std::string::npos)
     {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
+        out.append( str, last_pos, start_pos - last_pos );
+        out.append( to );
+        last_pos = start_pos + from.length();
     }
+
+    if ( last_pos == 0 )
+    {
+        return;
+    }
+
+    out.append( str, last_pos, std::string::npos );
+    str.swap( out );
 }
 
 //==== Remove All Instances of c in str ====//
@@ -305,6 +319,94 @@ string StringUtil::NasFmt( double input )
         else
         {
             return string( "%8.1e" );
+        }
+    }
+}
+
+void StringUtil::AppendNas( string &out, double input )
+{
+    double x = input + 0.0;
+    double ax = std::abs( x );
+    if ( x > 0 )
+    {
+        if ( ax < 0.001 )
+        {
+            FastFormat::AppendE( out, input, 8, 2 );
+        }
+        else if ( ax < 10.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 6 );
+        }
+        else if ( ax < 100.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 5 );
+        }
+        else if ( ax < 1000.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 4 );
+        }
+        else if ( ax < 10000.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 3 );
+        }
+        else if ( ax < 100000.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 2 );
+        }
+        else if ( ax < 1000000.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 1 );
+        }
+        else if ( ax < 10000000.0 )
+        {
+            FastFormat::AppendF( out, input, 7, 0 );
+            out += '.';
+        }
+        else
+        {
+            FastFormat::AppendE( out, input, 8, 2 );
+        }
+    }
+    else
+    {
+        if ( ax == 0.0 )
+        {
+            char buf[64];
+            snprintf( buf, sizeof( buf ), "%08.1e", input );
+            out += buf;
+        }
+        else if ( ax < 0.001 )
+        {
+            FastFormat::AppendE( out, input, 8, 1 );
+        }
+        else if ( ax < 10.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 5 );
+        }
+        else if ( ax < 100.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 4 );
+        }
+        else if ( ax < 1000.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 3 );
+        }
+        else if ( ax < 10000.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 2 );
+        }
+        else if ( ax < 100000.0 )
+        {
+            FastFormat::AppendF( out, input, 8, 1 );
+        }
+        else if ( ax < 1000000.0 )
+        {
+            FastFormat::AppendF( out, input, 7, 0 );
+            out += '.';
+        }
+        else
+        {
+            FastFormat::AppendE( out, input, 8, 1 );
         }
     }
 }

@@ -75,7 +75,8 @@ public:
     bool AllInteriorConnectedFaces();
 
     void LaplacianSmooth( Surf* surfPtr );
-    void AreaWeightedLaplacianSmooth( Surf* surfPtr );
+    // The three vectors are scratch, passed in so a pass over the mesh reuses their storage.
+    void AreaWeightedLaplacianSmooth( Surf* surfPtr, vector< Face* > &connectFaces, vector< double > &areas, vector< char > &wasgood );
 
 };
 
@@ -198,6 +199,7 @@ public:
     ~Face();
 
     static void ComputeCosAngles( Node* nn0, Node* nn1, Node* nn2, double* ang0, double* ang1, double* ang2 );
+    static void ComputeCosAngles( const vec3d &p0, const vec3d &p1, const vec3d &p2, double* ang0, double* ang1, double* ang2 );
     static void ComputeCosAngles( Node* nn0, Node* nn1, Node* nn2, Node* nn3, double* ang0, double* ang1, double* ang2, double* ang3 );
 
     void SetNodesEdges( Node* nn0, Node* nn1, Node* nn2, Edge* ee0, Edge* ee1, Edge* ee2 );
@@ -218,6 +220,7 @@ public:
     static double ComputeTriQual( Node* n0, Node* n1, Node* n2 );
 
     double ComputeCosSmallAng();
+    static double ComputeCosSmallAng( Node* n0, Node* n1, Node* n2 );
 
     Node* OtherNodeTri( Node* a, Node* b );
 

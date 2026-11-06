@@ -45,8 +45,9 @@ public:
 
     // Initialize the curve as it is written to trimmed CAD: the CAD curve, and m_PntVec and
     // the parameters of both parents as points along it and along its image on each.  tol
-    // bounds how far the CAD curve may stray from either parent.
-    void InitCAD( SCurve curveA, SCurve curveB, double tol );
+    // bounds how far the CAD curve may stray from either parent.  Warnings go to warn where
+    // given, and to stdout otherwise.
+    void InitCAD( SCurve curveA, SCurve curveB, double tol, string *warn = nullptr );
 
     // Run the curve the other way
     void Reverse();
@@ -240,10 +241,25 @@ public:
     NURBS_Surface();
     virtual ~NURBS_Surface() {};
 
+    NURBS_Surface( const NURBS_Surface & ) = default;
+    NURBS_Surface( NURBS_Surface && ) = default;
+    NURBS_Surface & operator=( const NURBS_Surface & ) = default;
+    NURBS_Surface & operator=( NURBS_Surface && ) = default;
+
     // Create a NURBS surface from a piecewise Bezier surface. The knot vectors,
     // number of points and number of patches in the U and V directions are 
     // saved as member variable.
     void InitNURBSSurf( Surf* surface );
+
+    // The surface the NURBS surface is written from, which may be pointed at a copy of it
+    const piecewise_surface_type* GetSurf() const
+    {
+        return m_Surf;
+    }
+    void SetSurf( piecewise_surface_type* surf )
+    {
+        m_Surf = surf;
+    }
 
     // Write the NURBS surface to IGES
     DLL_IGES_ENTITY_128 WriteIGESSurf( IGESutil* iges, const string& label = "" );
@@ -272,6 +288,9 @@ public:
     // Identifies the internal and external NURBS curves on the surface, organizes
     // them into connected chains, and forms loops.  
     void BuildNURBSLoopMap();
+
+    // Whether an end of curve i of this surface meets no end of another of its curves
+    bool DanglingEnd( size_t i ) const;
 
     // Find all NURBS surves associated with this NURBS surface
     vector < NURBS_Curve > MatchNURBSCurves( const vector < NURBS_Curve > &all_curve_vec );

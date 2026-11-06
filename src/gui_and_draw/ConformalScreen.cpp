@@ -11,7 +11,7 @@
 #include "APIDefines.h"
 
 //==== Constructor ====//
-ConformalScreen::ConformalScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Conformal" )
+ConformalScreen::ConformalScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Conformal", "Conformal.html" )
 {
     Fl_Group* design_tab = AddTab( "Design" );
     Fl_Group* design_group = AddSubGroup( design_tab, 5 );
@@ -33,6 +33,7 @@ ConformalScreen::ConformalScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, 
     {
         m_ParentGeomPicker.AddExcludeType( nst[i] );
     }
+    m_ParentGeomPicker.AddExcludeType( GEAR_GEOM_TYPE );
 
     m_ParentGeomPicker.SetIncludeNone( true );
 

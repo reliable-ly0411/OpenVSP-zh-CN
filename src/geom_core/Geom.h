@@ -310,10 +310,16 @@ public:
     bool m_XFormDirty;
     bool m_UpdateXForm;
     bool m_SurfDirty;
+    // The surfaces are built but must be placed again by UpdatePostSurf.
+    bool m_PostSurfDirty;
+    // The surfaces changed, by either pass.
     bool m_UpdateSurf;
     bool m_TessDirty;
     bool m_UpdateTess;
     bool m_HighlightDirty;
+    // The markers change though the geometry does not.
+    bool m_MarkerDirty;
+    bool m_UpdateMarker;
     bool m_FeaDirty;
     bool m_GlobalScaleDirty;
 
@@ -593,6 +599,9 @@ public:
     {
          degen_vec = m_MainDegenGeomPreviewVec;
     }
+
+    // The points of surface isurf, symmetric copies included, as the display type shows it.
+    virtual bool GetDisplayTessPnts( int isurf, vector< vec3d > & pnts );
 
     // Whether capping changed each main surface.  A Clone copies these with the capped surfaces.
     virtual void GetCapSuccessCopy( vector< bool > & umin_vec, vector< bool > & umax_vec ) const
@@ -1058,14 +1067,14 @@ protected:
     long long m_UpdateStamp;
 
     virtual void UpdateSurf() = 0;
-    // Cap the first ncap main surfaces (ncap < 0 means all of them).  Capping fewer than all is
-    // used by Geoms whose main surfaces are copies of one computed surface (e.g. prop blades),
-    // so only the single source surface needs capping before it is duplicated.
-    virtual void UpdateEndCaps( int ncap = -1 );
+    virtual void UpdateEndCaps();
     virtual void UpdateEngine()   {};
     virtual void UpdateFeatureLines();
     virtual void UpdateLCurve();
     virtual void UpdateFlags();
+    void CapSurf( VspSurf & surf, bool & umin_success, bool & umax_success );
+    void UpdateCapParms();
+    void UpdateSurfFlags( VspSurf & surf );
     virtual void UpdateSymmAttach( int num_main );
     virtual void UpdateSymmAttach();
     virtual void UpdateSurfVec();
@@ -1158,6 +1167,9 @@ protected:
     virtual void LoadMarkerDrawObjs( vector< DrawObj* > & draw_obj_vec );
 
     virtual void UpdatePreTess()   {};
+    // Moves the finished main surfaces.  It runs after every pass that builds them, whenever
+    // m_SurfDirty or m_PostSurfDirty is set, so it can run alone.
+    virtual void UpdatePostSurf()   {};
 
     virtual void UpdateMainTessVec();
     virtual void UpdateTessVec();

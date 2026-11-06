@@ -1018,7 +1018,7 @@ void WingSect::GetJoints( bool first, bool last,
         case BLEND_MATCH_IN_ANGLES :
         case BLEND_MATCH_LE_ANGLES :
         {
-            GetTanNormVec(tle, -m_InLESweep() * M_PI / 180.0, -m_InLEDihedral() * M_PI / 180.0, tangent, normal);
+            GetTanNormVec(tle, -m_InLESweep() * M_PI / 180.0, m_InLEDihedral() * M_PI / 180.0, tangent, normal);
             tangent = tangent * m_InLEStrength() * le_in_str;
             tangent.get_pnt(tgt);
             le_joint.set_left_fp(tgt);
@@ -1059,7 +1059,7 @@ void WingSect::GetJoints( bool first, bool last,
         case BLEND_MATCH_IN_ANGLES :
         case BLEND_MATCH_LE_ANGLES :
         {
-            GetTanNormVec( tte, m_InTESweep()*M_PI/180.0, m_InTEDihedral()*M_PI/180.0, tangent, normal );
+            GetTanNormVec( tte, m_InTESweep()*M_PI/180.0, -m_InTEDihedral()*M_PI/180.0, tangent, normal );
             tangent = tangent * m_InTEStrength() * te_in_str;
             tangent.get_pnt( tgt );
             te_joint.set_left_fp( tgt );
@@ -1205,10 +1205,10 @@ void WingSect::GetBlendTangents( bool in, vec3d &te_tan, vec3d &le_tan )
 
     if ( in )
     {
-        GetTanNormVec( tle, -m_InLESweep() * M_PI / 180.0, -m_InLEDihedral() * M_PI / 180.0, le_tan, normal );
+        GetTanNormVec( tle, -m_InLESweep() * M_PI / 180.0, m_InLEDihedral() * M_PI / 180.0, le_tan, normal );
         le_tan = le_tan * m_InLEStrength() * m_LEInStr;
 
-        GetTanNormVec( tte, m_InTESweep() * M_PI / 180.0, m_InTEDihedral() * M_PI / 180.0, te_tan, normal );
+        GetTanNormVec( tte, m_InTESweep() * M_PI / 180.0, -m_InTEDihedral() * M_PI / 180.0, te_tan, normal );
         te_tan = te_tan * m_InTEStrength() * m_TEInStr;
     }
     else
@@ -1241,7 +1241,7 @@ void WingSect::SetUnsetParms( int irib, const VspSurf &surf, const double &te_in
     if ( m_InTEMode() != BLEND_ANGLES && m_InTEMode() != BLEND_MATCH_LE_ANGLES )
     {
         m_InTESweep = 180.0-thetaL*180.0/M_PI;
-        m_InTEDihedral = asin ( sin ( phiL ) / cos( m_InTESweep() * M_PI / 180.0 ) ) * 180.0 / M_PI;
+        m_InTEDihedral = -asin ( sin ( phiL ) / cos( m_InTESweep() * M_PI / 180.0 ) ) * 180.0 / M_PI;
     }
 
     if ( m_InTEMode() == BLEND_FREE )
@@ -1268,7 +1268,7 @@ void WingSect::SetUnsetParms( int irib, const VspSurf &surf, const double &te_in
     if ( m_InLEMode() != BLEND_ANGLES )
     {
         m_InLESweep = -(180.0-thetaL*180.0/M_PI);
-        m_InLEDihedral = -asin ( sin ( phiL ) / cos( m_InLESweep() * M_PI / 180.0 ) ) * 180.0 / M_PI;
+        m_InLEDihedral = asin ( sin ( phiL ) / cos( m_InLESweep() * M_PI / 180.0 ) ) * 180.0 / M_PI;
     }
 
     if ( m_InLEMode() == BLEND_FREE )
@@ -1409,7 +1409,10 @@ void WingGeom::Update( bool fullupdate )
     // m_SurfDirty update after the m_XForDirty update
     if ( xform_dirty )
     {
+        // Setting the totals leaves the list of edited Parms as it was.
+        vector< string > updated_parms = m_UpdatedParmVec;
         UpdateTotalParameters();
+        m_UpdatedParmVec = updated_parms;
     }
 }
 
@@ -1634,6 +1637,8 @@ void WingGeom::InsertXSec( int index, int type )
     if ( index > 0 && index < m_XSecSurf.NumXSec() )
     {
         string ins_id = m_XSecSurf.InsertXSec(type, index);
+        // The new section may be past the old last one.
+        m_ActiveWingSection.SetUpperLimit( m_XSecSurf.NumXSec() - 1 );
         m_ActiveWingSection = index + 1;
         PasteWingSect( m_ActiveWingSection() );
     }
@@ -1651,14 +1656,28 @@ void WingGeom::SplitWingSect( int index  )
         double rc = ws->m_RootChord();
         double ac = ws->m_AvgChord();
         double tc = ws->m_TipChord();
-        double twist = 0.5*ws->m_Twist();
+
+        // Relative twist splits in half; absolute twist puts the new airfoil halfway between its neighbors.
+        double twist_in = 0.5 * ws->m_Twist();
+        double twist_out = twist_in;
+        if ( !m_RelativeTwistFlag() )
+        {
+            double twist_prev = 0.0;
+            WingSect* prev_ws = GetWingSect( index - 1 );
+            if ( prev_ws )
+            {
+                twist_prev = prev_ws->m_Twist();
+            }
+            twist_in = 0.5 * ( twist_prev + ws->m_Twist() );
+            twist_out = ws->m_Twist();
+        }
 
         int curve_type = ws->GetXSecCurve()->GetType();
 
         string ins_id = m_XSecSurf.InsertXSec( curve_type, index );
 
         ws->ForceSpanRcTc( span*0.5, rc, ac );
-        ws->m_Twist = twist;
+        ws->m_Twist = twist_in;
         ws->Update();
 
         XSec* xs = m_XSecSurf.FindXSec( ins_id );
@@ -1667,7 +1686,12 @@ void WingGeom::SplitWingSect( int index  )
             WingSect* ins_ws = dynamic_cast< WingSect* >(xs);
             ins_ws->CopyFrom( ws );
             ins_ws->ForceSpanRcTc( span*0.5, ac, tc );
-            ins_ws->m_Twist = twist;
+            ins_ws->m_Twist = twist_out;
+            // Relative dihedral is the change from the section before, and the halves lie in one plane.
+            if ( m_RelativeDihedralFlag() )
+            {
+                ins_ws->m_Dihedral = 0.0;
+            }
             ins_ws->Update();
         }
     }
@@ -1744,6 +1768,8 @@ void WingGeom::InsertWingSect( int index  )
         int type = xs->GetXSecCurve()->GetType();
 
         string ins_id = m_XSecSurf.InsertXSec(type, index);
+        // The new section may be past the old last one.
+        m_ActiveWingSection.SetUpperLimit( m_XSecSurf.NumXSec() - 1 );
         m_ActiveWingSection = index + 1;
         PasteWingSect( m_ActiveWingSection() );
     }
@@ -1788,6 +1814,24 @@ void WingGeom::UpdateSurf()
 
     //==== Make Sure Chord Match For Adjacent Wing Sections ====//
     MatchWingSections();
+
+    // The flaps are sized from the section widths of this Update.
+    for ( int i = 0 ; i < m_XSecSurf.NumXSec() ; i++ )
+    {
+        WingSect* ws = dynamic_cast < WingSect* > ( m_XSecSurf.FindXSec( i ) );
+        if ( ws )
+        {
+            XSecCurve* xsc = ws->GetXSecCurve();
+            if ( xsc )
+            {
+                Parm* width_parm = ParmMgr.FindParm( xsc->GetWidthParmID() );
+                if ( width_parm )
+                {
+                    width_parm->Set( ws->m_TipChord() );
+                }
+            }
+        }
+    }
 
     NormalizeFlaps();
 

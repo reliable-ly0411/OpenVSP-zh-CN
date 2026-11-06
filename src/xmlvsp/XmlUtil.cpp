@@ -70,6 +70,57 @@ xmlNodePtr XmlUtil::GetNodeDbg( xmlNodePtr node, const char * name, int id, cons
     return nullptr;
 }
 
+//==== Get All Nodes w/ Name ====//
+vector< xmlNodePtr > XmlUtil::GetNodes( xmlNodePtr node, const char * name )
+{
+    vector< xmlNodePtr > nodes;
+
+    if ( node == nullptr )
+    {
+        return nodes;
+    }
+
+    for ( xmlNodePtr iter_node = node->xmlChildrenNode; iter_node != nullptr; iter_node = iter_node->next )
+    {
+        if ( !xmlStrcmp( iter_node->name, ( const xmlChar * )name ) )
+        {
+            nodes.push_back( iter_node );
+        }
+    }
+
+    return nodes;
+}
+
+//==== Get First Node of Each Name ====//
+std::unordered_map< string, xmlNodePtr > XmlUtil::GetNodeMap( xmlNodePtr node )
+{
+    std::unordered_map< string, xmlNodePtr > nodes;
+
+    if ( node == nullptr )
+    {
+        return nodes;
+    }
+
+    for ( xmlNodePtr iter_node = node->xmlChildrenNode; iter_node != nullptr; iter_node = iter_node->next )
+    {
+        // emplace keeps the first node of a name, as GetNode( node, name, 0 ) finds.
+        nodes.emplace( string( ( const char * )iter_node->name ), iter_node );
+    }
+
+    return nodes;
+}
+
+//==== Find Node of a Name in a Map ====//
+xmlNodePtr XmlUtil::FindNode( const std::unordered_map< string, xmlNodePtr > & nodes, const string & name )
+{
+    std::unordered_map< string, xmlNodePtr >::const_iterator iter = nodes.find( name );
+    if ( iter == nodes.end() )
+    {
+        return nullptr;
+    }
+    return iter->second;
+}
+
 //==== Extract Double From Node  ====//
 double XmlUtil::ExtractDouble( xmlNodePtr node )
 {

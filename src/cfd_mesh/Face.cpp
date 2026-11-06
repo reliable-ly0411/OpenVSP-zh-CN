@@ -201,12 +201,10 @@ static bool FaceOutward( Face* f, const vec3d &nsurf, Surf* surfPtr )
     return dprod >= 0.0;
 }
 
-void Node::AreaWeightedLaplacianSmooth( Surf* surfPtr )
+void Node::AreaWeightedLaplacianSmooth( Surf* surfPtr, vector< Face* > &connectFaces, vector< double > &areas, vector< char > &wasgood )
 {
-    vector< Face* > connectFaces;
     GetConnectFaces( connectFaces );
 
-    vector< double > areas;
     areas.resize( connectFaces.size() );
 
     double sum_area = 0.0;
@@ -292,7 +290,7 @@ void Node::AreaWeightedLaplacianSmooth( Surf* surfPtr )
     // that turns over, not the surface underneath it.
     vec3d nsurf = surfPtr->CompNorm( uw.x(), uw.y() );
 
-    vector< bool > wasgood( connectFaces.size() );
+    wasgood.resize( connectFaces.size() );
 
     for ( int i = 0 ; i < ( int )connectFaces.size() ; i++ )
     {
@@ -845,6 +843,7 @@ void Face::ReplaceEdge( Edge* curr_edge, Edge* replace_edge )
 // for, so this catches only faces that are past saving and leaves ordinary poor ones to be
 // improved by smoothing and swapping.
 static const double MIN_TRI_ANGLE = 0.5 * M_PI / 180.0;
+static const double COS_MIN_TRI_ANGLE = cos( MIN_TRI_ANGLE );
 
 bool Face::Degenerate()
 {
@@ -853,7 +852,14 @@ bool Face::Degenerate()
         return false;                       // quads are not this routine's business
     }
 
-    return ComputeTriQual() < MIN_TRI_ANGLE;
+    // acos is decreasing on [-1, 1], so the smallest angle is under MIN_TRI_ANGLE when the
+    // largest cosine is over its cosine; in doubles the two differ only for a cosine that rounds
+    // to the limit angle.  ComputeTriQual clamps the cosine to [-1, 1] before acos; unclamped, a
+    // cosine over 1 is still over the limit and one under -1 still is not.
+    double ang0, ang1, ang2;
+    ComputeCosAngles( n0, n1, n2, &ang0, &ang1, &ang2 );
+
+    return max( ang0, max( ang1, ang2 ) ) > COS_MIN_TRI_ANGLE;
 }
 
 double Face::ComputeTriQual()
@@ -908,6 +914,26 @@ double Face::ComputeTriQual( Node* n0, Node* n1, Node* n2 )
     //return qual;
 }
 
+// The cosine of a triangle's smallest angle, clamped to [-1, 1].
+double Face::ComputeCosSmallAng( Node* n0, Node* n1, Node* n2 )
+{
+    double ang0, ang1, ang2;
+    ComputeCosAngles( n0, n1, n2, &ang0, &ang1, &ang2 );
+
+    double minang = max( ang0, max( ang1, ang2 ) );
+
+    if ( minang > 1.0 )
+    {
+        return 1.0;
+    }
+    else if ( minang < -1.0 )
+    {
+        return -1.0;
+    }
+
+    return minang;
+}
+
 double Face::ComputeCosSmallAng()
 {
     double minang, ang0, ang1, ang2, ang3;
@@ -948,9 +974,15 @@ vec3d Face::Normal( Node* n0, Node* n1, Node* n2 )
 
 void Face::ComputeCosAngles( Node* n0, Node* n1, Node* n2, double* ang0, double* ang1, double* ang2 )
 {
-    double dsqr01 = dist_squared( n0->pnt, n1->pnt );
-    double dsqr12 = dist_squared( n1->pnt, n2->pnt );
-    double dsqr20 = dist_squared( n2->pnt, n0->pnt );
+    ComputeCosAngles( n0->pnt, n1->pnt, n2->pnt, ang0, ang1, ang2 );
+}
+
+// The same for corners that need not be nodes yet, such as a triangle a split would build.
+void Face::ComputeCosAngles( const vec3d &p0, const vec3d &p1, const vec3d &p2, double* ang0, double* ang1, double* ang2 )
+{
+    double dsqr01 = dist_squared( p0, p1 );
+    double dsqr12 = dist_squared( p1, p2 );
+    double dsqr20 = dist_squared( p2, p0 );
 
     double d01 = sqrt( dsqr01 );
     double d12 = sqrt( dsqr12 );

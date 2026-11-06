@@ -9,12 +9,22 @@
 #include "ScreenMgr.h"
 #include "PropGeom.h"
 #include "ParmMgr.h"
+#include "VSPChinese.h"
 
 using namespace vsp;
 
 
+// The ways the blades can take a hinge's angle.
+static void AddBladeMotionItems( Choice & choice )
+{
+    choice.AddItem( "Collective", vsp::PROP_BLADE_COLLECTIVE );
+    choice.AddItem( "Individual", vsp::PROP_BLADE_INDIVIDUAL );
+    choice.AddItem( "Harmonic", vsp::PROP_BLADE_HARMONIC );
+    choice.UpdateItems();
+}
+
 //==== Constructor ====//
-PropScreen::PropScreen( ScreenMgr* mgr ) : XSecScreen( mgr, 460, 800, "Propeller", string(), string(), "Airfoil Alias", false ) // combine xsec and xseccurve name controls
+PropScreen::PropScreen( ScreenMgr* mgr ) : XSecScreen( mgr, 510, 800, "Propeller", "Propeller.html", string(), "Airfoil Alias", false ) // combine xsec and xseccurve name controls
 {
     m_CurrDisplayGroup = nullptr;
 
@@ -23,6 +33,24 @@ PropScreen::PropScreen( ScreenMgr* mgr ) : XSecScreen( mgr, 460, 800, "Propeller
     Fl_Group* design_group = AddSubGroup( design_tab, 5 );
 
     m_DesignLayout.SetGroupAndScreen( design_group, this );
+
+    m_DesignLayout.AddDividerBox( "Preset" );
+    m_PresetChoice.AddItem( "Propeller", PROP_PRESET_PROPELLER );
+    m_PresetChoice.AddItem( "Helicopter Rotor", PROP_PRESET_HELICOPTER );
+    int std_btn = m_DesignLayout.GetButtonWidth();
+    int std_slider = m_DesignLayout.GetSliderWidth();
+    m_DesignLayout.SetFitWidthFlag( false );
+    m_DesignLayout.SetSameLineFlag( true );
+    m_DesignLayout.SetSliderWidth( m_DesignLayout.GetW() - m_DesignLayout.GetChoiceButtonWidth() - 50 );
+    m_DesignLayout.AddChoice( m_PresetChoice, "Preset" );
+    m_DesignLayout.SetButtonWidth( m_DesignLayout.GetRemainX() );
+    m_DesignLayout.AddButton( m_PresetButton, "Set" );
+    m_DesignLayout.ForceNewLine();
+    m_DesignLayout.SetButtonWidth( std_btn );
+    m_DesignLayout.SetSliderWidth( std_slider );
+    m_DesignLayout.SetFitWidthFlag( true );
+    m_DesignLayout.SetSameLineFlag( false );
+    m_DesignLayout.AddYGap();
 
     m_DesignLayout.AddDividerBox( "Modeling" );
     m_PropModeChoice.AddItem( "Blades" );
@@ -132,6 +160,36 @@ PropScreen::PropScreen( ScreenMgr* mgr ) : XSecScreen( mgr, 460, 800, "Propeller
 
     buf[ indx + 1 ] = 'P';
     m_DesignLayout.AddOutput( m_PSolidityOutput, buf, "%7.4f" );
+
+    char theta[5];
+    indx = 0;
+    indx += fl_utf8encode( 952, &theta[ indx ] ); // Greek character theta
+    theta[ indx ] = 0;
+
+    char delta[5];
+    indx = 0;
+    indx += fl_utf8encode( 948, &delta[ indx ] ); // Greek character delta
+    delta[ indx ] = 0;
+
+    char alpha[5];
+    indx = 0;
+    indx += fl_utf8encode( 945, &alpha[ indx ] ); // Greek character alpha
+    alpha[ indx ] = 0;
+
+    char beta[5];
+    indx = 0;
+    indx += fl_utf8encode( 946, &beta[ indx ] ); // Greek character beta
+    beta[ indx ] = 0;
+
+    char zeta[5];
+    indx = 0;
+    indx += fl_utf8encode( 950, &zeta[ indx ] ); // Greek character zeta
+    zeta[ indx ] = 0;
+
+    char psi[5];
+    indx = 0;
+    indx += fl_utf8encode( 968, &psi[ indx ] ); // Greek character psi
+    psi[ indx ] = 0;
 
     m_DesignLayout.ForceNewLine();
     m_DesignLayout.SetFitWidthFlag( true );
@@ -426,6 +484,87 @@ PropScreen::PropScreen( ScreenMgr* mgr ) : XSecScreen( mgr, 460, 800, "Propeller
     m_ModifyLayout.AddSlider( m_FlapTEYSlider, "Y/T", 10.0, "%6.5f" );
     m_ModifyLayout.AddSlider( m_FlapTEDeflectionSlider, "Deflection", 10.0, "%6.5f" );
 
+    Fl_Group* hinge_tab = AddTab( "Motion" );
+    Fl_Group* hinge_group = AddSubGroup( hinge_tab, 5 );
+
+    m_HingeLayout.SetGroupAndScreen( hinge_group, this );
+
+    // Half the column, for two controls to a line.
+    int w2 = m_HingeLayout.GetW() / 2;
+
+    m_HingeLayout.SetButtonWidth( 100 );
+    m_HingeLayout.SetChoiceButtonWidth( 100 );
+    m_HingeLayout.SetInputWidth( 55 );
+
+    // Rotate is also on the Design tab; here it turns the harmonic motion.
+    m_HingeLayout.AddDividerBox( "Rotation" );
+    m_HingeLayout.AddSlider( m_HingeRotateSlider, "Rotate", 100, "%5.3f" );
+    m_HingeLayout.AddSlider( m_PsiRefSlider, ( string( psi ) + " Ref" ).c_str(), 100, "%5.3f" );
+
+    m_HingeLayout.AddYGap();
+
+    // One mode moves the flap, lag and feather; the blade the per-blade angles are shown for.
+    m_HingeLayout.AddDividerBox( "Blade Motion" );
+    m_HingeLayout.SetSameLineFlag( true );
+    AddBladeMotionItems( m_BladeMotionModeChoice );
+    m_HingeLayout.AddChoice( m_BladeMotionModeChoice, "Mode", w2 );
+    m_HingeLayout.AddCounter( m_NumHarmonicsCounter, "Harmonics", w2 );
+    m_HingeLayout.ForceNewLine();
+    m_HingeLayout.SetSameLineFlag( false );
+    m_HingeLayout.AddIndexSelector( m_ActiveBladeIndexSelector, "Blade" );
+
+    // Width of the toggle that gives each blade its own fold angle.
+    int indw = 40;
+
+    m_HingeLayout.AddYGap();
+
+    m_HingeLayout.AddDividerBox( "Flapping", 0, DrawObjKeyColor( PropGeom::HingeDrawColor( PropGeom::FLAP_HINGE ) ) );
+    AddHingePlace( m_RFlapSlider, m_AxFlapSlider, m_OffFlapSlider );
+    // The axis angles carry their rotor notation in Greek.
+    AddSliderPair( m_HingeLayout, m_AzFlapSlider, string( "Azimuth (" ) + theta + "_F)", 100,
+                   m_ElFlapSlider, string( "Elevation (" ) + delta + "_3)", 100 );
+    m_HingeLayout.AddYGap();
+    AddHarmonicGui( m_FlapHarmonicGui, m_FlapAngleSlider, beta );
+
+    m_HingeLayout.AddYGap();
+
+    m_HingeLayout.AddDividerBox( "Lag", 0, DrawObjKeyColor( PropGeom::HingeDrawColor( PropGeom::LAG_HINGE ) ) );
+    AddHingePlace( m_RLagSlider, m_AxLagSlider, m_OffLagSlider );
+    AddSliderPair( m_HingeLayout, m_AzLagSlider, string( "Azimuth (" ) + theta + "_L)", 100,
+                   m_CantLagSlider, string( "Cant (" ) + alpha + "_1)", 100 );
+    m_HingeLayout.AddYGap();
+    AddHarmonicGui( m_LagHarmonicGui, m_LagAngleSlider, zeta );
+
+    m_HingeLayout.AddYGap();
+
+    m_HingeLayout.AddDividerBox( "Feather", 0, DrawObjKeyColor( PropGeom::HingeDrawColor( PropGeom::FEATHER_HINGE ) ) );
+    m_HingeLayout.AddSlider( m_RFeatherSlider, "Radial/R", 1, "%5.3f" );
+    m_HingeLayout.AddYGap();
+    AddHarmonicGui( m_FeatherHarmonicGui, m_HingeFeatherSlider, theta );
+
+    m_HingeLayout.AddYGap();
+
+    m_HingeLayout.AddDividerBox( "Folding", 0, DrawObjKeyColor( PropGeom::HingeDrawColor( PropGeom::FOLD_HINGE ) ) );
+
+    AddHingePlace( m_RFoldSlider, m_AxFoldSlider, m_OffFoldSlider );
+    AddSliderPair( m_HingeLayout, m_AzFoldSlider, "Azimuth", 100, m_ElFoldSlider, "Elevation", 100 );
+    m_HingeLayout.AddYGap();
+
+    m_HingeLayout.SetFitWidthFlag( false );
+    m_HingeLayout.SetSameLineFlag( true );
+
+    m_HingeLayout.SetButtonWidth( indw );
+    m_HingeLayout.AddButton( m_IndividualBladeFoldToggle, "Ind." );
+
+    m_HingeLayout.SetButtonWidth( 100 - indw );
+    m_HingeLayout.SetFitWidthFlag( true );
+
+    m_HingeLayout.AddSlider( m_FoldAngleSlider, "Angle", 100, "%5.3f" );
+    m_HingeLayout.ForceNewLine();
+
+    m_HingeLayout.SetButtonWidth( 100 );
+    m_HingeLayout.SetSameLineFlag( false );
+
     Fl_Group* more_tab = AddTab("More" );
     Fl_Group* more_group = AddSubGroup(more_tab, 5 );
 
@@ -433,40 +572,6 @@ PropScreen::PropScreen( ScreenMgr* mgr ) : XSecScreen( mgr, 460, 800, "Propeller
 
     m_MoreLayout.SetButtonWidth(100 );
     m_MoreLayout.SetChoiceButtonWidth(100 );
-
-    m_MoreLayout.AddDividerBox("Folding" );
-
-    m_MoreLayout.SetFitWidthFlag( false );
-    m_MoreLayout.SetSameLineFlag( true );
-
-    m_MoreLayout.SetButtonWidth( 15 );
-    m_MoreLayout.AddButton( m_IndividualBladeFoldToggle, "");
-
-    m_MoreLayout.SetButtonWidth( 50 );
-    m_MoreLayout.SetSliderWidth( 50 );
-    m_MoreLayout.AddCounter( m_ActiveBladeIndexSelector, "Blade" );
-
-
-    m_MoreLayout.SetButtonWidth( 100 );
-    m_MoreLayout.SetFitWidthFlag( true );
-
-    m_MoreLayout.AddSlider( m_FoldAngleSlider, "Angle", 100, "%5.3f" );
-    m_MoreLayout.ForceNewLine();
-
-
-    m_MoreLayout.SetFitWidthFlag( true );
-    m_MoreLayout.SetSameLineFlag( false );
-
-
-    m_MoreLayout.AddSlider(m_RFoldSlider, "Radial/R", 1, "%5.3f" );
-    m_MoreLayout.AddSlider(m_AxFoldSlider, "Axial/R", 1, "%5.3f" );
-    m_MoreLayout.AddSlider(m_OffFoldSlider, "Offset/R", 1, "%5.3f" );
-    m_MoreLayout.AddSlider(m_AzFoldSlider, "Azimuth", 100, "%5.3f" );
-    m_MoreLayout.AddSlider(m_ElFoldSlider, "Elevation", 100, "%5.3f" );
-
-    m_MoreLayout.SetButtonWidth(100 );
-
-    m_MoreLayout.AddYGap();
 
     m_MoreLayout.AddDividerBox( "Blade Spacing" );
 
@@ -588,12 +693,109 @@ void PropScreen::RedrawBladeAzimuthSliders( int num_sliders )
     }
 }
 
+// Two sliders side by side, half the column each with a small gutter between, inside a scroll box's
+// scroll bar if it has one.
+void PropScreen::AddSliderPair( GroupLayout & layout, SliderAdjRangeInput & a, const string & alabel, double arange,
+                                SliderAdjRangeInput & b, const string & blabel, double brange )
+{
+    int gutter = 3;
+
+    int w = layout.GetW();
+    if ( dynamic_cast< Fl_Scroll* >( layout.GetGroup() ) )
+    {
+        w -= Fl::scrollbar_size();
+    }
+    int half = ( w - gutter ) / 2;
+
+    layout.SetSameLineFlag( true );
+    layout.AddSlider( a, alabel.c_str(), arange, "%5.3f", w - half );
+    layout.AddX( gutter );
+    layout.AddSlider( b, blabel.c_str(), brange, "%5.3f" );
+    layout.ForceNewLine();
+    layout.SetSameLineFlag( false );
+}
+
+// A hinge's radial place on a line of its own, then its axial and offset place side by side.
+void PropScreen::AddHingePlace( SliderAdjRangeInput & rad, SliderAdjRangeInput & ax, SliderAdjRangeInput & off )
+{
+    m_HingeLayout.AddSlider( rad, "Radial/R", 1, "%5.3f" );
+    AddSliderPair( m_HingeLayout, ax, "Axial/R", 1, off, "Offset/R", 1 );
+}
+
+// The angle beside the harmonic mean ("Mean (beta0)" in Greek), then a scrolling box for the
+// coefficients, which UpdateHarmonicGui fills.
+void PropScreen::AddHarmonicGui( HarmonicGui & gui, SliderAdjRangeInput & angle, const string & greek )
+{
+    gui.m_Greek = greek;
+
+    AddSliderPair( m_HingeLayout, angle, "Angle (" + greek + ")", 100, gui.m_MeanSlider, "Mean (" + greek + "0)", 100 );
+
+    int ht = m_HingeLayout.GetStdHeight() * 3;
+    m_HingeLayout.AddSubGroupLayout( gui.m_Layout, m_HingeLayout.GetRemainX(), ht );
+    m_HingeLayout.AddY( ht );
+
+    gui.m_Scroll = gui.m_Layout.AddFlScroll( gui.m_Layout.GetRemainY() );
+    gui.m_Scroll->type( Fl_Scroll::VERTICAL_ALWAYS );
+    gui.m_Scroll->box( FL_BORDER_BOX );
+
+    gui.m_Layout.SetButtonWidth( m_HingeLayout.GetButtonWidth() );
+    gui.m_Layout.SetInputWidth( m_HingeLayout.GetInputWidth() );
+    gui.m_Layout.SetFitWidthFlag( true );
+}
+
+// A line for each harmonic, its cosine and sine side by side, labelled in rotor notation, e.g.
+// beta 1c and beta 1s.
+void PropScreen::UpdateHarmonicGui( HarmonicGui & gui, Parm & mean, const vector< Parm* > & cosvec,
+                                    const vector< Parm* > & sinvec )
+{
+    gui.m_MeanSlider.Update( mean.GetID() );
+
+    int n = min( cosvec.size(), sinvec.size() );
+    if ( n != ( int )gui.m_CosSliderVec.size() )
+    {
+        gui.m_Scroll->clear();
+        gui.m_Layout.SetGroup( gui.m_Scroll );
+
+        gui.m_CosSliderVec.clear();
+        gui.m_CosSliderVec.resize( n );
+        gui.m_SinSliderVec.clear();
+        gui.m_SinSliderVec.resize( n );
+
+        for ( int k = 0; k < n; k++ )
+        {
+            string label = gui.m_Greek + to_string( k + 1 );
+            AddSliderPair( gui.m_Layout, gui.m_CosSliderVec[k], label + "c", 10, gui.m_SinSliderVec[k], label + "s", 10 );
+        }
+    }
+
+    for ( int k = 0; k < n; k++ )
+    {
+        gui.m_CosSliderVec[k].Update( cosvec[k]->GetID() );
+        gui.m_SinSliderVec[k].Update( sinvec[k]->GetID() );
+    }
+}
+
 //==== Show Pod Screen ====//
 void PropScreen::Show()
 {
     if ( Update() )
     {
         XSecScreen::Show();
+    }
+}
+
+// Show the active blade's own parm when blades have their own, the propeller's otherwise.
+static void UpdateBladeSlider( SliderAdjRangeInput & slider, Parm & master, const vector< Parm* > & blade_parms,
+                               bool individual, int active_blade )
+{
+    int index = active_blade - 2;
+    if ( individual && index >= 0 && index < ( int )blade_parms.size() && blade_parms[ index ] )
+    {
+        slider.Update( blade_parms[ index ]->GetID() );
+    }
+    else
+    {
+        slider.Update( master.GetID() );
     }
 }
 
@@ -642,7 +844,6 @@ bool PropScreen::Update()
     else
     {
         m_Beta34Slider.Deactivate();
-        m_FeatherSlider.Activate();
     }
 
     m_AFLimitSlider.Update( propeller_ptr->m_AFLimit.GetID() );
@@ -670,18 +871,43 @@ bool PropScreen::Update()
 
     m_IndividualBladeFoldToggle.Update( propeller_ptr->m_IndividualBladeFoldFlag.GetID() );
     m_ActiveBladeIndexSelector.Update( propeller_ptr->m_ActiveBlade.GetID() );
+    m_BladeMotionModeChoice.Update( propeller_ptr->m_BladeMotionMode.GetID() );
+    m_NumHarmonicsCounter.Update( propeller_ptr->m_NumHarmonics.GetID() );
+    m_HingeRotateSlider.Update( propeller_ptr->m_Rotate.GetID() );
+    m_PsiRefSlider.Update( propeller_ptr->m_PsiRef.GetID() );
 
-    if ( propeller_ptr->m_ActiveBlade() > 1 && propeller_ptr->m_ActiveBlade() <= propeller_ptr->m_Nblade() )
-    {
-        int index = propeller_ptr->m_ActiveBlade() - 2;
-        m_FoldAngleSlider.Update( propeller_ptr->m_FoldAngleParmVec[ index ]->GetID() );
-    }
-    else
-    {
-        m_FoldAngleSlider.Update( propeller_ptr->m_FoldAngle.GetID() );
-    }
+    UpdateBladeSlider( m_FoldAngleSlider, propeller_ptr->m_FoldAngle, propeller_ptr->m_FoldAngleParmVec,
+                       propeller_ptr->m_IndividualBladeFoldFlag(), propeller_ptr->m_ActiveBlade() );
 
-    if ( propeller_ptr->m_IndividualBladeFoldFlag() )
+    UpdateHarmonicGui( m_FlapHarmonicGui, propeller_ptr->m_FlapMean,
+                       propeller_ptr->m_FlapCosParmVec, propeller_ptr->m_FlapSinParmVec );
+    UpdateBladeSlider( m_FlapAngleSlider, propeller_ptr->m_FlapAngle, propeller_ptr->m_FlapAngleParmVec,
+                       propeller_ptr->m_BladeMotionMode() == vsp::PROP_BLADE_INDIVIDUAL, propeller_ptr->m_ActiveBlade() );
+    m_RFlapSlider.Update( propeller_ptr->m_RadFlapAxis.GetID() );
+    m_AxFlapSlider.Update( propeller_ptr->m_AxialFlapAxis.GetID() );
+    m_OffFlapSlider.Update( propeller_ptr->m_OffsetFlapAxis.GetID() );
+    m_AzFlapSlider.Update( propeller_ptr->m_AzimuthFlapDir.GetID() );
+    m_ElFlapSlider.Update( propeller_ptr->m_ElevationFlapDir.GetID() );
+
+    UpdateHarmonicGui( m_LagHarmonicGui, propeller_ptr->m_LagMean,
+                       propeller_ptr->m_LagCosParmVec, propeller_ptr->m_LagSinParmVec );
+    UpdateBladeSlider( m_LagAngleSlider, propeller_ptr->m_LagAngle, propeller_ptr->m_LagAngleParmVec,
+                       propeller_ptr->m_BladeMotionMode() == vsp::PROP_BLADE_INDIVIDUAL, propeller_ptr->m_ActiveBlade() );
+    m_RLagSlider.Update( propeller_ptr->m_RadLagAxis.GetID() );
+    m_AxLagSlider.Update( propeller_ptr->m_AxialLagAxis.GetID() );
+    m_OffLagSlider.Update( propeller_ptr->m_OffsetLagAxis.GetID() );
+    m_AzLagSlider.Update( propeller_ptr->m_AzimuthLagDir.GetID() );
+    m_CantLagSlider.Update( propeller_ptr->m_CantLagDir.GetID() );
+
+    UpdateHarmonicGui( m_FeatherHarmonicGui, propeller_ptr->m_FeatherMean,
+                       propeller_ptr->m_FeatherCosParmVec, propeller_ptr->m_FeatherSinParmVec );
+    UpdateBladeSlider( m_HingeFeatherSlider, propeller_ptr->m_Feather, propeller_ptr->m_FeatherParmVec,
+                       propeller_ptr->FeatherMode() == vsp::PROP_BLADE_INDIVIDUAL, propeller_ptr->m_ActiveBlade() );
+    m_RFeatherSlider.Update( propeller_ptr->m_RadFeatherAxis.GetID() );
+
+    // Harmonic motion gives each blade its angles, so there is no blade to pick; the angle sliders show
+    // blade 1, whatever blade the fold's own angles pick.
+    if ( propeller_ptr->m_BladeMotionMode() == vsp::PROP_BLADE_INDIVIDUAL || propeller_ptr->m_IndividualBladeFoldFlag() )
     {
         m_ActiveBladeIndexSelector.Activate();
     }
@@ -1130,6 +1356,15 @@ void PropScreen::GuiDeviceCallBack( GuiDevice* gui_device )
     {
         propeller_ptr->ResetThickness();
         propeller_ptr->Update();
+    }
+    else if ( gui_device == &m_PresetButton )
+    {
+        if ( fl_choice( "%s", VSPTranslate( "Cancel" ).c_str(), VSPTranslate( "Ok" ).c_str(), 0,
+                        VSPTranslateMessage( "Replace the sections, blade curves, pitch and rotation with the preset?" ).c_str() ) == 1 )
+        {
+            propeller_ptr->InitPreset( m_PresetChoice.GetVal() );
+            propeller_ptr->Update();
+        }
     }
     else if ( gui_device == &m_ModXSecCurveNameInput )
     {

@@ -35,6 +35,7 @@ public:
     void ComposeStowAttachMatrix();
     void ComposeMechAttachMatrix();
     void FlipAttachMatrix( Matrix4d &attach_mat ) const;
+    void KneeFrame( vec3d &axis, vec3d &u, vec3d &u_dir, vec3d &n, vec3d &v, double &gamma ) const;
     void BuildRetractMatrix( Matrix4d &ret_mat, vec3d &knee_pt, vec3d &knee_ax, double k, int isymm ) const;
     void UpdateRetract();
     void BackCalculateRetract();
@@ -241,7 +242,6 @@ public:
 
     void AppendMainSurf( vector < VspSurf > &surfvec, int gear_config ) const;
 
-    bool m_Visible;
     Matrix4d m_StowTransform;
     Matrix4d m_StowSymmTransform;
     Matrix4d m_StowAttachMatrix;
@@ -620,8 +620,6 @@ public:
     void SetCurrBogieIndex( int i )             { m_CurrBogieIndex = i; }
     int GetCurrBogieIndex()                     { return m_CurrBogieIndex; }
     void DelAllBogies();
-    void ShowAllBogies();
-    void HideAllBogies();
     Bogie *  GetBogie( const string &id ) const;
     vector < string > GetAllBogies();
     void DelBogie( const int &i );

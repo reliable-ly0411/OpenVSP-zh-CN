@@ -40,6 +40,9 @@
 //
 //      CfdMeshMgr::MergeBorderEndPoints: Merge IPnts into single points.
 //
+//      CfdMeshMgr::JoinLooseChainEnds: Join each intersection curve end that meets no other curve
+//              to the nearest point of one.
+//
 //      CfdMeshMgr::BuildMesh: For each surface, find chains and build triangle mesh.
 //
 //      CfdMeshMgr::RemoveInteriorTris: For each triangle, shoot ray and count number of crossings.
@@ -160,10 +163,16 @@ public:
     virtual void WriteTaggedSTL( const string &filename );
     virtual void WriteTetGen( const string &filename );
     virtual void WriteNASCART_Obj_Tri_Gmsh( const string &dat_fn, const string &key_fn, const string &obj_fn, const string &tri_fn, const string &gmsh_fn, const string & vspgeom_fn );
-    virtual void WriteTagFiles( string file_name, const vector< SimpFace > &allFaceVec, bool allowquads );
-    virtual void WriteTagFile( FILE* file_id, int part, int tag, const vector< SimpFace > &allFaceVec, bool allowquads );
-    virtual void WriteTagFile( FILE* file_id, const vector < int > &parts, const vector< SimpFace > &allFaceVec, bool allowquads );
+    virtual void WriteTagFiles( string file_name, const vector< SimpFace > &allFaceVec,
+                                const vector< const vector < int >* > &allTagsVec, const vector< int > &allTagVec, bool allowquads );
+    virtual void WriteTagFile( FILE* file_id, const vector < char > &match, const vector < int > &faceCombo,
+                               const vector< SimpFace > &allFaceVec, bool allowquads );
     virtual void WriteFacet( const string &facet_fn );
+
+    // The faces carrying each of tags, by position in faceTags and in that order.  A face is
+    // put with the last of tags that equals its tag.
+    void GroupFacesByTag( const vector< const vector < int >* > &faceTags, const vector< int > &tags,
+                          vector< vector< int > > &groups );
     virtual void WritePOGS( const string &pogs_fn );
     virtual void ReportPOGSWrite( const string &fn, bool ok );
     virtual bool WritePOGSSurfFile( const string &uvin_fn, const string &uv_fn,
@@ -201,6 +210,7 @@ public:
     int m_NumMeshTris = 0;
     int m_NumBorderEdges = 0;
     int m_NumOverConnEdges = 0;
+    int m_NumTopoSurfs = 0;             // Surfaces the chain topology classified, needing no rays
 
     // The same numbers as a Results entry, so a scripted run can read the verdict rather
     // than watch the console for it.  Written by every run.
@@ -232,8 +242,24 @@ public:
 
     enum { QUIET_OUTPUT, VOCAL_OUTPUT, };
 
-    void RunRayCastStage( const string &label, int n, const std::function< void( int ) > &body );
-    void RemoveInteriorTrisOneSurf( int s, double x_dist, int ncross, vector< bool > &inside, vector< int > &count );
+    bool CoplanarSurfsMeshed() const override
+    {
+        return true;
+    }
+
+    bool RemovesInteriorTris() const override
+    {
+        return true;
+    }
+
+    // The triangles of the initial mesh classified by the topology of the intersection chains:
+    // del[s][k] for face k of surface s, for each surface with handled[s] set.  The others are
+    // left to the ray cast.
+    void TopoInteriorTris( int ncross, vector< vector< char > > &del, vector< char > &handled );
+
+    void CompSurfCounts( int ncross, vector< pair< int, int > > &compcounts );
+    void RemoveInteriorTrisOneSurf( int s, double x_dist, int ncross, const vector< vector< pair< int, bool > > > &coplanar,
+                                    vector< bool > &inside, vector< int > &count );
 
     virtual void Remesh( int output_type );
     virtual void RemeshOneSurf( int isurf, int nsurf, int output_type, int &num_tris );
@@ -251,7 +277,9 @@ public:
     virtual void MergeBorderEndPoints();
     virtual void MergeEndPointCloud( IPntCloud &cloud, double tol );
     virtual void MergeCoincidentTessPnts();
+    virtual void JoinLooseChainEnds();
     virtual void TessellateChains();
+    virtual void TieCoincidentBorderChains();
     virtual void SetWakeAttachChain( ISegChain* c );
     virtual void MatchWakes();
     virtual void AddWakeCoPlanarSurfaceChains();
@@ -263,7 +291,7 @@ public:
 
     virtual void BuildTargetMap( int output_type );
     virtual void BuildChainDistTables();
-    virtual void SpreadChainDensity( int nedgeprop, int nthread, list< MapSource* > &splitSources, int stride, int output_type );
+    virtual void SpreadChainDensity( int nedgeprop, int nthread, SplitSourceSet &splitSources, int stride, int output_type );
     virtual void RemoveInteriorTris();
     virtual void RemoveTrimTris() {};  // Implemented for FEAMesh
     virtual void ConnectBorderNodes( bool wakeOnly );
@@ -314,6 +342,27 @@ protected:
     vector<Edge*> m_BadEdges;
     vector<Face*> m_BadFaces;
     vector< Node* > m_nodeStore;
+
+    // The mesh points merged once for every file written and for the watertight check.
+    //
+    // Each writer merges the points of its own choice of surfaces, numbered in the order it
+    // visits them.  Where the points within merging distance of one another always fall into
+    // groups whose members are all within that distance of each other, merging any choice of
+    // surfaces gives those same groups restricted to the choice, so one merge of every point
+    // serves them all.  Otherwise each writer merges its own points.
+    void BuildExportMerge();
+    void ClearExportMerge();
+
+    // For the surfaces flagged in use, taken in order: each point's merged point, numbered as
+    // a merge of those surfaces' points alone numbers them, and each merged point's place.
+    // used_first, when given, receives the position among those points of each merged
+    // point's first member.
+    void MergeSurfPnts( const vector< bool > &use, vector< vector< int > > &used_key,
+                        vector< vec3d > &used_pnt, vector< int > *used_first );
+
+    bool m_ExportMergeBuilt = false;
+    vector< int > m_ExportMergeStart;   // Position of each surface's first point in the merge
+    vector< int > m_ExportMergeGroup;   // Each point's group, its lowest member; empty if unusable
 
     vector< IPnt* > m_DegenCorners;
     vector< ISegChain* > m_DegenCornerChains;

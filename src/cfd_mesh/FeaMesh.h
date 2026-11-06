@@ -94,6 +94,21 @@ public:
 
     virtual void SetDrawCapFlag( int index, bool flag );
 
+    // Look the parts' and subsurfaces' property IDs up in a list of property IDs.
+    virtual void IndexFeaProperties( const vector < string > & prop_id_vec );
+
+    // The indices into m_FeaElementVec of each part's elements and of each subsurface's
+    // elements, in order.
+    void IndexElements( vector < vector < int > > &part_elems, vector < vector < int > > &ss_elems );
+    // Split a list of element indices by part surface number or by beam chain, keeping their order.
+    void SplitBySurf( const vector < int > &elems, int nsurf, vector < vector < int > > &surf_elems );
+    void SplitByChain( const vector < int > &elems, int nchain, vector < vector < int > > &chain_elems );
+
+    // The indices into m_FeaNodeVec of the nodes with one tag, by tag, and of the nodes with none,
+    // in order.  OnlyTagNodes merges the two into the nodes HasOnlyTag( tag ) accepts.
+    void IndexNodesByTag( vector < vector < int > > &single_nodes, vector < int > &untagged_nodes );
+    static void OnlyTagNodes( long long int tag, const vector < vector < int > > &single_nodes, const vector < int > &untagged_nodes, vector < int > &nodes );
+
     virtual void ExportFeaMesh();
 
     virtual void WriteCalculix();
@@ -104,12 +119,22 @@ public:
     virtual void WriteCalculixBCs( FILE* fp );
     virtual void WriteCalculixProperties( FILE* fp );
 
+    // Write the nodes or elements at the given indices, formatted in chunks side by side; element k
+    // is numbered first_id + k.
+    void WriteCalculixNodeList( FILE* fp, const vector < int > &nodes, long long int noffset );
+    void WriteCalculixElementList( FILE* fp, const vector < int > &elems, int first_id, long long int noffset, long long int eoffset );
+
     virtual void WriteNASTRAN();
     virtual void WriteNASTRAN( FILE *dat_fp, FILE *bdf_header_fp, FILE *bdf_fp, FILE *nkey_fp );
     virtual void WriteNASTRANHeader( FILE* dat_fp );
     virtual void WriteNASTRANNodes( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int &set_cnt );
     virtual void WriteNASTRANSPC1( FILE *bdf_fp );
     virtual void WriteNASTRANElements( FILE* dat_fp, FILE* bdf_fp, FILE* nkey_fp, int &set_cnt );
+
+    // Write the nodes or elements at the given indices, formatted in chunks side by side; element k
+    // is numbered first_id + k.
+    void WriteNASTRANNodeList( FILE* bdf_fp, const vector < int > &nodes, long long int noffset );
+    void WriteNASTRANElementList( FILE* bdf_fp, const vector < int > &elems, int first_id, int property_id, long long int noffset, long long int eoffset );
 
     virtual void WriteGmsh();
     virtual void WriteGmsh( FILE* fp );
@@ -122,7 +147,7 @@ public:
     virtual void WriteSTL( FILE* fp );
 
     // Was protected.
-    virtual void WriteNASTRANSet( FILE* dat_fp, FILE* nkey_fp, int & set_num, vector < long long int > set_ids, const string &set_name, const long long int &offset );
+    virtual void WriteNASTRANSet( FILE* dat_fp, FILE* nkey_fp, int & set_num, const vector < long long int > &set_ids, const string &set_name, const long long int &offset );
 
     virtual void ComputeWriteMass();
     virtual void ComputeWriteMass( FILE* fp );

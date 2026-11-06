@@ -81,6 +81,7 @@ void CfdMeshScreen::CreateGlobalTab()
 
     int actionToggleButtonWidth = 45;
     int normalButtonWidth = 175;
+    int toggleButtonWidth = 17;
 
     m_GlobalTabLayout.SetFitWidthFlag( false );
     m_GlobalTabLayout.SetSameLineFlag( true );
@@ -143,6 +144,22 @@ void CfdMeshScreen::CreateGlobalTab()
     m_GlobalTabLayout.SetButtonWidth( normalButtonWidth );
 
     m_GlobalTabLayout.AddSlider(m_NumCircleSegments, "Num Circle Segments", 100.0, "%7.5f");
+
+    m_GlobalTabLayout.SetFitWidthFlag( false );
+    m_GlobalTabLayout.SetSameLineFlag( true );
+
+    m_GlobalTabLayout.SetButtonWidth( toggleButtonWidth );
+    m_GlobalTabLayout.AddButton(m_WidthLimit, "" );
+
+    m_GlobalTabLayout.SetFitWidthFlag( true );
+    m_GlobalTabLayout.SetButtonWidth( normalButtonWidth - toggleButtonWidth );
+    m_GlobalTabLayout.AddSlider(m_NumWidthSegments, "Num Width Segments", 10.0, "%7.5f" );
+
+    m_GlobalTabLayout.ForceNewLine();
+    m_GlobalTabLayout.SetSameLineFlag( false );
+
+    m_GlobalTabLayout.SetButtonWidth( normalButtonWidth );
+
     m_GlobalTabLayout.AddSlider(m_GrowthRatio, "Growth Ratio", 2.0, "%7.5f");
 
     m_GlobalTabLayout.AddYGap();
@@ -223,6 +240,7 @@ void CfdMeshScreen::CreateGlobalTab()
 
     m_GlobalTabLayout.AddYGap();
     m_GlobalTabLayout.AddButton( m_SplitJoinSurfs, "Split and Join Surfaces" );
+    m_GlobalTabLayout.AddButton( m_TopoInterior, "Find Interior by Topology" );
 
     m_GlobalTabLayout.AddYGap();
     m_GlobalTabLayout.AddButton( m_ConvertToQuadsToggle, "Convert to Quads" );
@@ -331,7 +349,7 @@ void CfdMeshScreen::CreateDisplayTab()
     m_DisplayTabLayout.SetFitWidthFlag( false );
     m_DisplayTabLayout.SetSameLineFlag( true );
 
-    m_DisplayTabLayout.SetButtonWidth( m_DisplayTabLayout.GetW() / 3.0 );
+    m_DisplayTabLayout.SetButtonWidth( m_DisplayTabLayout.GetW() / 4.0 );
 
     m_DisplayTabLayout.AddButton( m_GrowLimitCurvGapLabel, "Growth Ratio" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::GROW_LIMIT_CURV_GAP ) );
@@ -340,6 +358,10 @@ void CfdMeshScreen::CreateDisplayTab()
     m_DisplayTabLayout.AddButton( m_GrowLimitNCircSegLabel, "Growth Ratio" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::GROW_LIMIT_CURV_NCIRCSEG ) );
     m_GrowLimitNCircSegLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
+
+    m_DisplayTabLayout.AddButton( m_GrowLimitSurfWidthLabel, "Growth Ratio" );
+    c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::GROW_LIMIT_SURF_WIDTH ) );
+    m_GrowLimitSurfWidthLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
 
     m_DisplayTabLayout.AddButton( m_GrowLimitSourcesLabel, "Growth Ratio" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::GROW_LIMIT_SOURCES ) );
@@ -354,6 +376,10 @@ void CfdMeshScreen::CreateDisplayTab()
     m_DisplayTabLayout.AddButton( m_NCircSegLabel, "Num Circle Segments" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::CURV_NCIRCSEG ) );
     m_NCircSegLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
+
+    m_DisplayTabLayout.AddButton( m_SurfWidthLabel, "Surface Width" );
+    c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::SURF_WIDTH ) );
+    m_SurfWidthLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
 
     m_DisplayTabLayout.AddButton( m_SourcesLabel, "Sources" );
     c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::SOURCES ) );
@@ -371,6 +397,12 @@ void CfdMeshScreen::CreateDisplayTab()
     m_MinLenCurvNCircSegLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
     m_MinLenCurvNCircSegLabel.SetLabelColor( FL_WHITE );
 
+    m_DisplayTabLayout.AddButton( m_MinLenSurfWidthLabel, "Min Edge Len" );
+    c = 255 * DrawObj::Color( DrawObj::reasonColorMap( vsp::MIN_LEN_CONSTRAINT_SURF_WIDTH ) );
+    m_MinLenSurfWidthLabel.SetColor( fl_rgb_color( c.x(), c.y(), c.z() ) );
+    m_MinLenSurfWidthLabel.SetLabelColor( FL_WHITE );
+
+    m_DisplayTabLayout.ForceNewLine();
 
     displayTab->show();
 }
@@ -979,6 +1011,7 @@ void CfdMeshScreen::UpdateGlobalTab()
 {
     m_ParallelMesh.Update( m_Vehicle->GetCfdSettingsPtr()->m_ParallelMeshFlag.GetID() );
     m_SplitJoinSurfs.Update( m_Vehicle->GetCfdSettingsPtr()->m_SplitJoinSurfsFlag.GetID() );
+    m_TopoInterior.Update( m_Vehicle->GetCfdSettingsPtr()->m_TopoInteriorFlag.GetID() );
 
     //===== Global Mesh Control =====//
     m_MaxEdgeLenToggleGroup.Update( m_Vehicle->GetCfdGridDensityPtr()->m_BaseAbsRel.GetID() );
@@ -1014,6 +1047,8 @@ void CfdMeshScreen::UpdateGlobalTab()
     m_NumCircleSegments.Update( m_Vehicle->GetCfdGridDensityPtr()->m_NCircSeg.GetID() );
     m_GrowthRatio.Update( m_Vehicle->GetCfdGridDensityPtr()->m_GrowRatio.GetID() );
     m_Rig3dGrowthLimit.Update( m_Vehicle->GetCfdGridDensityPtr()->m_RigorLimit.GetID() );
+    m_WidthLimit.Update( m_Vehicle->GetCfdGridDensityPtr()->m_WidthLimit.GetID() );
+    m_NumWidthSegments.Update( m_Vehicle->GetCfdGridDensityPtr()->m_NWidthSeg.GetID() );
 
     //===== Geometry Control =====//
     m_IntersectSubsurfaces.Update( m_Vehicle->GetCfdSettingsPtr()->m_IntersectSubSurfs.GetID() );
