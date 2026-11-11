@@ -8,7 +8,29 @@
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 
-## 先选版本
+## 当前发布索引（2026-11-11 核对）
+
+当前源码基线与可下载发布包是不同身份：`main` 为 OpenVSP 3.56.0 开发快照，
+不是 3.56.0 已发布汉化包。下列入口根据仓库公开 Release 元数据核对；
+本次文档核对没有重新下载附件或重新执行原生/GUI 测试，具体通过范围以各版发布说明为准。
+
+| 软件版本族 | 最新公开汉化预发布 |
+|---|---|
+| 3.55.0 | [3.55.0-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.3) |
+| 3.54.0 | [3.54.0-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.3) |
+| 3.53.0 | [3.53.0-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.3) |
+| 3.51.3 | [3.51.3-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.3) |
+| 3.51.2 | [3.51.2-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.3) |
+
+这些 rc.3 均保持预发布身份，各含五个平台 ZIP 和同页校验清单；不应将预发布称为稳定版。
+历史稳定 Latest 仍为 `3.53.0-Codex-AI-zh-CN`。每个下载目录只使用同一标签的 ZIP 与
+`SHA256SUMS.txt`，不要跨修订混用同名附件。
+
+下文 rc.2 下载示例和验收报告保留为历史记录，不代表最新修订；rc.3 的对应源码、
+新增名称显示修复和验证边界请查看上述精确发布链接。旧标签下的 README 属于该版本
+不可变源码快照，本次不移动标签、不替换包内文档或既有附件。
+
+## 先选版本（rc.2 历史记录）
 
 以下发布状态核对于 **2026-10-20**；`main`、开发分支和公开 Release 分别追踪，不能把
 分支上的文档或测试结果当成某个已下载包的验收结果。
