@@ -224,8 +224,8 @@ class NativeFamilyPlanTests(unittest.TestCase):
                 self.validate(1)
 
 
-class NativeSnapshotFamilyPlanTests(NativeFamilyPlanTests):
-    """The new snapshot retains every exact-source and family-ancestry guard."""
+class Native356FamilyPlanTests(NativeFamilyPlanTests):
+    """The new family retains every exact-source and family-ancestry guard."""
     version = '3.56.0'
 
 
@@ -343,7 +343,7 @@ class NativeFamilyPromotionTests(unittest.TestCase):
         client.latest_sha = self.source
         self.validate(client)  # Repackaging a descendant at the same exact source is allowed.
 
-    def test_snapshot_promotion_uses_same_baseline_and_latest_family_revision(self):
+    def test_new_family_promotion_uses_same_baseline_and_latest_family_revision(self):
         tag = '3.56.0-zh-CN.rc.1'
         client = self.client()
         self.validate(client, tag)

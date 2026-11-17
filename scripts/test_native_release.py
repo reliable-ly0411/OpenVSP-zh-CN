@@ -80,16 +80,26 @@ class NativePlanTests(unittest.TestCase):
             self.assertEqual({j['sha'] for j in jobs}, {SOURCE})
             self.assertEqual({j['python'] for j in jobs if j['runner'].startswith('ubuntu')}, {'3.12'})
 
-    def test_snapshot_baseline_is_localized_merge_and_backfill_stays_historical(self):
+    def test_new_family_baseline_is_localized_merge_and_backfill_stays_historical(self):
         from backfill_plan import RELEASES, matrix as historical_matrix
         historical = {version: sha for version, _, sha in RELEASES}
         self.assertNotIn('3.56.0', historical)
         self.assertEqual(NATIVE_BASELINES, dict(historical,
             **{'3.56.0': 'c7d406ed7e9be80fb2abf3b508d41fe830c9ee7c'}))
         self.assertEqual(len(historical_matrix('all')['include']), 15)
-        # Native build support must not invent a published upstream release.
-        with self.assertRaisesRegex(ValueError, 'No reviewed complete upstream notes'):
-            release_body('3.56.0-zh-CN.rc.1', SOURCE, 'example/repo')
+
+    def test_missing_reviewed_upstream_notes_still_block_new_family_release(self):
+        from upstream_release_notes import upstream_release_notes
+        # Exercise the real notes validator with missing reviewed sources, even
+        # after this repository adds the verified official 3.56 release notes.
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            (directory / 'sources.json').write_text(json.dumps(
+                dict(schema=1, github_release_count=0, versions={})))
+            with patch('native_release.upstream_release_notes',
+                       side_effect=lambda version: upstream_release_notes(version, directory)):
+                with self.assertRaisesRegex(ValueError, 'No reviewed complete upstream notes'):
+                    release_body('3.56.0-zh-CN.rc.1', SOURCE, 'example/repo')
 
     def test_old_tags_dev_snapshots_and_shell_input_rejected(self):
         for tag in ('3.55.0-Codex-AI-zh-CN', '3.55.0-zh-CN.rc.0', '3.55.0-zh-CN.rc.01',

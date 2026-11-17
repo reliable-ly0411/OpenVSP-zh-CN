@@ -10,8 +10,8 @@ import subprocess
 from backfill_plan import RELEASES
 
 # Native candidates evolve independently of the immutable historical backfill.
-# 3.56.0 is an unverified upstream development snapshot, not an official release.
-# Its first candidate must include the reviewed localized upstream merge.
+# Official OpenVSP_3.56.0 resolves to ca4958f2cf98d5e787a2a3fa37efb497e4903902.
+# Native candidates must include the localized merge of that exact upstream commit.
 NATIVE_BASELINES = {version: sha for version, _, sha in RELEASES}
 NATIVE_BASELINES['3.56.0'] = 'c7d406ed7e9be80fb2abf3b508d41fe830c9ee7c'
 
