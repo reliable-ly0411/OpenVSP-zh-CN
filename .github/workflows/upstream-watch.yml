@@ -17,6 +17,8 @@ on:
       - '.github/workflows/prepare-upstream-update.yml'
       - '.github/workflows/build-localized-pr.yml'
       - 'scripts/sync_upstream.py'
+      - 'scripts/sync_upstream_mirror.py'
+      - 'scripts/test_upstream_mirror.py'
       - 'scripts/select_official_release.py'
       - 'scripts/test_sync_upstream.py'
       - 'scripts/test_select_official_release.py'
@@ -36,6 +38,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  mirror:
+    # Independent of candidate merge success; only trusted main supplies code.
+    if: >-
+      github.repository == 'reliable-ly0411/OpenVSP-zh-CN' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fast-forward exact upstream mirror without checking out upstream code
+        env:
+          PUSH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The built-in token suppresses push-triggered workflow cascades.
+          # Credentials live only in this step, never in the repository config.
+          export GIT_CONFIG_COUNT=2
+          export GIT_CONFIG_KEY_0=http.https://github.com/reliable-ly0411/OpenVSP-zh-CN.git.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)"
+          export GIT_CONFIG_KEY_1=core.hooksPath
+          export GIT_CONFIG_VALUE_1=/dev/null
+          python3 -I scripts/sync_upstream_mirror.py
+
   policy-checks:
     # Deploying policy must not create a source candidate or start packaging.
     if: github.event_name == 'push'
