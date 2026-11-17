@@ -17,6 +17,7 @@ TRUSTED_POLICY_PATHS = (
     "scripts/sync_upstream.py", "scripts/select_official_release.py",
     "scripts/upstream_candidate.py", "scripts/check_localization_release.py",
     "scripts/upstream_maintenance.py", "scripts/upstream_ui_report.py",
+    "scripts/sync_upstream_mirror.py", "scripts/test_upstream_mirror.py",
     "scripts/test_sync_upstream.py", "scripts/test_select_official_release.py",
     "scripts/test_upstream_candidate.py", "scripts/test_workflow_policy.py",
     # Preserve the manual publisher's GUI, immutable-artifact and family gates

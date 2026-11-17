@@ -7,6 +7,7 @@
 - 当前软件版本：OpenVSP 3.56.0
 - 汉化仓库：<https://github.com/reliable-ly0411/OpenVSP-zh-CN>
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
+- 官方网站：<https://openvsp.org/>
 
 ## 先选版本
 
@@ -30,6 +31,26 @@
 需要稳定发布策略的用户可保留 Latest，但应先阅读其已知限制。
 [五版本族验收报告](docs/five-family-rc2-acceptance-20261020.md)列出精确源码、25 个原生包、
 清单哈希和 GUI 边界；[逐页汉化状态](docs/localization-status.md)列出尚未目视验收的页面。
+
+## 上游提交差异
+
+[![领先上游提交](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Freliable-ly0411%2FOpenVSP-zh-CN%2Fcompare%2Fupstream-main...main&query=%24.ahead_by&label=%E9%A2%86%E5%85%88%E4%B8%8A%E6%B8%B8&color=blue&cacheSeconds=300)](https://github.com/reliable-ly0411/OpenVSP-zh-CN/compare/upstream-main...main)
+[![落后上游提交](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Freliable-ly0411%2FOpenVSP-zh-CN%2Fcompare%2Fupstream-main...main&query=%24.behind_by&label=%E8%90%BD%E5%90%8E%E4%B8%8A%E6%B8%B8&color=orange&cacheSeconds=300)](https://github.com/reliable-ly0411/OpenVSP-zh-CN/compare/main...upstream-main)
+
+以纯上游镜像 `upstream-main` 为基准比较汉化 `main`：**领先**是仅汉化主线拥有的提交数
+（含汉化、维护与合并提交），**落后**是仅上游拥有、尚未合入汉化主线的提交数；分叉时
+两者可同时大于 0。这是 Git 历史差异，不代表功能数量、汉化完成度或已发布版本；不用于
+衡量 `develop/<版本>-zh-CN` 等历史维护线是否应追随最新上游。
+
+[每日维护任务](https://github.com/reliable-ly0411/OpenVSP-zh-CN/actions/workflows/upstream-watch.yml)
+计划于 **03:17 UTC** 更新镜像（Actions 可能延迟，也可从 `main` 手动运行）。镜像精确指向
+最近一次成功获取的官方 `OpenVSP/OpenVSP:main` 提交，仅允许快进；每次运行摘要记录
+更新前后 SHA、核对时间和比较计数。上游历史重写或镜像分叉时停止，不强推。
+此步骤独立于同步候选验证，不推进汉化分支，也不构建或发布安装包。
+
+徽章直接读取 GitHub compare API 的 `ahead_by` / `behind_by`，请求 Shields 缓存 **300 秒**；
+实际显示还可能受 GitHub 图片代理缓存影响。汉化 `main` 更新后按缓存刷新，上游变化在
+镜像下一次成功同步后才计入；任务失败或停用时可能保留旧镜像，应核对上述运行记录。
 
 ## 汉化范围与兼容性
 
@@ -217,6 +238,9 @@ PR 合并不会自动改写旧 Release 页面。稳定版 Latest 不变。CI 原
 - 追加[五族 rc.2 原包验收记录](docs/five-family-rc2-acceptance-20261020.md)：25 个 ZIP 与原始清单重新校验一致；五族原始 Linux AMD64 包均完成主界面、机翼、名称和特殊字符文件名的 GUI 保存重开有限验收，保留 51 张实际窗口截图及合成模型。3.55.0 原证据恢复与其余四族新操作分别标记；Windows、macOS、ARM64 GUI 未作同范围验收。五族均已公开预发布，30 个公开文件的独立完整下载哈希全部一致；历史标签、附件和 Latest 未变。
 
 ## 未发布
+
+- README 增加官方源码、官网入口及主线相对上游的动态领先/落后提交数；每日维护独立
+  快进纯上游镜像，记录精确 SHA，不改变汉化分支同步或发布策略。
 
 ## 3.56.0-zh-CN.dev.ca4958f2cf98
 
