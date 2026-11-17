@@ -130,12 +130,13 @@ class NativeFamilyPlanTests(unittest.TestCase):
         self.git('config', 'user.email', 'test@example.invalid')
         path = self.source / 'src/cmake/VSP_Version.cmake'
         path.parent.mkdir(parents=True)
-        path.write_text('SET(VSPVER_MAJOR 3)\nSET(VSPVER_MINOR 51)\nSET(VSPVER_PATCH 2)\n')
+        path.write_text(''.join(f'SET(VSPVER_{key} {value})\n'
+                                for key, value in zip(('MAJOR', 'MINOR', 'PATCH'), self.version.split('.'))))
         self.git('add', '.')
         self.baseline = self.commit('Historical family baseline')
         self.previous = self.commit('Previous family revision')
         self.head = self.commit('Next family revision')
-        self.patcher = patch.object(native_plan, 'RELEASES', ((self.version, 'historical', self.baseline),))
+        self.patcher = patch.object(native_plan, 'NATIVE_BASELINES', {self.version: self.baseline})
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
 
@@ -221,6 +222,11 @@ class NativeFamilyPlanTests(unittest.TestCase):
         with patch.object(native_plan.subprocess, 'check_output', side_effect=shallow):
             with self.assertRaisesRegex(ValueError, 'full-history'):
                 self.validate(1)
+
+
+class NativeSnapshotFamilyPlanTests(NativeFamilyPlanTests):
+    """The new snapshot retains every exact-source and family-ancestry guard."""
+    version = '3.56.0'
 
 
 class FamilyGitHubFixture(release_fixtures.FakeGitHub):
@@ -337,9 +343,25 @@ class NativeFamilyPromotionTests(unittest.TestCase):
         client.latest_sha = self.source
         self.validate(client)  # Repackaging a descendant at the same exact source is allowed.
 
+    def test_snapshot_promotion_uses_same_baseline_and_latest_family_revision(self):
+        tag = '3.56.0-zh-CN.rc.1'
+        client = self.client()
+        self.validate(client, tag)
+        baseline = native_plan.NATIVE_BASELINES['3.56.0']
+        self.assertIn((f'compare/{baseline}...{self.source}?per_page=1', 'GET'), client.calls)
+        self.assertEqual(client.writes, [])
+        client.comparisons[baseline] = {'status': 'diverged'}
+        with self.assertRaises(ValueError):
+            self.validate(client, tag)
+        client.comparisons.clear()
+        client.catalog = [self.release(1, tag_name=tag)]
+        self.validate(client, '3.56.0-zh-CN.rc.2')
+        self.assertIn(('commits/refs%2Ftags%2F3.56.0-zh-CN.rc.1', 'GET'), client.calls)
+        self.assertEqual(client.writes, [])
+
     def test_historical_baseline_is_still_required_without_modern_releases(self):
         client = self.client()
-        baseline = next(sha for version, _, sha in native_promote.RELEASES if version == '3.55.0')
+        baseline = native_promote.NATIVE_BASELINES['3.55.0']
         client.comparisons[baseline] = {'status': 'diverged'}
         with self.assertRaises(ValueError):
             self.validate(client)

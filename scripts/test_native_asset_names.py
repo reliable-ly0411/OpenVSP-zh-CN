@@ -16,7 +16,7 @@ from backfill_verify import digest
 from test_native_functional import functional_summary
 
 
-# Independent literal expectations: five supported families, five targets each.
+# Independent literal expectations: six supported families, five targets each.
 EXPECTED_NAMES = {
     '3.51.2': (
         'OpenVSP-3.51.2-Ubuntu-24.04_amd64-zh-CN.zip',
@@ -53,6 +53,13 @@ EXPECTED_NAMES = {
         'OpenVSP-3.55.0-macos-14-ARM64-Python3.11-zh-CN.zip',
         'OpenVSP-3.55.0-macos-15-intel-X64-Python3.11-zh-CN.zip',
     ),
+    '3.56.0': (
+        'OpenVSP-3.56.0-Ubuntu-24.04_amd64-zh-CN.zip',
+        'OpenVSP-3.56.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip',
+        'OpenVSP-3.56.0-win64-Python3.11-zh-CN.zip',
+        'OpenVSP-3.56.0-macos-14-ARM64-Python3.11-zh-CN.zip',
+        'OpenVSP-3.56.0-macos-15-intel-X64-Python3.11-zh-CN.zip',
+    ),
 }
 TARGETS = (
     dict(platform='Ubuntu-24.04_amd64', runner='ubuntu-24.04', arch='x86_64', python='3.12', llvm=''),
@@ -65,8 +72,8 @@ SOURCE, WORKFLOW, RUN = 'a' * 40, 'b' * 40, '123'
 
 
 class NativeAssetNameTests(unittest.TestCase):
-    def test_all_twenty_five_names_match_literal_expectations(self):
-        self.assertEqual(set(EXPECTED_NAMES), {v for v, _, _ in backfill_plan.RELEASES})
+    def test_all_thirty_names_match_literal_expectations(self):
+        self.assertEqual(set(EXPECTED_NAMES), set(native_plan.NATIVE_BASELINES))
         for version, names in EXPECTED_NAMES.items():
             with self.subTest(version=version):
                 self.assertEqual(tuple(native_plan.asset_name(version, p['platform']) for p in TARGETS), names)
@@ -74,8 +81,8 @@ class NativeAssetNameTests(unittest.TestCase):
     def test_mapping_covers_only_native_ids_and_all_names_are_unique(self):
         self.assertEqual(set(native_plan.ARCHIVE_PLATFORMS), {p['platform'] for p in TARGETS})
         names = [native_plan.asset_name(v, p['platform']) for v in EXPECTED_NAMES for p in TARGETS]
-        self.assertEqual(len(names), 25)
-        self.assertEqual(len(set(names)), 25)
+        self.assertEqual(len(names), 30)
+        self.assertEqual(len(set(names)), 30)
         for name in names:
             self.assertEqual(Path(name).name, name)
             self.assertTrue(name.endswith('-zh-CN.zip'))
@@ -99,7 +106,7 @@ class NativeAssetNameTests(unittest.TestCase):
                          'macos-15-intel-X64-Python3.11', '../win64', 'Windows-x64', None):
             with self.subTest(platform=platform), self.assertRaises(ValueError):
                 native_plan.asset_name('3.55.0', platform)
-        for version in ('3.56.0', '3.55.0-zh-CN.rc.1', '../3.55.0', None):
+        for version in ('3.57.0', '3.55.0-zh-CN.rc.1', '../3.55.0', None):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 native_plan.asset_name(version, 'win64')
 

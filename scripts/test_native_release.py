@@ -8,7 +8,7 @@ from unittest.mock import patch
 import zipfile
 
 from backfill_verify import digest
-from native_plan import PLATFORMS, REQUIRED_CHECKS, asset_name, matrix, validate_inputs
+from native_plan import NATIVE_BASELINES, PLATFORMS, REQUIRED_CHECKS, asset_name, matrix, validate_inputs
 from native_release import find_release, prepare_assets, publish as publish_original, verify_manifest, release_body
 from test_native_functional import functional_summary
 
@@ -73,16 +73,27 @@ class FakeGitHub:
 
 class NativePlanTests(unittest.TestCase):
     def test_exact_five_targets_and_supported_families(self):
-        for version in ('3.51.2', '3.51.3', '3.53.0', '3.54.0', '3.55.0'):
+        for version in ('3.51.2', '3.51.3', '3.53.0', '3.54.0', '3.55.0', '3.56.0'):
             jobs = matrix(SOURCE, version + '-zh-CN.rc.1')['include']
             self.assertEqual(len(jobs), 5)
             self.assertEqual({j['runner'] for j in jobs}, {'ubuntu-24.04', 'ubuntu-24.04-arm', 'windows-2022', 'macos-14', 'macos-15-intel'})
             self.assertEqual({j['sha'] for j in jobs}, {SOURCE})
             self.assertEqual({j['python'] for j in jobs if j['runner'].startswith('ubuntu')}, {'3.12'})
 
+    def test_snapshot_baseline_is_localized_merge_and_backfill_stays_historical(self):
+        from backfill_plan import RELEASES, matrix as historical_matrix
+        historical = {version: sha for version, _, sha in RELEASES}
+        self.assertNotIn('3.56.0', historical)
+        self.assertEqual(NATIVE_BASELINES, dict(historical,
+            **{'3.56.0': 'c7d406ed7e9be80fb2abf3b508d41fe830c9ee7c'}))
+        self.assertEqual(len(historical_matrix('all')['include']), 15)
+        # Native build support must not invent a published upstream release.
+        with self.assertRaisesRegex(ValueError, 'No reviewed complete upstream notes'):
+            release_body('3.56.0-zh-CN.rc.1', SOURCE, 'example/repo')
+
     def test_old_tags_dev_snapshots_and_shell_input_rejected(self):
         for tag in ('3.55.0-Codex-AI-zh-CN', '3.55.0-zh-CN.rc.0', '3.55.0-zh-CN.rc.01',
-                    '3.56.0-zh-CN.rc.1', '3.55.0-zh-CN.dev.aaaaaaaaaaaa', TAG + '; echo injected'):
+                    '3.57.0-zh-CN.rc.1', '3.55.0-zh-CN.dev.aaaaaaaaaaaa', TAG + '; echo injected'):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 validate_inputs(SOURCE, tag)
         for source in ('main', 'a' * 39, 'A' * 40, SOURCE + '\n'):

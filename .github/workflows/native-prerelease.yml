@@ -18,7 +18,7 @@ on:
         required: true
         type: string
       new_tag:
-        description: NEW SemVer prerelease tag, for example 3.55.0-zh-CN.rc.1
+        description: NEW SemVer prerelease tag, for example 3.56.0-zh-CN.rc.1
         required: true
         type: string
 

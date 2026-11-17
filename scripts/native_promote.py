@@ -9,9 +9,8 @@ import subprocess
 from urllib.parse import quote
 import zipfile
 
-from backfill_plan import RELEASES
 from backfill_verify import digest
-from native_plan import PLATFORMS, asset_name, family_revision, validate_inputs
+from native_plan import NATIVE_BASELINES, PLATFORMS, asset_name, family_revision, validate_inputs
 from native_release import GitHub, publish, validate_gui_review, validate_report, verify_manifest
 
 
@@ -72,7 +71,7 @@ def validate_promotion_source(api, source_sha, tag):
     published = [(family_revision(release['tag_name'], version), release['tag_name'])
                  for release in releases if not release['draft']]
     published = [(number, name) for number, name in published if number is not None]
-    ancestors = {next(sha for v, _, sha in RELEASES if v == version)}
+    ancestors = {NATIVE_BASELINES[version]}
     if published:
         latest_revision, latest_tag = max(published)
         if revision <= latest_revision:

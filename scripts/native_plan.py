@@ -9,6 +9,12 @@ import subprocess
 
 from backfill_plan import RELEASES
 
+# Native candidates evolve independently of the immutable historical backfill.
+# 3.56.0 is an unverified upstream development snapshot, not an official release.
+# Its first candidate must include the reviewed localized upstream merge.
+NATIVE_BASELINES = {version: sha for version, _, sha in RELEASES}
+NATIVE_BASELINES['3.56.0'] = 'c7d406ed7e9be80fb2abf3b508d41fe830c9ee7c'
+
 TAG_RE = re.compile(r'^(?P<version>[0-9]+\.[0-9]+\.[0-9]+)-zh-CN\.rc\.(?P<revision>[1-9][0-9]*)$')
 PLATFORMS = (
     dict(platform='Ubuntu-24.04_amd64', runner='ubuntu-24.04', arch='x86_64', python='3.12', llvm=''),
@@ -42,13 +48,13 @@ def validate_inputs(source_sha, new_tag):
     if not re.fullmatch('[0-9a-f]{40}', source_sha):
         raise ValueError('source_sha must be an exact lowercase 40-character commit')
     match = TAG_RE.fullmatch(new_tag)
-    if not match or match['version'] not in {v for v, _, _ in RELEASES}:
+    if not match or match['version'] not in NATIVE_BASELINES:
         raise ValueError('new_tag must be a supported <version>-zh-CN.rc.<positive integer>')
     return match['version']
 
 
 def asset_name(version, platform):
-    if version not in {v for v, _, _ in RELEASES} or platform not in {p['platform'] for p in PLATFORMS}:
+    if version not in NATIVE_BASELINES or platform not in {p['platform'] for p in PLATFORMS}:
         raise ValueError('Unsupported version family or native platform')
     return f'OpenVSP-{version}-{ARCHIVE_PLATFORMS[platform]}-zh-CN.zip'
 
@@ -78,7 +84,7 @@ def validate_source(source, source_sha, new_tag):
         raise ValueError('Checked-out source does not match source_sha')
     if git('rev-parse', '--is-shallow-repository') != 'false':
         raise ValueError('Family ancestry requires a full-history checkout with all tags')
-    baseline = next(sha for v, _, sha in RELEASES if v == version)
+    baseline = NATIVE_BASELINES[version]
     subprocess.run(['git', '-C', str(source), 'merge-base', '--is-ancestor', baseline, source_sha], check=True)
     revision = family_revision(new_tag, version)
     previous = []
