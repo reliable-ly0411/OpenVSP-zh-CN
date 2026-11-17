@@ -11,7 +11,8 @@ from native_release import release_body
 from upstream_release_notes import NOTES, upstream_release_notes
 
 
-VERSIONS = ('3.51.2', '3.51.3', '3.53.0', '3.54.0', '3.55.0')
+HISTORICAL_VERSIONS = ('3.51.2', '3.51.3', '3.53.0', '3.54.0', '3.55.0')
+VERSIONS = HISTORICAL_VERSIONS + ('3.56.0',)
 
 
 class UpstreamReleaseNotesTests(unittest.TestCase):
@@ -36,13 +37,15 @@ class UpstreamReleaseNotesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             copied = Path(temporary) / 'notes'
             shutil.copytree(NOTES, copied)
-            path = copied / '3.55.0.md'
-            original = path.read_bytes()
-            for raw in (original[:-1], original.replace(b'Features:', b'Features?'), b'# summary only\n'):
-                path.write_bytes(raw)
-                with self.assertRaises(ValueError):
-                    upstream_release_notes('3.55.0', copied)
-            for version in ('3.56.0', '../3.55.0', '3.55.0/other', '3.55.0\n'):
+            for version in VERSIONS:
+                path = copied / (version + '.md')
+                original = path.read_bytes()
+                for raw in (original[:-1], original.replace(b'Features:', b'Features?'), b'# summary only\n'):
+                    path.write_bytes(raw)
+                    with self.subTest(version=version), self.assertRaises(ValueError):
+                        upstream_release_notes(version, copied)
+                path.write_bytes(original)
+            for version in ('3.57.0', '../3.55.0', '3.55.0/other', '3.55.0\n'):
                 with self.assertRaises(ValueError):
                     upstream_release_notes(version, copied)
 
@@ -62,7 +65,7 @@ class UpstreamReleaseNotesTests(unittest.TestCase):
                     upstream_release_notes('3.55.0', copied)
 
     def test_rc1_text_does_not_claim_later_product_fixes(self):
-        for version in VERSIONS:
+        for version in HISTORICAL_VERSIONS:
             old = release_body(version + '-zh-CN.rc.1', 'a' * 40, 'example/repo', True)
             new = release_body(version + '-zh-CN.rc.2', 'a' * 40, 'example/repo', True)
             self.assertNotIn('rc.2 新增', old)
@@ -89,6 +92,39 @@ class UpstreamReleaseNotesTests(unittest.TestCase):
         pending = release_body('3.55.0-zh-CN.rc.2', 'a' * 40, 'example/repo')
         self.assertIn('待目视', pending)
         self.assertNotIn('已人工抽查', pending)
+
+    def test_356_source_identity_and_exact_official_bytes(self):
+        entry, original = upstream_release_notes('3.56.0')
+        sha = 'ca4958f2cf98d5e787a2a3fa37efb497e4903902'
+        self.assertEqual(entry['upstream_sha'], sha)
+        self.assertEqual(entry['section_bytes'], 9966)
+        self.assertEqual(hashlib.sha256(original.encode()).hexdigest(),
+                         '6254ba8d17ab91056e15b83c1e159aa37d4afe7af5d44be7fffa406fb544586f')
+        self.assertEqual(entry['publication_date'], '2026-11-05')
+        self.assertEqual(entry['announcement_url'],
+                         'https://openvsp.org/blogs/announcements/2026/11/05/openvsp-3-56-0-released')
+        metadata = json.loads((NOTES.parents[1] / '.github/upstream.json').read_text())
+        self.assertEqual(metadata['base_commit'], sha)
+        self.assertEqual(metadata['source_ref'], 'OpenVSP_3.56.0')
+        self.assertEqual(metadata['source_kind'], 'version-tag')
+        self.assertIs(metadata['upstream_publication_verified'], True)
+
+    def test_356_candidate_does_not_claim_native_acceptance_or_old_rc_changes(self):
+        for revision in (1, 2, 3):
+            body = release_body(f'3.56.0-zh-CN.rc.{revision}', 'a' * 40, 'example/repo')
+            local = body.split('## 上游版本说明')[0]
+            self.assertIn('预发布候选', local)
+            self.assertIn('尚未执行或确认该候选的五平台原生构建', local)
+            self.assertIn('离线定向测试不证明原生包通过', local)
+            self.assertIn('官方已于 2026-11-05 发布 3.56.0', local)
+            self.assertIn('官方此版本 ARM64 下载名使用 macOS 15', local)
+            self.assertNotIn('rc.2 新增', local)
+            self.assertNotIn('rc.3 新增', local)
+            self.assertNotIn('已人工抽查', local)
+            self.assertNotIn('五个平台均经原生构建', local)
+        reviewed = release_body('3.56.0-zh-CN.rc.1', 'a' * 40, 'example/repo', True)
+        self.assertIn('已人工抽查', reviewed)
+        self.assertNotIn('尚未执行或确认', reviewed)
 
     def test_release_links_reject_untrusted_repository_shape(self):
         for repository in ('example/repo?q=1', 'example/repo/other', 'https://example.com', 'a\nb/c'):
