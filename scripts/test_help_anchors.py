@@ -126,9 +126,9 @@ class BundledHelpTests(unittest.TestCase):
         self.assertEqual(set(names), {
             "AdvLink.md", "AttributeExplorer.md", "GeometryAnalysis.md",
             "SetEdit.md", "StackPresets.md", "index.md",
-            "Blank.md", "Pod.md", "Ellipsoid.md",
+            "Blank.md", "Pod.md", "Ellipsoid.md", "GenTab.md", "MassTab.md",
         })
-        self.assertEqual(len(names), 9)
+        self.assertEqual(len(names), 11)
         for name in names:
             with self.subTest(page=name):
                 self.assertEqual(Path(name).name, name)
