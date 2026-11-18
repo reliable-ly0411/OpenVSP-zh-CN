@@ -17,3 +17,9 @@
 - 来源：`ed364d66fe64309ce886b53c5911bba404c265cd` 的 `src/help/Hinge.md`，原文 blob `98de3ebc353224face767d8bc69fb96b29cdaf40`。
 - 9 个二级章节锚点、全部行内代码与相对链接均与原文静态核对，6 个图片路径保留。译稿覆盖运动、限位、矢量定向、翻转、关节链及完整参数表。
 - 与 Clone 相同，目前仅保存草稿，未生成 HTML、未纳入本地化清单或安装包，也未进行构建和浏览器验收。集成时采用上述相同步骤。
+
+## Conformal
+
+- 来源：`ed364d66fe64309ce886b53c5911bba404c265cd` 的 `src/help/Conformal.md`，原文 blob `90f24f4d51b5ec91b10179dd569326a25bdbacc9`。
+- 8 个二级章节锚点、全部行内代码及相对链接静态核对通过，7 个图片路径保留。保留偏移符号、弦向比例计量方向与示例值，以及原参数 `UMinTrimTypeFalg`、`UMaxTrimTypeFalg` 的实际拼写。
+- 当前仍为未生成、未集成的译稿，待与 Clone、Hinge 一同按仓库生成与验收流程检查。
