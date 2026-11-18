@@ -126,15 +126,16 @@ class BundledHelpTests(unittest.TestCase):
         self.assertEqual(set(names), {
             "AdvLink.md", "AttributeExplorer.md", "GeometryAnalysis.md",
             "SetEdit.md", "StackPresets.md", "index.md",
+            "Blank.md", "Pod.md", "Ellipsoid.md",
         })
-        self.assertEqual(len(names), 6)
+        self.assertEqual(len(names), 9)
         for name in names:
             with self.subTest(page=name):
                 self.assertEqual(Path(name).name, name)
                 self.assertTrue((HELP / name).is_file())
                 html = HELP / "html" / (Path(name).stem + ".html")
                 self.assertTrue(html.is_file())
-                self.assertIn('<html lang="zh-CN">', html.read_text(encoding="utf-8"))
+                self.assertRegex(html.read_text(encoding="utf-8"), r'<html[^>]*lang="zh-CN"')
         # Remaining pages retain upstream English Pandoc output, not an implied
         # Chinese translation or marked's incompatible math rendering.
         for source in HELP.glob("*.md"):
@@ -143,6 +144,22 @@ class BundledHelpTests(unittest.TestCase):
                 with self.subTest(upstream_page=source.name):
                     self.assertIn('name="generator" content="pandoc ', html)
                     self.assertNotIn('<html lang="zh-CN">', html)
+
+    def test_new_geometry_help_math_and_parameter_identity(self):
+        for name in ("Blank", "Pod", "Ellipsoid"):
+            source = (HELP / (name + ".md")).read_text(encoding="utf-8")
+            html = (HELP / "html" / (name + ".html")).read_text(encoding="utf-8")
+            with self.subTest(page=name):
+                self.assertIn("help-renderer: pandoc", source)
+                self.assertIn("<math ", html)
+                self.assertIn('href="index.html">目录</a>', html)
+        pod = (HELP / "html/Pod.html").read_text(encoding="utf-8")
+        self.assertIn("<code>FineRatio</code>", pod)
+        self.assertIn('src="images/Pod_profile.png"', pod)
+        ellipsoid = (HELP / "html/Ellipsoid.html").read_text(encoding="utf-8")
+        self.assertIn('<math display="block"', ellipsoid)
+        self.assertIn("<code>A_Radius</code>", ellipsoid)
+        self.assertIn('id="design"', ellipsoid)
 
     def test_all_headings_and_fragment_targets(self):
         errors, counts = check_help_anchors(HELP / "html")

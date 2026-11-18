@@ -1,39 +1,42 @@
 ---
-title:  'Pod'
+title: '吊舱（Pod）'
+help-renderer: pandoc
 ---
 
-The Pod is the simplest component: a streamlined body of revolution set by two numbers, a length and a fineness
-ratio.  Its profile is fixed: a full, rounded nose, its greatest diameter at mid-length, and a tail that tapers to a
-point.  It is the quickest way to put a store, a tank, a fairing or a placeholder body into a model.  A body of any
-other shape is a [Fuselage or Stack](FuselageStack.md), or a [Body of Revolution](BOR.md).
+吊舱是最简单的组件：由长度和细长比两个数值确定的流线型回转体。其轮廓固定，头部丰满圆润，
+最大直径位于长度中点，尾部逐渐收缩至尖点。它适合快速建立外挂物、油箱、整流罩或占位体。
+其他外形可使用[机身或堆叠体](FuselageStack.md)，或[回转体](BOR.md)。
 
-The Pod has one tab of its own, Design.  The [Gen](GenTab.md), [XForm](XFormTab.md), [Mass](MassTab.md) and
-[Sub](SubTab.md) tabs are described on their own pages.
+吊舱只有一个专用标签页 Design（设计）。通用的 [Gen](GenTab.md)、[XForm](XFormTab.md)、
+[Mass](MassTab.md) 和 [Sub](SubTab.md) 标签页分别见对应帮助。
 
-## Quick Start
+<a id="quick-start"></a>
 
-1. Add a Pod.  A new one is 10 long, with its nose at its origin and its axis along $X$.
-2. Place it with the XForm tab.
-3. Set *Length*.
-4. Set *Fine Ratio* to twice the length-to-diameter ratio wanted (see below).
+## 快速开始
 
-## Design
+1. 添加吊舱。新吊舱长度为 10，头部位于原点，轴线沿 $X$ 方向。
+2. 在 XForm 标签页调整位置。
+3. 设置 *Length*（长度）。
+4. 将 *Fine Ratio* 设为所需长径比的两倍，详见下文。
 
-| Control    | Parm         | Default | Meaning                                                   |
-|:-----------|:-------------|:--------|:----------------------------------------------------------|
-| Length     | `Length`     | 10      | Length, $L$, from the nose at $X = 0$ to the tail.        |
-| Fine Ratio | `FineRatio`  | 15      | The length divided by the greatest radius, $L / R$.       |
+<a id="design"></a>
 
-*Fine Ratio* is the length over the greatest radius, not the usual fineness ratio of length over diameter, and it
-keeps that definition so that existing models keep their shape.  The length-to-diameter ratio is half of it: the
-default Pod, *Fine Ratio* 15, has a diameter of $2L/15$, $L/D = 7.5$.  For a pod of length-to-diameter
-ratio $L/D$, set *Fine Ratio* to $2\,L/D$.
+## 设计
 
-The radius is greatest, $R = L / \mathrm{FineRatio}$, at mid-length, and the profile is the same at every size
-(Figure 1).  It reaches half of $R$ at $0.05L$ and 90 percent of it at $0.19L$; aft of mid-length it stays above 90
-percent to $0.6L$, falls to half at $0.82L$, and closes to a point at the tail.  Changing either value keeps the nose
-at the origin; *Rot Origin(X)* on the XForm tab is a fraction of the length.
+| 控件 | 参数 | 默认值 | 含义 |
+|:-----|:-----|:-------|:-----|
+| Length（长度） | `Length` | 10 | 从 $X = 0$ 的头部到尾部的长度 $L$。 |
+| Fine Ratio（细长比） | `FineRatio` | 15 | 长度与最大半径之比 $L / R$。 |
 
-![Figure 1. Pod profile](images/Pod_profile.png "Figure 1. Pod profile")
+*Fine Ratio* 是长度除以最大半径，不是通常以直径为分母的长径比。保留此定义是为了使既有模型的
+形状不变。长径比等于该值的一半：默认 *Fine Ratio* 为 15 时，直径为 $2L/15$，$L/D = 7.5$。
+若所需长径比为 $L/D$，应将 *Fine Ratio* 设为 $2\,L/D$。
 
-*Figure 1. The radius of a Pod along its length, as fractions of its greatest radius R and its length L.*
+最大半径 $R = L / \mathrm{FineRatio}$ 位于长度中点，各种尺寸下的相对轮廓相同（图 1）。
+在 $0.05L$ 处半径达到 $R$ 的一半，在 $0.19L$ 处达到 90%；中点之后到 $0.6L$ 仍大于 90%，
+在 $0.82L$ 处降至一半，最终在尾部收拢成尖点。改变任一数值时，头部仍在原点；
+XForm 标签页的 *Rot Origin(X)* 以长度的比例表示旋转中心位置。
+
+![图 1：吊舱轮廓](images/Pod_profile.png "图 1：吊舱轮廓")
+
+*图 1：吊舱沿长度方向的半径变化，分别以最大半径 R 和长度 L 归一化。*

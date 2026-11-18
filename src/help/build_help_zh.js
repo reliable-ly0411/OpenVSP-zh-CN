@@ -4,6 +4,7 @@
 const assert = require("assert/strict");
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const { pathToFileURL } = require("url");
 
 function headingText(tokens) {
@@ -145,13 +146,24 @@ function loadLocalizedPages(helpDir) {
     return names;
 }
 
+function renderLocalizedDocument(marked, markdown, name, helpDir) {
+    const metadata = markdown.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n/);
+    if (metadata && /^help-renderer:\s*pandoc\s*$/m.test(metadata[1])) {
+        return execFileSync("pandoc", [name, "--standalone", "--mathml",
+            "--from=gfm+tex_math_gfm+yaml_metadata_block", "--to=html5",
+            "--metadata=lang:zh-CN", "--css=github-pandoc.css",
+            "--lua-filter=links-to-html.lua"], { cwd: helpDir, encoding: "utf8" });
+    }
+    return renderDocument(marked, markdown, name);
+}
+
 function buildHelp(marked, helpDir, check) {
     // Validate the entire list before writing anything. Unlisted upstream pages
     // are deliberately not parsed by marked (notably Pandoc-rendered formulas).
     const names = loadLocalizedPages(helpDir);
     for (const name of names) {
         const markdown = fs.readFileSync(path.join(helpDir, name), "utf8");
-        const html = renderDocument(marked, markdown, name);
+        const html = renderLocalizedDocument(marked, markdown, name, helpDir);
         const output = path.join(helpDir, "html", name.replace(/\.md$/, ".html"));
         if (check) {
             assert.equal(fs.readFileSync(output, "utf8"), html, `Regenerate stale help: ${name}`);

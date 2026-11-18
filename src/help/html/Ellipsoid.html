@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Ellipsoid</title>
+  <title>椭球体（Ellipsoid）</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -31,74 +25,76 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Ellipsoid</h1>
+<h1 class="title">椭球体（Ellipsoid）</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>The Ellipsoid is a closed body with three radii, one along each axis.
-With all three equal it is a sphere; with two equal, a spheroid such as
-a radome, a tank end or a blister. It has one tab of its own, Design.
-The <a href="GenTab.html">Gen</a>, <a href="XFormTab.html">XForm</a>, <a
-href="MassTab.html">Mass</a> and <a href="SubTab.html">Sub</a> tabs are
-described on their own pages.</p>
-<h2 id="quick-start">Quick Start</h2>
+<p><a href="index.html">目录</a></p>
+<p>椭球体是由三个半径确定的封闭体，每个坐标轴对应一个半径。三个半径相等时为球体，两个相等时为
+旋转椭球体，可用于雷达罩、油箱端部或鼓包。它只有一个专用标签页
+Design（设计）。通用的 <a href="GenTab.html">Gen</a>、<a
+href="XFormTab.html">XForm</a>、<a href="MassTab.html">Mass</a> 和 <a
+href="SubTab.html">Sub</a> 标签页分别见对应帮助。</p>
+<p><a id="quick-start"></a></p>
+<h2 id="快速开始">快速开始</h2>
 <ol type="1">
-<li>Add an Ellipsoid. A new one is a sphere of radius 1.</li>
-<li>Place it with the XForm tab.</li>
-<li>Set <em>A Radius</em>, <em>B Radius</em> and <em>C Radius</em>.</li>
+<li>添加椭球体。新组件是半径为 1 的球体。</li>
+<li>在 XForm 标签页调整位置。</li>
+<li>设置 <em>A Radius</em>、<em>B Radius</em> 和 <em>C
+Radius</em>。</li>
 </ol>
-<h2 id="design">Design</h2>
+<p><a id="design"></a></p>
+<h2 id="设计">设计</h2>
 <table>
 <thead>
-<tr>
-<th style="text-align: left;">Control</th>
-<th style="text-align: left;">Parm</th>
-<th style="text-align: left;">Default</th>
-<th style="text-align: left;">Meaning</th>
+<tr class="header">
+<th style="text-align: left;">控件</th>
+<th style="text-align: left;">参数</th>
+<th style="text-align: left;">默认值</th>
+<th style="text-align: left;">含义</th>
 </tr>
 </thead>
 <tbody>
-<tr>
-<td style="text-align: left;">A Radius</td>
+<tr class="odd">
+<td style="text-align: left;">A Radius（A 半径）</td>
 <td style="text-align: left;"><code>A_Radius</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Semi-axis along
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>a</mi><annotation encoding="application/x-tex">a</annotation></semantics></math>.</td>
+<td style="text-align: left;">沿
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
+轴的半轴长
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>a</mi><annotation encoding="application/x-tex">a</annotation></semantics></math>。</td>
 </tr>
-<tr>
-<td style="text-align: left;">B Radius</td>
+<tr class="even">
+<td style="text-align: left;">B Radius（B 半径）</td>
 <td style="text-align: left;"><code>B_Radius</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Semi-axis along
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math>.</td>
+<td style="text-align: left;">沿
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
+轴的半轴长
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math>。</td>
 </tr>
-<tr>
-<td style="text-align: left;">C Radius</td>
+<tr class="odd">
+<td style="text-align: left;">C Radius（C 半径）</td>
 <td style="text-align: left;"><code>C_Radius</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Semi-axis along
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math>.</td>
+<td style="text-align: left;">沿
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
+轴的半轴长
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math>。</td>
 </tr>
 </tbody>
 </table>
-<p>The surface is</p>
+<p>曲面方程为</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mrow><mo stretchy="true" form="prefix">(</mo><mfrac><mrow><mi>x</mi><mo>−</mo><mi>a</mi></mrow><mi>a</mi></mfrac><mo stretchy="true" form="postfix">)</mo></mrow><mn>2</mn></msup><mo>+</mo><msup><mrow><mo stretchy="true" form="prefix">(</mo><mfrac><mi>y</mi><mi>b</mi></mfrac><mo stretchy="true" form="postfix">)</mo></mrow><mn>2</mn></msup><mo>+</mo><msup><mrow><mo stretchy="true" form="prefix">(</mo><mfrac><mi>z</mi><mi>c</mi></mfrac><mo stretchy="true" form="postfix">)</mo></mrow><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">
 \left(\frac{x - a}{a}\right)^2 + \left(\frac{y}{b}\right)^2 + \left(\frac{z}{c}\right)^2 = 1
 </annotation></semantics></math></p>
-<p>so the Ellipsoid's nose, not its center, is at its origin, and it
-runs from
+<p>因此位于组件原点的是椭球体的头部，而不是中心；其范围从
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">X = 0</annotation></semantics></math>
-to
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi><mo>=</mo><mn>2</mn><mi>a</mi></mrow><annotation encoding="application/x-tex">X = 2a</annotation></semantics></math>.
-Changing <em>A Radius</em> keeps the nose in place and moves the center.
-<em>Rot Origin(X)</em> on the XForm tab is a fraction of the length
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>a</mi></mrow><annotation encoding="application/x-tex">2a</annotation></semantics></math>,
-so 0.5 turns the Ellipsoid about its center.</p>
-<p>The surface follows this equation closely but not exactly: every
-point lies within 0.04 percent of the radius in its direction from the
-true ellipsoid. A radius may be zero, which flattens the Ellipsoid into
-an elliptical disk.</p>
+延伸至
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi><mo>=</mo><mn>2</mn><mi>a</mi></mrow><annotation encoding="application/x-tex">X = 2a</annotation></semantics></math>。
+改变 <em>A Radius</em> 时，头部保持不动，中心随之移动。XForm 标签页的
+<em>Rot Origin(X)</em> 以长度
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>a</mi></mrow><annotation encoding="application/x-tex">2a</annotation></semantics></math>
+的比例表示旋转中心位置，因此设为 0.5 时绕椭球体中心旋转。</p>
+<p>实际曲面与此方程十分接近，但并非完全一致：沿各方向测量，每个点相对精确椭球面的误差均不超过
+该方向半径的 0.04%。半径可以为零，此时椭球体压扁为椭圆盘。</p>
 </body>
 </html>

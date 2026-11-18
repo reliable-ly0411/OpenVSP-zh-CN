@@ -1,7 +1,10 @@
 [
   "AdvLink.md",
   "AttributeExplorer.md",
+  "Blank.md",
+  "Ellipsoid.md",
   "GeometryAnalysis.md",
+  "Pod.md",
   "SetEdit.md",
   "StackPresets.md",
   "index.md"
