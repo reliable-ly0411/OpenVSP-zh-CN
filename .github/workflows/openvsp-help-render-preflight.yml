@@ -23,7 +23,7 @@ jobs:
           test "$(git rev-parse HEAD~34)" = ed364d66fe64309ce886b53c5911bba404c265cd
           sudo apt-get update
           sudo apt-get install -y pandoc
-          npm install --prefix "$RUNNER_TEMP/help-deps" --no-audit --no-fund marked@15.0.12
+          npm install --prefix "$RUNNER_TEMP/help-deps" --no-audit --no-fund marked@16.4.2
           node --version
           pandoc --version
       - name: Compare default renderer with Pandoc MathML, then audit selected output
