@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>XForm Tab</title>
+  <title>XForm 变换选项卡</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -31,494 +25,403 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">XForm Tab</h1>
+<h1 class="title">XForm 变换选项卡</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>Every component (Geom) in OpenVSP is edited in a window whose first
-tabs are the same for all of them: <a href="GenTab.html">Gen</a>, XForm,
-<a href="MassTab.html">Mass</a> and <a href="SubTab.html">Sub</a>. The
-XForm tab places the Geom in the model: where it is and how it is
-turned, what it is attached to, whether it is reflected, mirrored or
-repeated, and its overall size. Every Geom is built in its own axes and
-then placed by these settings, which <a
-href="#how-the-placement-is-built">How the Placement Is Built</a> puts
-together.</p>
+<p><a href="index.html">目录</a></p>
+<p>OpenVSP 的组件（Geom）编辑窗口都以相同选项卡开头：<a
+href="GenTab.html">Gen</a>、XForm、<a href="MassTab.html">Mass</a>、<a
+href="SubTab.html">Sub</a>。XForm
+决定组件的位置、朝向、附着对象、反射或重复方式以及整体尺寸。组件先在自身坐标轴中构建，再由这些设置放置，详见<a
+href="#how-the-placement-is-built">放置变换的组合</a>。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Topic</th>
+<th style="text-align: left;">主题</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><a href="#quick-start">Quick
-Start</a></td>
+<td style="text-align: left;"><a href="#quick-start">快速开始</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#location-and-rotation">Location
-and Rotation</a></td>
+<td style="text-align: left;"><a
+href="#location-and-rotation">位置与旋转</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#abs-and-rel">Abs and
-Rel</a></td>
+<td style="text-align: left;"><a
+href="#abs-and-rel">绝对与相对坐标</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#attach-to-parent">Attach to
-Parent</a></td>
+<td style="text-align: left;"><a
+href="#attach-to-parent">附着到父组件</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#flip">Flip</a></td>
+<td style="text-align: left;"><a href="#flip">翻转</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#symmetry">Symmetry</a></td>
+<td style="text-align: left;"><a href="#symmetry">对称</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#how-the-placement-is-built">How
-the Placement Is Built</a></td>
+<td style="text-align: left;"><a
+href="#how-the-placement-is-built">放置变换的组合</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#scale">Scale</a></td>
+<td style="text-align: left;"><a href="#scale">缩放</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#scripting">Scripting</a></td>
+<td style="text-align: left;"><a href="#scripting">脚本</a></td>
 </tr>
 </tbody>
 </table>
-<h2 id="quick-start">Quick Start</h2>
-<p>A part that belongs to another part, such as a wing on a fuselage or
-a nacelle under a wing, is made a child of it and attached to it, so
-that it moves with it. In the Geom Browser, select the parent before you
-click <em>Add</em>: the new Geom becomes its child.</p>
-<h3 id="a-wing-on-a-fuselage">A wing on a fuselage</h3>
+<p><a id="quick-start"></a></p>
+<h2 id="快速开始">快速开始</h2>
+<p>机翼与机身、短舱与机翼等从属部件，应设为所属部件的子组件并附着，才能随它运动。在
+Geom Browser 中先选父组件，再点击
+<em>Add</em>，新组件即成为它的子组件。</p>
+<p><a id="a-wing-on-a-fuselage"></a></p>
+<h3 id="机身上的机翼">机身上的机翼</h3>
 <ol type="1">
-<li>Select the fuselage and add a Wing.</li>
-<li>On the XForm tab, set <em>Attach To Parent</em> to Translate
-<em>Comp</em> and Rotate <em>Comp</em>.</li>
-<li>Place the wing with <em>XLoc</em>, <em>YLoc</em> and <em>ZLoc</em>,
-now measured from the fuselage's origin in the fuselage's axes.</li>
-<li>Leave <em>Symmetry</em> at its default, Planar <em>XZ</em> about the
-wing's attachment: the left wing is the mirror image of the right one in
-the fuselage's center plane, wherever the fuselage is moved.</li>
+<li>选择机身，添加 Wing。</li>
+<li>在 XForm 的 <em>Attach To Parent</em> 中，将 Translate 和 Rotate
+均设为 <em>Comp</em>。</li>
+<li>用 <em>XLoc</em>、<em>YLoc</em>、<em>ZLoc</em>
+放置机翼。此时位置从机身原点沿机身坐标轴测量。</li>
+<li>保留默认 <em>Symmetry</em>：绕机翼附着坐标系的 Planar
+<em>XZ</em>。无论机身移到哪里，左翼都是右翼关于机身中心面的镜像。</li>
 </ol>
-<h3 id="a-nacelle-under-a-wing">A nacelle under a wing</h3>
+<p><a id="a-nacelle-under-a-wing"></a></p>
+<h3 id="机翼下的短舱">机翼下的短舱</h3>
 <ol type="1">
-<li>Select the wing and add a Pod.</li>
-<li>Set Translate to
+<li>选择机翼，添加 Pod。</li>
+<li>Translate 设为
 <em><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-MN</em> and Rotate to <em>Comp</em>, so that the nacelle sits at a
-fraction of the span and keeps the wing's axes.</li>
-<li>Set
+MN</em>，Rotate 设为
+<em>Comp</em>，使短舱位于指定展向比例处，并保持机翼轴方向。</li>
+<li>用
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-to the spanwise station and <em>M</em> 1 for the leading edge (where
-<em>N</em> has no effect), then move the nacelle forward and down with
-<em>XLoc</em> and <em>ZLoc</em>, now measured from that point in the
-wing's axes.</li>
-<li>To repeat it on the other wing, set Symmetry <em>About</em> to the
-wing (2 in the list), keep <em>Attach</em>, and check Planar
-<em>XZ</em>: the nacelle is mirrored in the same plane as the wing (see
-<a href="#symmetry">Symmetry</a>).</li>
+指定展向站位，<em>M</em> 设为 1 表示前缘（此处 <em>N</em> 无影响）。再用
+<em>XLoc</em>、<em>ZLoc</em>
+向前和向下移动短舱，此时偏移从该点沿机翼轴测量。</li>
+<li>若要在另一侧机翼重复短舱，将 Symmetry 的 <em>About</em>
+设为机翼（列表中的 2），保留 <em>Attach</em>，勾选 Planar
+<em>XZ</em>。短舱将与机翼使用相同镜像平面，见<a
+href="#symmetry">对称</a>。</li>
 </ol>
-<h2 id="location-and-rotation">Location and Rotation</h2>
-<p><em>XLoc</em>, <em>YLoc</em> and <em>ZLoc</em> move the Geom;
-<em>XRot</em>, <em>YRot</em> and <em>ZRot</em> turn it, in degrees. The
-rotations are applied in the order ZRot, YRot, XRot, each about an axis
-that stays fixed: the shape is first turned about
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>,
-the result about
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>,
-and that about
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>.
-The same turn is reached by turning about the Geom's own axes in the
-order X, Y, Z, each turn carrying the axes for the next.</p>
-<p>The Geom turns about its <em>Rot Origin(X)</em>: a point on its own
+<p><a id="location-and-rotation"></a></p>
+<h2 id="位置与旋转">位置与旋转</h2>
+<p><em>XLoc</em>、<em>YLoc</em>、<em>ZLoc</em>
+平移组件；<em>XRot</em>、<em>YRot</em>、<em>ZRot</em>
+以度为单位旋转组件。旋转依次按 ZRot、YRot、XRot
+施加，每步绕保持不动的轴：先绕
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>，将结果绕
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>，再绕
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>。等价操作是按
+X、Y、Z 顺序绕组件自身轴旋转，每次旋转都带动下一步使用的轴。</p>
+<p>组件绕 <em>Rot Origin(X)</em> 旋转。它是自身
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-axis, given as a fraction of its length. For a Fuselage, Pod, Cobra,
-Ellipsoid or BOR this is the fraction of its length along
+轴上按长度比例指定的点。对
+Fuselage、Pod、Cobra、Ellipsoid、BOR，是从头部沿
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-from the nose, for a Wing of the root chord of its first section; for
-Stack, Propeller and the Geoms without a length along
+的长度比例；对 Wing，是第一翼段根弦的比例；对 Stack、Propeller 及没有沿
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-it has no effect. The rotation origin is also the point the location
-refers to: <em>XLoc</em>, <em>YLoc</em>, <em>ZLoc</em> in <em>Abs</em>
-give where the rotation origin lies in the model, while in <em>Rel</em>
-they give how far it has been moved. A 10-unit pod with Rot Origin 0.5
-and nothing else changed shows an absolute <em>XLoc</em> of 5 and a
-relative one of 0.</p>
-<h3 id="placing-a-part-against-others">Placing a Part Against
-Others</h3>
-<p>To put a part a set distance from the rest of the model, such as a
-battery or a tank packed inside a fuselage, use <em>Snap To</em> in the
-Model menu (Figure 1) rather than adjusting by eye. Set the <em>Target
-Min Dist</em> and the Set of components to keep clear of. Then either
-hold Alt (Option) while dragging one of the part's sliders,
-<em>XLoc</em> for example, and the part stops at that clearance instead
-of passing into the others; or pick a parameter in <em>Manual Collision
-Detection</em> and click <em>Increase</em> or <em>Decrease</em> to move
-it until the clearance is reached. <em>Check Clearance</em> reports the
-present minimum distance.</p>
-<p><img src="images/XFormTab_gui_snapto.png" title="Figure 1. Snap To"
-alt="Figure 1. Snap To" /></p>
-<p><em>Figure 1. The Snap To dialog with its default settings.</em></p>
-<h2 id="abs-and-rel">Abs and Rel</h2>
-<p>The location and rotation are kept two ways, absolute (<em>Abs</em>:
-in the model's axes) and relative (<em>Rel</em>: in the axes the Geom is
-attached to, see <a href="#attach-to-parent">Attach to Parent</a>). The
-<em>Coord System</em> buttons choose which of the two the sliders show
-and set; the other is computed from it. A Geom that is not attached to
-anything has the same absolute and relative values, apart from the
-rotation origin's effect above.</p>
-<p>The choice does not change what happens when the parent moves. A
-child always keeps its relative placement when its parent moves, so an
-attached child moves with its parent even while its sliders show
-absolute values; <em>Abs</em> is a way to put a child at a known point
-in the model, not a way to pin it there.</p>
-<p>The choice does matter when the child's own attachment changes. In
-<em>Rel</em>, the child keeps its relative values and jumps to the same
-relative place in the new axes. In <em>Abs</em>, it keeps its place in
-the model and its relative values are recomputed for the new attachment.
-To attach a part that is already where it belongs, switch to
-<em>Abs</em>, change the attachment, and switch back to <em>Rel</em>:
-the part does not move, and from then on it follows its parent.</p>
-<h2 id="attach-to-parent">Attach to Parent</h2>
-<p>A child Geom may be attached to its parent. Attachment chooses the
-axes its relative location and rotation are measured in, separately for
-the two: <em>Translate</em> chooses the origin of those axes and
-<em>Rotate</em> their directions (Figure 2). With both at <em>None</em>,
-the default, the child is placed in the model's axes and stays where it
-is when the parent moves.</p>
+长度的组件，不起作用。位置值也以旋转原点为参考：<em>Abs</em> 下的
+<em>XLoc</em>、<em>YLoc</em>、<em>ZLoc</em>
+表示旋转原点在模型中的位置，<em>Rel</em> 下表示平移量。例如长 10 的
+Pod，Rot Origin 设为 0.5、其余不变，绝对 <em>XLoc</em> 为 5，相对值为
+0。</p>
+<p><a id="placing-a-part-against-others"></a></p>
+<h3 id="按间距放置部件">按间距放置部件</h3>
+<p>要让电池、油箱等与模型其他部分保持指定距离，可用 Model 菜单的
+<em>Snap To</em>（图 1），而非目测调整。设定 <em>Target Min Dist</em>
+和需要避让的组件 Set。按住 Alt（Option）拖动部件滑块（如
+<em>XLoc</em>），部件会在达到该间距时停止，而不穿入其他部件。也可在
+<em>Manual Collision Detection</em> 中选参数，点击 <em>Increase</em> 或
+<em>Decrease</em> 移动到目标间距。<em>Check Clearance</em>
+显示当前最小距离。</p>
+<p><img src="images/XFormTab_gui_snapto.png" title="图 1. Snap To"
+alt="图 1. Snap To" /></p>
+<p><em>图 1. 默认设置下的 Snap To 对话框。</em></p>
+<p><a id="abs-and-rel"></a></p>
+<h2 id="绝对与相对坐标">绝对与相对坐标</h2>
+<p>位置和旋转保存为两套值：绝对（<em>Abs</em>，模型轴）和相对（<em>Rel</em>，组件附着轴，见<a
+href="#attach-to-parent">附着到父组件</a>）。<em>Coord System</em>
+选择滑块显示和修改哪一套，另一套据此计算。未附着组件除上述旋转原点影响外，绝对值与相对值相同。</p>
+<p>此选择不改变父组件移动时的行为。子组件始终保持相对放置关系，因此即便滑块显示绝对值，已附着子组件也随父组件运动。<em>Abs</em>
+用于把子组件放到模型已知点，而非把它钉在那里。</p>
+<p>但改变子组件自身的附着方式时，此选择会影响结果。<em>Rel</em>
+保持相对值，子组件跳到新坐标系的相同相对位置；<em>Abs</em>
+保持模型中位置，重新计算相对新附着的数值。要将已摆好的部件附着而不移动，先切到
+<em>Abs</em>，改变附着，再切回 <em>Rel</em>。此后它将跟随父组件。</p>
+<p><a id="attach-to-parent"></a></p>
+<h2 id="附着到父组件">附着到父组件</h2>
+<p>子组件可附着到父组件。附着分别决定相对位置和旋转的参考：<em>Translate</em>
+选择原点，<em>Rotate</em> 选择轴方向（图 2）。默认两者均为
+<em>None</em>，子组件在模型轴中放置，父组件移动时它保持不动。</p>
 <p><img src="images/XFormTab_gui_attach.png"
-title="Figure 2. Attach To Parent"
-alt="Figure 2. Attach To Parent" /></p>
-<p><em>Figure 2. The Attach To Parent group of a Pod whose parent is the
-default Wing, attached by Translate
+title="图 2. Attach To Parent" alt="图 2. Attach To Parent" /></p>
+<p><em>图 2. 父组件为默认 Wing 的 Pod：Translate 为
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-MN and Rotate Comp at
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-0.4, M 1 and N 0. The rows of the coordinates not chosen are greyed and
-show where the same point lies in them.</em></p>
+MN、Rotate 为
+Comp，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
+为 0.4、M 为 1、N 为
+0。未选坐标行灰显，并显示同一点在相应坐标中的位置。</em></p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Choice</th>
-<th style="text-align: left;">Translate: origin at</th>
-<th style="text-align: left;">Rotate: axes along</th>
+<th style="text-align: left;">选择</th>
+<th style="text-align: left;">Translate：原点位置</th>
+<th style="text-align: left;">Rotate：轴方向</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;">None</td>
-<td style="text-align: left;">the model's origin</td>
-<td style="text-align: left;">the model's axes</td>
+<td style="text-align: left;">模型原点</td>
+<td style="text-align: left;">模型轴</td>
 </tr>
 <tr>
 <td style="text-align: left;">Comp</td>
-<td style="text-align: left;">the parent's origin</td>
-<td style="text-align: left;">the parent's axes</td>
+<td style="text-align: left;">父组件原点</td>
+<td style="text-align: left;">父组件轴</td>
 </tr>
 <tr>
 <td style="text-align: left;">UW</td>
-<td style="text-align: left;">a point on the parent's surface</td>
-<td style="text-align: left;">the surface there (below)</td>
+<td style="text-align: left;">父组件表面点</td>
+<td style="text-align: left;">该处表面方向，见下文</td>
 </tr>
 <tr>
 <td style="text-align: left;">RST</td>
-<td style="text-align: left;">a point inside the parent's volume</td>
-<td style="text-align: left;">the volume coordinates there (below)</td>
+<td style="text-align: left;">父组件体积内点</td>
+<td style="text-align: left;">该处体积坐标方向，见下文</td>
 </tr>
 <tr>
 <td style="text-align: left;">LMN</td>
-<td style="text-align: left;">a point inside the parent's volume, by
-distance</td>
-<td style="text-align: left;">as RST</td>
+<td style="text-align: left;">按距离指定的父组件体积内点</td>
+<td style="text-align: left;">同 RST</td>
 </tr>
 <tr>
 <td
 style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
 MN</td>
-<td style="text-align: left;">a point inside a wing, by fraction of
-span</td>
-<td style="text-align: left;">as RST</td>
+<td style="text-align: left;">按展长比例指定的机翼内点</td>
+<td style="text-align: left;">同 RST</td>
 </tr>
 </tbody>
 </table>
-<p>Translate and Rotate are independent: Translate <em>Comp</em> with
-Rotate <em>None</em> follows the parent's moves but not its turns, which
-keeps a part level however the parent is turned (Figure 3).</p>
-<p><img src="images/XFormTab_attach_comp.png"
-title="Figure 3. Attachment" alt="Figure 3. Attachment" /></p>
-<p><em>Figure 3. A fuselage moved and turned by ZRot 20, with a child
-pod at the same relative location (12, -5, 0) attached three ways. Each
-dashed arrow is that location, measured from the origin and along the
-axes the attachment chooses: the model's
+<p>Translate 与 Rotate 相互独立。Translate 为 <em>Comp</em>、Rotate 为
+<em>None</em>
+时，部件随父组件平移，但不随它转动，所以无论父组件怎样转动，部件仍保持水平（图
+3）。</p>
+<p><img src="images/XFormTab_attach_comp.png" title="图 3. 附着"
+alt="图 3. 附着" /></p>
+<p><em>图 3. 机身平移并施加 ZRot 20，子 Pod 均为相对位置 (12, -5,
+0)，采用三种附着方式。虚线箭头从所选原点沿所选轴表示该位置：模型的
 (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>,
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>)
-or the fuselage's
+或机身的
 (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>X</mi><mi>p</mi></msub><annotation encoding="application/x-tex">X_p</annotation></semantics></math>,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>Y</mi><mi>p</mi></msub><annotation encoding="application/x-tex">Y_p</annotation></semantics></math>).</em></p>
-<p>Changing the attachment moves the child or not depending on
-<em>Abs</em> and <em>Rel</em> (see <a href="#abs-and-rel">Abs and
-Rel</a>). The attachment is computed on the parent's first surface, not
-on its symmetric copies. For a parent without a surface, such as a
-Blank, UW and the others act as Comp. A child of a Hinge is always
-carried by the hinge and its attachment controls are greyed (see <a
-href="Hinge.html">Hinge</a>); a child of a Routing Geom cannot be
-attached.</p>
-<p>While a Geom is selected, the 3D view draws the frame it is attached
-in as dashed axes (red
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>,
-green
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>,
-blue
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>),
-at the point its relative location is measured from. With attachment
-None that is the model's origin and axes. In the Geom Browser, the line
-joining an attached child to its parent is drawn thick, and the lines
-from a Hinge to its children are double. A Geom whose attachment is set
-but which has no parent, for example after it was moved out from under
-its parent, has its name drawn lighter; it is placed as if attached to
-nothing.</p>
-<p>Attachment is the way to keep a model together as it changes. Attach
-each part to the part it is mounted on, so that moving or resizing a
-fuselage carries its wing, and the wing its nacelles; an unattached part
-stays behind and has to be moved by hand every time. Where an assembly
-should not hang off one of its parts, attach it to a <a
-href="Blank.html">Blank</a> and move the Blank.</p>
-<h3 id="attachment-coordinates">Attachment Coordinates</h3>
-<p>UW is a point on the parent's surface. <em>U</em> runs along the
-parent from 0 at its start to 1 at its end, and <em>W</em> around each
-section from 0 to 1. With <em>0N</em> instead of <em>01</em>, U counts
-sections, with each cross section at a whole number; on a Wing the root
-and tip caps count as sections, so a one-panel wing runs U = 0 to 3 and
-its panel lies between U = 1 and 2. Where W starts depends on the Geom:
-on a Wing, W = 0 is the trailing edge, 0.25 the lower surface, 0.5 the
-leading edge and 0.75 the upper surface; on a Fuselage W = 0 is the
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>Y</mi><mi>p</mi></msub><annotation encoding="application/x-tex">Y_p</annotation></semantics></math>)。</em></p>
+<p>改变附着是否移动子组件取决于 <em>Abs</em> 和 <em>Rel</em>，见<a
+href="#abs-and-rel">绝对与相对坐标</a>。附着在父组件第一个表面上计算，不在其对称副本上计算。对
+Blank 等无表面父组件，UW 等方式按 Comp 处理。Hinge
+的子组件始终由铰链带动，其附着控件灰显，见 <a
+href="Hinge.html">Hinge</a>；Routing 的子组件不能附着。</p>
+<p>选中组件时，三维视图在相对位置测量起点以虚线绘出附着坐标系：红色
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>、绿色
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>、蓝色
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>。None
+使用模型原点和轴。Geom Browser 中，附着子组件到父组件的连线加粗；Hinge
+到子组件为双线。若设置了附着却没有父组件（如移出了父组件层级），名称显示较浅，并按无附着方式放置。</p>
+<p>附着让模型修改时仍保持装配关系。将各部件附着到安装它的部件上，使移动或改变机身尺寸带动机翼，机翼带动短舱。未附着部件会留在原处，每次需手动移动。若装配不适合依附其中某个部件，可附着到
+<a href="Blank.html">Blank</a>，再移动 Blank。</p>
+<p><a id="attachment-coordinates"></a></p>
+<h3 id="附着坐标">附着坐标</h3>
+<p>UW 指定父组件表面点。<em>U</em> 从父组件起点 0 到终点 1；<em>W</em>
+绕截面从 0 到 1。选 <em>0N</em> 而非 <em>01</em> 时，U
+按截面计数，各截面对应整数。机翼根部和梢部封口也计为截面，所以单翼段机翼
+U = 0 到 3，翼段在 U = 1 到 2。W 起点随组件而异：机翼 W = 0 是后缘，0.25
+是下表面，0.5 是前缘，0.75 是上表面；机身 W = 0 在
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">+Y</annotation></semantics></math>
-side and W runs down, round the bottom; on a Pod W = 0 is the top and W
-runs toward
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">+Y</annotation></semantics></math>.
-The UW axes are
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-along the surface in the direction of increasing U,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
-the outward normal, and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
-completing the set (Figure 4).</p>
-<p><img src="images/XFormTab_attach_uw.png"
-title="Figure 4. UW attachment axes"
-alt="Figure 4. UW attachment axes" /></p>
-<p><em>Figure 4. UW attachment axes at two points of a fuselage.
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>z</mi><annotation encoding="application/x-tex">z</annotation></semantics></math>
-is the outward normal and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>
-points along increasing U; the dashed lines are the sections at those
-U.</em></p>
-<p>RST is a point inside the parent. <em>R</em> is the same as U. At
-that station, <em>S</em> picks a pair of points on the surface, one on
-each half of the section: at W = S/2 and W = 1 - S/2. On a wing, S = 0
-is the trailing edge and S = 1 the leading edge. <em>T</em> places the
-point on the straight line between them, from 0 on the first half (a
-wing's lower surface) to 1 on the second (its upper surface); T = 0.5 is
-midway. So T = 0 or 1 lies on the surface, and values between lie inside
-(Figure 5).</p>
+侧，向下绕过底部；Pod 的 W = 0 在顶部，沿
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">+Y</annotation></semantics></math>
+方向增加。UW
+轴中，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
+沿表面 U
+增大方向，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
+为外法向，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
+补全坐标系（图 4）。</p>
+<p><img src="images/XFormTab_attach_uw.png" title="图 4. UW 附着轴"
+alt="图 4. UW 附着轴" /></p>
+<p><em>图 4. 机身两点处的 UW
+轴。<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>z</mi><annotation encoding="application/x-tex">z</annotation></semantics></math>
+为外法向，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>
+沿 U 增大方向；虚线为相应 U 处截面。</em></p>
+<p>RST 指定父组件内点。<em>R</em> 与 U 相同。在该站位，<em>S</em>
+选择两半截面表面各一点，分别在 W = S/2 和 W = 1 - S/2。机翼 S = 0
+是后缘，S = 1 是前缘。<em>T</em> 在两点连线上定位，从第一半的
+0（机翼下表面）到第二半的 1（上表面），T = 0.5 为中间。因此 T = 0 或 1
+在表面，中间值在内部（图 5）。</p>
 <p><img src="images/XFormTab_attach_rst.png"
-title="Figure 5. RST on a wing section"
-alt="Figure 5. RST on a wing section" /></p>
-<p><em>Figure 5. RST at the root section of a wing of 20% thickness.
-Each S picks a point on each surface (dots, joined by dashed lines); T
-runs along that line from the lower surface to the upper.</em></p>
-<p>LMN is RST measured by distance. <em>L</em> is the fraction of the
-parent's length along its center line (<em>0D</em> gives it as a length
-instead), where R, like U, counts the parent's sections whatever their
-lengths. <em>M</em> is the fraction of the distance from the S = 0 edge
-to the S = 1 edge, along the line midway between the two halves; on a
-wing it is the fraction of the chord from the trailing edge, so M = 0.25
-is at 75% chord. <em>N</em> is the same as T. Use LMN to place something
-at a fraction of a length or a chord.</p>
-<p>The difference between U (or R) and L is large when the cross
-sections are unevenly spaced (Figure 6). Each span between neighboring
-cross sections takes an equal share of U, however long it is: on a
-fuselage of five cross sections, U = 0.25 is always the second and U =
-0.5 the third, wherever they have been placed, while L = 0.5 is always
-half way along. Choose by what the part should stay with when the parent
-is reshaped: U or R to stay at a cross section, such as a wing at a
-fuselage frame; L to stay at a fraction of the length.</p>
-<p><img src="images/XFormTab_u_and_l.png"
-title="Figure 6. U and L along a fuselage"
-alt="Figure 6. U and L along a fuselage" /></p>
-<p><em>Figure 6. A fuselage 30 long with its cross sections at 0, 3,
-7.5, 22.5 and 30. Above, the points U = 0 to 1 on its center line fall
-at the cross sections; below, the points L = 0 to 1 are evenly spaced
-along it.</em></p>
-<p><em><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-MN</em> is offered when the parent is a Wing (or a Clone of one).
+title="图 5. 机翼截面上的 RST" alt="图 5. 机翼截面上的 RST" /></p>
+<p><em>图 5. 厚度比 20% 的机翼根截面。每个 S
+对应上下表面各一点（圆点，以虚线连接）；T
+沿线从下表面到上表面。</em></p>
+<p>LMN 是按距离定义的 RST。<em>L</em>
+表示父组件中心线长度比例（<em>0D</em> 改用长度值），而 R 像 U
+一样按截面计数，不考虑各段长度。<em>M</em> 是沿两半截面中间线，从 S = 0
+边到 S = 1 边的距离比例；在机翼上是从后缘起算的弦长比例，因此 M = 0.25
+对应从前缘起算的 75% 弦长。<em>N</em> 与 T
+相同。按长度或弦长比例定位时使用 LMN。</p>
+<p>截面间距不均匀时，U（或 R）和 L 差别很大（图
+6）。相邻截面之间不论多长，都占相同 U
+份额。五截面机身中，无论截面放在哪里，U = 0.25 总是第二截面，U = 0.5
+总是第三截面；L = 0.5
+始终在长度中点。按父组件变形时希望部件跟随什么来选择：跟随截面（如机翼对应机身框）用
+U 或 R；保持长度比例用 L。</p>
+<p><img src="images/XFormTab_u_and_l.png" title="图 6. 机身上的 U 与 L"
+alt="图 6. 机身上的 U 与 L" /></p>
+<p><em>图 6. 长 30 的机身，截面位于 0、3、7.5、22.5、30。上方中心线上 U
+= 0 到 1 的等分点落在各截面；下方 L = 0 到 1
+的点沿长度均匀分布。</em></p>
+<p>父组件为 Wing 或其 Clone 时可选
+<em><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
+MN</em>。<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
+表示从根到梢的展长比例，只计翼段、不含封口；M 和 N 与 LMN 相同，见<a
+href="Wing.html#spanwise-coordinate-eta">展向坐标
+Eta</a>。对机翼，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
+是对应 L 的展向选择。U 和 R 计入翼段及封口，所以改变翼段展长时，按 U
+放置的部件跟随截面，按
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-is the fraction of the wing's span from root to tip, measured over its
-sections without the caps, and M and N are as in LMN; see <a
-href="Wing.html#spanwise-coordinate-eta">Spanwise Coordinate Eta</a>. On
-a wing,
+放置的部件保持展长比例。按半翼展比例布置短舱、吊架或外挂物时，使用
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-is the spanwise choice that corresponds to L: U and R count the wing's
-sections and caps, so a part placed by U stays with a section when a
-panel's span is changed, while a part placed by
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-stays at its fraction of the span. Use
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-MN for nacelles, pylons and stores placed at a fraction of the
-semispan.</p>
-<p>The RST, LMN and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-MN axes are
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-along R (along the parent),
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
-normal to the R and S directions, and
+MN。</p>
+<p>RST、LMN、<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
+MN
+的轴为：<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
+沿
+R（沿父组件），<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
+垂直于 R 和 S
+方向，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
+补全坐标系。</p>
+<p>UW、RST、LMN 描述同一点。使用其中一个时 OpenVSP
+同步更新其他坐标，因此切换不会移动附着点。</p>
+<p><a id="flip"></a></p>
+<h2 id="翻转">翻转</h2>
+<p><em>Flip</em>
+在组件自身轴的所选平面中原位反射形状，得到镜像，而不是额外副本。用于同一定义的相反手性部件，如单独左侧短舱、反向旋转的螺旋桨
+Clone，见<a
+href="Propeller.html#clones-of-a-propeller">螺旋桨</a>。Blank 和 Routing
+没有可反射形状；Auxiliary 和 Conformal
+使用父组件翻转，因此这些类型不提供该选项。</p>
+<p>反射在自身轴中发生，早于旋转和平移。机翼在自身 XZ
+平面翻转成为左翼；再施加 XRot 30
+时，左翼向下而非向上倾斜，因为旋转作用在反射后的形状上。Planar XZ
+对称生成的左翼则是旋转后右翼的镜像，因此向上倾斜（图 7）。</p>
+<p><img src="images/XFormTab_flip.png" title="图 7. 翻转与对称"
+alt="图 7. 翻转与对称" /></p>
+<p><em>图 7. 默认机翼前视：关闭对称、XRot 30（上）；自身 XZ 翻转且 XRot
+30（中）；Planar XZ 对称且 XRot 30（下）。虚线为模型
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
-completing the set.</p>
-<p>UW, RST and LMN describe one point, and while one of them is in use
-OpenVSP keeps the others up to date. Switching from one to another
-therefore leaves the attachment point where it was.</p>
-<h2 id="flip">Flip</h2>
-<p><em>Flip</em> reflects the Geom's shape in the chosen planes of its
-own axes, in place: it makes the mirror image of the Geom, not a second
-copy. Use it for one opposite-handed part made from the same definition,
-such as a single left-hand nacelle or a counter-rotating Clone of a
-propeller (see <a
-href="Propeller.html#clones-of-a-propeller">Propeller</a>). It is not
-offered for Blank and Routing Geoms, which have no shape to reflect, nor
-for Auxiliary and Conformal Geoms, which take their parent's flip.</p>
-<p>The reflection happens in the Geom's own axes, before it is turned
-and moved. A wing flipped in its XZ plane becomes a left wing; turned by
-XRot 30 as well, that left wing tips down, not up, because the turn acts
-on the reflected shape. A left wing made by Planar XZ symmetry is the
-mirror image of the turned right wing, so it tips up (Figure 7).</p>
-<p><img src="images/XFormTab_flip.png"
-title="Figure 7. Flip and symmetry"
-alt="Figure 7. Flip and symmetry" /></p>
-<p><em>Figure 7. The default Wing, without its symmetry, turned by XRot
-30 (top), flipped in its XZ plane and turned by XRot 30 (middle), and
-with Planar XZ symmetry and XRot 30 (bottom), seen from the front. The
-dashed line is the model's
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
-axis.</em></p>
-<p>A flip changes the shape, not the Geom's axes. Children attached by
-<em>Comp</em> follow the parent's unreflected axes; children attached by
-UW, RST, LMN or
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-MN follow the reflected surface. Two planes of flip together amount to a
-half turn, not a reflection.</p>
-<h2 id="symmetry">Symmetry</h2>
-<p><em>Symmetry</em> adds copies of the Geom. Each <em>Planar</em> plane
-doubles the number of copies by reflecting all of them in it.
-<em>Axial</em> makes
+轴。</em></p>
+<p>翻转改变形状，不改变组件轴。通过 <em>Comp</em>
+附着的子组件跟随未反射的父组件轴；通过
+UW、RST、LMN、<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
+MN
+附着的子组件跟随反射后表面。两个平面一起翻转等价于半周旋转，而不是反射。</p>
+<p><a id="symmetry"></a></p>
+<h2 id="对称">对称</h2>
+<p><em>Symmetry</em> 增加副本。每个 <em>Planar</em>
+平面反射所有副本，使数量加倍。<em>Axial</em> 生成
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
-copies, each turned
+个副本，相邻副本绕所选轴相差
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>360</mn><mi>/</mi><mi>N</mi></mrow><annotation encoding="application/x-tex">360/N</annotation></semantics></math>
-degrees from the last about the chosen axis. Planar symmetry is applied
-first and axial symmetry to its result, so XZ with Axial X and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">N = 3</annotation></semantics></math>
-gives six copies. The copies are part of the Geom: they carry its
-sub-surfaces and its specified mass, and they appear in every analysis,
-but its children are not copied; give each child its own symmetry.</p>
-<p>A new Wing has Planar XZ symmetry. When a wing is turned XRot 90 to
-make a vertical tail on the center plane, its copy lands on top of it.
-Coincident surfaces trouble meshing and the analyses: CFD Mesh leaves
-the tail and its copy out of the mesh altogether, with a warning in its
-console. The wing's total span also counts both. Uncheck XZ for a single
-vertical tail; keep it only for twin tails moved off the center
-plane.</p>
-<p>The planes and the axis belong to a frame chosen by <em>About</em>
-and the two buttons beside it (Figure 8). The list holds the global
-origin (0), the Geom itself (1), its parent (2), its grandparent (3),
-and so on.</p>
-<p><img src="images/XFormTab_gui_sym.png"
-title="Figure 8. Symmetry group" alt="Figure 8. Symmetry group" /></p>
-<p><em>Figure 8. The Symmetry group of the same Pod: About its parent, 2
-WingGeom, with Attach, and Planar XZ.</em></p>
+度。先做平面对称，再做轴向重复，所以 XZ 加 Axial
+X、<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">N = 3</annotation></semantics></math>
+得到六个副本。副本属于组件，带有其子曲面和指定质量，参与各项分析；但子组件不会被复制，须单独给它们设置对称。</p>
+<p>新 Wing 默认启用 Planar XZ。将机翼 XRot 90
+放在中心面作为垂尾时，其副本与它重合。重合表面会影响网格与分析：CFD Mesh
+会完全排除垂尾及其副本，并在控制台警告；机翼总展长也计入二者。单垂尾应取消
+XZ，只有移离中心面的双垂尾才保留。</p>
+<p>对称平面和轴的坐标系由 <em>About</em> 及其旁边两个按钮选择（图
+8）。列表包含全局原点（0）、组件自身（1）、父组件（2）、祖父组件（3），依此类推。</p>
+<p><img src="images/XFormTab_gui_sym.png" title="图 8. Symmetry 分组"
+alt="图 8. Symmetry 分组" /></p>
+<p><em>图 8. 同一 Pod 的 Symmetry：About 选择父组件 2 WingGeom，使用
+Attach 与 Planar XZ。</em></p>
 <ul>
-<li><em>Attach</em> uses the frame that Geom is attached in: its
-parent's origin and axes, or the surface point, if it is attached; the
-model's origin if it is not.</li>
-<li><em>Object</em> uses that Geom's own origin and axes, where it has
-been placed.</li>
+<li><em>Attach</em>
+使用所选组件的附着坐标系：若附着，则为父组件原点和轴或表面附着点；若未附着，则为模型原点。</li>
+<li><em>Object</em> 使用所选组件放置后的自身原点和轴。</li>
 </ul>
-<p>The default, the Geom itself with <em>Attach</em>, mirrors a Geom in
-the frame it is attached in. For a wing attached to its fuselage by
-Comp, that is the fuselage's center plane, wherever the fuselage is
-(Figure 9). When the attachment is a point on the surface (UW, RST, LMN
-or
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-MN), the frame sits at that point, so the default mirrors the wing about
-a plane through the attachment point instead of the fuselage's center:
-choose the fuselage in the list, with <em>Object</em>. To mirror in the
-model's own planes, choose 0, the global origin.</p>
-<p><img src="images/XFormTab_sym_frame.png"
-title="Figure 9. Symmetry frame" alt="Figure 9. Symmetry frame" /></p>
-<p><em>Figure 9. A fuselage moved and turned by ZRot 10, with a wing
-attached by Translate and Rotate Comp and Planar XZ symmetry. Top: the
-default, about the wing's attachment, mirrors it in the fuselage's
-center plane. Bottom: about the global origin, it is mirrored in the
-model's XZ plane.</em></p>
-<h2 id="how-the-placement-is-built">How the Placement Is Built</h2>
-<p>A point
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝒑</mi><annotation encoding="application/x-tex">\mathbf{p}</annotation></semantics></math>
-of the Geom as it is built in its own axes is placed in the model at</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi mathvariant="bold-italic">𝒙</mi><mi>k</mi></msub><mo>=</mo><mi>Q</mi><mspace width="0.167em"></mspace><msub><mi>S</mi><mi>k</mi></msub><mspace width="0.167em"></mspace><msup><mi>Q</mi><mrow><mi>−</mi><mn>1</mn></mrow></msup><mspace width="0.278em"></mspace><mi>A</mi><mspace width="0.278em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi mathvariant="bold-italic">𝒕</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.278em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi mathvariant="bold-italic">𝒄</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><msub><mi>R</mi><mi>X</mi></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>X</mi></msub><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><msub><mi>R</mi><mi>Y</mi></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>Y</mi></msub><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><msub><mi>R</mi><mi>Z</mi></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>Z</mi></msub><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>−</mi><mi mathvariant="bold-italic">𝒄</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.278em"></mspace><mi>F</mi><mspace width="0.278em"></mspace><mi mathvariant="bold-italic">𝒑</mi></mrow><annotation encoding="application/x-tex">
+<p>默认选择组件自身及
+<em>Attach</em>，即在它的附着坐标系中镜像。机翼通过 Comp
+附着到机身时，这就是机身中心面，与机身位置无关（图
+9）。若附着是表面点（UW、RST、LMN、<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
+MN），坐标系位于该点，默认镜像面穿过该点，而不是机身中心。此时应在列表中选机身并用
+<em>Object</em>。若要关于模型自身平面镜像，选择 0（全局原点）。</p>
+<p><img src="images/XFormTab_sym_frame.png" title="图 9. 对称坐标系"
+alt="图 9. 对称坐标系" /></p>
+<p><em>图 9. 机身平移并施加 ZRot 10，机翼 Translate/Rotate 均为
+Comp，使用 Planar
+XZ。上：默认绕机翼附着坐标系，在机身中心面镜像。下：绕全局原点，在模型
+XZ 平面镜像。</em></p>
+<p><a id="how-the-placement-is-built"></a></p>
+<h2 id="放置变换的组合">放置变换的组合</h2>
+<p>组件自身坐标中的点
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝐩</mi><annotation encoding="application/x-tex">\mathbf{p}</annotation></semantics></math>
+被放置到模型中：</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝐱</mi><mi>k</mi></msub><mo>=</mo><mi>Q</mi><mspace width="0.167em"></mspace><msub><mi>S</mi><mi>k</mi></msub><mspace width="0.167em"></mspace><msup><mi>Q</mi><mrow><mi>−</mi><mn>1</mn></mrow></msup><mspace width="0.278em"></mspace><mi>A</mi><mspace width="0.278em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>𝐭</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.278em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>𝐜</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><msub><mi>R</mi><mi>X</mi></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>X</mi></msub><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><msub><mi>R</mi><mi>Y</mi></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>Y</mi></msub><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><msub><mi>R</mi><mi>Z</mi></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>Z</mi></msub><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>−</mi><mi>𝐜</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.278em"></mspace><mi>F</mi><mspace width="0.278em"></mspace><mi>𝐩</mi></mrow><annotation encoding="application/x-tex">
 \mathbf{x}_k = Q\,S_k\,Q^{-1}\; A\; T(\mathbf{t})\; T(\mathbf{c})\,
 R_X(\theta_X)\, R_Y(\theta_Y)\, R_Z(\theta_Z)\, T(-\mathbf{c})\; F\;\mathbf{p}
 </annotation></semantics></math></p>
-<p>read right to left:</p>
+<p>从右向左读取：</p>
 <ul>
 <li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>F</mi><annotation encoding="application/x-tex">F</annotation></semantics></math>
-is the flip, a reflection in each checked plane of the Geom's own
-axes;</li>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝒄</mi><annotation encoding="application/x-tex">\mathbf{c}</annotation></semantics></math>
-is the rotation origin,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>⋅</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">T(\cdot)</annotation></semantics></math>
-a move, and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>R</mi><mi>X</mi></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>X</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">R_X(\theta_X)</annotation></semantics></math>
-etc. the rotations by XRot, YRot, ZRot;</li>
-<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝒕</mi><annotation encoding="application/x-tex">\mathbf{t}</annotation></semantics></math>
-is the relative location;</li>
+为翻转，即在勾选的组件自身坐标平面中反射；</li>
+<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝐜</mi><annotation encoding="application/x-tex">\mathbf{c}</annotation></semantics></math>
+为旋转原点，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>⋅</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">T(\cdot)</annotation></semantics></math>
+为平移，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>R</mi><mi>X</mi></msub><mo stretchy="false" form="prefix">(</mo><msub><mi>θ</mi><mi>X</mi></msub><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">R_X(\theta_X)</annotation></semantics></math>
+等为 XRot、YRot、ZRot 旋转；</li>
+<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝐭</mi><annotation encoding="application/x-tex">\mathbf{t}</annotation></semantics></math>
+为相对位置；</li>
 <li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>A</mi><annotation encoding="application/x-tex">A</annotation></semantics></math>
-is the attachment: the parent's frame chosen by Translate and Rotate
-(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mo>=</mo><mi>I</mi></mrow><annotation encoding="application/x-tex">A = I</annotation></semantics></math>
-for None);</li>
+为附着，即 Translate 和 Rotate 选择的父组件坐标系（None 时
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mo>=</mo><mi>I</mi></mrow><annotation encoding="application/x-tex">A = I</annotation></semantics></math>）；</li>
 <li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Q</mi><annotation encoding="application/x-tex">Q</annotation></semantics></math>
-is the symmetry frame chosen by <em>About</em>, and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>S</mi><mi>k</mi></msub><annotation encoding="application/x-tex">S_k</annotation></semantics></math>
-the
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-th
-symmetric copy, a combination of the planar reflections and axial turns
-(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>S</mi><mn>0</mn></msub><mo>=</mo><mi>I</mi></mrow><annotation encoding="application/x-tex">S_0 = I</annotation></semantics></math>,
-the Geom itself).</li>
+为 <em>About</em>
+选择的对称坐标系，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>S</mi><mi>k</mi></msub><annotation encoding="application/x-tex">S_k</annotation></semantics></math>
+为第
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>
+个对称副本，组合了平面反射和轴向转动（<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>S</mi><mn>0</mn></msub><mo>=</mo><mi>I</mi></mrow><annotation encoding="application/x-tex">S_0 = I</annotation></semantics></math>
+为组件自身）。</li>
 </ul>
-<p>The absolute location and rotation are the move and turn of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mspace width="0.167em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi mathvariant="bold-italic">𝒕</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi mathvariant="bold-italic">𝒄</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><mi>R</mi><mspace width="0.167em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>−</mi><mi mathvariant="bold-italic">𝒄</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">A\,T(\mathbf{t})\,T(\mathbf{c})\,R\,T(-\mathbf{c})</annotation></semantics></math>
-expressed in the model's axes; children attached by Comp hang off this
-same product, without
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>F</mi><annotation encoding="application/x-tex">F</annotation></semantics></math>.</p>
-<h2 id="scale">Scale</h2>
-<p><em>Scale</em> multiplies the Geom's dimensions (lengths, diameters,
-chords, spans, and sub-surface and CFD source sizes given as lengths),
-keeping its proportions; the shape grows about the Geom's own origin. It
-does not move the Geom, and it does not scale its children or their
-placement.</p>
-<p>The factor is relative to the size when it was last accepted. Setting
-it back to 1, or <em>Reset</em>, returns the Geom to that size;
-<em>Accept</em> makes the current size the new size at 1. An edit made
-while scaled is scaled back with everything else: a pod scaled by 2
-whose length is then set to 25 is 12.5 long when the scale returns to 1.
-So accept a scale before editing the scaled Geom.</p>
-<h2 id="scripting">Scripting</h2>
-<p>Every control on this tab except the Scale's <em>Reset</em> and
-<em>Accept</em> buttons is a Parm, set and read with
-<code>SetParmVal</code> and <code>GetParmVal</code> by name and group;
-<code>GetParmActiveFlag</code> tells whether a control is active or
-greyed, as of the last Update. <em>Reset</em> is
-<code>ResetGeomScale</code> and <em>Accept</em> is
-<code>AcceptGeomScale</code>. The parent a Geom is attached to is set
-with <code>SetGeomParent</code> (or chosen when the Geom is added with
-<code>AddGeom</code>) and read with <code>GetGeomParent</code>.</p>
+<p>绝对位置和旋转是
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mspace width="0.167em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>𝐭</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>𝐜</mi><mo stretchy="false" form="postfix">)</mo><mspace width="0.167em"></mspace><mi>R</mi><mspace width="0.167em"></mspace><mi>T</mi><mo stretchy="false" form="prefix">(</mo><mi>−</mi><mi>𝐜</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">A\,T(\mathbf{t})\,T(\mathbf{c})\,R\,T(-\mathbf{c})</annotation></semantics></math>
+在模型轴中表达的平移和转动；通过 Comp 附着的子组件也使用此乘积，不含
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>F</mi><annotation encoding="application/x-tex">F</annotation></semantics></math>。</p>
+<p><a id="scale"></a></p>
+<h2 id="缩放">缩放</h2>
+<p><em>Scale</em>
+按比例乘以组件尺寸，包括长度、直径、弦长、展长以及按长度给出的子曲面和
+CFD
+源尺寸，保持比例不变；形状绕自身原点缩放。它不移动组件，也不缩放子组件或其放置位置。</p>
+<p>系数以上次接受的尺寸为基准。设回 1 或点击 <em>Reset</em>
+恢复该尺寸；<em>Accept</em> 将当前尺寸设为新的比例
+1。缩放期间的尺寸编辑也随其他尺寸一起缩回：例如 Pod 放大 2
+倍后把长度设为 25，缩放回 1 时长度为
+12.5。因此编辑已缩放组件前应先接受缩放。</p>
+<p><a id="scripting"></a></p>
+<h2 id="脚本">脚本</h2>
+<p>除 Scale 的 <em>Reset</em>、<em>Accept</em> 按钮外，所有控件均为
+Parm，可按名称和分组通过
+<code>SetParmVal</code>、<code>GetParmVal</code>
+设置或读取。<code>GetParmActiveFlag</code> 返回上次 Update
+后控件是启用还是灰显。<em>Reset</em> 对应
+<code>ResetGeomScale</code>，<em>Accept</em> 对应
+<code>AcceptGeomScale</code>。父组件用 <code>SetGeomParent</code>
+设置（或在 <code>AddGeom</code> 时指定），用 <code>GetGeomParent</code>
+读取。</p>
+<p>下表保留英文控件名、参数和分组，以便逐项对照界面与 API。</p>
 <table>
 <thead>
 <tr>
@@ -630,23 +533,18 @@ or 0; <code>Sym_Rot_N</code></td>
 </tr>
 </tbody>
 </table>
-<p>To set a child's absolute location or rotation from a script, call
-<code>UpdateGeom</code> on the child right after setting it, or set it
-with <code>SetParmValUpdate</code>, which sets the Parm and updates the
-Geom in one call. The child then takes its relative values from the new
-absolute ones. <code>Update</code> alone updates the parent first, which
-places the child from its relative values, so the new absolute ones are
-replaced.</p>
-<p>The attachment coordinates can be evaluated and converted without
-attaching anything: <code>CompPnt01</code> gives the point at U, W and
-<code>CompPntRST</code> the point at R, S, T; <code>ProjPnt01</code> and
-<code>FindRST</code> find the coordinates of a point;
-<code>ConvertRSTtoLMN</code> and <code>ConvertLMNtoRST</code> convert
-between volume coordinates, and <code>ConvertUtoEta</code> and
-<code>ConvertEtatoU</code> between U and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-on a wing. All but the last two have vector forms
-(<code>CompVecPnt01</code>, <code>FindRSTVec</code>, ...) for many
-points at once.</p>
+<p>脚本设置子组件绝对位置或旋转后，立即对它调用
+<code>UpdateGeom</code>；或使用一次完成设置和更新的
+<code>SetParmValUpdate</code>。这样子组件才由新绝对值计算相对值。只调用
+<code>Update</code>
+会先更新父组件，父组件又按子组件相对值放置它，导致新绝对值被替换。</p>
+<p>无需实际附着，也能求值和转换附着坐标：<code>CompPnt01</code> 返回
+U、W 处的点，<code>CompPntRST</code> 返回 R、S、T
+处的点；<code>ProjPnt01</code>、<code>FindRST</code>
+求点的坐标；<code>ConvertRSTtoLMN</code>、<code>ConvertLMNtoRST</code>
+转换体积坐标，<code>ConvertUtoEta</code>、<code>ConvertEtatoU</code>
+转换机翼的 U 与
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>。除最后两个外，其余提供向量形式（<code>CompVecPnt01</code>、<code>FindRSTVec</code>
+等），可一次处理多个点。</p>
 </body>
 </html>

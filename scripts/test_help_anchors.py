@@ -127,8 +127,27 @@ class BundledHelpTests(unittest.TestCase):
             "AdvLink.md", "AttributeExplorer.md", "GeometryAnalysis.md",
             "SetEdit.md", "StackPresets.md", "index.md",
             "Blank.md", "Pod.md", "Ellipsoid.md", "GenTab.md", "MassTab.md",
+            "Airfoils.md",
+            "BOR.md",
+            "Chevron.md",
+            "Clone.md",
+            "Cobra.md",
+            "Conformal.md",
+            "EngineModel.md",
+            "FuselageStack.md",
+            "Gear.md",
+            "Hinge.md",
+            "Human.md",
+            "Mesh.md",
+            "NGonMesh.md",
+            "PtCloud.md",
+            "Routing.md",
+            "SubTab.md",
+            "Wire.md",
+            "XFormTab.md",
+            "XSecSkinning.md",
         })
-        self.assertEqual(len(names), 11)
+        self.assertEqual(len(names), 30)
         for name in names:
             with self.subTest(page=name):
                 self.assertEqual(Path(name).name, name)

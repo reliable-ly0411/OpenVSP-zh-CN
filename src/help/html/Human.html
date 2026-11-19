@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Human</title>
+  <title>人体（Human）</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -96,118 +90,113 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Human</h1>
+<h1 class="title">人体（Human）</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>The Human component models a person: a pilot, a passenger or a ground
-crew member, sized from population statistics and posed joint by joint.
-Its shape comes from a statistical model of adult body scans, so a few
-numbers -- sex, stature, body mass index, age and sitting height -- give
-a complete, realistic body. A skeleton inside the body then bends it
-into any pose from standing to seated. The result is a closed triangle
-mesh with a mass, a volume and a design eye point, for checking fit,
-reach, visibility and mass properties.</p>
+<p><a href="index.html">目录</a></p>
+<p>Human
+组件用于建立飞行员、乘客或地勤人员的人体模型：按人群统计数据确定尺寸，并逐个关节设置姿态。外形来自成年人体扫描的统计模型，只需性别、身高、身体质量指数、年龄和坐高等少量输入，即可生成完整、逼真的人体。体内骨架可将其调整为站立、坐姿等姿态。结果是带有质量、体积及设计眼点的封闭三角网格，可用于检查容纳空间、触及范围、可视性和质量特性。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Topic</th>
-<th style="text-align: left;">Tab</th>
+<th style="text-align: left;">主题</th>
+<th style="text-align: left;">选项卡</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><a href="#quick-start">Quick
-Start</a></td>
+<td style="text-align: left;"><a href="#quick-start">快速入门</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#units">Units</a></td>
-<td style="text-align: left;">Anthropometric</td>
+<td style="text-align: left;"><a href="#units">单位</a></td>
+<td style="text-align: left;">Anthropometric（人体测量）</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#body-size">Body Size</a></td>
-<td style="text-align: left;">Anthropometric</td>
+<td style="text-align: left;"><a href="#body-size">体型尺寸</a></td>
+<td style="text-align: left;">Anthropometric（人体测量）</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#origin-and-axes">Origin and
-Axes</a></td>
+<td style="text-align: left;"><a
+href="#origin-and-axes">原点与坐标轴</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#pose">Pose</a></td>
-<td style="text-align: left;">Pose</td>
+<td style="text-align: left;"><a href="#pose">姿态</a></td>
+<td style="text-align: left;">Pose（姿态）</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#design-eye">Design Eye</a></td>
+<td style="text-align: left;"><a href="#design-eye">设计眼点</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#the-human-in-analyses">The Human
-in Analyses</a></td>
+<td style="text-align: left;"><a
+href="#the-human-in-analyses">人体参与的分析</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#scripting">Scripting</a></td>
+<td style="text-align: left;"><a href="#scripting">脚本</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#references">References</a></td>
+<td style="text-align: left;"><a href="#references">参考文献</a></td>
 <td style="text-align: left;"></td>
 </tr>
 </tbody>
 </table>
-<p>The Gen, XForm and Mass tabs are the ones every component has; see <a
-href="GenTab.html">Gen</a>, <a href="XFormTab.html">XForm</a> and <a
-href="MassTab.html">Mass</a>. A Human has no Sub tab.</p>
-<h2 id="quick-start">Quick Start</h2>
-<h3 id="a-standing-person">A standing person</h3>
+<p>Gen、XForm 和 Mass 是所有组件共有的选项卡，参见 <a
+href="GenTab.html">Gen</a>、<a href="XFormTab.html">XForm</a> 和 <a
+href="MassTab.html">Mass</a>。Human 没有 Sub 选项卡。</p>
+<p><a id="quick-start"></a></p>
+<h2 id="快速入门">快速入门</h2>
+<p><a id="a-standing-person"></a></p>
+<h3 id="站立人体">站立人体</h3>
 <ol type="1">
-<li>On the Anthropometric tab choose <em>Gender</em>, then set
-<em>Length Unit</em> and <em>Mass Unit</em> to the units of the
-model.</li>
-<li>Set <em>% Stature</em> and <em>% BMI</em>, or type the
-<em>Stature</em> and <em>Mass</em> directly.</li>
-<li>Leave the pose as it is: a new human stands.</li>
-<li>Place it with the XForm tab. The origin is the waist joint, so set
-the location of the waist, not the feet.</li>
+<li>在 Anthropometric 选项卡选择 <em>Gender（性别）</em>，再将
+<em>Length Unit（长度单位）</em> 和 <em>Mass Unit（质量单位）</em>
+设为模型使用的单位。</li>
+<li>设置 <em>% Stature（身高百分位）</em> 和 <em>% BMI（BMI
+百分位）</em>，或直接输入 <em>Stature（身高）</em> 和
+<em>Mass（质量）</em>。</li>
+<li>保持初始姿态；新建人体默认为站立。</li>
+<li>在 XForm
+选项卡放置人体。原点在腰部关节，因此应设置腰部位置，而不是脚部位置。</li>
 </ol>
-<h3 id="a-seated-occupant">A seated occupant</h3>
+<p><a id="a-seated-occupant"></a></p>
+<h3 id="坐姿乘员">坐姿乘员</h3>
 <ol type="1">
-<li>Choose <em>Gender</em>, then set <em>Length Unit</em> and <em>Mass
-Unit</em> to the units of the model.</li>
-<li>Set the size, as for a standing person.</li>
-<li>On the Pose tab choose <em>Preset</em> SITTING and click
-<em>Set</em>, then adjust the joints to fit the seat.</li>
-<li>Place it with the XForm tab, by the waist joint (Figure 2). Attach a
-Super Cone Auxiliary to it to show the field of view (see <a
-href="#design-eye">Design Eye</a>).</li>
+<li>选择 <em>Gender</em>，再设置与模型一致的 <em>Length Unit</em> 和
+<em>Mass Unit</em>。</li>
+<li>与站立人体相同，设置体型尺寸。</li>
+<li>在 Pose 选项卡将 <em>Preset（预设）</em> 设为 SITTING，点击
+<em>Set（应用）</em>，再调整各关节以适配座椅。</li>
+<li>通过 XForm 选项卡按腰部关节位置放置人体（图 2）。为其附加 Super Cone
+Auxiliary 组件可以显示视场，参见<a
+href="#design-eye">设计眼点</a>。</li>
 </ol>
-<h2 id="units">Units</h2>
-<p><em>Length Unit</em> and <em>Mass Unit</em> say what units the human
-is built in. They are not display units: the body is built at its
-stature in the length unit, so a 1.76 m man is 1.76 model units tall
-with Length Unit M and 5.76 with Length Unit FT. Set them to the units
-the rest of the model uses. The default is FT and LBM.</p>
-<p>Changing the length unit keeps the person the same size in the real
-world: the stature percentile stays, and the stature is restated in the
-new unit. Changing the mass unit restates the mass.</p>
-<p>The XForm tab's <em>Scale</em> has no effect on a human; its size is
-set by the stature and the length unit alone.</p>
-<h2 id="body-size">Body Size</h2>
-<p>The body shape is the statistical model from Human Shapes
-(humanshape.org, by Prof. Matthew P. Reed of the University of Michigan
-Transportation Research Institute), used with permission [1]. Its inputs
-are stature, body mass index, sitting height ratio and age; every point
-of the body follows from them. Between them, the controls on the
-Anthropometric tab describe most of the variation among adults.</p>
+<p><a id="units"></a></p>
+<h2 id="单位">单位</h2>
+<p><em>Length Unit</em> 和 <em>Mass Unit</em>
+指定构建人体时使用的单位，而非仅改变显示单位。人体按所选长度单位中的身高建模，因此一个身高
+1.76 m 的男性，在 Length Unit 为 M 时高 1.76 个模型单位，为 FT 时高 5.76
+个模型单位。应与模型其他部分的单位一致。默认值为 FT 和 LBM。</p>
+<p>改变长度单位会保持人体的实际尺寸：身高百分位不变，身高数值换算为新单位。改变质量单位会换算质量数值。</p>
+<p>XForm 选项卡的 <em>Scale（缩放）</em>
+对人体无效；人体尺寸仅由身高和长度单位决定。</p>
+<p><a id="body-size"></a></p>
+<h2 id="体型尺寸">体型尺寸</h2>
+<p>人体外形使用 Human Shapes
+的统计模型（humanshape.org，由密歇根大学交通研究所 Matthew P. Reed
+教授开发），已获得使用许可
+[1]。输入包括身高、身体质量指数、坐高与身高之比以及年龄，身体各点的位置由这些输入确定。Anthropometric
+选项卡的这些控件可描述成年人体型的大部分差异。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Control</th>
-<th style="text-align: left;">Parm</th>
-<th style="text-align: left;">Default</th>
-<th style="text-align: left;">Range</th>
-<th style="text-align: left;">Meaning</th>
+<th style="text-align: left;">控件</th>
+<th style="text-align: left;">参数</th>
+<th style="text-align: left;">默认值</th>
+<th style="text-align: left;">范围</th>
+<th style="text-align: left;">含义</th>
 </tr>
 </thead>
 <tbody>
@@ -216,107 +205,107 @@ Anthropometric tab describe most of the variation among adults.</p>
 <td style="text-align: left;"><code>GenderFlag</code></td>
 <td style="text-align: left;">MALE</td>
 <td style="text-align: left;"></td>
-<td style="text-align: left;">Which body model, and which population
-statistics.</td>
+<td style="text-align: left;">选择人体模型及对应的人群统计数据。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Stature</td>
 <td style="text-align: left;"><code>Stature</code></td>
-<td style="text-align: left;">50th pct.</td>
-<td style="text-align: left;">5th to 95th</td>
-<td style="text-align: left;">Standing height, in the length unit.</td>
+<td style="text-align: left;">第 50 百分位</td>
+<td style="text-align: left;">第 5 至第 95 百分位</td>
+<td style="text-align: left;">站立身高，使用所选长度单位。</td>
 </tr>
 <tr>
 <td style="text-align: left;">% Stature</td>
 <td style="text-align: left;"><code>Stature_pct</code></td>
 <td style="text-align: left;">0.5</td>
 <td style="text-align: left;">0.05 - 0.95</td>
-<td style="text-align: left;">Stature percentile, as a fraction.</td>
+<td style="text-align: left;">以小数表示的身高百分位。</td>
 </tr>
 <tr>
 <td style="text-align: left;">BMI</td>
 <td style="text-align: left;"><code>BMI</code></td>
-<td style="text-align: left;">50th pct.</td>
+<td style="text-align: left;">第 50 百分位</td>
 <td style="text-align: left;">16 - 55</td>
-<td style="text-align: left;">Body mass index, kg/m^2.</td>
+<td style="text-align: left;">身体质量指数，kg/m^2。</td>
 </tr>
 <tr>
 <td style="text-align: left;">% BMI</td>
 <td style="text-align: left;"><code>BMI_pct</code></td>
 <td style="text-align: left;">0.5</td>
 <td style="text-align: left;">0.05 - 0.95</td>
-<td style="text-align: left;">BMI percentile, as a fraction.</td>
+<td style="text-align: left;">以小数表示的 BMI 百分位。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Mass</td>
 <td style="text-align: left;"><code>Mass</code></td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
-<td style="text-align: left;">Body mass, in the mass unit.</td>
+<td style="text-align: left;">体重，使用所选质量单位。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Age</td>
 <td style="text-align: left;"><code>Age</code></td>
 <td style="text-align: left;">30</td>
 <td style="text-align: left;">18 - 80</td>
-<td style="text-align: left;">Age in years.</td>
+<td style="text-align: left;">年龄，单位为岁。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Sitting H / H</td>
 <td style="text-align: left;"><code>SitFrac</code></td>
 <td style="text-align: left;">0.51</td>
 <td style="text-align: left;">0.4 - 0.6</td>
-<td style="text-align: left;">Sitting height divided by stature.</td>
+<td style="text-align: left;">坐高除以身高。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Volume</td>
 <td style="text-align: left;"><code>Volume</code></td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
-<td style="text-align: left;">Output: the volume of the posed body.</td>
+<td style="text-align: left;">输出：当前姿态下人体的体积。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Auto Density</td>
 <td style="text-align: left;"><code>AutoDensity</code></td>
-<td style="text-align: left;">on</td>
+<td style="text-align: left;">开启</td>
 <td style="text-align: left;"></td>
-<td style="text-align: left;">Set the Mass tab's density to Mass /
-Volume.</td>
+<td style="text-align: left;">将 Mass 选项卡的密度设为 Mass /
+Volume。</td>
 </tr>
 </tbody>
 </table>
-<h3 id="stature-and-bmi">Stature and BMI</h3>
-<p>Stature and BMI each have a value and a percentile; set either and
-the other follows. The percentiles come from the United States NHANES
-survey of adults aged 20 and over, 2011-2014, separately for men and
-women [2]:</p>
+<p><a id="stature-and-bmi"></a></p>
+<h3 id="身高与-bmi">身高与 BMI</h3>
+<p>身高和 BMI
+均有数值与百分位两种表示；设置其中一个，另一个随之变化。百分位来自美国
+2011—2014 年 NHANES 调查中 20 岁及以上成年人的数据，男性和女性分别统计
+[2]：</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Percentile</th>
-<th style="text-align: left;">Male stature, mm</th>
-<th style="text-align: left;">Female stature, mm</th>
-<th style="text-align: left;">Male BMI</th>
-<th style="text-align: left;">Female BMI</th>
+<th style="text-align: left;">百分位</th>
+<th style="text-align: left;">男性身高，mm</th>
+<th style="text-align: left;">女性身高，mm</th>
+<th style="text-align: left;">男性 BMI</th>
+<th style="text-align: left;">女性 BMI</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">5th</td>
+<td style="text-align: left;">第 5 百分位</td>
 <td style="text-align: left;">1634</td>
 <td style="text-align: left;">1498</td>
 <td style="text-align: left;">20.7</td>
 <td style="text-align: left;">19.6</td>
 </tr>
 <tr>
-<td style="text-align: left;">50th</td>
+<td style="text-align: left;">第 50 百分位</td>
 <td style="text-align: left;">1756</td>
 <td style="text-align: left;">1619</td>
 <td style="text-align: left;">27.7</td>
 <td style="text-align: left;">27.7</td>
 </tr>
 <tr>
-<td style="text-align: left;">95th</td>
+<td style="text-align: left;">第 95 百分位</td>
 <td style="text-align: left;">1881</td>
 <td style="text-align: left;">1735</td>
 <td style="text-align: left;">39.8</td>
@@ -324,73 +313,65 @@ women [2]:</p>
 </tr>
 </tbody>
 </table>
-<p>Switching <em>Gender</em> keeps the percentiles, so a 95th percentile
-man becomes a 95th percentile woman, and shorter. The limits on
-<em>Stature</em> are the 5th and 95th percentile of the chosen sex.</p>
-<p>Mass, BMI and stature are tied together by</p>
+<p>切换 <em>Gender</em> 会保持百分位不变，因此第 95 百分位男性会变为第
+95 百分位女性，身高也会降低。<em>Stature</em> 的上下限是所选性别的第 5
+和第 95 百分位身高。</p>
+<p>质量、BMI 和身高的关系为：</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">B</mi><mi mathvariant="normal">M</mi><mi mathvariant="normal">I</mi></mrow><mo>=</mo><mfrac><mi>m</mi><msup><mi>h</mi><mn>2</mn></msup></mfrac></mrow><annotation encoding="application/x-tex">
 \mathrm{BMI} = \frac{m}{h^2}
 </annotation></semantics></math></p>
-<p>with the mass
+<p>其中质量
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math>
-in kilograms and the stature
+以千克计，身高
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math>
-in meters. Setting <em>Mass</em> sets BMI; setting <em>BMI</em> or <em>%
-BMI</em> sets the mass. Changing the stature keeps the BMI and changes
-the mass, so a taller person of the same build is heavier.</p>
-<h3 id="age-and-sitting-height">Age and sitting height</h3>
-<p><em>Age</em> and <em>Sitting H / H</em> change the shape without
-changing the stature. A larger sitting height ratio gives a longer trunk
-and shorter legs. Age changes the build, by an amount that depends on
-the BMI. Leave both at their defaults unless the person in question is
-known to differ.</p>
-<h3 id="volume-and-density">Volume and density</h3>
-<p><em>Volume</em> is the volume of the closed body as posed, in the
-length unit cubed. With <em>Auto Density</em> on, the human's density on
-the Mass tab is set to <em>Mass</em> / <em>Volume</em>, so the mass
-properties of the model carry the person's mass at the right place. Turn
-it off to set a density by hand.</p>
-<h2 id="origin-and-axes">Origin and Axes</h2>
-<p>The human faces
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>−</mi><mi>X</mi></mrow><annotation encoding="application/x-tex">-X</annotation></semantics></math>,
-with
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
-up and the person's right side toward
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">+Y</annotation></semantics></math>,
-the way a pilot sits in an aircraft whose nose points along
+以米计。设置 <em>Mass</em> 会确定 BMI；设置 <em>BMI</em> 或 <em>%
+BMI</em> 会确定质量。改变身高时保持 BMI
+不变并改变质量，因此同样体型的人越高，质量也越大。</p>
+<p><a id="age-and-sitting-height"></a></p>
+<h3 id="年龄与坐高">年龄与坐高</h3>
+<p><em>Age</em> 和 <em>Sitting H / H</em>
+改变体型，但不改变身高。较大的坐高比会使躯干更长、腿更短。年龄对体型的影响程度取决于
+BMI。除非已知目标人体与默认情况不同，否则保持两者默认值即可。</p>
+<p><a id="volume-and-density"></a></p>
+<h3 id="体积与密度">体积与密度</h3>
+<p><em>Volume</em>
+是当前姿态下封闭人体的体积，单位为所选长度单位的立方。开启 <em>Auto
+Density</em> 时，Mass 选项卡中的人体密度被设为 <em>Mass</em> /
+<em>Volume</em>，使模型的质量特性在正确位置计入人体质量。关闭后可手动指定密度。</p>
+<p><a id="origin-and-axes"></a></p>
+<h2 id="原点与坐标轴">原点与坐标轴</h2>
+<p>人体面朝
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>−</mi><mi>X</mi></mrow><annotation encoding="application/x-tex">-X</annotation></semantics></math>，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
+向上，人体右侧朝
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">+Y</annotation></semantics></math>，与坐在机头朝
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>−</mi><mi>X</mi></mrow><annotation encoding="application/x-tex">-X</annotation></semantics></math>
-(Figure 1). The origin is the waist joint, and it stays there whatever
-the pose: the legs hang from it standing and fold in front of it seated
-(Figure 2). Place a seated occupant by the waist joint, not by the seat
-or the feet.</p>
-<p><img src="images/Human_axes.png" title="Figure 1. Human axes"
-alt="Figure 1. Human axes" /></p>
-<p><em>Figure 1. A new human, its origin at the waist joint, and its
-axes. The person faces
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>−</mi><mi>X</mi></mrow><annotation encoding="application/x-tex">-X</annotation></semantics></math>;
-the right hand is toward
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">+Y</annotation></semantics></math>.</em></p>
-<p><img src="images/Human_seated.png"
-title="Figure 2. Standing and seated"
-alt="Figure 2. Standing and seated" /></p>
-<p><em>Figure 2. The default human standing, as it is made, and in the
-Sitting preset. The origin is the same point of the body in
-both.</em></p>
-<h2 id="pose">Pose</h2>
-<p>The pose bends the body at the joints of its skeleton. The skin
-follows the bones smoothly, so a bent elbow or hip deforms the flesh
-around it rather than hinging a rigid part. The skin is bound to the
-skeleton by the Pinocchio automatic rigging method [3].</p>
-<h3 id="presets">Presets</h3>
-<p><em>Preset</em> and <em>Set</em> at the top of the Pose tab put the
-human into a standard pose. Set replaces every joint angle and turns
-<em>R/L Sym</em> on; choose the preset first and then adjust.</p>
+的飞机中的飞行员方向一致（图
+1）。原点位于腰部关节，不随姿态改变：站立时双腿从腰部向下伸展，坐姿时在腰部前方弯折（图
+2）。放置坐姿乘员时应以腰部关节为定位点，而非座椅或脚部。</p>
+<p><img src="images/Human_axes.png" title="图 1. 人体坐标轴"
+alt="图 1. 人体坐标轴" /></p>
+<p><em>图 1. 新建人体、腰部关节处的原点及坐标轴。人体面朝
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>−</mi><mi>X</mi></mrow><annotation encoding="application/x-tex">-X</annotation></semantics></math>，右手朝
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">+Y</annotation></semantics></math>。</em></p>
+<p><img src="images/Human_seated.png" title="图 2. 站立与坐姿"
+alt="图 2. 站立与坐姿" /></p>
+<p><em>图 2. 新建人体的默认站姿与 Sitting
+预设坐姿。两种姿态的原点均位于身体同一点。</em></p>
+<p><a id="pose"></a></p>
+<h2 id="姿态">姿态</h2>
+<p>姿态通过骨架关节使人体弯曲。皮肤平滑地随骨骼运动，因此肘部或髋部弯曲时，周围软组织会变形，而不是像刚性部件那样仅绕铰链转动。皮肤通过
+Pinocchio 自动绑定方法与骨架关联 [3]。</p>
+<p><a id="presets"></a></p>
+<h3 id="预设">预设</h3>
+<p>Pose 选项卡顶部的 <em>Preset</em> 和 <em>Set</em>
+将人体置于标准姿态。Set 会替换所有关节角并开启 <em>R/L
+Sym（左右对称）</em>；应先应用预设，再进行调整。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Joint</th>
-<th style="text-align: left;">Standing</th>
-<th style="text-align: left;">Sitting</th>
+<th style="text-align: left;">关节</th>
+<th style="text-align: left;">Standing（站立）</th>
+<th style="text-align: left;">Sitting（坐姿）</th>
 </tr>
 </thead>
 <tbody>
@@ -420,28 +401,28 @@ human into a standard pose. Set replaces every joint angle and turns
 <td style="text-align: left;">80</td>
 </tr>
 <tr>
-<td style="text-align: left;">All other joints</td>
+<td style="text-align: left;">其他所有关节</td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">0</td>
 </tr>
 </tbody>
 </table>
-<p>A new human stands, in the Standing preset.</p>
-<h3 id="joint-angles">Joint angles</h3>
-<p>Every angle is in degrees. The names are the anatomical ones: AB/AD
-is abduction (away from the body's centerline) and adduction, FE is
-flexion and extension, IE is internal and external rotation.
-<em>Elbow</em> is the angle between the upper arm and the forearm, zero
-for a straight arm; the other angles are zero in a natural standing
-posture. Figures 3-5 show positive angles on the larger joints.</p>
+<p>新建人体使用 Standing 预设。</p>
+<p><a id="joint-angles"></a></p>
+<h3 id="关节角">关节角</h3>
+<p>所有角度单位均为度。名称采用解剖学术语：AB/AD
+表示外展（远离身体中线）与内收，FE 表示屈曲与伸展，IE
+表示内旋与外旋。<em>Elbow（肘部）</em>
+是上臂和前臂之间的弯曲角，手臂伸直时为零；其他角度在自然站姿下为零。图
+3—5 展示主要关节正角度对应的动作。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Control</th>
-<th style="text-align: left;">Parm</th>
-<th style="text-align: left;">Default</th>
-<th style="text-align: left;">Range</th>
-<th style="text-align: left;">A positive angle</th>
+<th style="text-align: left;">控件</th>
+<th style="text-align: left;">参数</th>
+<th style="text-align: left;">默认值</th>
+<th style="text-align: left;">范围</th>
+<th style="text-align: left;">正角度对应的动作</th>
 </tr>
 </thead>
 <tbody>
@@ -450,181 +431,161 @@ posture. Figures 3-5 show positive angles on the larger joints.</p>
 <td style="text-align: left;"><code>Back</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-15 - 45</td>
-<td style="text-align: left;">bends the upper body forward at the middle
-of the back.</td>
+<td style="text-align: left;">上身从背部中段向前弯曲。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Waist</td>
 <td style="text-align: left;"><code>Waist</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-15 - 45</td>
-<td style="text-align: left;">bends the upper body forward at the
-waist.</td>
+<td style="text-align: left;">上身从腰部向前弯曲。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Nod</td>
 <td style="text-align: left;"><code>Nod</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-40 - 50</td>
-<td style="text-align: left;">tips the head forward, chin down.</td>
+<td style="text-align: left;">头部前倾，下巴向下。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Rotate</td>
 <td style="text-align: left;"><code>RotateHead</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-80 - 80</td>
-<td style="text-align: left;">turns the head toward the person's
-right.</td>
+<td style="text-align: left;">头部转向人体右侧。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Shoulder AB/AD</td>
 <td style="text-align: left;"><code>ShoulderABADRt</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-40 - 170</td>
-<td style="text-align: left;">raises the arm out to the side
-(abduction).</td>
+<td style="text-align: left;">手臂向身体侧方抬起（外展）。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Shoulder FE</td>
 <td style="text-align: left;"><code>ShoulderFERt</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-30 - 180</td>
-<td style="text-align: left;">swings the arm forward and up
-(flexion).</td>
+<td style="text-align: left;">手臂向前、向上摆动（屈曲）。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Shoulder IE</td>
 <td style="text-align: left;"><code>ShoulderIERt</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-30 - 100</td>
-<td style="text-align: left;">turns the arm inward about its length
-(internal rotation).</td>
+<td style="text-align: left;">手臂绕自身长轴向内转动（内旋）。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Elbow</td>
 <td style="text-align: left;"><code>ElbowRt</code></td>
 <td style="text-align: left;">15</td>
 <td style="text-align: left;">0 - 150</td>
-<td style="text-align: left;">bends the elbow (flexion).</td>
+<td style="text-align: left;">弯曲肘部（屈曲）。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Forearm</td>
 <td style="text-align: left;"><code>ForearmRt</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-90 - 90</td>
-<td style="text-align: left;">turns the thumb in toward the body
-(pronation).</td>
+<td style="text-align: left;">拇指朝身体内侧转动（旋前）。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Wrist</td>
 <td style="text-align: left;"><code>WristRt</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-90 - 90</td>
-<td style="text-align: left;">bends the hand toward its back
-(extension).</td>
+<td style="text-align: left;">手向手背方向弯曲（伸展）。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Hip AB/AD</td>
 <td style="text-align: left;"><code>HipABADRt</code></td>
 <td style="text-align: left;">0.5</td>
 <td style="text-align: left;">-45 - 45</td>
-<td style="text-align: left;">swings the leg out to the side
-(abduction).</td>
+<td style="text-align: left;">腿向身体侧方摆动（外展）。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Hip FE</td>
 <td style="text-align: left;"><code>HipFERt</code></td>
 <td style="text-align: left;">2.5</td>
 <td style="text-align: left;">-15 - 130</td>
-<td style="text-align: left;">swings the leg forward (flexion).</td>
+<td style="text-align: left;">腿向前摆动（屈曲）。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Knee</td>
 <td style="text-align: left;"><code>KneeRt</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">0 - 140</td>
-<td style="text-align: left;">bends the knee, the foot moving back
-(flexion).</td>
+<td style="text-align: left;">弯曲膝部，使脚向后运动（屈曲）。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Ankle</td>
 <td style="text-align: left;"><code>AnkleRt</code></td>
 <td style="text-align: left;">0</td>
 <td style="text-align: left;">-15 - 15</td>
-<td style="text-align: left;">raises the toes (dorsiflexion).</td>
+<td style="text-align: left;">脚趾抬起（背屈）。</td>
 </tr>
 </tbody>
 </table>
-<p>The limb joints are on the Pose tab twice, under Right Side and Left
-Side (Parms ending in <code>Rt</code> and <code>Lt</code>). The left
-angles mean the same motions as the right: a positive Shoulder AB/AD
-raises either arm out to its own side. With <em>R/L Sym</em> on, the
-default, the left side copies the right and its controls are greyed;
-turn it off to pose the sides apart.</p>
-<p>Back and Waist both bend the upper body forward; Back bends it
-higher, at the middle of the back, and Waist at the waist joint (Figure
-3). In both the legs and the origin stay where they are.</p>
-<p><img src="images/Human_pose_body.png"
-title="Figure 3. Back, waist and head"
-alt="Figure 3. Back, waist and head" /></p>
-<p><em>Figure 3. Back, Waist and Nod at 30, seen from the person's left.
-The tint shows the part that moved, as it was standing.</em></p>
-<p><img src="images/Human_pose_arm.png" title="Figure 4. Arm"
-alt="Figure 4. Arm" /></p>
-<p><em>Figure 4. Positive shoulder and elbow angles. Shoulder AB/AD is
-seen from in front of the person and moves the right arm; Shoulder FE
-and Elbow are seen from the left and move the left arm; Shoulder IE is
-seen from above and moves the right arm, its elbow at 90. The tint shows
-the arm as it was.</em></p>
-<p>Shoulder IE is easiest to see with the elbow bent: internal rotation
-swings the forearm in across the body, as in Figure 4. With the arm
-hanging straight it only turns the arm about its own length. Likewise
-Forearm turns the palm down when the elbow is bent 90 degrees, and
-toward the back when the arm hangs; the palm faces the thigh at
-zero.</p>
-<p><img src="images/Human_pose_leg.png" title="Figure 5. Leg"
-alt="Figure 5. Leg" /></p>
-<p><em>Figure 5. Positive hip and knee angles. Hip AB/AD is seen from in
-front of the person and moves the right leg; Hip FE and Knee are seen
-from the left and move the left leg.</em></p>
-<p>The skeleton does not check for collisions, so a pose can put an arm
-through the body or a leg through the other; check a demanding pose by
-eye.</p>
-<h2 id="design-eye">Design Eye</h2>
-<p>The human carries a <em>design eye</em> point between the eyes
-(Figure 1), which moves and turns with the head. Two things use it:</p>
+<p>四肢关节在 Pose 选项卡中分别列于 Right Side（右侧）和 Left
+Side（左侧），参数名分别以 <code>Rt</code> 和 <code>Lt</code>
+结尾。左侧角度与右侧表示相同的动作：正 Shoulder AB/AD
+会使任一手臂向其自身外侧抬起。默认开启 <em>R/L
+Sym</em>，此时左侧复制右侧姿态，左侧控件变灰；关闭即可独立调整两侧。</p>
+<p>Back 和 Waist 都使上身前弯，但 Back 的弯曲位置更高，在背部中段；Waist
+则在腰部关节处弯曲（图 3）。两种情况下腿部和原点都保持原位。</p>
+<p><img src="images/Human_pose_body.png" title="图 3. 背部、腰部与头部"
+alt="图 3. 背部、腰部与头部" /></p>
+<p><em>图 3. 从人体左侧观察 Back、Waist 和 Nod 分别为 30
+度时的情况。着色部分表示发生运动的部位在原站姿中的位置。</em></p>
+<p><img src="images/Human_pose_arm.png" title="图 4. 手臂"
+alt="图 4. 手臂" /></p>
+<p><em>图 4. 肩部与肘部的正角度。Shoulder AB/AD
+从人体前方观察，运动的是右臂；Shoulder FE 和 Elbow
+从左侧观察，运动的是左臂；Shoulder IE 从上方观察，运动的是肘角为 90
+度的右臂。着色部分表示手臂原来的位置。</em></p>
+<p>肘部弯曲时最容易看清 Shoulder
+IE：内旋会使前臂向内摆动并横过身体，如图
+4。手臂伸直下垂时，它仅使手臂绕自身长轴旋转。同样，Forearm 在肘部弯曲 90
+度时使手掌转向下方，在手臂下垂时使手掌转向后方；零角度时手掌朝向大腿。</p>
+<p><img src="images/Human_pose_leg.png" title="图 5. 腿部"
+alt="图 5. 腿部" /></p>
+<p><em>图 5. 髋部与膝部的正角度。Hip AB/AD
+从人体前方观察，运动的是右腿；Hip FE 和 Knee
+从左侧观察，运动的是左腿。</em></p>
+<p>骨架不进行碰撞检查，因此某些姿态可能导致手臂穿过身体或两腿互相穿透；复杂姿态应通过目视检查。</p>
+<p><a id="design-eye"></a></p>
+<h2 id="设计眼点">设计眼点</h2>
+<p>人体在双眼之间设有一个设计眼点（图
+1），随头部移动和旋转。有两项功能使用该点：</p>
 <ul>
-<li>A Super Cone <a href="Auxiliary.html">Auxiliary</a> component whose
-parent is a human is placed at the design eye and turned with the head,
-so it shows the field of view from the person's eyes.</li>
-<li><a href="GeometryAnalysis.html#from-point-visibility">From Point
-Visibility</a> in Geometry Analysis can take a human as its viewpoint,
-and looks from the design eye.</li>
+<li>以人体为父组件的 Super Cone <a href="Auxiliary.html">Auxiliary</a>
+组件会放置在设计眼点，并随头部转动，用于显示该人体的视场。</li>
+<li>Geometry Analysis 中的 <a
+href="GeometryAnalysis.html#from-point-visibility">From Point
+Visibility（从点观察的可视性）</a>
+可选择人体作为观察位置，从设计眼点进行观察。</li>
 </ul>
-<p>With symmetry, each copy of the human has its own design eye. An
-attached Super Cone follows the eye as the human is posed or
-resized.</p>
-<h2 id="the-human-in-analyses">The Human in Analyses</h2>
-<p>A human is a closed triangle mesh, the same in every analysis.
-CompGeom, Mass Properties, the slicing analyses, interference checks and
-the mesh exports all use it, and VSPAERO takes it as one component. Its
-mesh is fixed by the model: the Gen tab's tessellation controls do not
-apply.</p>
-<p>It is not a surface, so it has no sub-surfaces, its degenerate
-geometry is empty, and it takes no part where a surface is needed: CFD
-Mesh, FEA Mesh, Fit Model, or as the boundary or direction of a
-projection. Symmetry and Flip on the XForm tab work as for any
-component; see <a href="XFormTab.html#symmetry">Symmetry</a> and <a
-href="XFormTab.html#flip">Flip</a>.</p>
-<h2 id="scripting">Scripting</h2>
-<p>A human has no functions of its own in the API: it is built and posed
-through its Parms, in the groups <code>Anthropometric</code> and
-<code>Pose</code>, with the names in the tables above. The <em>Set</em>
-button is not in the API; to pose a human as a preset, set the joint
-angles from the preset table. <code>ShowSkelFlag</code> in the
-<code>Anthropometric</code> group draws the skeleton with the feature
-lines, unposed in black and posed in blue; it has no control on the
-screen.</p>
+<p>使用对称复制时，每个人体副本都有独立的设计眼点。附加的 Super Cone
+会随人体姿态或尺寸变化而跟随眼点。</p>
+<p><a id="the-human-in-analyses"></a></p>
+<h2 id="人体参与的分析">人体参与的分析</h2>
+<p>人体是封闭三角网格，在各项分析中使用同一网格。CompGeom、Mass
+Properties、切片分析、干涉检查及网格导出都会使用它，VSPAERO
+将其作为一个组件处理。网格由人体模型固定决定；Gen
+选项卡的离散细分控件不适用。</p>
+<p>人体不是曲面，因此没有子曲面，退化几何为空，也不参与必须使用曲面的功能：CFD
+Mesh、FEA Mesh、Fit Model，或作为投影的边界和方向。XForm 选项卡中的
+Symmetry 和 Flip 与其他组件相同，参见<a
+href="XFormTab.html#symmetry">对称</a>和<a
+href="XFormTab.html#flip">翻转</a>。</p>
+<p><a id="scripting"></a></p>
+<h2 id="脚本">脚本</h2>
+<p>人体在 API 中没有专用函数；通过 <code>Anthropometric</code> 和
+<code>Pose</code> 参数组中上表所列的参数来构建和设置姿态。API 不提供
+<em>Set</em>
+按钮；要应用预设姿态，应按预设表设置关节角。<code>Anthropometric</code>
+组中的 <code>ShowSkelFlag</code>
+会随特征线绘制骨架：未摆姿态的骨架为黑色，摆姿态后的骨架为蓝色；界面中没有对应控件。</p>
 <div class="sourceCode" id="cb1"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> openvsp <span class="im">as</span> vsp</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -637,7 +598,8 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a hr
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    vsp.SetParmVal( h, name, <span class="st">&quot;Pose&quot;</span>, val )</span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>vsp.Update()</span></code></pre></div>
-<h2 id="references">References</h2>
+<p><a id="references"></a></p>
+<h2 id="参考文献">参考文献</h2>
 <ol type="1">
 <li>Reed, M. P., Human Shapes, University of Michigan Transportation
 Research Institute. <a

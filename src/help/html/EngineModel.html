@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Engine Model</title>
+  <title>发动机模型（Engine Model）</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -31,452 +25,409 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Engine Model</h1>
+<h1 class="title">发动机模型（Engine Model）</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>A Fuselage or a Stack can stand for an engine nacelle, an inlet, an
-exhaust or the flowpath inside them. The engine model lets the same
-sections be handed to analyses in different ways -- as an open
-flow-through nacelle, as a solid with the flowpath removed, closed at
-the lips or at the faces, or stretched upstream and downstream to the
-edge of a CFD domain -- without rebuilding them. It works in two steps.
-The <em>Engine Definition</em> says what the sections describe and where
-the inlet and outlet lips and faces are; the <em>Engine
-Representation</em> says what is built from them. Both are groups on the
-Design tab of the Fuselage and the Stack.</p>
-<p>Engine modeling has many choices, and not every combination of them
-makes a valid or useful model. The quickest way to a working one is a
-Stack preset: each nacelle preset lays out the sections and sets the
-whole engine model to match (see <a
-href="#starting-from-a-preset">Starting from a Preset</a>). The <a
-href="StackPresets.html">Stack Presets</a> page draws every one of
-them.</p>
+<p><a href="index.html">目录</a></p>
+<p>Fuselage 或 Stack
+可表示发动机短舱、进气道、排气道或其内部流道。发动机模型功能允许同一组截面以不同形式参与分析：开放贯通的短舱、扣除流道的实体、在唇口或内部端面封闭的形体，或向上游和下游延伸至
+CFD 计算域边界的形体，无需重建截面。它分两步工作：<em>Engine
+Definition（发动机定义）</em>
+指定截面描述的内容以及进出口唇口和端面的位置；<em>Engine
+Representation（发动机表示方式）</em> 决定据此生成什么。两者均位于
+Fuselage 和 Stack 的 Design 选项卡。</p>
+<p>发动机建模有多种选择，并非所有组合都有效或有用。最快的入门方法是使用
+Stack 预设：每个短舱预设都布置好截面，并设置匹配的完整发动机模型，参见<a
+href="#starting-from-a-preset">从预设开始</a>。<a
+href="StackPresets.html">堆叠几何预设</a>页展示了各个预设。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Topic</th>
-<th style="text-align: left;">Tab</th>
+<th style="text-align: left;">主题</th>
+<th style="text-align: left;">选项卡</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><a href="#quick-start">Quick
-Start</a></td>
+<td style="text-align: left;"><a href="#quick-start">快速入门</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#starting-from-a-preset">Starting
-from a Preset</a></td>
-<td style="text-align: left;">Design</td>
-</tr>
-<tr>
-<td style="text-align: left;"><a href="#engine-definition">Engine
-Definition</a></td>
-<td style="text-align: left;">Design</td>
-</tr>
-<tr>
-<td style="text-align: left;"><a href="#stations">Stations</a></td>
-<td style="text-align: left;">Design</td>
-</tr>
-<tr>
-<td style="text-align: left;"><a href="#engine-representation">Engine
-Representation</a></td>
+<td style="text-align: left;"><a
+href="#starting-from-a-preset">从预设开始</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
 <td style="text-align: left;"><a
-href="#representing-a-flowpath">Representing a Flowpath</a></td>
+href="#engine-definition">发动机定义</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#extension">Extension</a></td>
+<td style="text-align: left;"><a href="#stations">站位</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#scripting">Scripting</a></td>
+<td style="text-align: left;"><a
+href="#engine-representation">发动机表示方式</a></td>
+<td style="text-align: left;">Design</td>
+</tr>
+<tr>
+<td style="text-align: left;"><a
+href="#representing-a-flowpath">流道的表示方式</a></td>
+<td style="text-align: left;">Design</td>
+</tr>
+<tr>
+<td style="text-align: left;"><a href="#extension">延伸</a></td>
+<td style="text-align: left;">Design</td>
+</tr>
+<tr>
+<td style="text-align: left;"><a href="#scripting">脚本</a></td>
 <td style="text-align: left;"></td>
 </tr>
 </tbody>
 </table>
-<p>The rest of the Fuselage and Stack screens is described in <a
-href="FuselageStack.html">Fuselage and Stack</a>, and the chevrons of
-their Modify tab in <a href="Chevron.html">Chevrons</a>.</p>
-<h2 id="quick-start">Quick Start</h2>
+<p>其他界面功能参见<a
+href="FuselageStack.html">机身与堆叠几何体</a>，Modify
+选项卡的锯齿功能参见<a href="Chevron.html">锯齿边缘</a>。</p>
+<p><a id="quick-start"></a></p>
+<h2 id="快速入门">快速入门</h2>
 <ol type="1">
-<li>Add a Stack and set <em>Stack Preset</em> to one of the Nacelle
-Flowthrough presets. The preset lays out the sections and fills in the
-Engine Definition.</li>
-<li>Place it with the XForm tab, and size its sections on the XSec
-tab.</li>
-<li>The lips and faces are drawn on the nacelle while <em>Show
-Stations</em> is checked, as it is by default.</li>
-<li>The preset comes with <em>Inlet Mode</em> FLOWTHROUGH, an open
-nacelle. Choose FLOWTHROUGH NEGATIVE under Engine Representation for a
-solid nacelle and a flowpath that cuts through whatever it meets.</li>
+<li>添加 Stack，将 <em>Stack Preset</em> 设为某个 Nacelle Flowthrough
+预设。预设会布置截面并填写 Engine Definition。</li>
+<li>在 XForm 选项卡放置组件，在 XSec 选项卡调整截面尺寸。</li>
+<li>默认勾选的 <em>Show Stations</em>
+会在短舱上显示唇口和端面站位。</li>
+<li>预设的 <em>Inlet Mode</em> 为 FLOWTHROUGH，形成开放短舱。在 Engine
+Representation 中选择 FLOWTHROUGH
+NEGATIVE，可生成实体短舱及穿透所有相交物体的负体积流道。</li>
 </ol>
-<h2 id="starting-from-a-preset">Starting from a Preset</h2>
-<p><em>Stack Preset</em> on the Stack's Design tab replaces the Stack's
-sections with a nacelle and sets its XSec Order, its end caps, and the
-parts of its Engine Definition, stations and Engine Representation that
-the preset's definition uses, with the simplest representation of it.
-The controls it does not use keep their values, and so do the
-<em>Extension</em> settings. Pick the preset by what the sections should
-describe; the representation can then be changed freely.</p>
+<p><a id="starting-from-a-preset"></a></p>
+<h2 id="从预设开始">从预设开始</h2>
+<p>Stack 的 Design 选项卡中，<em>Stack Preset</em>
+会用短舱替换现有截面，并设置 XSec Order、端盖，以及该预设使用的 Engine
+Definition、站位和 Engine Representation
+项目，采用对应的最简单表示方式。未使用的控件保留原值，<em>Extension</em>
+设置也保留。应根据截面需要描述什么来选择预设，再自由调整表示方式。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Sections describe</th>
-<th style="text-align: left;">Presets</th>
-<th style="text-align: left;">Comes as</th>
+<th style="text-align: left;">截面描述的内容</th>
+<th style="text-align: left;">预设</th>
+<th style="text-align: left;">初始表示</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">The whole nacelle wall, one loop
-(FLOWTHROUGH)</td>
+<td
+style="text-align: left;">整个短舱壁，形成一个环路（FLOWTHROUGH）</td>
 <td style="text-align: left;"><a
 href="StackPresets.html#nacelle-flowthrough-outlet-origin">Nacelle
 Flowthrough Outlet, Inlet or Mid Origin</a></td>
-<td style="text-align: left;">An open nacelle</td>
+<td style="text-align: left;">开放短舱</td>
 </tr>
 <tr>
-<td style="text-align: left;">The outside, into both ends to the
-faces</td>
+<td style="text-align: left;">外壁及两端延伸到内部端面的部分</td>
 <td style="text-align: left;"><a
 href="StackPresets.html#nacelle-inlet--outlet-to-face">Nacelle Inlet +
 Outlet to Face</a></td>
-<td style="text-align: left;">Closed at both faces</td>
+<td style="text-align: left;">两个端面封闭</td>
 </tr>
 <tr>
-<td style="text-align: left;">The outside, to one lip and one face</td>
+<td style="text-align: left;">外壁，一端到唇口、另一端到内部端面</td>
 <td style="text-align: left;"><a
 href="StackPresets.html#nacelle-inlet-lip--outlet-face">Nacelle Inlet
-Lip + Outlet Face</a>, <a
+Lip + Outlet Face</a>、<a
 href="StackPresets.html#nacelle-inlet-face--outlet-lip">Nacelle Inlet
 Face + Outlet Lip</a></td>
-<td style="text-align: left;">Closed at that lip and that face</td>
+<td style="text-align: left;">对应唇口和端面封闭</td>
 </tr>
 <tr>
-<td style="text-align: left;">The outside, to both lips</td>
+<td style="text-align: left;">外壁，两端都到唇口</td>
 <td style="text-align: left;"><a
 href="StackPresets.html#nacelle-inlet--outlet-to-lip">Nacelle Inlet +
 Outlet to Lip</a></td>
-<td style="text-align: left;">Closed at both lips</td>
+<td style="text-align: left;">两个唇口封闭</td>
 </tr>
 <tr>
-<td style="text-align: left;">An outlet only, with a closed nose</td>
+<td style="text-align: left;">仅出口，头部封闭</td>
 <td style="text-align: left;"><a
 href="StackPresets.html#nacelle-outlet-to-face">Nacelle Outlet to
-Face</a>, <a href="StackPresets.html#nacelle-outlet-to-lip">Nacelle
+Face</a>、<a href="StackPresets.html#nacelle-outlet-to-lip">Nacelle
 Outlet to Lip</a></td>
-<td style="text-align: left;">Closed at the face or the lip</td>
+<td style="text-align: left;">端面或唇口封闭</td>
 </tr>
 <tr>
-<td style="text-align: left;">An inlet only, with a closed tail</td>
+<td style="text-align: left;">仅入口，尾部封闭</td>
 <td style="text-align: left;"><a
 href="StackPresets.html#nacelle-inlet-to-face">Nacelle Inlet to
-Face</a>, <a href="StackPresets.html#nacelle-inlet-to-lip">Nacelle Inlet
+Face</a>、<a href="StackPresets.html#nacelle-inlet-to-lip">Nacelle Inlet
 to Lip</a></td>
-<td style="text-align: left;">Closed at the face or the lip</td>
+<td style="text-align: left;">端面或唇口封闭</td>
 </tr>
 <tr>
-<td style="text-align: left;">Only the duct inside (FLOWPATH)</td>
+<td style="text-align: left;">仅内部流道（FLOWPATH）</td>
 <td style="text-align: left;"><a
 href="StackPresets.html#nacelle-flowpath-inlet--outlet">Nacelle Flowpath
 Inlet + Outlet, Inlet or Outlet</a></td>
-<td style="text-align: left;">The duct, positive</td>
+<td style="text-align: left;">正体积流道</td>
 </tr>
 </tbody>
 </table>
-<p>A Fuselage has no presets. Its engine model is set by hand, with the
-same controls.</p>
-<h2 id="engine-definition">Engine Definition</h2>
-<p><em>Geom Type</em> says which parts of an engine the sections
-describe: NONE (an ordinary body, the default), INLET, BOTH or OUTLET.
-The other controls are used only when it is not NONE.</p>
-<p><em>Inlet Type</em> and <em>Outlet Type</em> say how the sections
-describe each end.</p>
+<p>Fuselage 没有这些预设，需使用相同控件手动设置发动机模型。</p>
+<p><a id="engine-definition"></a></p>
+<h2 id="发动机定义">发动机定义</h2>
+<p><em>Geom Type</em>
+指定截面描述发动机的哪些部分：NONE（普通体部，默认）、INLET、BOTH 或
+OUTLET。仅在不为 NONE 时使用其他控件。</p>
+<p><em>Inlet Type</em> 和 <em>Outlet Type</em>
+指定截面如何描述各端。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Type</th>
-<th style="text-align: left;">The sections describe</th>
+<th style="text-align: left;">类型</th>
+<th style="text-align: left;">截面描述的内容</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;">FLOWTHROUGH</td>
-<td style="text-align: left;">The whole nacelle wall in one loop: the
-outside, both lips and the flowpath inside. An <em>Inlet Type</em>, for
-<em>Geom Type</em> BOTH; the menu also offers it with INLET, where it
-does not give a flow-through nacelle.</td>
+<td
+style="text-align: left;">一个环路描述整个短舱壁：外壁、两端唇口及内部流道。它是
+<em>Geom Type</em> 为 BOTH 时的 <em>Inlet Type</em>；菜单在 INLET
+时也提供此项，但这种组合不会生成贯通短舱。</td>
 </tr>
 <tr>
 <td style="text-align: left;">FLOWPATH</td>
-<td style="text-align: left;">Only the duct inside, from the lip to the
-face.</td>
+<td style="text-align: left;">仅内部流道，从唇口到内部端面。</td>
 </tr>
 <tr>
 <td style="text-align: left;">INLET TO LIP, OUTLET TO LIP</td>
-<td style="text-align: left;">The outside only, ending at the lip.</td>
+<td style="text-align: left;">仅外壁，在唇口终止。</td>
 </tr>
 <tr>
 <td style="text-align: left;">INLET TO FACE, OUTLET TO FACE</td>
-<td style="text-align: left;">The outside, around the lip and into the
-duct, ending at the face.</td>
+<td
+style="text-align: left;">外壁绕过唇口进入流道，在内部端面终止。</td>
 </tr>
 </tbody>
 </table>
-<p>With <em>Geom Type</em> BOTH and an <em>Inlet Type</em> of
-FLOWTHROUGH or FLOWPATH, the outlet is described the same way, and
-<em>Outlet Type</em> is greyed.</p>
-<p>The lip is where the outside surface meets the duct; the face is the
-end of the duct inside the nacelle, where the compressor face or the
-turbine exit would be. Figure 1 shows the curve the sections trace for
-each type, and where its lips and faces lie.</p>
-<p><img src="images/EngineModel_types.png"
-title="Figure 1. Inlet and outlet types"
-alt="Figure 1. Inlet and outlet types" /></p>
-<p><em>Figure 1. The sections of a Stack preset of each type, with both
-ends of that type, cut through the axis above it: Nacelle Flowthrough
-Mid Origin, Nacelle Flowpath Inlet + Outlet, Nacelle Inlet + Outlet to
-Lip and Nacelle Inlet + Outlet to Face. The inlet is at the left. Dots
-are the sections; grey, the flat ends that point sections close; dotted,
-the stations the definition uses.</em></p>
-<h2 id="stations">Stations</h2>
-<p>The four stations mark the lips and faces on the sections: <em>Inlet
-Lip</em>, <em>Inlet Face</em>, <em>Outlet Face</em> and <em>Outlet
-Lip</em>. Each is set either by the index of a section (<em>Indx</em>)
-or by <em>U</em>, a fraction from 0 at the first section to 1 at the
-last, chosen by the small toggle before each (Figure 2). Only the
-stations the definition needs are active: the lip of each end described,
-and its face unless its type is TO LIP. A FLOWTHROUGH nacelle needs all
-four.</p>
+<p><em>Geom Type</em> 为 BOTH 且 <em>Inlet Type</em> 为 FLOWTHROUGH 或
+FLOWPATH 时，出口采用相同描述方式，<em>Outlet Type</em>
+为灰色禁用状态。</p>
+<p>唇口是外表面与流道相接处；端面是短舱内部流道的终点，相当于压气机进口面或涡轮出口的位置。图
+1 展示各类型截面所描绘的曲线及唇口和端面的位置。</p>
+<p><img src="images/EngineModel_types.png" title="图 1. 进出口类型"
+alt="图 1. 进出口类型" /></p>
+<p><em>图 1. 各类型两端一致的 Stack
+预设，沿轴线剖开后显示轴线上方部分：Nacelle Flowthrough Mid
+Origin、Nacelle Flowpath Inlet + Outlet、Nacelle Inlet + Outlet to
+Lip、Nacelle Inlet + Outlet to
+Face。入口在左侧；圆点表示截面，灰色表示点截面封闭的平端，点线表示该定义使用的站位。</em></p>
+<p><a id="stations"></a></p>
+<h2 id="站位">站位</h2>
+<p>四个站位标记截面上的唇口和端面：<em>Inlet Lip</em>、<em>Inlet
+Face</em>、<em>Outlet Face</em>、<em>Outlet
+Lip</em>。每项前的小切换按钮选择用截面索引（<em>Indx</em>）或 <em>U</em>
+指定位置；U 从首截面的 0 到末截面的 1（图
+2）。仅激活定义所需的站位：被描述的每端都需要唇口，除 TO LIP
+外还需要端面。FLOWTHROUGH 短舱需要全部四个站位。</p>
 <p><img src="images/EngineModel_gui_stations.png"
-title="Figure 2. Engine Definition"
-alt="Figure 2. Engine Definition" /></p>
-<p><em>Figure 2. The Engine Definition and Engine Representation of the
-Nacelle Flowthrough Mid Origin preset, with the Inlet Face given by U.
-Outlet Type is greyed because the inlet is FLOWTHROUGH, and Outlet Mode
-because the Inlet Mode is.</em></p>
-<p><em>Show Stations</em> draws the active stations on the component in
-the 3D view, as heavy dashed lines in the colors of their labels: the
-inlet lip cyan, the inlet face magenta, the outlet face green, the
-outlet lip yellow (Figure 3). They are drawn only while the component is
-in the Shown set and its feature lines are shown.</p>
-<p><img src="images/EngineModel_stations.png" title="Figure 3. Stations"
-alt="Figure 3. Stations" /></p>
-<p><em>Figure 3. The stations on the Nacelle Flowthrough Mid Origin
-preset, cut through its axis, with the section numbers. The inlet is at
-the left.</em></p>
-<h2 id="engine-representation">Engine Representation</h2>
-<p><em>Inlet Mode</em> and <em>Outlet Mode</em> say what is built from
-the sections at each end. The result may be several surfaces: positive
-ones, which are solid like any other component, and negative ones, which
-CompGeom, CFD Mesh and the other analyses that understand negative
-volumes subtract from whatever they overlap. A negative flowpath cut
-through a nacelle that is closed at its lips leaves the same hollow
-nacelle as the flow-through loop, but as closed volumes, and it cuts
-through any wing or fuselage the nacelle is buried in. Each surface is
-closed where it is cut, by a cap at the lip or face, flat where the
-section is flat; where a negative surface ends on a positive one, the
-center of its cap is drawn out a hair (1/10000 of the component's size)
-so that the two do not share a face.</p>
-<p>On a FLOWTHROUGH nacelle the <em>Inlet Mode</em> chooses between the
-flow-through modes, which treat both ends at once (Figure 4), and the
-modes for each end, of which the <em>Inlet Mode</em> sets the inlet and
-the <em>Outlet Mode</em> the outlet (Figure 5). <em>Outlet Mode</em> is
-greyed while a flow-through mode is chosen; the Flowthrough presets set
-it to TO LIP.</p>
+title="图 2. 发动机定义" alt="图 2. 发动机定义" /></p>
+<p><em>图 2. Nacelle Flowthrough Mid Origin 预设的 Engine Definition 和
+Engine Representation，Inlet Face 用 U 指定。由于入口类型为
+FLOWTHROUGH，Outlet Type 禁用；由于 Inlet Mode 也为贯通模式，Outlet Mode
+同样禁用。</em></p>
+<p><em>Show Stations</em>
+在三维视图中以与标签同色的粗虚线绘制激活的站位：入口唇口为青色、入口端面为品红色、出口端面为绿色、出口唇口为黄色（图
+3）。仅在组件属于 Shown 集合且显示特征线时绘制。</p>
+<p><img src="images/EngineModel_stations.png" title="图 3. 站位"
+alt="图 3. 站位" /></p>
+<p><em>图 3. 沿轴线剖开的 Nacelle Flowthrough Mid Origin
+预设及其站位和截面编号，入口位于左侧。</em></p>
+<p><a id="engine-representation"></a></p>
+<h2 id="发动机表示方式">发动机表示方式</h2>
+<p><em>Inlet Mode</em> 和 <em>Outlet Mode</em>
+指定利用各端截面生成什么。结果可能包含多个曲面：正曲面像其他组件一样表示实体；负曲面则由
+CompGeom、CFD Mesh
+等支持负体积的分析从与其重叠的物体中扣除。对两端唇口封闭的短舱使用负体积流道，可得到与贯通环路相同的空心短舱，但由封闭体积表达；它也会穿透短舱所嵌入的机翼或机身。各曲面在被截断处通过唇口或端面上的端盖封闭，截面为平面时端盖也为平面。当负曲面终止于正曲面时，其端盖中心会略微向外拉出（组件尺寸的
+1/10000），避免两者共面。</p>
+<p>对于 FLOWTHROUGH 短舱，<em>Inlet Mode</em>
+可以选择同时处理两端的贯通模式（图
+4），或分别处理各端的模式；后一情况下，<em>Inlet Mode</em>
+控制入口，<em>Outlet Mode</em> 控制出口（图 5）。选择贯通模式时
+<em>Outlet Mode</em> 禁用；Flowthrough 预设将其设为 TO LIP。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Mode</th>
-<th style="text-align: left;">Built</th>
+<th style="text-align: left;">模式</th>
+<th style="text-align: left;">生成结果</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;">FLOWTHROUGH</td>
-<td style="text-align: left;">The loop as it is: an open nacelle, the
-flow passing through it.</td>
+<td
+style="text-align: left;">保持原环路，形成流体可穿过的开放短舱。</td>
 </tr>
 <tr>
 <td style="text-align: left;">FLOWTHROUGH NEGATIVE</td>
-<td style="text-align: left;">The nacelle closed at both lips, and a
-negative flowpath from lip to lip.</td>
+<td
+style="text-align: left;">在两个唇口封闭的短舱，以及从一个唇口到另一个唇口的负体积流道。</td>
 </tr>
 <tr>
 <td style="text-align: left;">FLOWTHROUGH NEGATIVE ONLY</td>
-<td style="text-align: left;">The negative flowpath alone; the nacelle
-is not built.</td>
+<td style="text-align: left;">仅负体积流道，不生成短舱。</td>
 </tr>
 <tr>
 <td style="text-align: left;">TO LIP</td>
-<td style="text-align: left;">The end closed at the lip.</td>
+<td style="text-align: left;">在唇口封闭该端。</td>
 </tr>
 <tr>
 <td style="text-align: left;">TO FACE</td>
-<td style="text-align: left;">The end closed at the face, leaving the
-inlet or outlet open as a recess.</td>
+<td
+style="text-align: left;">在内部端面封闭该端，入口或出口保留为开放凹腔。</td>
 </tr>
 <tr>
 <td style="text-align: left;">TO FACE NEGATIVE</td>
-<td style="text-align: left;">The end closed at the lip, and a negative
-recess from the lip to the face.</td>
+<td
+style="text-align: left;">在唇口封闭该端，并生成从唇口到端面的负体积凹腔。</td>
 </tr>
 <tr>
 <td style="text-align: left;">TO FACE NEGATIVE ONLY</td>
-<td style="text-align: left;">The negative recess alone: no positive
-surface is built, at either end.</td>
+<td style="text-align: left;">仅负体积凹腔，两端均不生成正曲面。</td>
 </tr>
 <tr>
 <td style="text-align: left;">EXTEND</td>
-<td style="text-align: left;">The end closed at the lip and stretched
-upstream (inlet) or downstream (outlet); see <a
-href="#extension">Extension</a>.</td>
+<td
+style="text-align: left;">在唇口封闭该端，并向上游（入口）或下游（出口）延伸，参见<a
+href="#extension">延伸</a>。</td>
 </tr>
 </tbody>
 </table>
 <p><img src="images/EngineModel_flowthrough.png"
-title="Figure 4. Flow-through representations"
-alt="Figure 4. Flow-through representations" /></p>
-<p><em>Figure 4. The flow-through modes on the nacelle of Figure 3, cut
-through its axis. Positive surfaces are grey, negative ones red and
-hatched.</em></p>
-<p><img src="images/EngineModel_ends.png"
-title="Figure 5. Representations of each end"
-alt="Figure 5. Representations of each end" /></p>
-<p><em>Figure 5. The modes of each end on the same nacelle, each set as
-the Inlet Mode and shown at the inlet (left), with the Outlet Mode TO
-LIP, which closes the outlet at its lip except under TO FACE NEGATIVE
-ONLY, where only the recess is built. EXTEND has a Distance of
-1.</em></p>
-<p>Which modes are offered depends on the definition: the flow-through
-modes for a FLOWTHROUGH nacelle, and FLOWTHROUGH NEGATIVE and NEGATIVE
-ONLY also for a FLOWPATH with both ends; the modes that end at a face
-only when there is a face, except that a FLOWPATH, which has no outside
-to leave open, does not offer TO FACE. An outside that ends at its lip
-(TO LIP) can be closed at the lip or extended; one that goes on to the
-face (TO FACE) can use every mode but the flow-through ones. Each
-NEGATIVE ONLY mode is offered where its NEGATIVE mode is.</p>
-<p>While <em>Geom Type</em> is not NONE, the Gen tab's <a
-href="GenTab.html#negative-volume">Negative Volume</a> box has no
-effect, though it can still be checked; the representation decides which
-surfaces are negative.</p>
-<h2 id="representing-a-flowpath">Representing a Flowpath</h2>
-<p>A FLOWPATH definition describes the duct itself, and the
-representation then says whether the duct is solid or is cut away. The
-modes build different surfaces from a duct than from a nacelle wall.</p>
+title="图 4. 贯通表示方式" alt="图 4. 贯通表示方式" /></p>
+<p><em>图 4. 图 3
+短舱沿轴线剖开后的各贯通模式。正曲面为灰色，负曲面为红色斜线填充。</em></p>
+<p><img src="images/EngineModel_ends.png" title="图 5. 各端的表示方式"
+alt="图 5. 各端的表示方式" /></p>
+<p><em>图 5. 同一短舱的各端模式，均作为 Inlet Mode
+应用并显示在左侧入口处。Outlet Mode 为 TO LIP，通常在出口唇口封闭；但 TO
+FACE NEGATIVE ONLY 只生成凹腔。EXTEND 的 Distance 为 1。</em></p>
+<p>可选模式取决于定义：FLOWTHROUGH 短舱可用贯通模式；两端均有的 FLOWPATH
+也可用 FLOWTHROUGH NEGATIVE 和 NEGATIVE
+ONLY。终止于端面的模式仅在存在端面时提供，但 FLOWPATH
+没有可保留为开放状态的外壁，因此不提供 TO FACE。止于唇口的外壁（TO
+LIP）可在唇口封闭或延伸；延伸至内部端面的外壁（TO
+FACE）可用除贯通模式外的所有模式。提供某 NEGATIVE 模式时，也提供其
+NEGATIVE ONLY 模式。</p>
+<p>只要 <em>Geom Type</em> 不为 NONE，Gen 选项卡的<a
+href="GenTab.html#negative-volume">负体积</a>复选框就没有作用，即使仍可勾选；哪些曲面为负由表示方式决定。</p>
+<p><a id="representing-a-flowpath"></a></p>
+<h2 id="流道的表示方式">流道的表示方式</h2>
+<p>FLOWPATH
+定义描述流道本身，表示方式决定将其作为实体还是扣除区域。对流道和短舱壁，同一模式生成的曲面不同。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Definition</th>
-<th style="text-align: left;">Mode</th>
-<th style="text-align: left;">Built</th>
+<th style="text-align: left;">定义</th>
+<th style="text-align: left;">模式</th>
+<th style="text-align: left;">生成结果</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Inlet or outlet</td>
+<td style="text-align: left;">仅入口或出口</td>
 <td style="text-align: left;">TO LIP</td>
-<td style="text-align: left;">The duct as its sections draw it,
-positive.</td>
+<td style="text-align: left;">按截面原样生成正体积流道。</td>
 </tr>
 <tr>
-<td style="text-align: left;">Inlet or outlet</td>
+<td style="text-align: left;">仅入口或出口</td>
 <td style="text-align: left;">TO FACE NEGATIVE</td>
-<td style="text-align: left;">The duct, negative.</td>
+<td style="text-align: left;">负体积流道。</td>
 </tr>
 <tr>
-<td style="text-align: left;">Inlet or outlet</td>
+<td style="text-align: left;">仅入口或出口</td>
 <td style="text-align: left;">TO FACE NEGATIVE ONLY</td>
-<td style="text-align: left;">Nothing.</td>
+<td style="text-align: left;">不生成任何内容。</td>
 </tr>
 <tr>
-<td style="text-align: left;">Inlet or outlet</td>
+<td style="text-align: left;">仅入口或出口</td>
 <td style="text-align: left;">EXTEND</td>
-<td style="text-align: left;">The duct, positive, stretched upstream
-(inlet) or downstream (outlet).</td>
+<td
+style="text-align: left;">正体积流道，向上游（入口）或下游（出口）延伸。</td>
 </tr>
 <tr>
-<td style="text-align: left;">BOTH, <em>Inlet Mode</em></td>
+<td style="text-align: left;">BOTH，<em>Inlet Mode</em></td>
 <td style="text-align: left;">FLOWTHROUGH NEGATIVE</td>
-<td style="text-align: left;">The whole duct, negative. The <em>Outlet
-Mode</em> then closes or extends the outlet end.</td>
+<td style="text-align: left;">整个流道为负体积，随后由 <em>Outlet
+Mode</em> 封闭或延伸出口端。</td>
 </tr>
 <tr>
-<td style="text-align: left;">BOTH, <em>Inlet Mode</em></td>
+<td style="text-align: left;">BOTH，<em>Inlet Mode</em></td>
 <td style="text-align: left;">FLOWTHROUGH NEGATIVE ONLY</td>
-<td style="text-align: left;">The whole duct, negative, as FLOWTHROUGH
-NEGATIVE.</td>
+<td style="text-align: left;">整个流道为负体积，与 FLOWTHROUGH NEGATIVE
+相同。</td>
 </tr>
 <tr>
-<td style="text-align: left;">BOTH, <em>Inlet Mode</em></td>
+<td style="text-align: left;">BOTH，<em>Inlet Mode</em></td>
 <td style="text-align: left;">TO FACE NEGATIVE</td>
-<td style="text-align: left;">The duct from the inlet lip to the face
-negative, the rest positive.</td>
+<td style="text-align: left;">入口唇口至端面的流道为负，其余为正。</td>
 </tr>
 <tr>
-<td style="text-align: left;">BOTH, <em>Inlet Mode</em></td>
+<td style="text-align: left;">BOTH，<em>Inlet Mode</em></td>
 <td style="text-align: left;">TO FACE NEGATIVE ONLY</td>
-<td style="text-align: left;">The duct from the inlet lip to the face,
-negative; no positive part.</td>
+<td
+style="text-align: left;">仅入口唇口至端面的负体积流道，不生成正体积部分。</td>
 </tr>
 <tr>
-<td style="text-align: left;">BOTH, <em>Inlet Mode</em></td>
+<td style="text-align: left;">BOTH，<em>Inlet Mode</em></td>
 <td style="text-align: left;">TO LIP</td>
-<td style="text-align: left;">The whole duct, positive.</td>
+<td style="text-align: left;">整个流道为正体积。</td>
 </tr>
 <tr>
-<td style="text-align: left;">BOTH, <em>Inlet Mode</em></td>
+<td style="text-align: left;">BOTH，<em>Inlet Mode</em></td>
 <td style="text-align: left;">EXTEND</td>
-<td style="text-align: left;">The whole duct, positive, stretched
-upstream.</td>
+<td style="text-align: left;">整个流道为正体积，并向上游延伸。</td>
 </tr>
 </tbody>
 </table>
-<p>With both ends, the <em>Outlet Mode</em> treats the outlet end the
-same way: TO LIP closes it, EXTEND stretches it downstream, and TO FACE
-NEGATIVE makes the part from the outlet face to the outlet lip
-negative.</p>
-<p>To cut an inlet duct out of a fuselage it is buried in, use TO FACE
-NEGATIVE for an inlet or outlet alone, and FLOWTHROUGH NEGATIVE for a
-duct with both ends. The three Nacelle Flowpath presets come set to TO
-LIP, the duct as drawn, so choose the negative mode after
-<em>Set</em>.</p>
-<h2 id="extension">Extension</h2>
-<p>EXTEND stretches the lip section into a straight duct of the same
-section, so the flow entering an inlet or leaving an outlet can be
-carried to the edge of a CFD domain rather than meeting a closed
-face.</p>
+<p>同时具有两端时，<em>Outlet Mode</em> 同样处理出口端：TO LIP
+封闭出口，EXTEND 向下游延伸，TO FACE NEGATIVE
+将出口端面至出口唇口的部分设为负。</p>
+<p>若要从包围流道的机身中扣除该流道，仅有入口或出口时使用 TO FACE
+NEGATIVE，两端均有时使用 FLOWTHROUGH NEGATIVE。三个 Nacelle Flowpath
+预设初始均为 TO LIP，按原样显示流道，因此点击 <em>Set</em>
+后应再选择负体积模式。</p>
+<p><a id="extension"></a></p>
+<h2 id="延伸">延伸</h2>
+<p>EXTEND
+将唇口截面延伸为同截面的直流道，使进入入口或离开出口的流动可通向 CFD
+计算域边界，而不是遇到封闭端面。</p>
 <ul>
-<li><em>Distance</em> is the length added.</li>
-<li><em>Auto</em> sets the distance to the length in
+<li><em>Distance</em> 是新增长度。</li>
+<li><em>Auto</em> 将距离设为所选 <em>Set</em>（默认 Shown）中组件沿
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-of the components in the chosen <em>Set</em> (Shown by default), so the
-extension grows with the model. The extensions themselves are left out
-of that length.</li>
-<li><em>Align X</em> extends along the model's
+方向的长度，使延伸随模型大小变化。该长度不计入延伸部分本身。</li>
+<li><em>Align X</em> 沿模型的
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-axis, the usual freestream direction, rather than along the component's
-own
+轴（通常为自由来流方向）延伸，而不是沿组件自身
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
-axis. It matters only for a component that is turned.</li>
+轴延伸。仅当组件发生旋转时，两者才有区别。</li>
 </ul>
-<p>The inlet is extended toward
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>−</mi><mi>X</mi></mrow><annotation encoding="application/x-tex">-X</annotation></semantics></math>,
-the outlet toward
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>X</mi></mrow><annotation encoding="application/x-tex">+X</annotation></semantics></math>.</p>
-<h2 id="scripting">Scripting</h2>
-<p>The engine model's parms are in the <em>EngineModel</em> group of the
-Fuselage or Stack.</p>
+<p>入口向
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>−</mi><mi>X</mi></mrow><annotation encoding="application/x-tex">-X</annotation></semantics></math>
+延伸，出口向
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>X</mi></mrow><annotation encoding="application/x-tex">+X</annotation></semantics></math>
+延伸。</p>
+<p><a id="scripting"></a></p>
+<h2 id="脚本">脚本</h2>
+<p>发动机模型参数位于 Fuselage 或 Stack 的 <em>EngineModel</em>
+参数组。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Control</th>
-<th style="text-align: left;">Parm</th>
-<th style="text-align: left;">Values</th>
+<th style="text-align: left;">控件</th>
+<th style="text-align: left;">参数</th>
+<th style="text-align: left;">取值</th>
 </tr>
 </thead>
 <tbody>
@@ -515,12 +466,12 @@ Fuselage or Stack.</p>
 <td style="text-align: left;"><code>InletLipU</code>,
 <code>InletFaceU</code>, <code>OutletFaceU</code>,
 <code>OutletLipU</code></td>
-<td style="text-align: left;">0 to 1</td>
+<td style="text-align: left;">0 至 1</td>
 </tr>
 <tr>
 <td style="text-align: left;">Show Stations</td>
 <td style="text-align: left;"><code>EngineShowStationsFlag</code></td>
-<td style="text-align: left;">0 or 1</td>
+<td style="text-align: left;">0 或 1</td>
 </tr>
 <tr>
 <td style="text-align: left;">Inlet Mode, Outlet Mode</td>
@@ -532,7 +483,7 @@ Fuselage or Stack.</p>
 <tr>
 <td style="text-align: left;">Align X</td>
 <td style="text-align: left;"><code>RotExtensionFlag</code></td>
-<td style="text-align: left;">0 or 1</td>
+<td style="text-align: left;">0 或 1</td>
 </tr>
 <tr>
 <td style="text-align: left;">Auto, Set</td>

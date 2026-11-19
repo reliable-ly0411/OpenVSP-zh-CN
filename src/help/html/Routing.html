@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Routing</title>
+  <title>管线布置（Routing）</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -31,265 +25,236 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Routing</h1>
+<h1 class="title">管线布置（Routing）</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>The Routing component is a path through a series of points on other
-components: the run of a wire harness, a hydraulic, pneumatic, fuel or
-oxygen line, an air-conditioning duct, a control cable or pushrod, or a
-drive shaft. Each point lies on a component, so the route follows when
-that component moves or changes shape. The route reports its length and,
-given a mass per unit length, its mass, which Mass Properties includes.
-A route is a curve, not a surface: it is drawn as a line, and it is not
-meshed or exported.</p>
+<p><a href="index.html">目录</a></p>
+<p>Routing
+组件是一条经过其他组件上一系列点的路径，可表示线束、液压管、气动管、燃油管、氧气管、空调风管、操纵拉索或推杆以及传动轴。各点依附于组件，因此组件移动或改变形状时，路径也会随之变化。路径提供长度；指定单位长度质量后，还可得到质量，并计入
+Mass
+Properties。路径是曲线而非曲面，以线显示，不进行网格划分，也不导出。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Topic</th>
-<th style="text-align: left;">Tab</th>
+<th style="text-align: left;">主题</th>
+<th style="text-align: left;">选项卡</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><a href="#quick-start">Quick
-Start</a></td>
+<td style="text-align: left;"><a href="#quick-start">快速入门</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#routing-points">Routing
-Points</a></td>
+<td style="text-align: left;"><a href="#routing-points">路径点</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#placing-a-point">Placing a
-Point</a></td>
+<td style="text-align: left;"><a
+href="#placing-a-point">定位路径点</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#offset">Offset</a></td>
+<td style="text-align: left;"><a href="#offset">偏移</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#rounded-corners">Rounded
-Corners</a></td>
+<td style="text-align: left;"><a href="#rounded-corners">圆角</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#length-and-mass">Length and
-Mass</a></td>
+<td style="text-align: left;"><a
+href="#length-and-mass">长度与质量</a></td>
 <td style="text-align: left;">Design, Mass</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#symmetry">Symmetry</a></td>
+<td style="text-align: left;"><a href="#symmetry">对称</a></td>
 <td style="text-align: left;">XForm</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#shared-tabs">Shared
-Tabs</a></td>
+<td style="text-align: left;"><a href="#shared-tabs">通用选项卡</a></td>
 <td style="text-align: left;">Gen, XForm, Mass</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#scripting">Scripting</a></td>
+<td style="text-align: left;"><a href="#scripting">脚本</a></td>
 <td style="text-align: left;"></td>
 </tr>
 </tbody>
 </table>
-<h2 id="quick-start">Quick Start</h2>
+<p><a id="quick-start"></a></p>
+<h2 id="快速入门">快速入门</h2>
 <ol type="1">
-<li>Add a Routing component.</li>
-<li>On the Design tab, click <em>Add Multiple</em>, then click on the
-components in the 3D view at each point of the route in turn. Click
-<em>Stop Adding</em> when done.</li>
-<li>Choose a point in the list to adjust it: its <em>Parent</em>, its
-coordinates, an <em>Offset</em>, and a <em>Radius</em> to round the
-corner there.</li>
-<li>Give <em>Mass/Len</em> on the Mass tab to weigh the route.</li>
+<li>添加 Routing 组件。</li>
+<li>在 Design 选项卡点击 <em>Add
+Multiple（连续添加）</em>，然后在三维视图的组件上按顺序点击各路径点。完成后点击
+<em>Stop Adding（停止添加）</em>。</li>
+<li>在列表中选择一个点，调整其
+<em>Parent（父组件）</em>、坐标、<em>Offset（偏移）</em>，以及用于将该处拐角倒圆的
+<em>Radius（半径）</em>。</li>
+<li>在 Mass 选项卡设置
+<em>Mass/Len（单位长度质量）</em>，计算路径质量。</li>
 </ol>
-<h2 id="routing-points">Routing Points</h2>
-<p>The route runs through its points in the order of the list (Figure
-1); the arrows beside the list reorder them.</p>
-<p>Most components follow only their parent. A route follows every
-component it has a point on, wherever those are in the model's tree, and
-its own place in the tree does not matter. So one route can run from the
-fuselage, along the wing, and into a nacelle that tilts on a <a
-href="Hinge.html">Hinge</a>, and it stretches and bends as the nacelle
-turns.</p>
-<p><img src="images/Routing_route.png" title="Figure 1. A route"
-alt="Figure 1. A route" /></p>
-<p><em>Figure 1. A route over a pod and onto a wing through four points.
-Point 1 is set off above the pod; the corner at point 3 is
-rounded.</em></p>
-<p>Points are placed by clicking in the 3D view (Figure 2).
-<em>Add</em>, <em>Insert Before</em> and <em>Reset Point</em> act on the
-next click: Add puts a new point at the end of the route, Insert Before
-puts one before the chosen point, and Reset Point moves the chosen
-point. <em>Add Multiple</em> and <em>Insert Multiple</em> do the same at
-every click until <em>Stop Adding</em>, and the route is drawn through
-the points placed so far.</p>
-<p><img src="images/Routing_gui_points.png"
-title="Figure 2. Routing points" alt="Figure 2. Routing points" /></p>
-<p><em>Figure 2. The Routing Points, Parent and Coordinate groups of the
-Design tab for the route over the pod and the wing, with point 1 chosen:
-it lies on the pod at U 0.12, W 0, given as UW, and its RST and LMN
-coordinates are greyed.</em></p>
-<p>A click picks a point of a shown component's tessellation and sets
-the routing point at the nearest place on that component's surface: the
-component becomes the point's parent, and the point is given by its
-surface and its <em>U</em> and <em>W</em> on it. A click sets the
-point's <em>Coord Type</em> to UW. Its RST and LMN coordinates follow
-from where it now is, so either can be chosen again afterward without
-moving the point.</p>
-<h2 id="placing-a-point">Placing a Point</h2>
-<p><em>Parent</em> is the component the point lies on, and
-<em>Surface</em> which of its surfaces, one for each symmetric copy and
-each surface of a multi-surface component. <em>Coord Type</em> chooses
-how the point is given on that surface; the coordinates are those of the
-XForm tab's attachment, described in <a
-href="XFormTab.html#attachment-coordinates">Attachment
-Coordinates</a>:</p>
+<p><a id="routing-points"></a></p>
+<h2 id="路径点">路径点</h2>
+<p>路径按列表顺序经过各点（图 1）；列表旁的箭头可调整顺序。</p>
+<p>大多数组件只跟随自己的父组件。路径则跟随承载其各点的所有组件，无论这些组件位于模型树何处；Routing
+自身在树中的位置不影响这一行为。因此，一条路径可以从机身沿机翼延伸到由<a
+href="Hinge.html">铰链</a>驱动倾转的短舱，并随短舱转动而伸展和弯曲。</p>
+<p><img src="images/Routing_route.png" title="图 1. 路径"
+alt="图 1. 路径" /></p>
+<p><em>图 1. 一条经过四个点、从吊舱延伸到机翼的路径。点 1
+偏移到吊舱上方，点 3 处的拐角已倒圆。</em></p>
+<p>通过在三维视图中点击来放置点（图 2）。<em>Add</em>、<em>Insert
+Before</em> 和 <em>Reset Point</em> 对下一次点击生效：Add
+在路径末端增加点，Insert Before 在选定点之前插入点，Reset Point
+则移动选定点。<em>Add Multiple</em> 和 <em>Insert Multiple</em>
+会对每次点击执行相应操作，直到点击 <em>Stop
+Adding</em>；路径会实时连接已经放置的点。</p>
+<p><img src="images/Routing_gui_points.png" title="图 2. 路径点"
+alt="图 2. 路径点" /></p>
+<p><em>图 2. 吊舱到机翼路径的 Design 选项卡中，Routing Points、Parent 和
+Coordinate 分组。当前选中点 1：位于吊舱的 U 0.12、W 0 处，以 UW
+表示，RST 和 LMN 坐标为灰色。</em></p>
+<p>点击会拾取一个已显示组件离散网格上的点，并将路径点放在该组件曲面上距离它最近的位置。该组件成为路径点的父组件，点的位置由曲面及其上的
+<em>U</em>、<em>W</em> 给出。点击会将 <em>Coord Type</em> 设为 UW。RST
+和 LMN
+坐标随当前位置更新，因此之后改用其中任一种坐标表示，也不会使点移动。</p>
+<p><a id="placing-a-point"></a></p>
+<h2 id="定位路径点">定位路径点</h2>
+<p><em>Parent</em> 指定承载点的组件，<em>Surface</em>
+指定它的哪个曲面：对称副本各有对应曲面，多曲面组件的各个曲面也分别列出。<em>Coord
+Type</em> 选择在该曲面上表示点的方法，其坐标与 XForm
+选项卡附着功能使用的坐标相同，参见<a
+href="XFormTab.html#attachment-coordinates">附着坐标</a>。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Coord Type</th>
-<th style="text-align: left;">The point is</th>
+<th style="text-align: left;">坐标类型</th>
+<th style="text-align: left;">点的位置</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;">Comp</td>
-<td style="text-align: left;">The parent's origin.</td>
+<td style="text-align: left;">父组件的原点。</td>
 </tr>
 <tr>
 <td style="text-align: left;">UW</td>
-<td style="text-align: left;">On the surface at <em>U</em>,
-<em>W</em>.</td>
+<td style="text-align: left;">曲面上 <em>U</em>、<em>W</em>
+指定的位置。</td>
 </tr>
 <tr>
 <td style="text-align: left;">RST</td>
-<td style="text-align: left;">Inside the volume at <em>R</em>,
-<em>S</em>, <em>T</em>.</td>
+<td style="text-align: left;">体积内部
+<em>R</em>、<em>S</em>、<em>T</em> 指定的位置。</td>
 </tr>
 <tr>
 <td style="text-align: left;">LMN</td>
-<td style="text-align: left;">Inside the volume at <em>L</em>,
-<em>M</em>, <em>N</em>.</td>
+<td style="text-align: left;">体积内部
+<em>L</em>、<em>M</em>、<em>N</em> 指定的位置。</td>
 </tr>
 <tr>
 <td
 style="text-align: left;"><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>MN</td>
-<td style="text-align: left;">On a wing parent only: at the wing's
-spanwise station
+<td style="text-align: left;">仅适用于机翼父组件：机翼展向站位
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>
-and <em>M</em>, <em>N</em>.</td>
+及 <em>M</em>、<em>N</em> 指定的位置。</td>
 </tr>
 </tbody>
 </table>
-<p>Whichever is chosen, the others are kept up to date and shown greyed;
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>MN
-is <code>ROUTE_PT_EtaMN</code> in the API. A point on a component with
-no surface, such as a <a href="Blank.html">Blank</a>, lies at that
-component's origin, so Blanks can carry a route through free space.</p>
-<h2 id="offset">Offset</h2>
-<p><em>Offset</em> moves the point away from where it lies on its
-parent. <em>Rel</em> gives the offset in the axes the point is attached
-by -- the surface's axes at that point for UW, RST and LMN, the parent's
-axes for Comp -- so the point keeps its place relative to the surface as
-the parent turns. <em>Abs</em> gives it in the model's axes. While the
-Routing component is selected, the 3D view draws those axes for the
-chosen point, at the point it is offset from. Use an offset to run a
-route a set distance above a skin or inside a structure.</p>
-<h2 id="rounded-corners">Rounded Corners</h2>
-<p>A route is a series of straight segments between its points.
-<em>Radius</em> rounds the corner at a point with a circular arc of that
-radius, tangent to both segments, so the route no longer passes through
-the point itself; zero leaves a sharp corner. The ends of the route are
-never rounded. Give each corner the bend radius the real line will have,
-so that the length is right.</p>
-<h2 id="length-and-mass">Length and Mass</h2>
-<p><em>Length</em> is the length of the route, rounded corners included,
-and <em>Mass</em> is that length times <em>Mass/Len</em> from the Mass
-tab. <em>Symm Length</em> and <em>Symm Mass</em> count every symmetric
-copy. The Mass Properties analysis includes a route with a nonzero
-Mass/Len as a line of mass along it, with its center of gravity and
-moments of inertia, one for each symmetric copy.</p>
-<h2 id="symmetry">Symmetry</h2>
-<p>A route has no placement of its own: its points are where its parents
-put them, so its location, rotation and attachment are greyed. Its
-symmetry still applies, about the planes and axes the symmetry controls
-choose, so a route on one side of an aircraft can be mirrored to the
-other. A route cannot be flipped.</p>
-<h2 id="shared-tabs">Shared Tabs</h2>
-<p>The Gen, XForm and Mass tabs are common to every component; see <a
-href="GenTab.html">Gen</a>, <a href="XFormTab.html">XForm</a> and <a
-href="MassTab.html">Mass</a>. A route has no volume or area, so of the
-Mass tab only Mass/Len and the specified mass apply; with no placement
-of its own, a route's specified center of gravity is in the model's
-axes. A route has no Sub tab.</p>
-<h2 id="scripting">Scripting</h2>
-<p>The OpenVSP API builds and queries routes with these functions:</p>
+<p>无论选择哪种表示，其他坐标都会同步更新并以灰色显示；<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>η</mi><annotation encoding="application/x-tex">\eta</annotation></semantics></math>MN
+在 API 中对应
+<code>ROUTE_PT_EtaMN</code>。若点依附于没有曲面的组件，例如 <a
+href="Blank.html">Blank</a>，它会位于该组件原点，因此可借助 Blank
+将路径引导穿过自由空间。</p>
+<p><a id="offset"></a></p>
+<h2 id="偏移">偏移</h2>
+<p><em>Offset</em> 将点从其在父组件上的附着位置移开。<em>Rel</em>
+使用附着坐标轴表示偏移：UW、RST 和 LMN 使用该点处的曲面坐标轴，Comp
+使用父组件坐标轴。因此，父组件转动时，点会保持相对于曲面的位置。<em>Abs</em>
+使用模型坐标轴表示偏移。选中 Routing
+组件时，三维视图会在选定点的偏移基准位置绘制这些坐标轴。可通过偏移使路径保持在蒙皮上方一定距离，或进入结构内部。</p>
+<p><a id="rounded-corners"></a></p>
+<h2 id="圆角">圆角</h2>
+<p>路径由连接各点的直线段组成。<em>Radius</em>
+在某点处以指定半径的圆弧替代拐角，圆弧与两条相邻线段相切，因此路径不再经过该点本身；半径为零时保留尖角。路径两端不会倒圆。为各拐角指定真实管线的弯曲半径，才能得到正确长度。</p>
+<p><a id="length-and-mass"></a></p>
+<h2 id="长度与质量">长度与质量</h2>
+<p><em>Length</em> 是包含圆角的路径长度，<em>Mass</em> 为该长度乘以 Mass
+选项卡中的 <em>Mass/Len</em>。<em>Symm Length</em> 和 <em>Symm Mass</em>
+包含所有对称副本。对于 Mass/Len 非零的路径，Mass Properties
+分析将其作为沿路径分布的线质量，计算重心和转动惯量，每个对称副本分别计入。</p>
+<p><a id="symmetry"></a></p>
+<h2 id="对称">对称</h2>
+<p>路径没有独立的放置变换：各点的位置由其父组件决定，因此位置、旋转和附着控件均为灰色禁用状态。对称仍然有效，按对称控件选择的平面和轴作用，因此可以把飞机一侧的路径镜像到另一侧。路径不能执行
+Flip 翻转。</p>
+<p><a id="shared-tabs"></a></p>
+<h2 id="通用选项卡">通用选项卡</h2>
+<p>Gen、XForm 和 Mass 是组件通用选项卡，参见 <a
+href="GenTab.html">Gen</a>、<a href="XFormTab.html">XForm</a> 和 <a
+href="MassTab.html">Mass</a>。路径没有体积或面积，因此 Mass 选项卡中仅
+Mass/Len
+和指定质量适用。由于路径没有独立的放置变换，其指定重心采用模型坐标轴。路径没有
+Sub 选项卡。</p>
+<p><a id="scripting"></a></p>
+<h2 id="脚本">脚本</h2>
+<p>OpenVSP API 使用以下函数构建和查询路径：</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Call</th>
-<th style="text-align: left;">Purpose</th>
+<th style="text-align: left;">调用</th>
+<th style="text-align: left;">用途</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;"><code>AddRoutingPt</code>,
 <code>InsertRoutingPt</code>, <code>InsertRoutingPtByID</code></td>
-<td style="text-align: left;">Add a point on a component's surface.</td>
+<td style="text-align: left;">在组件曲面上添加点。</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>DelRoutingPt</code>,
 <code>DelRoutingPtByID</code>, <code>DelAllRoutingPt</code></td>
-<td style="text-align: left;">Delete points.</td>
+<td style="text-align: left;">删除点。</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>MoveRoutingPt</code>,
 <code>MoveRoutingPtByID</code></td>
-<td style="text-align: left;">Reorder the points.</td>
+<td style="text-align: left;">调整点的顺序。</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>GetNumRoutingPts</code>,
 <code>GetRoutingPtID</code>, <code>GetAllRoutingPtIds</code></td>
-<td style="text-align: left;">The points.</td>
+<td style="text-align: left;">查询点的数量和标识。</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>GetRoutingPtParentID</code>,
 <code>SetRoutingPtParentID</code></td>
-<td style="text-align: left;">A point's parent.</td>
+<td style="text-align: left;">获取或设置点的父组件。</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>GetMainRoutingPtCoord</code></td>
-<td style="text-align: left;">A point's location, before symmetry.</td>
+<td style="text-align: left;">获取应用对称前的点位置。</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>GetRoutingPtCoord</code>,
 <code>GetRoutingPtCoordByID</code>,
 <code>GetAllRoutingPtCoords</code></td>
-<td style="text-align: left;">Points of one symmetric copy of the
-route.</td>
+<td style="text-align: left;">获取路径某个对称副本中的点。</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>GetRoutingCurve</code></td>
-<td style="text-align: left;">The rounded route of one symmetric copy,
-as points.</td>
+<td
+style="text-align: left;">以点列形式获取某个对称副本的圆角路径。</td>
 </tr>
 </tbody>
 </table>
-<p>A point's parms are in the group <code>RoutePt</code>:
-<code>CoordType</code> (<code>ROUTE_PT_COMP</code>,
-<code>ROUTE_PT_UV</code>, <code>ROUTE_PT_RST</code>,
-<code>ROUTE_PT_LMN</code>, <code>ROUTE_PT_EtaMN</code>),
-<code>SurfIndx</code>, <code>U</code>, <code>W</code>, <code>R</code>,
-<code>S</code>, <code>T</code>, <code>L</code>, <code>M</code>,
-<code>N</code>, <code>Eta</code>, <code>DeltaType</code>
-(<code>ABS</code> or <code>REL</code>), <code>DeltaX</code>,
-<code>DeltaY</code>, <code>DeltaZ</code> and their <code>...Rel</code>
-forms, and <code>Radius</code>. The route's <code>LinearDensity</code>
-is in the group <code>Mass_Props</code>, and its <code>Length</code>,
-<code>SymmLength</code>, <code>Mass</code> and <code>m_SymmMass</code>
-in <code>Results</code>.</p>
+<p>点的参数位于 <code>RoutePt</code>
+组：<code>CoordType</code>（<code>ROUTE_PT_COMP</code>、<code>ROUTE_PT_UV</code>、<code>ROUTE_PT_RST</code>、<code>ROUTE_PT_LMN</code>、<code>ROUTE_PT_EtaMN</code>）、<code>SurfIndx</code>、<code>U</code>、<code>W</code>、<code>R</code>、<code>S</code>、<code>T</code>、<code>L</code>、<code>M</code>、<code>N</code>、<code>Eta</code>、<code>DeltaType</code>（<code>ABS</code>
+或
+<code>REL</code>）、<code>DeltaX</code>、<code>DeltaY</code>、<code>DeltaZ</code>
+及其 <code>...Rel</code> 形式，以及 <code>Radius</code>。路径的
+<code>LinearDensity</code> 位于 <code>Mass_Props</code>
+组，<code>Length</code>、<code>SymmLength</code>、<code>Mass</code> 和
+<code>m_SymmMass</code> 位于 <code>Results</code> 组。</p>
 </body>
 </html>
