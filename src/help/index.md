@@ -25,7 +25,7 @@ OpenVSP 使用一组参数化组件描述几何体。每种组件有特定用途
 
 ### 组合与机构
 
-- [空白组件](Blank.md)
+- [空白组件（中文）](Blank.md)
 - [铰链（中文）](Hinge.md)
 
 ### 几何组件
@@ -36,9 +36,9 @@ OpenVSP 使用一组参数化组件描述几何体。每种组件有特定用途
   - [堆叠几何预设（中文）](StackPresets.md)
   - [锯齿边缘（中文）](Chevron.md)
 - [螺旋桨](Propeller.md)
-- [椭球体](Ellipsoid.md)
+- [椭球体（中文）](Ellipsoid.md)
 - [Cobra（中文）](Cobra.md)
-- [吊舱](Pod.md)
+- [吊舱（中文）](Pod.md)
 - [旋转体（中文）](BOR.md)
 - [起落架（中文）](Gear.md)
 - [人体（中文）](Human.md)
@@ -64,9 +64,9 @@ OpenVSP 使用一组参数化组件描述几何体。每种组件有特定用途
 ### 通用功能
 
 - 通用组件标签页
-  - [常规](GenTab.md)
+  - [常规（中文）](GenTab.md)
   - [变换（中文）](XFormTab.md)
-  - [质量](MassTab.md)
+  - [质量（中文）](MassTab.md)
   - [子曲面（中文）](SubTab.md)
 - [截面曲线](XSecCurves.md)
 - [翼型（中文）](Airfoils.md)
