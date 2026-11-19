@@ -1,164 +1,110 @@
 ---
-title:  'Sub Tab'
+help-renderer: pandoc
+title: '子曲面选项卡（Sub）'
 ---
 
-Every component (Geom) in OpenVSP is edited in a window whose first tabs are the same for all of them:
-[Gen](GenTab.md), [XForm](XFormTab.md), [Mass](MassTab.md) and Sub.  The Sub tab holds the Geom's sub-surfaces.
-Blank, Hinge, Human, Mesh, NGon Mesh, Point Cloud, Routing and Wireframe have no Sub tab.
+OpenVSP 的组件（Geom）编辑窗口具有相同的前几个选项卡：[Gen](GenTab.md)、[XForm](XFormTab.md)、[Mass](MassTab.md) 和 Sub。Sub 管理组件的子曲面。Blank、Hinge、Human、Mesh、NGon Mesh、Point Cloud、Routing 和 Wireframe 没有 Sub 选项卡。
 
-| Topic                                     |
-|:------------------------------------------|
-| [Sub-Surfaces](#sub-surfaces)             |
-| [Sub-Surface Types](#sub-surface-types)   |
-| [Control Surface](#control-surface)       |
-| [Hinge Line and Deflection](#hinge-line-and-deflection) |
-| [Scripting](#scripting)                   |
+| 主题 |
+|:-----|
+| [子曲面](#sub-surfaces) |
+| [子曲面类型](#sub-surface-types) |
+| [控制面](#control-surface) |
+| [铰链线与偏转](#hinge-line-and-deflection) |
+| [脚本](#scripting) |
 
-## Sub-Surfaces
+<a id="sub-surfaces"></a>
+## 子曲面
 
-A sub-surface marks a region, or a line, on a Geom's surface.  It does not change the shape; it labels part of it so
-that analyses can treat that part apart:
+子曲面在组件曲面上标记一个区域或一条线。它不改变形状，而是标记其中一部分，让分析能单独处理：
 
-- CompGeom and the mesh exports tag the triangles in the region, so their area is reported separately and the
-  exported mesh carries the tag.
-- VSPAERO deflects control surfaces (the Control_Surf type only); each symmetric copy is a separate control surface
-  there.
-- Parasite Drag can give the region its own treatment, or no drag.
-- CFD Mesh and FEA Mesh imprint its boundary into the mesh, when their *Intersect Sub-Surfaces* option is on (the
-  default); FEA Structure can turn it into beam elements or remove its shell elements.
-- STEP and IGES export can split the surface along it, and DegenGeom reports it.
+- CompGeom 和网格导出标记区域内的三角形，以单独报告面积并在导出网格中保留标签。
+- VSPAERO 可偏转控制面（仅 Control_Surf 类型）；各对称副本在其中分别作为控制面。
+- Parasite Drag 可对该区域采用独立处理方式，或不计阻力。
+- 开启默认的 *Intersect Sub-Surfaces* 时，CFD Mesh 和 FEA Mesh 将子曲面边界压印到网格；FEA Structure 可将其转成梁单元或移除其壳单元。
+- STEP、IGES 导出可沿子曲面分割曲面，DegenGeom 也会报告子曲面。
 
-Sub-surfaces are defined in the surface's own parameters, U along the Geom and W around it, each from 0 to 1 (see
-[Attachment Coordinates](XFormTab.md#attachment-coordinates) for where they start).  So a sub-surface stays on the same
-part of the surface as the Geom changes shape, and a rectangle in U and W need not look rectangular on the surface
-(Figure 1).
-Each region tags the side of its boundary chosen by *Tag*, *Inside* or *Outside*; for a Line, *Test* *Greater* tags
-the side of larger U (or W) and *Less* the other.
+子曲面使用曲面自身参数定义：U 沿组件纵向，W 绕组件周向，范围均为 0 至 1，起点见[附着坐标](XFormTab.md#attachment-coordinates)。因此组件变形时，子曲面仍位于曲面的相同参数区域；U-W 平面中的矩形在曲面上未必呈矩形（图 1）。区域用 *Tag* 的 *Inside* 或 *Outside* 选择标记边界内侧或外侧。对于 Line，*Test* 的 *Greater* 标记 U（或 W）较大的一侧，*Less* 标记另一侧。
 
-![Figure 1. Sub-surfaces in U and W](images/SubTab_ss_uw.png "Figure 1. Sub-surfaces in U and W")
+![图 1. U-W 中的子曲面](images/SubTab_ss_uw.png "图 1. U-W 中的子曲面")
 
-*Figure 1. A Line at U 0.2, a 0.2 by 0.2 Rectangle turned by Theta 30, and an Ellipse 0.15 by 0.15, in U and W (left)
-and on a pod (right).*
+*图 1. U 0.2 处的 Line、旋转 Theta 30 的 0.2 × 0.2 Rectangle，以及 0.15 × 0.15 Ellipse，分别显示于 U-W 平面（左）及吊舱上（右）。*
 
-Choose the *Surface* before clicking *Add*: *ALL* puts the sub-surface on each of the Geom's surfaces (every blade of a
-propeller, for example), *Surf_i* on that one only (Figure 2).  The choice applies when the sub-surface is made; the
-Sub tab cannot change it afterward.  A sub-surface on a surface is on all of that surface's symmetric copies.
+点击 *Add* 前先选 *Surface*：*ALL* 将子曲面加到组件的每个曲面，例如螺旋桨的所有桨叶；*Surf_i* 只加到指定曲面（图 2）。此选择在创建时生效，Sub 选项卡之后不能修改。某曲面上的子曲面也会出现在该曲面的全部对称副本上。
 
-![Figure 2. Sub-surface list](images/SubTab_gui_list.png "Figure 2. Sub-surface list")
+![图 2. 子曲面列表](images/SubTab_gui_list.png "图 2. 子曲面列表")
 
-*Figure 2. The top of the Sub tab of the default Propeller, holding a Line added with Surface ALL and a Rectangle
-added with Surface Surf_1.  The SURF column shows the surface each sub-surface is on.*
+*图 2. 默认 Propeller 的 Sub 顶部，包含以 Surface ALL 添加的 Line，以及以 Surface Surf_1 添加的 Rectangle。SURF 列显示各子曲面所属曲面。*
 
-Each sub-surface has its own name, which becomes part of its tag, and its own attributes (see
-[Attributes](GenTab.md#attributes)).
+每个子曲面有自己的名称（成为标签的一部分）和属性，参见[属性](GenTab.md#attributes)。
 
-## Sub-Surface Types
+<a id="sub-surface-types"></a>
+## 子曲面类型
 
-| Type          | Defined by                                                                                  | Use                                     |
-|:--------------|:--------------------------------------------------------------------------------------------|:----------------------------------------|
-| Line          | A line of constant U or constant W across the whole surface; tags one side of it.           | Split a body at a station, or lengthwise. |
-| Rectangle     | Center, lengths in U and W, and *Theta*, a turn from the U direction toward W.               | A panel or a hatch.                     |
-| Ellipse       | Center, lengths (diameters) in U and W, *Theta*, and the number of points on its outline.    | A window or an inlet face.              |
-| Finite_Line   | A straight segment in U and W between two points; tags nothing.                             | A line in a mesh, or an FEA beam.       |
-| XSec_Curve    | Any cross-section curve shape (circle, super ellipse, edit curve and the rest), centered at U and W, with its width along U and its height along W. | An outline of any shape.              |
-| Intersect     | The curve where another Geom meets this one.                                                | The footprint of a part on a body.      |
-| Control_Surf  | Spanwise start and end and a chordwise depth from an edge (below); Wing and Propeller only. | Flaps, ailerons, slats.                 |
+| 类型 | 定义方式 | 用途 |
+|:-----|:---------|:-----|
+| Line | 横跨整个曲面的恒 U 或恒 W 线，标记其中一侧。 | 按站位或纵向分割体部。 |
+| Rectangle | 中心、U/W 长度及从 U 朝 W 方向的转角 *Theta*。 | 面板或舱口。 |
+| Ellipse | 中心、U/W 长度（直径）、*Theta* 及轮廓点数。 | 窗口或入口端面。 |
+| Finite_Line | U-W 平面中两点之间的直线段，不标记区域。 | 网格中的线或 FEA 梁。 |
+| XSec_Curve | 任意截面曲线（圆、超椭圆、编辑曲线等），以 U/W 定位中心，宽度沿 U、高度沿 W。 | 任意形状的轮廓。 |
+| Intersect | 其他组件与本组件相交的曲线。 | 部件在体部上的相交轮廓。 |
+| Control_Surf | 展向起止站位及从边缘量取的弦向深度，见下文；仅用于 Wing 和 Propeller。 | 襟翼、副翼、前缘缝翼。 |
 
-The Rectangle and Ellipse lengths and *Theta* act in the U-W plane, so on a long body a "square" of 0.2 by 0.2 is much
-longer along the body than around it, and *Theta* is not an angle on the surface.
+Rectangle 和 Ellipse 的长度及 *Theta* 作用在 U-W 平面。在细长体上，0.2 × 0.2 的“正方形”沿纵向的实际长度可能远大于周向长度；*Theta* 也不是曲面上的实际夹角。
 
-A Line's value is a fraction of the surface's U (or W) range by default, *[0, 1]*.  With *[0, N]* it counts the
-surface's sections instead, so a whole number puts the line exactly on a cross section: on a Fuselage, U 2 is its
-third cross section; on a Wing the root and tip caps count as sections, so U 1 is the root airfoil and U 2 the end of
-the first panel.  W counts the four quarters of each section; on a Wing W 2 is the leading edge, and a Line of
-constant W there splits the upper surface from the lower (see
-[Attachment Coordinates](XFormTab.md#attachment-coordinates) for where W starts on other Geoms).  Use [0, N]
-whenever a line belongs on a section: it stays on that section when sections are added behind it, where a [0, 1]
-value moves to a new place among the sections.
+Line 默认用 *[0, 1]* 表示曲面 U（或 W）范围的比例。选择 *[0, N]* 则按截面计数，整数使线恰好位于截面上：Fuselage 的 U 2 是第三个截面；Wing 的根部和翼尖端盖也算截面，因此 U 1 是翼根翼型，U 2 是第一翼段末端。W 按每截面的四个四分之一段计数；Wing 的 W 2 为前缘，此处的恒 W 线将上、下表面分开。其他组件 W 的起点见[附着坐标](XFormTab.md#attachment-coordinates)。线需要位于特定截面时应使用 [0, N]：在其后增加截面时仍留在该截面，而 [0, 1] 比例值会移动到截面间的新位置。
 
-An Ellipse is drawn as a polygon of *Num Points* corners, so a small number gives a polygon: 3 a triangle, 6 a
-hexagon (Figure 3).  The first corner lies at *Theta* from the U direction, so at Theta 0 a corner points along U.
-A Theta of 180/N degrees, for N points, turns the polygon by half a side, so that a side faces along U instead; the
-value boxes take arithmetic, so 180/6 can be typed as it is.  Give the U and W lengths equal values for a regular
-polygon in U and W; as with the Rectangle, it is regular on the surface only where U and W are scaled alike.
+Ellipse 实际绘制为具有 *Num Points* 个顶点的多边形，因此较小点数可生成多边形：3 为三角形，6 为六边形（图 3）。第一个顶点与 U 方向夹角为 *Theta*，所以 Theta 0 时有一个角朝向 U。N 个点时，将 Theta 设为 180/N 度可旋转半条边对应的角度，使一条边朝向 U。数值输入框支持算式，可直接输入 180/6。U、W 长度相等时，在 U-W 平面得到正多边形；与 Rectangle 一样，只有 U 和 W 缩放比例相同时，曲面上的多边形才是正多边形。
 
-![Figure 3. Ellipse polygons](images/SubTab_ss_polygon.png "Figure 3. Ellipse polygons")
+![图 3. Ellipse 多边形](images/SubTab_ss_polygon.png "图 3. Ellipse 多边形")
 
-*Figure 3. Ellipse sub-surfaces of Num Points 3 and 6, each at Theta 0 and at Theta 180/N, in U and W (left) and on a
-pod (right).*
+*图 3. Num Points 为 3 和 6 的 Ellipse，分别取 Theta 0 和 Theta 180/N，在 U-W 平面（左）及吊舱上（右）的形状。*
 
-An XSec_Curve sub-surface starts as a circle of diameter 1, which spans the whole surface; set its size first.  Its
-width and height are fractions of the U and W ranges, from 0 to 1.
+XSec_Curve 初始为直径 1 的圆，会跨越整个曲面，因此应先调整尺寸。宽高分别为 U、W 范围的比例，从 0 至 1。
 
-An Intersect sub-surface is computed when *Intersect* is clicked, from the Geom chosen in *Intersect Geom*, and kept as
-an edit curve.  When the two Geoms meet along more than one curve, *Curve Index* chooses which of the *Num Curves* to
-use.  It does not follow later changes to either Geom; click *Intersect* again after changing them.  Between clicks
-the curve is an ordinary XSec_Curve outline: edit it, or change its type, to tidy or simplify the footprint.
+Intersect 在点击 *Intersect* 时，根据 *Intersect Geom* 选择的组件计算相交曲线，并作为编辑曲线保存。若两个组件形成多条相交曲线，用 *Curve Index* 从 *Num Curves* 条曲线中选择。它不会自动跟随后续几何变化；修改组件后应再次点击 *Intersect*。两次计算之间，它就是普通的 XSec_Curve 轮廓，可编辑或更换曲线类型，整理或简化轮廓。
 
-## Control Surface
+<a id="control-surface"></a>
+## 控制面
 
-The Control_Surf type is offered on Wing and Propeller Geoms (Figure 4).  It marks a region bounded by the trailing
-edge (or, with *Leading Edge*, the leading edge), two spanwise stations and a hinge line, on the *Upper*, *Lower* or
-*Both* surfaces.  Model a flap, aileron, elevator or rudder with it rather than with a Rectangle: a Rectangle can be
-made to look like one, but its sides follow U and W rather than a depth from the edge, and VSPAERO deflects only a
-Control_Surf.
+Wing 和 Propeller 提供 Control_Surf 类型（图 4）。它在 *Upper*、*Lower* 或 *Both* 表面上标记由后缘（勾选 *Leading Edge* 则为前缘）、两个展向站位和铰链线围成的区域。襟翼、副翼、升降舵和方向舵应使用此类型，而不是 Rectangle：Rectangle 虽可做出类似外观，其边界却沿 U/W 而非按边缘深度定义，且 VSPAERO 只偏转 Control_Surf。
 
-![Figure 4. Control surface panel](images/SubTab_gui_control.png "Figure 4. Control surface panel")
+![图 4. 控制面面板](images/SubTab_gui_control.png "图 4. 控制面面板")
 
-*Figure 4. The Sub tab's panel for the default control surface on the default wing: Start U 0.4 to End U 0.6, a
-constant depth of 0.25 of the chord, on Both surfaces.  Controls that the present choices do not use are greyed.*
+*图 4. 默认机翼的默认控制面：Start U 0.4 至 End U 0.6，恒定深度为弦长的 0.25，位于 Both 表面。当前选项未使用的控件为灰色。*
 
-- The spanwise stations are *Start U* and *End U*, or, with *Use Eta for Spanwise Coordinate*, *Start Eta* and *End
-  Eta*, fractions of the span from root to tip (of the radius, $r/R$, on a propeller; see
-  [Spanwise Coordinate Eta](Wing.md#spanwise-coordinate-eta)).  U includes a wing's root and
-  tip caps (see [Attachment Coordinates](XFormTab.md#attachment-coordinates)), so the default U of 0.4 to 0.6 on a
-  one-panel wing is 20% to 80% of the span (Figure 5).
-- The chordwise depth is given at the start and at the end, as a fraction of the local chord (*L/C*) or as a length
-  (*L*); *Constant* makes the end equal to the start.  The hinge line passes through the points on the surface that
-  lie that straight-line distance from the edge, on each surface.
-- The sides follow the wing's sections unless *Surface End Angle* sets the angle each side makes with the edge, in
-  degrees; with both angles set, *Same Angle* makes the end angle equal to the start.  With an angle not set, its
-  slider shows the angle the section makes with the edge.
-- Each edge, the two sides and the hinge line, is a smooth curve through four points: its ends and its thirds.  The
-  depth and the end angles are met exactly at those points and blended between them.  *Num Points* is the number of
-  points each edge is drawn with, and so how closely the tagged region follows that curve; raise it when the outline
-  must be smooth, on a long control surface or with end angles set.
+- 展向站位为 *Start U* 和 *End U*；开启 *Use Eta for Spanwise Coordinate* 后使用 *Start Eta* 和 *End Eta*，即从翼根到翼尖的展长比例（螺旋桨为半径比例 $r/R$，参见[展向坐标 Eta](Wing.md#spanwise-coordinate-eta)）。U 包含翼根和翼尖端盖，见[附着坐标](XFormTab.md#attachment-coordinates)，因此单翼段机翼默认 U 0.4 至 0.6 对应展长的 20% 至 80%（图 5）。
+- 在起端和末端分别给出弦向深度，可使用局部弦长比例（*L/C*）或长度（*L*）；*Constant* 使末端等于起端。各表面上的铰链线经过距边缘为指定直线距离的点。
+- 两侧边界默认沿机翼截面；*Surface End Angle* 可指定每侧与边缘的夹角，单位为度。两角均启用时，*Same Angle* 使末端角等于起端角。未指定某侧角度时，其滑块显示截面与边缘的实际夹角。
+- 两侧边界和铰链线均由四点拟合为光滑曲线：两端点和两个三等分点。深度与端部角度在这些点精确满足，在其间平滑过渡。*Num Points* 控制每条边的绘制点数，进而影响标签区域贴合曲线的精细程度。控制面较长或设置了端角且需要平滑轮廓时，应增加点数。
 
-![Figure 5. Control surface](images/SubTab_ss_control.png "Figure 5. Control surface")
+![图 5. 控制面](images/SubTab_ss_control.png "图 5. 控制面")
 
-*Figure 5. The default control surface on the default wing: Start U 0.4 to End U 0.6, 25% of the chord deep, on both
-surfaces.  The hinge line is dashed.*
+*图 5. 默认机翼的默认控制面，Start U 0.4 至 End U 0.6，深度为弦长的 25%，位于上下两面。虚线为铰链线。*
 
-### Hinge Line and Deflection
+<a id="hinge-line-and-deflection"></a>
+### 铰链线与偏转
 
-The 3D view draws each control surface's hinge line, from the Start end to the End end, with a curved arrow around it
-for a positive deflection.  A positive deflection turns the surface right-handed about that line, from Start toward
-End.  On a wing whose Start is at the root, that turns a trailing-edge surface down and a leading-edge surface up.
+三维视图从 Start 端到 End 端绘制各控制面的铰链线，并用弧形箭头表示正偏转方向。正偏转按沿 Start 指向 End 的铰链线的右手规则旋转。机翼 Start 位于翼根时，后缘控制面向下偏，前缘控制面向上偏。
 
-A symmetric copy is a mirror image, so its hinge line also runs from root to tip, and the same positive deflection
-turns its trailing edge up (Figure 6).  VSPAERO deflects each copy by the control group's deflection times that
-copy's gain.  Its automatic grouping puts both copies in one group with a gain of 1 each, which deflects them as
-ailerons; for a flap or an elevator, which deflect together, set the gain of the copy to -1.
+对称副本是镜像，其铰链线也从翼根指向翼尖，因此同样的正偏转会使该副本后缘向上（图 6）。VSPAERO 对各副本施加“控制组偏转角 × 该副本增益”的偏转。自动分组将两个副本放在同一组，各自增益均为 1，得到副翼式反向偏转。襟翼或升降舵需要同向偏转时，应将副本增益设为 -1。
 
-![Figure 6. Positive deflection](images/SubTab_ss_hinge.png "Figure 6. Positive deflection")
+![图 6. 正偏转](images/SubTab_ss_hinge.png "图 6. 正偏转")
 
-*Figure 6. The default control surface on the default wing and its symmetric copy, each given the same positive
-deflection, seen from behind with $+Y$ to the right.  The hinge lines run from Start to End; the curved arrows show
-the positive sense; dashed outlines are the surfaces at rest.*
+*图 6. 从后方观察默认机翼控制面及其对称副本，两者均施加同样的正偏转，$+Y$ 向右。铰链线从 Start 指向 End；弧形箭头标示正方向；虚线轮廓是未偏转状态。*
 
-## Scripting
+<a id="scripting"></a>
+## 脚本
 
-Every control on this tab is a Parm, set and read with `SetParmVal` and `GetParmVal` by name and group;
-`GetParmActiveFlag` tells whether a control is active or greyed, as of the last Update.
-Sub-surfaces are made with `AddSubSurf( geom_id, type, surfindex )`, whose surface index defaults to 0, the first
-surface; pass -1 for all of them, as *ALL* on the Sub tab does.  `GetSubSurfIDVec` lists a Geom's sub-surfaces,
-`GetSubSurfParmIDs` gives a sub-surface's Parms, and `IntersectSubSurf` does what the *Intersect* button does, with the
-Geom set by `SetIntersectSubSurfGeomID`.
+本选项卡的各控件均为参数，可按名称和参数组用 `SetParmVal`、`GetParmVal` 读写。`GetParmActiveFlag` 返回上一次 Update 时控件是激活还是灰色禁用状态。
 
-| Control                       | Parm                                                       | Group        |
+用 `AddSubSurf( geom_id, type, surfindex )` 创建子曲面。曲面索引默认 0，即第一个曲面；传入 -1 表示全部曲面，与 Sub 的 *ALL* 相同。`GetSubSurfIDVec` 列出组件子曲面，`GetSubSurfParmIDs` 返回子曲面参数，`IntersectSubSurf` 执行 *Intersect* 按钮的操作，相交组件由 `SetIntersectSubSurfGeomID` 指定。
+
+| 控件                          | 参数                                                       | 参数组       |
 |:------------------------------|:-----------------------------------------------------------|:-------------|
-| Sub-surface Tag               | `Test_Type`: `INSIDE`, `OUTSIDE` or `NONE`                 | SS_Rectangle, SS_Ellipse, SS_XsecCurve or SS_Control, by type |
-| Line value, [0, 1] or [0, N]  | `Const_Line_Value`, `Const_Line_Value0N`; `Value_01` 1 for [0, 1], 0 for [0, N] | SubSurface |
+| Sub-surface Tag               | `Test_Type`: `INSIDE`, `OUTSIDE` or `NONE`                 | SS_Rectangle, SS_Ellipse, SS_XsecCurve 或 SS_Control，按类型选择 |
+| Line value, [0, 1] or [0, N]  | `Const_Line_Value`, `Const_Line_Value0N`; `Value_01` 1 表示 [0, 1]，0 表示 [0, N] | SubSurface |
 | Line sub-surface Test         | `Test_Type`: `SS_LINE_TEST_GREATER`, `SS_LINE_TEST_LESS` or `SS_LINE_TEST_NONE` | SubSurface |
 | Control surface sides         | `Surf_Type`: `SS_CONTROL_UPPER_SURF`, `SS_CONTROL_LOWER_SURF` or `SS_CONTROL_BOTH_SURF` | SS_Control |
 | Line Type                     | `Const_Line_Type`: `CONST_U` or `CONST_W`                  | SubSurface   |

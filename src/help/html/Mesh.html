@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Mesh</title>
+  <title>网格（Mesh）</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -96,308 +90,281 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Mesh</h1>
+<h1 class="title">网格（Mesh）</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>A Mesh component holds a fixed set of triangles. It is how OpenVSP
-brings in geometry from other tools -- STL, Cart3D and NASCART files --
-and it is what several analyses leave behind: the intersected and
-trimmed outer mold line from CompGeom, the slices from Mass Properties
-and Planar Slice, a projected area. A mesh can be moved, turned, scaled,
-saved and used in further analyses, but its shape cannot be edited: it
-has no parameters of its own beyond how it is drawn.</p>
+<p><a href="index.html">目录</a></p>
+<p>Mesh 组件保存一组固定的三角形。它用于将其他工具的几何（STL、Cart3D 和
+NASCART 文件）导入 OpenVSP，也用于保存若干分析产生的结果：CompGeom
+相交和裁剪后的外形面、Mass Properties 与 Planar Slice
+的切片，以及投影面积。网格可以平移、旋转、缩放、保存，并参与后续分析，但不能编辑其形状：除了显示方式，它没有自身的形状参数。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Topic</th>
-<th style="text-align: left;">Tab</th>
+<th style="text-align: left;">主题</th>
+<th style="text-align: left;">选项卡</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><a href="#quick-start">Quick
-Start</a></td>
+<td style="text-align: left;"><a href="#quick-start">快速入门</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#where-a-mesh-comes-from">Where a
-Mesh Comes From</a></td>
+<td style="text-align: left;"><a
+href="#where-a-mesh-comes-from">网格来源</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#importing-a-mesh">Importing a
-Mesh</a></td>
+<td style="text-align: left;"><a
+href="#importing-a-mesh">导入网格</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#tags">Tags</a></td>
+<td style="text-align: left;"><a href="#tags">标签</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#converting-a-mesh">Converting a
-Mesh</a></td>
+<td style="text-align: left;"><a
+href="#converting-a-mesh">转换网格</a></td>
 <td style="text-align: left;">Other</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#mesh-and-slices">Mesh and
-Slices</a></td>
+<td style="text-align: left;"><a
+href="#mesh-and-slices">网格与切片</a></td>
 <td style="text-align: left;">Other</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#using-a-mesh">Using a
-Mesh</a></td>
+<td style="text-align: left;"><a href="#using-a-mesh">使用网格</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#scripting">Scripting</a></td>
+<td style="text-align: left;"><a href="#scripting">脚本</a></td>
 <td style="text-align: left;"></td>
 </tr>
 </tbody>
 </table>
-<p>The Gen, XForm and Mass tabs are the ones every component has; see <a
-href="GenTab.html">Gen</a>, <a href="XFormTab.html">XForm</a> and <a
-href="MassTab.html">Mass</a>. A Mesh has no Sub tab.</p>
-<h2 id="quick-start">Quick Start</h2>
-<h3 id="an-imported-mesh">An imported mesh</h3>
+<p>Gen、XForm 和 Mass 是所有组件共有的选项卡，参见 <a
+href="GenTab.html">Gen</a>、<a href="XFormTab.html">XForm</a> 和 <a
+href="MassTab.html">Mass</a>。Mesh 没有 Sub 选项卡。</p>
+<p><a id="quick-start"></a></p>
+<h2 id="快速入门">快速入门</h2>
+<p><a id="an-imported-mesh"></a></p>
+<h3 id="导入的网格">导入的网格</h3>
 <ol type="1">
-<li>Choose <em>File &gt; Import</em> and click the file's format:
-Stereolith (.stl), Cart3D (.tri), NASCART (.dat) or XSec as Tri Mesh
-(.hrm).</li>
-<li>Place it with the XForm tab, and scale it to the model's units with
-<em>Scale</em>.</li>
-<li>Set its density on the Mass tab if it is to count in the mass
-properties.</li>
+<li>选择 <em>File &gt; Import（文件 &gt;
+导入）</em>，点击文件格式：Stereolith (.stl)、Cart3D (.tri)、NASCART
+(.dat) 或 XSec as Tri Mesh (.hrm)。</li>
+<li>在 XForm 选项卡放置网格，并用 <em>Scale（缩放）</em>
+调整到与模型一致的单位。</li>
+<li>若需在质量特性中计入此网格，在 Mass 选项卡设置密度。</li>
 </ol>
-<h3 id="the-result-of-an-analysis">The result of an analysis</h3>
+<p><a id="the-result-of-an-analysis"></a></p>
+<h3 id="分析结果">分析结果</h3>
 <ol type="1">
-<li>Run the analysis -- CompGeom, Mass Properties, Planar Slice,
-Projected Area. The mesh it makes is added to the model. Run from their
-screens, CompGeom, Mass Properties, Planar Slice and Wave Drag hide the
-components the mesh was made from.</li>
-<li>Inspect it in the 3D view: turn on <em>Sub</em> in the Geom Browser
-to color it by component and sub-surface.</li>
-<li>Delete it when done, or keep it as a record: it is saved with the
-model.</li>
+<li>运行 CompGeom、Mass Properties、Planar Slice 或 Projected Area
+分析。产生的网格会加入模型。从各自窗口运行 CompGeom、Mass
+Properties、Planar Slice 和 Wave Drag
+时，会隐藏生成网格所用的源组件。</li>
+<li>在三维视图检查结果：在 Geom Browser 中开启
+<em>Sub</em>，按组件和子曲面着色。</li>
+<li>完成后删除网格，或将其保留作为记录；网格会随模型保存。</li>
 </ol>
-<h2 id="where-a-mesh-comes-from">Where a Mesh Comes From</h2>
-<p>A mesh is made by an import, by an analysis, or from another
-component.</p>
+<p><a id="where-a-mesh-comes-from"></a></p>
+<h2 id="网格来源">网格来源</h2>
+<p>网格可通过导入、分析或转换其他组件生成。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Source</th>
-<th style="text-align: left;">The mesh</th>
+<th style="text-align: left;">来源</th>
+<th style="text-align: left;">生成的网格</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;">File &gt; Import</td>
-<td style="text-align: left;">The file's triangles.</td>
+<td style="text-align: left;">文件中的三角形。</td>
 </tr>
 <tr>
 <td style="text-align: left;">CompGeom</td>
-<td style="text-align: left;">The outer mold line: every component
-intersected with every other, inside parts removed, negative volumes cut
-out.</td>
+<td
+style="text-align: left;">外形面：所有组件相互求交，移除内部部分，并切除负体积。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Mass Properties</td>
-<td style="text-align: left;">The components' triangles, and the slices
-the mass was integrated over.</td>
+<td style="text-align: left;">组件三角形，以及质量积分所用的切片。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Planar Slice</td>
-<td style="text-align: left;">The components' triangles, and the cutting
-planes' cross sections.</td>
+<td style="text-align: left;">组件三角形，以及切平面上的截面。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Wave Drag</td>
-<td style="text-align: left;">The components' triangles, and the slices
-at the Mach angle.</td>
+<td style="text-align: left;">组件三角形，以及按马赫角生成的切片。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Projected Area</td>
-<td style="text-align: left;">The projected area, flat, and its
-outline.</td>
+<td style="text-align: left;">平面的投影面积及其轮廓。</td>
 </tr>
 <tr>
-<td style="text-align: left;">Geometry Analysis, <em>Make
+<td style="text-align: left;">Geometry Analysis 的 <em>Make
 MeshGeom</em></td>
-<td style="text-align: left;">The triangles the analysis case worked on,
-and any slices.</td>
+<td
+style="text-align: left;">该分析算例处理的三角形及切片（如有）。</td>
 </tr>
 <tr>
-<td style="text-align: left;">DegenGeom, <em>Make Mesh</em></td>
-<td style="text-align: left;">The degenerate geometry as triangles:
-plates for bodies, camber surfaces for wings.</td>
+<td style="text-align: left;">DegenGeom 的 <em>Make Mesh</em></td>
+<td
+style="text-align: left;">三角形表示的退化几何：体部为平板，机翼为中弧面。</td>
 </tr>
 <tr>
-<td style="text-align: left;">Point Cloud, <em>Create Convex Hull
+<td style="text-align: left;">Point Cloud 的 <em>Create Convex Hull
 Mesh</em></td>
-<td style="text-align: left;">The convex hull of the points.</td>
+<td style="text-align: left;">点集的凸包。</td>
 </tr>
 <tr>
-<td style="text-align: left;">File &gt; Export, the mesh formats</td>
-<td style="text-align: left;">The triangles of the exported set.</td>
+<td style="text-align: left;">File &gt; Export 中的网格格式</td>
+<td style="text-align: left;">导出集合的三角形。</td>
 </tr>
 </tbody>
 </table>
-<p>Mass Properties removes the mesh it made the previous time it ran, so
-only the latest is kept. The mesh exports (STL, Cart3D, OBJ and others)
-also build a mesh, and leave it in the model with every other component
-hidden. An export whose set already holds a mesh writes that mesh
-instead of building a new one, so a second export after the model has
-changed writes the old shape; delete the mesh before exporting
-again.</p>
-<h2 id="importing-a-mesh">Importing a Mesh</h2>
-<p>The importers read triangles and nothing else: no units, no names of
-parts and no surface curvature. OpenVSP's model has no units, so a mesh
-comes in at the numbers in the file; scale it to match the model
-(<em>Scale</em> on the XForm tab).</p>
+<p>Mass Properties
+会移除其上一次运行生成的网格，因此只保留最新结果。网格导出（STL、Cart3D、OBJ
+等）也会创建网格并将其留在模型中，同时隐藏其他所有组件。如果导出集合已经包含网格，导出会直接使用该网格，不再创建新的网格。因此，模型改变后再次导出可能仍写出旧形状；重新导出前应删除旧网格。</p>
+<p><a id="importing-a-mesh"></a></p>
+<h2 id="导入网格">导入网格</h2>
+<p>导入器只读取三角形，不读取单位、零件名称或曲面曲率。OpenVSP
+模型本身没有单位，因此导入时直接使用文件中的数值；请用 XForm 选项卡的
+<em>Scale</em> 缩放到与模型一致。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Format</th>
-<th style="text-align: left;">Notes</th>
+<th style="text-align: left;">格式</th>
+<th style="text-align: left;">说明</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;">Stereolith (.stl)</td>
-<td style="text-align: left;">ASCII or binary, told apart by the file's
-content. Several solids in one file make one mesh, in ASCII or as binary
-blocks, one per solid, as DATCOM writes them. A binary file whose size
-does not match its facet count, such as one cut short, is refused. The
-facet normals are read as given.</td>
+<td style="text-align: left;">支持 ASCII
+或二进制，根据文件内容识别。一个文件中的多个实体合为一个网格，可采用
+ASCII 形式，或像 DATCOM
+输出那样，每个实体对应一个二进制块。若二进制文件大小与面片计数不符（例如文件被截断），则拒绝导入。面片法向按文件给定值读取。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Cart3D (.tri)</td>
-<td style="text-align: left;">Formatted or unformatted, single or double
-precision, told apart by the file's content. The component number of
-each triangle is kept as its tag.</td>
+<td
+style="text-align: left;">支持格式化或非格式化、单精度或双精度，根据内容识别。保留每个三角形的组件编号作为标签。</td>
 </tr>
 <tr>
 <td style="text-align: left;">NASCART (.dat)</td>
-<td style="text-align: left;">Rotated as it is read, from NASCART's axes
-(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
-up) to OpenVSP's
-(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
-up): the file's
+<td style="text-align: left;">读取时从 NASCART
+的坐标系（<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math>
+向上）旋转到 OpenVSP
+的坐标系（<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>Z</mi><annotation encoding="application/x-tex">Z</annotation></semantics></math>
+向上）：文件中的
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">(x, y, z)</annotation></semantics></math>
-becomes
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">(</mo><mi>x</mi><mo>,</mo><mi>−</mi><mi>z</mi><mo>,</mo><mi>y</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">(x, -z, y)</annotation></semantics></math>.</td>
+变为
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">(</mo><mi>x</mi><mo>,</mo><mi>−</mi><mi>z</mi><mo>,</mo><mi>y</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">(x, -z, y)</annotation></semantics></math>。</td>
 </tr>
 <tr>
 <td style="text-align: left;">XSec (.hrm)</td>
-<td style="text-align: left;">OpenVSP's cross section format. Each
-component's grid of points is split into triangles, two per
-quadrilateral, and all components go into one mesh. To keep the
-components apart as grids, import the same file as XSec as Wireframe
-instead (see <a href="Wire.html">Wireframe</a>).</td>
+<td style="text-align: left;">OpenVSP
+截面格式。各组件的点阵被拆成三角形，每个四边形对应两个三角形，所有组件合为一个网格。若需将组件分别保留为点阵，应以
+XSec as Wireframe 导入同一文件，参见<a href="Wire.html">线框</a>。</td>
 </tr>
 </tbody>
 </table>
-<p>A file that holds no triangles is not imported.</p>
-<h2 id="tags">Tags</h2>
-<p>Each triangle of a mesh can carry tags: numbers that say which
-component and which sub-surfaces it came from. A CompGeom mesh is tagged
-by component and, when sub-surfaces are intersected, by sub-surface; a
-Cart3D file brings its own component numbers. With <em>Sub</em> on in
-the Geom Browser, the mesh is drawn one color per combination of tags,
-going round the color wheel. <em>Start Color Degree</em> on the Other
-tab sets where on the wheel the first color is: 0 is red, 120 green and
-240 blue. It also colors the outlines a projected area draws.</p>
-<h2 id="converting-a-mesh">Converting a Mesh</h2>
-<p>The Other tab converts a mesh into two other components. Each is a
-new component; the mesh is left as it was.</p>
+<p>没有三角形的文件不会被导入。</p>
+<p><a id="tags"></a></p>
+<h2 id="标签">标签</h2>
+<p>网格中的每个三角形可以携带标签，即表示其来源组件和子曲面的数字。CompGeom
+网格按组件标记；若进行了子曲面相交，也按子曲面标记。Cart3D
+文件则提供自身的组件编号。在 Geom Browser 开启 <em>Sub</em>
+后，网格按标签组合着色，每种组合沿色轮依次取色。Other 选项卡的 <em>Start
+Color Degree</em> 设置首个颜色在色轮上的位置：0 为红色，120 为绿色，240
+为蓝色。该设置也用于投影面积所绘制轮廓的着色。</p>
+<p><a id="converting-a-mesh"></a></p>
+<h2 id="转换网格">转换网格</h2>
+<p>Other
+选项卡可将网格转换为另外两种组件。两种转换都创建新组件，原网格保持不变。</p>
 <ul>
-<li><em>Convert</em> under Convert to Point Cloud makes a <a
-href="PtCloud.html">Point Cloud</a> of the mesh's vertices, each once,
-where the mesh is placed. The vertices of the slices are included when
-<em>Slices</em> is on.</li>
-<li><em>Convert</em> under Convert to NGon Mesh makes an <a
-href="NGonMesh.html">NGon Mesh</a>: the triangles merged into polygons,
-with the wing wakes found, ready to write as a VSPAERO geometry file.
-The NGon mesh is made where the mesh is placed. The cleanup passes that
-collapse short segments along intersections and merge the fans of thin
-triangles at poles and tip caps are not run (see <a
-href="NGonMesh.html#how-the-polygons-are-made">How the Polygons Are
-Made</a>); they are options of VSPAERO's own conversion. A mesh opened
-from a model file has lost the tables that say which component each
-triangle came from, so its conversion finds no wakes; convert a mesh in
-the session that made it.</li>
+<li>Convert to Point Cloud 下的 <em>Convert</em>
+在网格当前位置，从网格顶点生成<a
+href="PtCloud.html">点云</a>，每个顶点只保留一次。开启 <em>Slices</em>
+时，也包含切片顶点。</li>
+<li>Convert to NGon Mesh 下的 <em>Convert</em> 生成<a
+href="NGonMesh.html">多边形网格</a>：将三角形合并为多边形，寻找机翼尾迹，以便写出
+VSPAERO 几何文件。NGon
+网格生成在原网格的位置。此转换不会执行沿相交线收缩短线段、或合并极点及翼尖端盖处细长三角形扇区的清理；这些是
+VSPAERO 自身转换流程的可选步骤，参见<a
+href="NGonMesh.html#how-the-polygons-are-made">多边形的生成方式</a>。
+从模型文件重新打开的网格已丢失记录各三角形来源组件的表格，因此转换时找不到尾迹；应在生成网格的同一会话内转换。</li>
 </ul>
-<h2 id="mesh-and-slices">Mesh and Slices</h2>
-<p>A mesh from Mass Properties, Planar Slice or Wave Drag holds two sets
-of triangles: the components' mesh and the slices. <em>Mesh</em> and
-<em>Slices</em> on the Other tab choose which are drawn. They also
-choose what an STL export of the mesh writes and what a point cloud made
-from it holds, so turn <em>Slices</em> off to export the shape
-alone.</p>
-<h2 id="using-a-mesh">Using a Mesh</h2>
-<p>A mesh takes part wherever triangles are enough.</p>
+<p><a id="mesh-and-slices"></a></p>
+<h2 id="网格与切片">网格与切片</h2>
+<p>Mass Properties、Planar Slice 或 Wave Drag
+生成的网格包含两组三角形：组件网格和切片。Other 选项卡的 <em>Mesh</em>
+与 <em>Slices</em> 控制显示哪一组；它们也决定该网格导出 STL
+时写出什么，以及转换为点云时包含什么。因此，只需导出外形时应关闭
+<em>Slices</em>。</p>
+<p><a id="using-a-mesh"></a></p>
+<h2 id="使用网格">使用网格</h2>
+<p>只要三角形足以表达分析所需的几何，就可以使用网格。</p>
 <ul>
-<li>It is placed like any component: location, rotation, attachment,
-<em>Scale</em> and <em>Flip</em> on the XForm tab. It makes no symmetric
-copies, so the XForm tab's symmetry controls are greyed, and so is
-<em>Rot Origin(X)</em>.</li>
-<li>CompGeom, Mass Properties, the slicing analyses, Projected Area,
-interference checks and the mesh exports take it as they take any
-component. A mesh run through CompGeom again is intersected with the
-other components like any of them; it should be closed for the result to
-be right.</li>
-<li>Mass Properties gives it the density on its Mass tab, like any
-component.</li>
-<li>VSPAERO takes it as one or more components.</li>
-<li>It is saved with the model, triangles and all.</li>
+<li>与其他组件一样，使用 XForm
+选项卡设置位置、旋转、附着、<em>Scale</em> 和
+<em>Flip</em>。网格不生成对称副本，因此对称控件为灰色禁用状态，<em>Rot
+Origin(X)</em> 也一样。</li>
+<li>CompGeom、Mass Properties、切片分析、Projected
+Area、干涉检查和网格导出会像处理其他组件一样处理网格。再次通过 CompGeom
+处理的网格也会与其他组件求交；要得到正确结果，网格应封闭。</li>
+<li>Mass Properties 使用其 Mass 选项卡中的密度，与其他组件相同。</li>
+<li>VSPAERO 将其作为一个或多个组件处理。</li>
+<li>网格会随模型保存，包括全部三角形。</li>
 </ul>
-<p>It is not a surface. It has no sub-surfaces, its degenerate geometry
-is empty, and it takes no part where a surface is needed: CFD Mesh, FEA
-Mesh, Fit Model, or as the boundary or direction of a projection. Its
-triangles cannot be edited in OpenVSP; change the geometry it came from
-and run the analysis again, or edit the file and import it again.</p>
-<h2 id="scripting">Scripting</h2>
-<p>A mesh is made by importing a file or by running an analysis; each
-returns the new mesh's ID.</p>
+<p>网格不是曲面。它没有子曲面，退化几何为空，也不参与必须使用曲面的功能：CFD
+Mesh、FEA Mesh、Fit Model，或作为投影的边界或方向。不能在 OpenVSP
+内编辑其三角形；应修改源几何并重新运行分析，或编辑源文件后重新导入。</p>
+<p><a id="scripting"></a></p>
+<h2 id="脚本">脚本</h2>
+<p>通过导入文件或运行分析创建网格，均会返回新网格的 ID。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Function</th>
-<th style="text-align: left;">Use</th>
+<th style="text-align: left;">函数</th>
+<th style="text-align: left;">用途</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td
 style="text-align: left;"><code>ImportFile( file, IMPORT_STL, "" )</code></td>
-<td style="text-align: left;">Import a file as a mesh
-(<code>IMPORT_CART3D_TRI</code>, <code>IMPORT_NASCART</code>,
-<code>IMPORT_XSEC_MESH</code> for the other formats).</td>
+<td style="text-align: left;">将文件导入为网格；其他格式使用
+<code>IMPORT_CART3D_TRI</code>、<code>IMPORT_NASCART</code>、<code>IMPORT_XSEC_MESH</code>。</td>
 </tr>
 <tr>
 <td
 style="text-align: left;"><code>ComputeCompGeom( set, half, types )</code></td>
-<td style="text-align: left;">Run CompGeom and return the mesh's
-ID.</td>
+<td style="text-align: left;">运行 CompGeom 并返回网格 ID。</td>
 </tr>
 <tr>
 <td
 style="text-align: left;"><code>CreatePtCloudGeom( mesh_id )</code></td>
-<td style="text-align: left;">Convert to a point cloud, as the Convert
-to Point Cloud button.</td>
+<td style="text-align: left;">转换为点云，与 Convert to Point Cloud
+按钮相同。</td>
 </tr>
 <tr>
 <td
 style="text-align: left;"><code>CreateNGonMeshGeom( mesh_id )</code></td>
-<td style="text-align: left;">Convert to an NGon mesh, as the Convert to
-NGon Mesh button.</td>
+<td style="text-align: left;">转换为 NGon 网格，与 Convert to NGon Mesh
+按钮相同。</td>
 </tr>
 </tbody>
 </table>
-<p>The Other tab's toggles are the Parms <code>MeshFlag</code>,
-<code>SliceFlag</code> and <code>StartColorDegree</code> in the group
-<code>Draw</code>. The scale the mesh has been given in total is
-<code>Scale_From_Original</code> in the group <code>XForm</code>.</p>
+<p>Other 选项卡的控制参数为 <code>Draw</code> 组中的
+<code>MeshFlag</code>、<code>SliceFlag</code> 和
+<code>StartColorDegree</code>。网格相对于原始尺寸的累计缩放值为
+<code>XForm</code> 组中的 <code>Scale_From_Original</code>。</p>
 <div class="sourceCode" id="cb1"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> openvsp <span class="im">as</span> vsp</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
