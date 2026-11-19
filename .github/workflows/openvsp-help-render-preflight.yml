@@ -111,6 +111,24 @@ jobs:
           subprocess.run(["python3", str(test), "-v"], check=True)
           PY
 
+      - name: Record candidate patch and frozen source identity
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/help-input"
+          artifact="$RUNNER_TEMP/help-artifact"
+          mkdir -p "$artifact"
+          git diff --check
+          git diff --binary HEAD > "$artifact/reviewed-help.patch"
+          test -s "$artifact/reviewed-help.patch"
+          git diff --name-only HEAD > "$artifact/changed-files.txt"
+          cat "$artifact/changed-files.txt"
+          test "$(wc -l < "$artifact/changed-files.txt")" -eq 42
+          git rev-parse HEAD > "$artifact/base-commit.txt"
+          git rev-parse HEAD^{tree} > "$artifact/base-tree.txt"
+          git add -- src/help scripts/test_help_anchors.py
+          git write-tree > "$artifact/candidate-tree.txt"
+          sha256sum "$artifact/reviewed-help.patch" | cut -d' ' -f1 > "$artifact/patch-sha256.txt"
+          cat "$artifact/base-commit.txt" "$artifact/candidate-tree.txt" "$artifact/patch-sha256.txt"
       - name: Verify packaged help copies and produce browser screenshots
         run: |
           set -euo pipefail
@@ -123,6 +141,7 @@ jobs:
           cat > "$harness/CMakeLists.txt" <<'CMAKE'
           cmake_minimum_required(VERSION 3.24)
           project(HelpLayoutCheck NONE)
+          include(FindPackageHandleStandardArgs)
           list(APPEND CMAKE_MODULE_PATH "$ENV{HELP_CMAKE_MODULES}")
           set(VSP_BINARY_DIR "${CMAKE_BINARY_DIR}")
           set(SWIG_FOUND TRUE)
@@ -133,6 +152,11 @@ jobs:
           cmake -S "$harness" -B "$harness/build" -DCMAKE_INSTALL_PREFIX="$harness/stage"
           grep '^VSP_USE_PREGENERATED_HELP:BOOL=ON$' "$harness/build/CMakeCache.txt"
           cmake --install "$harness/build"
+          if [[ -z "$(fc-list :lang=zh)" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y fonts-noto-cjk
+          fi
+          test -n "$(fc-list :lang=zh)"
           for page in Airfoils XFormTab Gear NGonMesh index; do
             cmp "src/help/html/$page.html" "$harness/stage/help/$page.html"
             cmp "src/help/html/$page.html" "$harness/stage/python/openvsp/openvsp/help_vsp/$page.html"
@@ -141,21 +165,6 @@ jobs:
             test -s "$artifact/browser/$page.png"
           done
           echo "Verified five staged main/Python help pairs byte-identical; captured five Chrome screenshots."
-      - name: Record candidate patch and frozen source identity
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP/help-input"
-          artifact="$RUNNER_TEMP/help-artifact"
-          git diff --check
-          git diff --binary HEAD > "$artifact/reviewed-help.patch"
-          test -s "$artifact/reviewed-help.patch"
-          git diff --name-only HEAD > "$artifact/changed-files.txt"
-          test "$(wc -l < "$artifact/changed-files.txt")" -eq 42
-          git rev-parse HEAD > "$artifact/base-commit.txt"
-          git rev-parse HEAD^{tree} > "$artifact/base-tree.txt"
-          git add -- src/help scripts/test_help_anchors.py
-          git write-tree > "$artifact/candidate-tree.txt"
-          sha256sum "$artifact/reviewed-help.patch" | cut -d' ' -f1 > "$artifact/patch-sha256.txt"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
