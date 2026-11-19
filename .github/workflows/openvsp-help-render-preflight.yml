@@ -1,4 +1,4 @@
-name: OpenVSP 3.56 isolated help render preflight
+name: OpenVSP 3.56 help production candidate
 on:
   push:
     branches: [docs/3.56-help-integration-preflight]
@@ -16,11 +16,19 @@ jobs:
       - name: Pin source and install render dependencies
         run: |
           set -euo pipefail
-          git fetch --no-tags origin ddc69d585aba6a460a285aeb9e6cb2c287139181
-          git worktree add --detach "$RUNNER_TEMP/help-input" ddc69d585aba6a460a285aeb9e6cb2c287139181
+          product=5081da3cb28ebb910e7f5b770cdfd1f85e8c422c
+          review=34ec835326c769f22377d69eaec58f1c8cc8dc51
+          git fetch --no-tags origin "$product" "$review"
+          git worktree add --detach "$RUNNER_TEMP/help-input" "$product"
           cd "$RUNNER_TEMP/help-input"
-          test "$(git rev-parse HEAD)" = ddc69d585aba6a460a285aeb9e6cb2c287139181
-          test "$(git rev-parse HEAD~34)" = ed364d66fe64309ce886b53c5911bba404c265cd
+          test "$(git rev-parse HEAD)" = "$product"
+          test "$(git rev-parse HEAD^{tree})" = f5c5edeea6ec80e6964c954fb2a14dea5164e334
+          test "$(git rev-parse HEAD^)" = ed364d66fe64309ce886b53c5911bba404c265cd
+          test "$(git rev-parse HEAD~3)" = e4721e651faebadaefc9c636667410c01a84264a
+          test "$(git rev-parse "$review^{tree}")" = 07d001472e71bfe6b3776a5a65df774c123a23bb
+          git diff --exit-code "$review" HEAD -- src/help scripts/test_help_anchors.py
+          test ! -d docs/translation-drafts/3.56
+          test -z "$(git status --porcelain)"
           pandoc_version=3.6.4
           curl --fail --silent --show-error --location --retry 3 -o "$RUNNER_TEMP/pandoc.tar.gz" "https://github.com/jgm/pandoc/releases/download/$pandoc_version/pandoc-$pandoc_version-linux-amd64.tar.gz"
           tar -xzf "$RUNNER_TEMP/pandoc.tar.gz" -C "$RUNNER_TEMP" "pandoc-$pandoc_version/bin/pandoc"
@@ -31,110 +39,52 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/help-deps" --no-audit --no-fund marked@16.4.2
           node --version
           pandoc --version
-      - name: Compare default renderer with Pandoc MathML, then audit selected output
+      - name: Check exact candidate bytes and all help anchors
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/help-input"
           export HELP_MODULES="$RUNNER_TEMP/help-deps/node_modules"
+          node src/help/build_help_zh.js "$HELP_MODULES" --test
           python3 - <<'PY'
           import json, os, re, subprocess
           from pathlib import Path
           import xml.etree.ElementTree as ET
           root = Path("src/help")
-          drafts = Path("docs/translation-drafts/3.56")
-          pages = ["Airfoils","BOR","Chevron","Clone","Cobra","Conformal","EngineModel","FuselageStack","Gear","Hinge","Human","Mesh","NGonMesh","PtCloud","Routing","SubTab","Wire","XFormTab","XSecSkinning"]
-          proposed = set(["Airfoils","Chevron","EngineModel","FuselageStack","Gear","Human","Mesh","PtCloud","Routing","SubTab","Wire","XFormTab","XSecSkinning"])
-          def render(*flags):
-              subprocess.run(["node", str(root / "build_help_zh.js"), os.environ["HELP_MODULES"], *flags], check=True)
-          def file(name):
-              return root / "html" / (name + ".html")
-          def math_count(text):
-              fields = re.findall(r"<math\b[^>]*>.*?</math>", text, re.DOTALL)
-              for field in fields:
-                  ET.fromstring(field)
-              return len(fields)
+          pages = ["Airfoils","BOR","Chevron","Clone","Cobra","Conformal","EngineModel","FuselageStack","Gear","Hinge","Human","Mesh","NGonMesh","PtCloud","Routing","SubTab","Wire","XFormTab","XSecSkinning","index"]
           manifest = root / "localized_pages.json"
-          existing = json.loads(manifest.read_text())
-          assert len(existing) == 11 and not set(existing) & {p + ".md" for p in pages}
-          manifest.write_text(json.dumps(existing + [p + ".md" for p in pages], indent=2) + "\n")
-          for name in pages:
-              text = (drafts / (name + ".md")).read_text()
-              text = re.sub(r"（翻译草稿）", "", text, count=1) if name == "XFormTab" else text
-              text = re.sub(r"(?m)^> 独立[^\n]*\n\n", "", text, count=1)
-              (root / (name + ".md")).write_text(text)
-          render("--test")
-          render()
-          default_math = {p: math_count(file(p).read_text()) for p in pages}
-          for p in proposed:
-              path = root / (p + ".md")
-              body = path.read_text()
-              assert re.match(r"^---\n.*?\n---\n", body, re.DOTALL), p
-              body = re.sub(r"^---\n", "---\nhelp-renderer: pandoc\n", body, count=1)
-              if p == "Airfoils":
-                  for anchor, heading in [("cst", "CST"), ("karman-trefftz", "Karman-Trefftz")]:
-                      redundant = f'<a id="{anchor}"></a>\n### {heading}\n'
-                      assert body.count(redundant) == 1, anchor
-                      body = body.replace(redundant, f"### {heading}\n", 1)
-              path.write_text(body)
-          render()
-          airfoil_html = file("Airfoils").read_text()
-          for anchor in ("cst", "karman-trefftz"):
-              assert airfoil_html.count(f'id="{anchor}"') == 1, anchor
-          for p in sorted(pages):
-              actual = math_count(file(p).read_text())
-              print(f"{p}: original renderer MathML={default_math[p]}; trial MathML={actual}", flush=True)
-              if p in proposed:
-                  assert default_math[p] == 0 and actual > 0, p
-          index = root / "index.md"
-          nav = index.read_text()
-          old = ("部分高级功能涉及更复杂的概念，因此内置帮助提供相应说明。现有工具帮助、堆叠几何预设\n"
-                 "和本目录保留简体中文；OpenVSP 3.56.0 新增的 29 篇组件帮助暂保留上游英文原文，\n"
-                 "其中公式、图像与链接均随源码提供，尚未完成汉化或逐页目视验收。")
-          assert nav.count(old) == 1
-          nav = nav.replace(old, "内置帮助提供高级功能说明。目录中标有「中文」的条目提供简体中文，其他条目保留上游英文。", 1)
-          old = "以下链接除标明“中文”的堆叠几何预设外，均为上游英文帮助。"
-          assert nav.count(old) == 1
-          nav = nav.replace(old, "标有「中文」的组件帮助已翻译；未标注的组件帮助保留上游英文。", 1)
+          original = manifest.read_bytes()
+          names = json.loads(original)
+          focus = [name + ".md" for name in pages]
+          assert len(names) == 30 and set(focus) <= set(names)
+          original_html = [name[:-3] + ".html" for name in names if name not in focus]
+          assert len(original_html) == 10
+          for page in original_html:
+              with open(root / "html" / page, "rb") as current:
+                  baseline = subprocess.check_output(["git","show","ed364d66:src/help/html/" + page])
+                  assert current.read() == baseline, page
+          try:
+              manifest.write_text(json.dumps(focus, indent=2) + "\n")
+              subprocess.run(["node", str(root / "build_help_zh.js"), os.environ["HELP_MODULES"], "--check"], check=True)
+          finally:
+              manifest.write_bytes(original)
+          def html(p):
+              return (root / "html" / (p + ".html")).read_text()
           for page in pages:
-              pattern = rf"\[([^\]\n]+)\]\({page}\.md\)"
-              nav, count = re.subn(pattern, lambda hit: f"[{hit[1]}（中文）]({page}.md)", nav)
-              assert count == 1, (page, count)
-          index.write_text(nav)
-          render()
-          render("--check")
-          # Older Pandoc-generated pages can differ bytewise with this toolchain.
-          # Keep reviewed outside-scope HTML byte-identical, then run anchor tests
-          # against the exact candidate files rather than the trial regeneration.
-          outside = [str(file(name[:-3])) for name in existing if name != "index.md"]
-          assert len(outside) == 10
-          subprocess.run(["git", "restore", "--source=HEAD", "--", *outside], check=True)
-          test = Path("scripts/test_help_anchors.py")
-          text = test.read_text()
-          needle = '        })\n        self.assertEqual(len(names), 11)'
-          assert text.count(needle) == 1
-          joined = "".join(f'            "{p}.md",\n' for p in pages)
-          test.write_text(text.replace(needle, joined + '        })\n        self.assertEqual(len(names), 30)'))
-          subprocess.run(["python3", str(test), "-v"], check=True)
+              text = html(page)
+              assert '<html lang="zh-CN">' in text, page
+              for math in re.findall(r"<math\b[^>]*>.*?</math>", text, re.DOTALL):
+                  ET.fromstring(math)
+          for p in ("Airfoils","Chevron","EngineModel","FuselageStack","Gear","Human","Mesh","PtCloud","Routing","SubTab","Wire","XFormTab","XSecSkinning"):
+              assert "<math " in html(p), p
+          for legacy in ("cst","karman-trefftz"):
+              assert html("Airfoils").count(f'id="{legacy}"') == 1, legacy
+          for page in pages[:-1]:
+              assert re.search(rf"（中文）</a>", html("index"))
+              assert f'href="{page}.html"' in html("index"), page
           PY
-
-      - name: Record candidate patch and frozen source identity
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP/help-input"
-          artifact="$RUNNER_TEMP/help-artifact"
-          mkdir -p "$artifact"
+          python3 scripts/test_help_anchors.py -v
           git diff --check
-          git diff --binary HEAD > "$artifact/reviewed-help.patch"
-          test -s "$artifact/reviewed-help.patch"
-          git diff --name-only HEAD > "$artifact/changed-files.txt"
-          cat "$artifact/changed-files.txt"
-          test "$(wc -l < "$artifact/changed-files.txt")" -eq 42
-          git rev-parse HEAD > "$artifact/base-commit.txt"
-          git rev-parse HEAD^{tree} > "$artifact/base-tree.txt"
-          git add -- src/help scripts/test_help_anchors.py
-          git write-tree > "$artifact/candidate-tree.txt"
-          sha256sum "$artifact/reviewed-help.patch" | cut -d' ' -f1 > "$artifact/patch-sha256.txt"
-          cat "$artifact/base-commit.txt" "$artifact/candidate-tree.txt" "$artifact/patch-sha256.txt"
+          test -z "$(git status --porcelain)"
       - name: Verify packaged help copies and produce browser screenshots
         run: |
           set -euo pipefail
@@ -158,11 +108,20 @@ jobs:
           cmake -S "$harness" -B "$harness/build" -DCMAKE_INSTALL_PREFIX="$harness/stage"
           grep '^VSP_USE_PREGENERATED_HELP:BOOL=ON$' "$harness/build/CMakeCache.txt"
           cmake --install "$harness/build"
+          python3 -c 'import json; print("\n".join(x[:-3] + ".html" for x in json.load(open("src/help/localized_pages.json"))))' > "$artifact/localized-html.txt"
+          test "$(wc -l < "$artifact/localized-html.txt")" -eq 30
+          while IFS= read -r page; do
+            cmp "src/help/html/$page" "$harness/stage/help/$page"
+            cmp "src/help/html/$page" "$harness/stage/python/openvsp/openvsp/help_vsp/$page"
+          done < "$artifact/localized-html.txt"
+          echo "All 30 Chinese help pages are byte-identical in both CMake install locations."
           if [[ -z "$(fc-list :lang=zh)" ]]; then
             sudo apt-get update
             sudo apt-get install -y fonts-noto-cjk
           fi
           test -n "$(fc-list :lang=zh)"
+          git rev-parse HEAD > "$artifact/product-commit.txt"
+          git rev-parse HEAD^{tree} > "$artifact/product-tree.txt"
           for page in Airfoils XFormTab Gear NGonMesh index; do
             cmp "src/help/html/$page.html" "$harness/stage/help/$page.html"
             cmp "src/help/html/$page.html" "$harness/stage/python/openvsp/openvsp/help_vsp/$page.html"
@@ -174,6 +133,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: openvsp-3.56-help-integration-evidence
+          name: openvsp-3.56-help-production-evidence
           path: ${{ runner.temp }}/help-artifact/
           if-no-files-found: error
