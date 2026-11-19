@@ -70,8 +70,16 @@ jobs:
               body = path.read_text()
               assert re.match(r"^---\n.*?\n---\n", body, re.DOTALL), p
               body = re.sub(r"^---\n", "---\nhelp-renderer: pandoc\n", body, count=1)
+              if p == "Airfoils":
+                  for anchor, heading in [("cst", "CST"), ("karman-trefftz", "Karman-Trefftz")]:
+                      redundant = f'<a id="{anchor}"></a>\n### {heading}\n'
+                      assert body.count(redundant) == 1, anchor
+                      body = body.replace(redundant, f"### {heading}\n", 1)
               path.write_text(body)
           render()
+          airfoil_html = file("Airfoils").read_text()
+          for anchor in ("cst", "karman-trefftz"):
+              assert airfoil_html.count(f'id="{anchor}"') == 1, anchor
           for p in sorted(pages):
               actual = math_count(file(p).read_text())
               print(f"{p}: original renderer MathML={default_math[p]}; trial MathML={actual}", flush=True)
