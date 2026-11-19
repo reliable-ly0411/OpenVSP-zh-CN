@@ -71,7 +71,7 @@ jobs:
               return (root / "html" / (p + ".html")).read_text()
           for page in pages:
               text = html(page)
-              assert '<html lang="zh-CN">' in text, page
+              assert re.search(r'<html\b[^>]*\slang="zh-CN"(?:\s|>)', text), page
               for math in re.findall(r"<math\b[^>]*>.*?</math>", text, re.DOTALL):
                   ET.fromstring(math)
           for p in ("Airfoils","Chevron","EngineModel","FuselageStack","Gear","Human","Mesh","PtCloud","Routing","SubTab","Wire","XFormTab","XSecSkinning"):
@@ -79,8 +79,7 @@ jobs:
           for legacy in ("cst","karman-trefftz"):
               assert html("Airfoils").count(f'id="{legacy}"') == 1, legacy
           for page in pages[:-1]:
-              assert re.search(rf"（中文）</a>", html("index"))
-              assert f'href="{page}.html"' in html("index"), page
+              assert re.search(rf'<a href="{re.escape(page)}\.html">[^<]+（中文）</a>', html("index")), page
           PY
           python3 scripts/test_help_anchors.py -v
           git diff --check
