@@ -16,17 +16,18 @@ jobs:
       - name: Pin source and install render dependencies
         run: |
           set -euo pipefail
-          product=5081da3cb28ebb910e7f5b770cdfd1f85e8c422c
+          product=7ca810f7397ca9eb0a735de7f5bde03abe29b6a6
           review=34ec835326c769f22377d69eaec58f1c8cc8dc51
           git fetch --no-tags origin "$product" "$review"
           git worktree add --detach "$RUNNER_TEMP/help-input" "$product"
           cd "$RUNNER_TEMP/help-input"
           test "$(git rev-parse HEAD)" = "$product"
-          test "$(git rev-parse HEAD^{tree})" = f5c5edeea6ec80e6964c954fb2a14dea5164e334
-          test "$(git rev-parse HEAD^)" = ed364d66fe64309ce886b53c5911bba404c265cd
-          test "$(git rev-parse HEAD~3)" = e4721e651faebadaefc9c636667410c01a84264a
+          test "$(git rev-parse HEAD^{tree})" = 554255b476aee34b64f52e6e78fba3f48275b4e8
+          test "$(git rev-parse HEAD^)" = 5081da3cb28ebb910e7f5b770cdfd1f85e8c422c
+          test "$(git rev-parse HEAD~2)" = ed364d66fe64309ce886b53c5911bba404c265cd
+          test "$(git rev-parse HEAD~4)" = e4721e651faebadaefc9c636667410c01a84264a
           test "$(git rev-parse "$review^{tree}")" = 07d001472e71bfe6b3776a5a65df774c123a23bb
-          git diff --exit-code "$review" HEAD -- src/help scripts/test_help_anchors.py
+          test "$(git diff --name-only "$review" HEAD -- src/help scripts/test_help_anchors.py)" = "$(printf '%s\n' src/help/html/index.html src/help/index.md)"
           test ! -d docs/translation-drafts/3.56
           test -z "$(git status --porcelain)"
           pandoc_version=3.6.4
@@ -78,7 +79,16 @@ jobs:
               assert "<math " in html(p), p
           for legacy in ("cst","karman-trefftz"):
               assert html("Airfoils").count(f'id="{legacy}"') == 1, legacy
-          for page in pages[:-1]:
+          previously_translated = ["Blank","Ellipsoid","GenTab","MassTab","Pod"]
+          review = "34ec835326c769f22377d69eaec58f1c8cc8dc51"
+          for file in ["src/help/index.md","src/help/html/index.html"]:
+              expected = subprocess.check_output(["git","show",f"{review}:{file}"]).decode()
+              for page in previously_translated:
+                  pattern = rf'(<a href="{page}\.html">)([^<\n]+)(</a>)' if file.endswith(".html") else rf'(\[)([^\]\n]+)(\]\({page}\.md\))'
+                  expected, count = re.subn(pattern, lambda match: match[1] + match[2] + "（中文）" + match[3], expected)
+                  assert count == 1, (file, page)
+              assert Path(file).read_text() == expected, file
+          for page in pages[:-1] + previously_translated:
               assert re.search(rf'<a href="{re.escape(page)}\.html">[^<]+（中文）</a>', html("index")), page
           PY
           python3 scripts/test_help_anchors.py -v
