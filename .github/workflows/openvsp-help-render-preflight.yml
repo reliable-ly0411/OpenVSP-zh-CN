@@ -85,6 +85,22 @@ jobs:
               print(f"{p}: original renderer MathML={default_math[p]}; trial MathML={actual}", flush=True)
               if p in proposed:
                   assert default_math[p] == 0 and actual > 0, p
+          index = root / "index.md"
+          nav = index.read_text()
+          old = ("部分高级功能涉及更复杂的概念，因此内置帮助提供相应说明。现有工具帮助、堆叠几何预设\n"
+                 "和本目录保留简体中文；OpenVSP 3.56.0 新增的 29 篇组件帮助暂保留上游英文原文，\n"
+                 "其中公式、图像与链接均随源码提供，尚未完成汉化或逐页目视验收。")
+          assert nav.count(old) == 1
+          nav = nav.replace(old, "内置帮助提供高级功能说明。目录中标有「中文」的条目提供简体中文，其他条目保留上游英文。", 1)
+          old = "以下链接除标明“中文”的堆叠几何预设外，均为上游英文帮助。"
+          assert nav.count(old) == 1
+          nav = nav.replace(old, "标有「中文」的组件帮助已翻译；未标注的组件帮助保留上游英文。", 1)
+          for page in pages:
+              pattern = rf"\[([^\]\n]+)\]\({page}\.md\)"
+              nav, count = re.subn(pattern, lambda hit: f"[{hit[1]}（中文）]({page}.md)", nav)
+              assert count == 1, (page, count)
+          index.write_text(nav)
+          render()
           render("--check")
           test = Path("scripts/test_help_anchors.py")
           text = test.read_text()
@@ -94,3 +110,55 @@ jobs:
           test.write_text(text.replace(needle, joined + '        })\n        self.assertEqual(len(names), 30)'))
           subprocess.run(["python3", str(test), "-v"], check=True)
           PY
+
+      - name: Verify packaged help copies and produce browser screenshots
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/help-input"
+          artifact="$RUNNER_TEMP/help-artifact"
+          harness="$RUNNER_TEMP/help-cmake"
+          mkdir -p "$artifact/browser" "$harness"
+          modules="$(dirname "$(find "$PWD" -iname pandocology.cmake -print -quit)")"
+          test -f "$modules/pandocology.cmake" || test -f "$modules/Pandocology.cmake"
+          cat > "$harness/CMakeLists.txt" <<'CMAKE'
+          cmake_minimum_required(VERSION 3.24)
+          project(HelpLayoutCheck NONE)
+          list(APPEND CMAKE_MODULE_PATH "$ENV{HELP_CMAKE_MODULES}")
+          set(VSP_BINARY_DIR "${CMAKE_BINARY_DIR}")
+          set(SWIG_FOUND TRUE)
+          set(PYTHONLIBS_FOUND TRUE)
+          add_subdirectory("$ENV{HELP_SOURCE}" help)
+          CMAKE
+          export HELP_SOURCE="$PWD/src/help" HELP_CMAKE_MODULES="$modules"
+          cmake -S "$harness" -B "$harness/build" -DCMAKE_INSTALL_PREFIX="$harness/stage"
+          grep '^VSP_USE_PREGENERATED_HELP:BOOL=ON$' "$harness/build/CMakeCache.txt"
+          cmake --install "$harness/build"
+          for page in Airfoils XFormTab Gear NGonMesh index; do
+            cmp "src/help/html/$page.html" "$harness/stage/help/$page.html"
+            cmp "src/help/html/$page.html" "$harness/stage/python/openvsp/openvsp/help_vsp/$page.html"
+            grep -q "lang=\"zh-CN\"" "$harness/stage/help/$page.html"
+            google-chrome --headless --disable-gpu --no-sandbox --window-size=1280,1400 --screenshot="$artifact/browser/$page.png" "file://$harness/stage/help/$page.html"
+            test -s "$artifact/browser/$page.png"
+          done
+          echo "Verified five staged main/Python help pairs byte-identical; captured five Chrome screenshots."
+      - name: Record candidate patch and frozen source identity
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/help-input"
+          artifact="$RUNNER_TEMP/help-artifact"
+          git diff --check
+          git diff --binary HEAD > "$artifact/reviewed-help.patch"
+          test -s "$artifact/reviewed-help.patch"
+          git diff --name-only HEAD > "$artifact/changed-files.txt"
+          test "$(wc -l < "$artifact/changed-files.txt")" -eq 42
+          git rev-parse HEAD > "$artifact/base-commit.txt"
+          git rev-parse HEAD^{tree} > "$artifact/base-tree.txt"
+          git add -- src/help scripts/test_help_anchors.py
+          git write-tree > "$artifact/candidate-tree.txt"
+          sha256sum "$artifact/reviewed-help.patch" | cut -d' ' -f1 > "$artifact/patch-sha256.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: openvsp-3.56-help-integration-evidence
+          path: ${{ runner.temp }}/help-artifact/
+          if-no-files-found: error
