@@ -102,6 +102,12 @@ jobs:
           index.write_text(nav)
           render()
           render("--check")
+          # Older Pandoc-generated pages can differ bytewise with this toolchain.
+          # Keep reviewed outside-scope HTML byte-identical, then run anchor tests
+          # against the exact candidate files rather than the trial regeneration.
+          outside = [str(file(name[:-3])) for name in existing if name != "index.md"]
+          assert len(outside) == 10
+          subprocess.run(["git", "restore", "--source=HEAD", "--", *outside], check=True)
           test = Path("scripts/test_help_anchors.py")
           text = test.read_text()
           needle = '        })\n        self.assertEqual(len(names), 11)'
