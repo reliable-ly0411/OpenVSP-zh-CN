@@ -1,0 +1,83 @@
+name: OpenVSP 3.56 isolated help render preflight
+on:
+  push:
+    branches: [docs/3.56-help-integration-preflight]
+    paths: ['.github/workflows/openvsp-help-render-preflight.yml']
+permissions:
+  contents: read
+jobs:
+  help-render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pin source and install render dependencies
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin ddc69d585aba6a460a285aeb9e6cb2c287139181
+          git worktree add --detach "$RUNNER_TEMP/help-input" ddc69d585aba6a460a285aeb9e6cb2c287139181
+          cd "$RUNNER_TEMP/help-input"
+          test "$(git rev-parse HEAD)" = ddc69d585aba6a460a285aeb9e6cb2c287139181
+          test "$(git rev-parse HEAD~34)" = ed364d66fe64309ce886b53c5911bba404c265cd
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+          npm install --prefix "$RUNNER_TEMP/help-deps" --no-audit --no-fund marked@15.0.12
+          node --version
+          pandoc --version
+      - name: Compare default renderer with Pandoc MathML, then audit selected output
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/help-input"
+          export HELP_MODULES="$RUNNER_TEMP/help-deps/node_modules"
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root = Path("src/help")
+          drafts = Path("docs/translation-drafts/3.56")
+          pages = ["Airfoils","BOR","Chevron","Clone","Cobra","Conformal","EngineModel","FuselageStack","Gear","Hinge","Human","Mesh","NGonMesh","PtCloud","Routing","SubTab","Wire","XFormTab","XSecSkinning"]
+          proposed = set(["Airfoils","Chevron","EngineModel","FuselageStack","Gear","Human","Mesh","PtCloud","Routing","SubTab","Wire","XFormTab","XSecSkinning"])
+          def render(*flags):
+              subprocess.run(["node", str(root / "build_help_zh.js"), os.environ["HELP_MODULES"], *flags], check=True)
+          def file(name):
+              return root / "html" / (name + ".html")
+          def math_count(text):
+              fields = re.findall(r"<math\b[^>]*>.*?</math>", text, re.DOTALL)
+              for field in fields:
+                  ET.fromstring(field)
+              return len(fields)
+          manifest = root / "localized_pages.json"
+          existing = json.loads(manifest.read_text())
+          assert len(existing) == 11 and not set(existing) & {p + ".md" for p in pages}
+          manifest.write_text(json.dumps(existing + [p + ".md" for p in pages], indent=2) + "\n")
+          for name in pages:
+              text = (drafts / (name + ".md")).read_text()
+              text = re.sub(r"（翻译草稿）", "", text, count=1) if name == "XFormTab" else text
+              text = re.sub(r"(?m)^> 独立[^\n]*\n\n", "", text, count=1)
+              (root / (name + ".md")).write_text(text)
+          render("--test")
+          render()
+          default_math = {p: math_count(file(p).read_text()) for p in pages}
+          for p in proposed:
+              path = root / (p + ".md")
+              body = path.read_text()
+              assert re.match(r"^---\n.*?\n---\n", body, re.DOTALL), p
+              body = re.sub(r"^---\n", "---\nhelp-renderer: pandoc\n", body, count=1)
+              path.write_text(body)
+          render()
+          for p in sorted(pages):
+              actual = math_count(file(p).read_text())
+              print(f"{p}: original renderer MathML={default_math[p]}; trial MathML={actual}", flush=True)
+              if p in proposed:
+                  assert default_math[p] == 0 and actual > 0, p
+          render("--check")
+          test = Path("scripts/test_help_anchors.py")
+          text = test.read_text()
+          needle = '        })\n        self.assertEqual(len(names), 11)'
+          assert text.count(needle) == 1
+          joined = "".join(f'            "{p}.md",\n' for p in pages)
+          test.write_text(text.replace(needle, joined + '        })\n        self.assertEqual(len(names), 30)'))
+          subprocess.run(["python3", str(test), "-v"], check=True)
+          PY
