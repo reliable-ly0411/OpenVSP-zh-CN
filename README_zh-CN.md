@@ -131,7 +131,7 @@ ARM64 使用上表对应 ZIP。3.51.2/3.51.3 的 Linux 新 rc 包应使用随包
 
 本分支源码标识（不等于当前下载推荐）：
 
-- 当前汉化版本：`3.56.0-zh-CN.dev.ca4958f2cf98`（新预发布候选；最终原包以对应 Release 及验收记录为准）
+- 当前汉化版本：`3.56.0-zh-CN.rc.1`（源码候选标识；尚未创建标签或发布）
 
 完整依赖和通用构建说明以根目录 [`README.md`](README.md) 中保留的官方英文文档为准。
 本汉化版使用 CMake 两阶段构建，并关闭不随 ZIP 分发的 Python API 文档生成；Python API
@@ -250,6 +250,18 @@ PR 合并不会自动改写旧 Release 页面。稳定版 Latest 不变。CI 原
 
 - 3.56.0 候选的 Apple Silicon 构建切换到 macOS 15，保留原生 ARM64、Python 3.11 和 LLVM 16；
   历史包名和验收规则不变。新目标尚未完成原生构建和运行验收，不宣称兼容 macOS 14。
+
+## 3.56.0-zh-CN.rc.1
+
+此节记录待验预发布候选，不表示标签或 Release 已创建。正式上游基线为
+[OpenVSP_3.56.0](https://github.com/OpenVSP/OpenVSP/tree/ca4958f2cf98d5e787a2a3fa37efb497e4903902)，
+[官网公告](https://openvsp.org/blogs/announcements/2026/11/05/openvsp-3-56-0-released)确认原版发布；
+[完整上游说明](docs/upstream-release-notes/3.56.0.md)保留原文及来源。
+
+- 纳入简体中文组件帮助、目录与锚点修订；保留控件名、参数标识和既有英文锚点。
+- 3.56.0 的 Apple Silicon 原生打包目标迁至 macOS 15，保留 ARM64、Python 3.11 和 LLVM 16；
+  历史目标和包名不变，不宣称 3.56.0 已在 macOS 14 验证。
+- 五平台原生构建、实际运行及原包验收尚未执行；源码和帮助检查不替代这些验收。
 
 ## 3.56.0-zh-CN.dev.ca4958f2cf98
 
