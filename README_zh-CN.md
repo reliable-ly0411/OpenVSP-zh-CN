@@ -172,7 +172,8 @@ cmake --build build --target package --config Release --parallel 2
 3. 新预发布统一为 `<版本>-zh-CN.rc.<递增序号>`，例如 `3.55.0-zh-CN.rc.1`。
    `Build five-platform localized prerelease` 只需精确 40 位 `source_sha` 与 `new_tag`，
    从该版本族最新已发布修订的后继提交构建 Ubuntu 24.04 AMD64/ARM64、Windows x64、
-   macOS 14 ARM64 与 macOS 15 Intel 五个原生平台。Linux Python 3.12，Windows/macOS
+   macOS ARM64 与 macOS 15 Intel 五个原生平台。3.56.0 的 ARM64 目标为 macOS 15，
+   历史版本的 ARM64 目标仍为 macOS 14。Linux Python 3.12，Windows/macOS
    Python 3.11，统一 NumPy 1.26.4。源码必须已有与新标签完全一致的更新说明。
    为维护旧版本族，手动预发布有意允许来自该版本族开发分支，而不要求先合入当前
    3.55.0 的 main；源码仍须继承该族历史发布、通过五平台验收并绑定精确 SHA。
@@ -246,6 +247,9 @@ PR 合并不会自动改写旧 Release 页面。稳定版 Latest 不变。CI 原
 
 - README 增加官方源码、官网入口及主线相对上游的动态领先/落后提交数；每日维护独立
   快进纯上游镜像，记录精确 SHA，不改变汉化分支同步或发布策略。
+
+- 3.56.0 候选的 Apple Silicon 构建切换到 macOS 15，保留原生 ARM64、Python 3.11 和 LLVM 16；
+  历史包名和验收规则不变。新目标尚未完成原生构建和运行验收，不宣称兼容 macOS 14。
 
 ## 3.56.0-zh-CN.dev.ca4958f2cf98
 

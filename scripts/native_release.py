@@ -17,16 +17,19 @@ import zipfile
 
 from backfill_verify import digest
 from native_functional import validate_functional_summary
-from native_plan import PLATFORMS, REQUIRED_CHECKS, asset_name, validate_inputs
+from native_plan import MACOS_15_ARM64, REQUIRED_CHECKS, asset_name, platform_for, platforms_for, validate_inputs
 from upstream_release_notes import upstream_release_notes
 
 
 def validate_report(report, package, source_sha, tag, run_id, workflow_sha):
     version = validate_inputs(source_sha, tag)
     native_platform = report.get('platform')
-    target = next((p for p in PLATFORMS if p['platform'] == native_platform), None)
-    if target is None:
-        raise ValueError('Unknown native platform report')
+    target = platform_for(version, native_platform)
+    if native_platform == MACOS_15_ARM64:
+        minimum = report.get('macos_minimum') or {}
+        if not isinstance(minimum, dict) or not re.fullmatch(r'15(?:\.[0-9]+){1,2}',
+                                                            str(minimum.get('tested_host', ''))):
+            raise ValueError('macOS 15 ARM64 verification must record the actual macOS 15 smoke-test host')
     exact = dict(schema=2, tag=tag, source_sha=source_sha, version=version,
                  platform=native_platform, architecture=target['arch'], python=target['python'],
                  workflow_sha=workflow_sha, run_id=str(run_id), archive=asset_name(version, native_platform),
@@ -49,7 +52,7 @@ def validate_report(report, package, source_sha, tag, run_id, workflow_sha):
 def prepare_assets(artifacts, output, source_sha, tag, run_id, workflow_sha):
     version = validate_inputs(source_sha, tag)
     reports = list(artifacts.rglob('verification.json'))
-    if len(reports) != len(PLATFORMS):
+    if len(reports) != len(platforms_for(version)):
         raise ValueError('All five native verification reports are required')
     selected = {}
     for path in reports:
@@ -74,7 +77,7 @@ def prepare_assets(artifacts, output, source_sha, tag, run_id, workflow_sha):
 
 
 def verify_manifest(directory, version):
-    expected = {asset_name(version, p['platform']) for p in PLATFORMS}
+    expected = {asset_name(version, p['platform']) for p in platforms_for(version)}
     if {p.name for p in directory.iterdir()} != expected | {'SHA256SUMS.txt'}:
         raise ValueError('Public assets must be exactly five ZIPs and SHA256SUMS.txt')
     sums = {}
@@ -127,23 +130,42 @@ def release_body(tag, source_sha, repository, linux_gui_reviewed=False):
             'rc.3 新增：寄生阻力组件表、附加阻力汇总及用户参数 Adjust 分组标题保留用户原始名称；固定界面标题仍正常汉化。',
             'rc.3 新增：三条实际布局方法的轻量 C++ 回归，覆盖词典碰撞、中文、空白及特殊字符；不修改模型数据、参数 ID 或接口。',
         ]
+    if version == '3.56.0':
+        # A new software family does not inherit another family's RC chronology.
+        changes = [
+            '以官方 OpenVSP_3.56.0 标签的精确源码为上游基线，保留汉化与平台兼容改动。',
+            '沿用显示时翻译与用户模型名称保护；本次汉化范围和已执行检查见对应源码说明。',
+            '独立原生候选版本清单支持 3.56.0；历史补构清单与原包验收门禁保持不变。',
+        ]
     gui = ('五个平台均经原生构建和包内 CLI、模型读写、分析、Python 导入、依赖与校验检查。'
            'Linux AMD64 原始 ZIP 的主界面、机翼页及模型名称/路径回归已人工抽查；'
            'Windows、macOS 和 Linux ARM64 GUI 未作同范围人工验收。'
            if linux_gui_reviewed else
            '原生构建和 GUI 截图待目视及原包复核；此准备文本本身不代表发布验收通过。')
+    if version == '3.56.0' and not linux_gui_reviewed:
+        gui = ('这是候选发行说明，尚未执行或确认该候选的五平台原生构建及 Linux GUI 验收；'
+               '离线定向测试不证明原生包通过。最终精确源码、构建 run、原包哈希与实际截图须另行记录。')
+    publication_note = ('官方已于 2026-11-05 发布 3.56.0，标签源码与本仓上游基线相同；'
+                        '汉化源码包含本地下游改动，不等同于官方原版源码树。\n\n'
+                        if version == '3.56.0' else '')
+    release_kind = '预发布候选' if version == '3.56.0' and not linux_gui_reviewed else '预发布'
     family_note = ('3.51.2 源码保留早期独立导入历史；对应官方版本的 CHANGELOG 字节一致，'
                    '尚未接续该官方标签的 Git 祖先。\n\n' if version == '3.51.2' else '')
-    mac_difference = ('官方此版本 ARM64 下载名使用 macOS 15；本仓按实际 macOS 14 原生目标命名，'
-                      '不把二者视为相同二进制。' if version in ('3.54.0', '3.55.0') else
-                      'macOS 下载名沿用对应官方版本的平台拼写。')
-    rows = '\n'.join(f'| {p["platform"]} | `{asset_name(version, p["platform"])}` |' for p in PLATFORMS)
+    if version == '3.56.0':
+        mac_difference = ('ARM64 使用 macOS 15 原生构建目标，与对应官方 ARM64 下载名一致；'
+                          '不把两者视为相同二进制，也不声称已在 macOS 14 验证。')
+    elif version in ('3.54.0', '3.55.0'):
+        mac_difference = ('官方此版本 ARM64 下载名使用 macOS 15；本仓按实际 macOS 14 原生目标命名，'
+                          '不把二者视为相同二进制。')
+    else:
+        mac_difference = 'macOS 下载名沿用对应官方版本的平台拼写。'
+    rows = '\n'.join(f'| {p["platform"]} | `{asset_name(version, p["platform"])}` |' for p in platforms_for(version))
     return (
-        f'OpenVSP {version} 非官方简体中文预发布，汉化修订 `{tag}`。'
+        f'OpenVSP {version} 非官方简体中文{release_kind}，汉化修订 `{tag}`。'
         'OpenVSP 原软件版权、作者归属及 NOSA 1.3 许可不变。\n\n'
         f'源码：[`{source_sha}`]({source_url})；官方版本参考：'
         f'[`{upstream["upstream_tag"]}`](https://github.com/OpenVSP/OpenVSP/commit/{upstream["upstream_sha"]})。\n\n'
-        + family_note + '## 本地变化\n\n' + ''.join('- ' + change + '\n' for change in changes)
+        + publication_note + family_note + '## 本地变化\n\n' + ''.join('- ' + change + '\n' for change in changes)
         + '\n## 下载与校验\n\n| 实际目标 | 文件名 |\n|---|---|\n' + rows + '\n\n'
         '附件仅五个 ZIP 和 `SHA256SUMS.txt`。同一软件版本的不同 rc 可能使用相同 ZIP 基名，'
         '请按标签分目录保存，只与同一 Release 的清单配对。下载全部五包可运行 '

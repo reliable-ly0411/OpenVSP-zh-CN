@@ -9,6 +9,12 @@ import subprocess
 
 from backfill_plan import RELEASES
 
+# Native candidates evolve independently of the immutable historical backfill.
+# Official OpenVSP_3.56.0 resolves to ca4958f2cf98d5e787a2a3fa37efb497e4903902.
+# Native candidates must include the localized merge of that exact upstream commit.
+NATIVE_BASELINES = {version: sha for version, _, sha in RELEASES}
+NATIVE_BASELINES['3.56.0'] = 'c7d406ed7e9be80fb2abf3b508d41fe830c9ee7c'
+
 TAG_RE = re.compile(r'^(?P<version>[0-9]+\.[0-9]+\.[0-9]+)-zh-CN\.rc\.(?P<revision>[1-9][0-9]*)$')
 PLATFORMS = (
     dict(platform='Ubuntu-24.04_amd64', runner='ubuntu-24.04', arch='x86_64', python='3.12', llvm=''),
@@ -17,6 +23,14 @@ PLATFORMS = (
     dict(platform='macOS-14-arm64-Python3.11', runner='macos-14', arch='arm64', python='3.11', llvm='16'),
     dict(platform='macOS-15-x86_64-Python3.11', runner='macos-15-intel', arch='x86_64', python='3.11', llvm='16'),
 )
+# 3.56.0 alone uses the currently hosted macOS 15 Apple Silicon image.
+# Historical target/asset identities remain valid for their original version family.
+MACOS_15_ARM64 = 'macOS-15-arm64-Python3.11'
+MACOS_14_ARM64 = 'macOS-14-arm64-Python3.11'
+OPENVSP_356_PLATFORMS = tuple(
+    dict(p, platform=MACOS_15_ARM64, runner='macos-15') if p['platform'] == MACOS_14_ARM64 else p
+    for p in PLATFORMS
+)
 # Public archive spellings follow https://openvsp.org/download.php (2026-10-19).
 # Keep actual target OS/CPU/ABI and ZIP format; internal job IDs stay unchanged.
 # Ubuntu ARM64 is a downstream target, not an official prebuilt distribution.
@@ -24,7 +38,8 @@ ARCHIVE_PLATFORMS = {
     'Ubuntu-24.04_amd64': 'Ubuntu-24.04_amd64',
     'Ubuntu-24.04_arm64-Python3.12': 'Ubuntu-24.04_arm64-Python3.12',
     'win64': 'win64-Python3.11',
-    'macOS-14-arm64-Python3.11': 'macos-14-ARM64-Python3.11',
+    MACOS_14_ARM64: 'macos-14-ARM64-Python3.11',
+    MACOS_15_ARM64: 'macos-15-ARM64-Python3.11',
     'macOS-15-x86_64-Python3.11': 'macos-15-intel-X64-Python3.11',
 }
 REQUIRED_CHECKS = {
@@ -42,20 +57,32 @@ def validate_inputs(source_sha, new_tag):
     if not re.fullmatch('[0-9a-f]{40}', source_sha):
         raise ValueError('source_sha must be an exact lowercase 40-character commit')
     match = TAG_RE.fullmatch(new_tag)
-    if not match or match['version'] not in {v for v, _, _ in RELEASES}:
+    if not match or match['version'] not in NATIVE_BASELINES:
         raise ValueError('new_tag must be a supported <version>-zh-CN.rc.<positive integer>')
     return match['version']
 
 
-def asset_name(version, platform):
-    if version not in {v for v, _, _ in RELEASES} or platform not in {p['platform'] for p in PLATFORMS}:
+def platforms_for(version):
+    if version not in NATIVE_BASELINES:
+        raise ValueError('Unsupported native version family')
+    return OPENVSP_356_PLATFORMS if version == '3.56.0' else PLATFORMS
+
+
+def platform_for(version, platform):
+    target = next((p for p in platforms_for(version) if p['platform'] == platform), None)
+    if target is None:
         raise ValueError('Unsupported version family or native platform')
+    return target
+
+
+def asset_name(version, platform):
+    platform_for(version, platform)
     return f'OpenVSP-{version}-{ARCHIVE_PLATFORMS[platform]}-zh-CN.zip'
 
 
 def matrix(source_sha, new_tag):
     version = validate_inputs(source_sha, new_tag)
-    return {'include': [dict(version=version, tag=new_tag, sha=source_sha, **p) for p in PLATFORMS]}
+    return {'include': [dict(version=version, tag=new_tag, sha=source_sha, **p) for p in platforms_for(version)]}
 
 
 def family_revision(tag, version):
@@ -78,7 +105,7 @@ def validate_source(source, source_sha, new_tag):
         raise ValueError('Checked-out source does not match source_sha')
     if git('rev-parse', '--is-shallow-repository') != 'false':
         raise ValueError('Family ancestry requires a full-history checkout with all tags')
-    baseline = next(sha for v, _, sha in RELEASES if v == version)
+    baseline = NATIVE_BASELINES[version]
     subprocess.run(['git', '-C', str(source), 'merge-base', '--is-ancestor', baseline, source_sha], check=True)
     revision = family_revision(new_tag, version)
     previous = []

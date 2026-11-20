@@ -20,7 +20,7 @@ from backfill_verify import (EXECUTABLES, audit_native, bundle_mac, cli_help, di
 from native_functional import (CLI_BASENAME, CLI_INPUT_SUFFIXES, FAILURE_REASONS,
                                FUNCTIONAL_SCRIPT, PASS_MARKERS, FunctionalCheckError,
                                verify_cli_history, verify_functional_outputs)
-from native_plan import REQUIRED_CHECKS, asset_name, validate_source
+from native_plan import MACOS_15_ARM64, REQUIRED_CHECKS, asset_name, platform_for, validate_source
 
 
 # Cross-process contract for the version-independent AngelScript boundary smoke.
@@ -326,6 +326,13 @@ def main():
     mac, windows = sys.platform == 'darwin', os.name == 'nt'
     native_platform, arch = os.environ['BACKFILL_PLATFORM'], os.environ['BACKFILL_ARCH']
     expected_python = os.environ['BACKFILL_PYTHON']
+    target = platform_for(version, native_platform)
+    if (arch, expected_python) != (target['arch'], target['python']):
+        raise ValueError('Build architecture/Python does not match the versioned package target')
+    if native_platform == MACOS_15_ARM64 and (
+            not mac or platform.machine() != arch or platform.mac_ver()[0].split('.')[0] != '15'):
+        raise ValueError('macOS 15 ARM64 target requires the actual native macOS 15 ARM64 host')
+    archive_name = asset_name(version, native_platform)
     if '.'.join(map(str, sys.version_info[:2])) != expected_python:
         raise ValueError('Build interpreter does not match package contract')
     notices = {}
@@ -370,8 +377,7 @@ def main():
             prefixes.extend([variant.encode(), variant.encode('utf-16le')])
     privacy_scan(root, prefixes, diagnostics, mac)
     output.mkdir(parents=True, exist_ok=True)
-    name = asset_name(version, native_platform)
-    archive = output / name
+    archive = output / archive_name
     make_archive(root, archive)
     source_files = verify_package(archive, source, runtime_resources=True)
     with zipfile.ZipFile(archive) as z:
@@ -384,7 +390,7 @@ def main():
     report = dict(schema=2, tag=tag, source_sha=source_sha, version=version,
                   platform=native_platform, architecture=arch, python=expected_python,
                   workflow_sha=os.environ['GITHUB_SHA'], run_id=os.environ['GITHUB_RUN_ID'],
-                  archive=name, sha256=digest(archive), bytes=archive.stat().st_size,
+                  archive=archive_name, sha256=digest(archive), bytes=archive.stat().st_size,
                   checks=sorted(REQUIRED_CHECKS), native=records, third_party_licenses=notices,
                   cli_help=cli, python_extensions=extensions, requirements_install=installed,
                   filesystem_boundary=boundary_file,
@@ -395,7 +401,7 @@ def main():
                   gui_review='pending visual review; screenshots alone do not establish acceptance',
                   macos_signing='ad-hoc only; not Developer ID signed or notarized' if mac else None)
     (output / 'verification.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    print(f'Native checks passed for {name}; SHA-256 {report["sha256"]}; GUI review remains pending')
+    print(f'Native checks passed for {archive_name}; SHA-256 {report["sha256"]}; GUI review remains pending')
 
 
 if __name__ == '__main__':

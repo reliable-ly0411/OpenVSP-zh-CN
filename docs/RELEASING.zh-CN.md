@@ -74,7 +74,8 @@
 | Ubuntu 24.04 AMD64 | `OpenVSP-<版本>-Ubuntu-24.04_amd64-zh-CN.zip` | 保留官方 Ubuntu 拼写；本仓使用 ZIP |
 | Ubuntu 24.04 ARM64 | `OpenVSP-<版本>-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip` | 本仓新增原生目标，不称官方预编译包 |
 | Windows x64 | `OpenVSP-<版本>-win64-Python3.11-zh-CN.zip` | Python 3.11 |
-| macOS ARM64 | `OpenVSP-<版本>-macos-14-ARM64-Python3.11-zh-CN.zip` | 实际最低系统与运行证据必须满足 macOS 14 |
+| macOS ARM64（历史版本） | `OpenVSP-<版本>-macos-14-ARM64-Python3.11-zh-CN.zip` | 实际最低系统与运行证据必须满足 macOS 14 |
+| macOS 15 ARM64（3.56.0 候选） | `OpenVSP-3.56.0-macos-15-ARM64-Python3.11-zh-CN.zip` | macOS 15 原生目标；不宣称已验证 macOS 14 |
 | macOS Intel x86_64 | `OpenVSP-<版本>-macos-15-intel-X64-Python3.11-zh-CN.zip` | 本仓实际构建目标为 macOS 15，不冒称更低系统兼容 |
 
 Linux Python 为 3.12，Windows/macOS 为 3.11；NumPy 1.26.4、依赖约束 `<2`。

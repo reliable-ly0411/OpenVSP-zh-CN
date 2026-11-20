@@ -13,7 +13,7 @@ class NativeMacToolchainTests(unittest.TestCase):
         self.formula = dict(name='llvm@16', tap='homebrew/core', disabled=False,
                             versions={'stable': '16.0.6'}, revision=1,
                             bottle={'stable': {'files': {}}})
-        for key in ('arm64_sonoma', 'sequoia'):
+        for key in ('arm64_sonoma', 'arm64_sequoia', 'sequoia'):
             self.formula['bottle']['stable']['files'][key] = dict(
                 sha256='a' * 64, url='https://ghcr.io/v2/homebrew/core/llvm/16/blobs/sha256:' + 'a' * 64)
 
@@ -35,6 +35,17 @@ class NativeMacToolchainTests(unittest.TestCase):
         self.assertEqual(self.contract()['bottle_tag'], 'arm64_sonoma')
         self.assertEqual(self.contract(target='macOS-15-x86_64-Python3.11', architecture='x86_64',
                                        host_version='15.7.1')['bottle_tag'], 'sequoia')
+
+    def test_new_arm_target_requires_its_exact_native_sequoia_bottle(self):
+        target = 'macOS-15-arm64-Python3.11'
+        self.assertEqual(self.contract(target=target, host_version='15.7.1')['bottle_tag'], 'arm64_sequoia')
+        with self.assertRaises(ValueError):
+            self.contract(target=target, host_version='14.8.9')
+        with self.assertRaises(ValueError):
+            self.contract(target=target, host_version='15.7.1', architecture='x86_64')
+        del self.formula['bottle']['stable']['files']['arm64_sequoia']
+        with self.assertRaisesRegex(ValueError, 'source-build fallback'):
+            self.contract(target=target, host_version='15.7.1')
 
     def test_macos15_cannot_prove_macos14_runtime(self):
         with self.assertRaises(ValueError): self.contract(host_version='15.7.1')
