@@ -76,7 +76,10 @@ class NativePlanTests(unittest.TestCase):
         for version in ('3.51.2', '3.51.3', '3.53.0', '3.54.0', '3.55.0', '3.56.0'):
             jobs = matrix(SOURCE, version + '-zh-CN.rc.1')['include']
             self.assertEqual(len(jobs), 5)
-            self.assertEqual({j['runner'] for j in jobs}, {'ubuntu-24.04', 'ubuntu-24.04-arm', 'windows-2022', 'macos-14', 'macos-15-intel'})
+            apple_silicon = 'macos-15' if version == '3.56.0' else 'macos-14'
+            self.assertEqual({j['runner'] for j in jobs}, {
+                'ubuntu-24.04', 'ubuntu-24.04-arm', 'windows-2022', apple_silicon, 'macos-15-intel',
+            })
             self.assertEqual({j['sha'] for j in jobs}, {SOURCE})
             self.assertEqual({j['python'] for j in jobs if j['runner'].startswith('ubuntu')}, {'3.12'})
 

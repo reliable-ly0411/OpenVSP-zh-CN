@@ -10,7 +10,7 @@ from urllib.parse import quote
 import zipfile
 
 from backfill_verify import digest
-from native_plan import NATIVE_BASELINES, PLATFORMS, asset_name, family_revision, validate_inputs
+from native_plan import NATIVE_BASELINES, asset_name, family_revision, platforms_for, validate_inputs
 from native_release import GitHub, publish, validate_gui_review, validate_report, verify_manifest
 
 
@@ -156,7 +156,7 @@ def latest_jobs(jobs, run_id, workflow_sha, run_attempt):
 
 
 def validate_jobs(jobs, version):
-    expected = {f'{version} / {p["platform"]}' for p in PLATFORMS} | {'regression', 'plan', 'assemble'}
+    expected = {f'{version} / {p["platform"]}' for p in platforms_for(version)} | {'regression', 'plan', 'assemble'}
     for name in expected:
         matching = [job for job in jobs if job.get('name') == name]
         if (len(matching) != 1 or matching[0].get('status') != 'completed'
@@ -194,7 +194,7 @@ def validate_evidence(evidence, directory, source_sha, tag, run_id, workflow_sha
     if any(evidence.get(k) != value for k, value in exact.items()):
         raise ValueError('Original build evidence identity or manifest mismatch')
     reports = evidence.get('reports', [])
-    if len(reports) != len(PLATFORMS):
+    if len(reports) != len(platforms_for(version)):
         raise ValueError('Evidence must include all five native reports')
     seen = set()
     for report in reports:
@@ -232,7 +232,7 @@ def main():
     artifacts = paginated(client.api, f'actions/runs/{run_id}/artifacts', 'artifacts')
     workspace = Path('promotion-work'); workspace.mkdir()
     directory = workspace / 'public-assets'
-    expected = {asset_name(version, p['platform']) for p in PLATFORMS} | {'SHA256SUMS.txt'}
+    expected = {asset_name(version, p['platform']) for p in platforms_for(version)} | {'SHA256SUMS.txt'}
     for name, destination, names in (
         ('native-release-assets', directory, expected),
         ('native-release-evidence', workspace / 'evidence', {'release-evidence.json'}),

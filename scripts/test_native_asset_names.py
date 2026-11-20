@@ -57,7 +57,7 @@ EXPECTED_NAMES = {
         'OpenVSP-3.56.0-Ubuntu-24.04_amd64-zh-CN.zip',
         'OpenVSP-3.56.0-Ubuntu-24.04_arm64-Python3.12-zh-CN.zip',
         'OpenVSP-3.56.0-win64-Python3.11-zh-CN.zip',
-        'OpenVSP-3.56.0-macos-14-ARM64-Python3.11-zh-CN.zip',
+        'OpenVSP-3.56.0-macos-15-ARM64-Python3.11-zh-CN.zip',
         'OpenVSP-3.56.0-macos-15-intel-X64-Python3.11-zh-CN.zip',
     ),
 }
@@ -68,6 +68,15 @@ TARGETS = (
     dict(platform='macOS-14-arm64-Python3.11', runner='macos-14', arch='arm64', python='3.11', llvm='16'),
     dict(platform='macOS-15-x86_64-Python3.11', runner='macos-15-intel', arch='x86_64', python='3.11', llvm='16'),
 )
+TARGETS_356 = TARGETS[:3] + (
+    dict(platform='macOS-15-arm64-Python3.11', runner='macos-15', arch='arm64', python='3.11', llvm='16'),
+) + TARGETS[4:]
+
+
+def expected_targets(version):
+    return TARGETS_356 if version == '3.56.0' else TARGETS
+
+
 SOURCE, WORKFLOW, RUN = 'a' * 40, 'b' * 40, '123'
 
 
@@ -76,23 +85,23 @@ class NativeAssetNameTests(unittest.TestCase):
         self.assertEqual(set(EXPECTED_NAMES), set(native_plan.NATIVE_BASELINES))
         for version, names in EXPECTED_NAMES.items():
             with self.subTest(version=version):
-                self.assertEqual(tuple(native_plan.asset_name(version, p['platform']) for p in TARGETS), names)
+                self.assertEqual(tuple(native_plan.asset_name(version, p['platform']) for p in expected_targets(version)), names)
 
     def test_mapping_covers_only_native_ids_and_all_names_are_unique(self):
-        self.assertEqual(set(native_plan.ARCHIVE_PLATFORMS), {p['platform'] for p in TARGETS})
-        names = [native_plan.asset_name(v, p['platform']) for v in EXPECTED_NAMES for p in TARGETS]
+        self.assertEqual(set(native_plan.ARCHIVE_PLATFORMS), {p['platform'] for p in (*TARGETS, *TARGETS_356)})
+        names = [native_plan.asset_name(v, p['platform']) for v in EXPECTED_NAMES for p in expected_targets(v)]
         self.assertEqual(len(names), 30)
         self.assertEqual(len(set(names)), 30)
         for name in names:
             self.assertEqual(Path(name).name, name)
             self.assertTrue(name.endswith('-zh-CN.zip'))
 
-    def test_build_ids_runners_architectures_abis_and_llvm_do_not_change(self):
+    def test_build_targets_change_only_for_356_apple_silicon(self):
         self.assertEqual(native_plan.PLATFORMS, TARGETS)
         for version in EXPECTED_NAMES:
             tag = version + '-zh-CN.rc.1'
             self.assertEqual(native_plan.matrix(SOURCE, tag)['include'],
-                             [dict(version=version, tag=tag, sha=SOURCE, **p) for p in TARGETS])
+                             [dict(version=version, tag=tag, sha=SOURCE, **p) for p in expected_targets(version)])
 
     def test_windows_name_always_records_the_actual_python_abi(self):
         target = next(p for p in native_plan.PLATFORMS if p['platform'] == 'win64')
@@ -109,6 +118,20 @@ class NativeAssetNameTests(unittest.TestCase):
         for version in ('3.57.0', '3.55.0-zh-CN.rc.1', '../3.55.0', None):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 native_plan.asset_name(version, 'win64')
+
+    def test_356_and_historical_arm_targets_are_not_interchangeable(self):
+        for version, wrong_target in (
+                ('3.56.0', TARGETS[3]['platform']), ('3.55.0', TARGETS_356[3]['platform'])):
+            with self.subTest(version=version):
+                with self.assertRaisesRegex(ValueError, 'native platform'):
+                    native_plan.asset_name(version, wrong_target)
+                names = [f'{version} / {p["platform"]}' for p in expected_targets(version)]
+                jobs = [dict(name=name, status='completed', conclusion='success')
+                        for name in (*names, 'regression', 'plan', 'assemble')]
+                native_promote.validate_jobs(jobs, version)
+                jobs[3]['name'] = f'{version} / {wrong_target}'
+                with self.assertRaisesRegex(ValueError, 'missing'):
+                    native_promote.validate_jobs(jobs, version)
 
     def test_packager_release_and_promotion_share_the_only_naming_function(self):
         for module in (native_verify, native_release, native_promote):
@@ -139,7 +162,7 @@ class NativeAssetGateTests(unittest.TestCase):
         tag = version + '-zh-CN.rc.1'
         artifacts, output = root / 'artifacts', root / 'public'
         reports = []
-        for target, name in zip(TARGETS, EXPECTED_NAMES[version]):
+        for target, name in zip(expected_targets(version), EXPECTED_NAMES[version]):
             folder = artifacts / target['platform']; folder.mkdir(parents=True)
             package = folder / name
             with zipfile.ZipFile(package, 'w') as z:
@@ -150,6 +173,8 @@ class NativeAssetGateTests(unittest.TestCase):
                           sha256=digest(package), source_tracked_files_clean=True,
                           checks=sorted(native_plan.REQUIRED_CHECKS), requirements_install={'numpy': '1.26.4'},
                           functional_smoke=functional_summary())
+            if target == TARGETS_356[3]:
+                report['macos_minimum'] = dict(tested_host='15.7.1', maximum_macho_minimum='15.0')
             reports.append(report)
             (folder / 'verification.json').write_text(json.dumps(report), encoding='utf-8')
         return tag, artifacts, output, reports
@@ -176,6 +201,26 @@ class NativeAssetGateTests(unittest.TestCase):
                 native_release.validate_gui_review(extracted, version, review)
                 with self.assertRaises(ValueError):
                     native_release.validate_gui_review(extracted, version, dict(review, linux_gui_sha256=digest(extracted / names[2])))
+
+    def test_356_arm_report_rejects_wrong_native_platform_or_host(self):
+        with tempfile.TemporaryDirectory() as temp:
+            tag, artifacts, output, reports = self.fixture(Path(temp), '3.56.0')
+            native_release.prepare_assets(artifacts, output, SOURCE, tag, RUN, WORKFLOW)
+            evidence = dict(schema=1, source_sha=SOURCE, tag=tag, run_id=RUN, workflow_sha=WORKFLOW,
+                            manifest_sha256=digest(output / 'SHA256SUMS.txt'), reports=reports)
+            report_path = artifacts / TARGETS_356[3]['platform'] / 'verification.json'
+            for changes in (
+                    {'platform': TARGETS[3]['platform']},
+                    {'macos_minimum': {'tested_host': '14.8.9'}},
+                    {'macos_minimum': None}):
+                with self.subTest(changes=changes):
+                    bad = copy.deepcopy(evidence)
+                    bad['reports'][3].update(changes)
+                    report_path.write_text(json.dumps(bad['reports'][3]), encoding='utf-8')
+                    with self.assertRaises(ValueError):
+                        native_release.prepare_assets(artifacts, Path(temp) / 'rejected', SOURCE, tag, RUN, WORKFLOW)
+                    with self.assertRaises(ValueError):
+                        native_promote.validate_evidence(bad, output, SOURCE, tag, RUN, WORKFLOW)
 
     def test_old_windows_and_mac_report_names_are_rejected_without_fallback(self):
         with tempfile.TemporaryDirectory() as temp:

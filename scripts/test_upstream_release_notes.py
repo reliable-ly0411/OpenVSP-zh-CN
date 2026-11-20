@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import unittest
 
-from native_plan import PLATFORMS, asset_name
+from native_plan import asset_name, platforms_for
 from native_release import release_body
 from upstream_release_notes import NOTES, upstream_release_notes
 
@@ -30,7 +30,7 @@ class UpstreamReleaseNotesTests(unittest.TestCase):
                 self.assertIn('上游作者原文', body)
                 self.assertIn('社区模型', body)
                 self.assertIn(version + '-zh-CN.rc.2', body)
-                for platform in PLATFORMS:
+                for platform in platforms_for(version):
                     self.assertIn(asset_name(version, platform['platform']), body)
 
     def test_mutation_truncation_and_wrong_version_fail_closed(self):
@@ -117,7 +117,9 @@ class UpstreamReleaseNotesTests(unittest.TestCase):
             self.assertIn('尚未执行或确认该候选的五平台原生构建', local)
             self.assertIn('离线定向测试不证明原生包通过', local)
             self.assertIn('官方已于 2026-11-05 发布 3.56.0', local)
-            self.assertIn('官方此版本 ARM64 下载名使用 macOS 15', local)
+            self.assertIn('ARM64 使用 macOS 15 原生构建目标', local)
+            self.assertIn('OpenVSP-3.56.0-macos-15-ARM64-Python3.11-zh-CN.zip', local)
+            self.assertNotIn('OpenVSP-3.56.0-macos-14-ARM64-Python3.11-zh-CN.zip', local)
             self.assertNotIn('rc.2 新增', local)
             self.assertNotIn('rc.3 新增', local)
             self.assertNotIn('已人工抽查', local)

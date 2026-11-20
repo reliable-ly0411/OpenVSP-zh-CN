@@ -17,16 +17,19 @@ import zipfile
 
 from backfill_verify import digest
 from native_functional import validate_functional_summary
-from native_plan import PLATFORMS, REQUIRED_CHECKS, asset_name, validate_inputs
+from native_plan import MACOS_15_ARM64, REQUIRED_CHECKS, asset_name, platform_for, platforms_for, validate_inputs
 from upstream_release_notes import upstream_release_notes
 
 
 def validate_report(report, package, source_sha, tag, run_id, workflow_sha):
     version = validate_inputs(source_sha, tag)
     native_platform = report.get('platform')
-    target = next((p for p in PLATFORMS if p['platform'] == native_platform), None)
-    if target is None:
-        raise ValueError('Unknown native platform report')
+    target = platform_for(version, native_platform)
+    if native_platform == MACOS_15_ARM64:
+        minimum = report.get('macos_minimum') or {}
+        if not isinstance(minimum, dict) or not re.fullmatch(r'15(?:\.[0-9]+){1,2}',
+                                                            str(minimum.get('tested_host', ''))):
+            raise ValueError('macOS 15 ARM64 verification must record the actual macOS 15 smoke-test host')
     exact = dict(schema=2, tag=tag, source_sha=source_sha, version=version,
                  platform=native_platform, architecture=target['arch'], python=target['python'],
                  workflow_sha=workflow_sha, run_id=str(run_id), archive=asset_name(version, native_platform),
@@ -49,7 +52,7 @@ def validate_report(report, package, source_sha, tag, run_id, workflow_sha):
 def prepare_assets(artifacts, output, source_sha, tag, run_id, workflow_sha):
     version = validate_inputs(source_sha, tag)
     reports = list(artifacts.rglob('verification.json'))
-    if len(reports) != len(PLATFORMS):
+    if len(reports) != len(platforms_for(version)):
         raise ValueError('All five native verification reports are required')
     selected = {}
     for path in reports:
@@ -74,7 +77,7 @@ def prepare_assets(artifacts, output, source_sha, tag, run_id, workflow_sha):
 
 
 def verify_manifest(directory, version):
-    expected = {asset_name(version, p['platform']) for p in PLATFORMS}
+    expected = {asset_name(version, p['platform']) for p in platforms_for(version)}
     if {p.name for p in directory.iterdir()} != expected | {'SHA256SUMS.txt'}:
         raise ValueError('Public assets must be exactly five ZIPs and SHA256SUMS.txt')
     sums = {}
@@ -148,10 +151,15 @@ def release_body(tag, source_sha, repository, linux_gui_reviewed=False):
     release_kind = '预发布候选' if version == '3.56.0' and not linux_gui_reviewed else '预发布'
     family_note = ('3.51.2 源码保留早期独立导入历史；对应官方版本的 CHANGELOG 字节一致，'
                    '尚未接续该官方标签的 Git 祖先。\n\n' if version == '3.51.2' else '')
-    mac_difference = ('官方此版本 ARM64 下载名使用 macOS 15；本仓按实际 macOS 14 原生目标命名，'
-                      '不把二者视为相同二进制。' if version in ('3.54.0', '3.55.0', '3.56.0') else
-                      'macOS 下载名沿用对应官方版本的平台拼写。')
-    rows = '\n'.join(f'| {p["platform"]} | `{asset_name(version, p["platform"])}` |' for p in PLATFORMS)
+    if version == '3.56.0':
+        mac_difference = ('ARM64 使用 macOS 15 原生构建目标，与对应官方 ARM64 下载名一致；'
+                          '不把两者视为相同二进制，也不声称已在 macOS 14 验证。')
+    elif version in ('3.54.0', '3.55.0'):
+        mac_difference = ('官方此版本 ARM64 下载名使用 macOS 15；本仓按实际 macOS 14 原生目标命名，'
+                          '不把二者视为相同二进制。')
+    else:
+        mac_difference = 'macOS 下载名沿用对应官方版本的平台拼写。'
+    rows = '\n'.join(f'| {p["platform"]} | `{asset_name(version, p["platform"])}` |' for p in platforms_for(version))
     return (
         f'OpenVSP {version} 非官方简体中文{release_kind}，汉化修订 `{tag}`。'
         'OpenVSP 原软件版权、作者归属及 NOSA 1.3 许可不变。\n\n'
