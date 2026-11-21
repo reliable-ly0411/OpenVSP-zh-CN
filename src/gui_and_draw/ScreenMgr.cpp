@@ -83,6 +83,8 @@
 
 #include <FL/platform.H>
 
+#include <algorithm>
+
 #define UPDATE_TIME (1.0/30.0)
 
 //==== Constructor ====//
@@ -1126,6 +1128,30 @@ void ScreenMgr::Init()
     }
 }
 
+// Keep the editor's natural height. On short displays there may be no room
+// under the Geometry Browser, so show it near the main window's top instead.
+static void PlaceVehicleNotes( Fl_Window *notes, int screen, int main_x, int main_y,
+                               int main_w, int browser_h )
+{
+    int sx, sy, sw, sh;
+    Fl::screen_work_area( sx, sy, sw, sh, screen );
+    const int frame = 16;
+    const int title = 35;
+    const int left = sx + frame;
+    const int top = sy + title;
+    const int right = sx + sw - frame;
+    const int bottom = sy + sh - frame;
+    const int width = std::min( notes->w(), std::max( 1, right - left ) );
+    const int height = std::min( notes->h(), std::max( 1, bottom - top ) );
+    const int max_x = std::max( left, right - width );
+    const int max_y = std::max( top, bottom - height );
+    const int x = std::clamp( main_x + main_w + 5, left, max_x );
+    const int preferred_y = main_y + browser_h + title;
+    const int y = preferred_y <= max_y ? std::max( preferred_y, top )
+                                     : std::clamp( main_y + title, top, max_y );
+    notes->resize( x, y, width, height );
+}
+
 void ScreenMgr::FirstShow()
 {
     m_ScreenVec[vsp::VSP_MAIN_SCREEN]->Show();
@@ -1142,7 +1168,7 @@ void ScreenMgr::FirstShow()
     VSP_Window::SetGeomScreen( screen );
 
     // Set manage geom screen to show up to the main screen as the default.
-    int x,y,w,w1,h1,h2,h3;
+    int x,y,w,h1,h2,h3;
     x = m_ScreenVec[vsp::VSP_MAIN_SCREEN]->GetFlWindow()->x();
     y = m_ScreenVec[vsp::VSP_MAIN_SCREEN]->GetFlWindow()->y();
     w = m_ScreenVec[vsp::VSP_MAIN_SCREEN]->GetFlWindow()->w();
@@ -1155,8 +1181,7 @@ void ScreenMgr::FirstShow()
     m_ScreenVec[vsp::VSP_XSEC_SCREEN]->GetFlWindow()->position( x + w + 5, y + h1 - h2 );
 
     h3 = m_ScreenVec[vsp::VSP_MANAGE_GEOM_SCREEN]->GetFlWindow()->h();
-    w1 = m_ScreenVec[vsp::VSP_VEH_NOTES_SCREEN]->GetFlWindow()->w();
-    m_ScreenVec[vsp::VSP_VEH_NOTES_SCREEN]->GetFlWindow()->resize( x + w + 5, y + h3 + 35, w1, h1 - ( y + h3 + 5 ) );
+    PlaceVehicleNotes( m_ScreenVec[vsp::VSP_VEH_NOTES_SCREEN]->GetFlWindow(), screen, x, y, w, h3 );
 
     x = m_ScreenVec[vsp::VSP_MANAGE_GEOM_SCREEN]->GetFlWindow()->x();
     y = m_ScreenVec[vsp::VSP_MANAGE_GEOM_SCREEN]->GetFlWindow()->y();
