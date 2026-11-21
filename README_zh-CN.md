@@ -9,7 +9,29 @@
 - 官方上游：<https://github.com/OpenVSP/OpenVSP>
 - 官方网站：<https://openvsp.org/>
 
-## 先选版本
+## 当前发布索引（2026-11-21 核对）
+
+当前源码基线与可下载发布包是不同身份：`main` 为 OpenVSP 3.56.0 开发快照，
+不是 3.56.0 已发布汉化包。下列入口根据仓库公开 Release 元数据核对；
+本次文档核对没有重新下载附件或重新执行原生/GUI 测试，具体通过范围以各版发布说明为准。
+
+| 软件版本族 | 最新公开汉化预发布 |
+|---|---|
+| 3.55.0 | [3.55.0-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.3) |
+| 3.54.0 | [3.54.0-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.3) |
+| 3.53.0 | [3.53.0-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.3) |
+| 3.51.3 | [3.51.3-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.3) |
+| 3.51.2 | [3.51.2-zh-CN.rc.3](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.3) |
+
+这些 rc.3 均保持预发布身份，各含五个平台 ZIP 和同页校验清单；不应将预发布称为稳定版。
+历史稳定 Latest 仍为 `3.53.0-Codex-AI-zh-CN`。每个下载目录只使用同一标签的 ZIP 与
+`SHA256SUMS.txt`，不要跨修订混用同名附件。
+
+下文 rc.2 下载示例和验收报告保留为历史记录，不代表最新修订；rc.3 的对应源码、
+新增名称显示修复和验证边界请查看上述精确发布链接。旧标签下的 README 属于该版本
+不可变源码快照，本次不移动标签、不替换包内文档或既有附件。
+
+## 先选版本（rc.2 历史记录）
 
 以下发布状态核对于 **2026-10-20**；`main`、开发分支和公开 Release 分别追踪，不能把
 分支上的文档或测试结果当成某个已下载包的验收结果。
@@ -27,7 +49,7 @@
 | 需要新修复并接受预发布性质 | [3.55.0-zh-CN.rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.55.0-zh-CN.rc.2) | 五个平台均完成原生包检查；Linux AMD64 主界面、机翼页和名称/路径有有限 GUI 抽查。仍为预发布，其他平台 GUI 未作同范围验收。 |
 | 需要旧软件版本的新本地化修复 | [3.54.0 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.54.0-zh-CN.rc.2)、[3.53.0 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.53.0-zh-CN.rc.2)、[3.51.3 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.3-zh-CN.rc.2)、[3.51.2 rc.2](https://github.com/reliable-ly0411/OpenVSP-zh-CN/releases/tag/3.51.2-zh-CN.rc.2) | 各族分别构建、核验和发布；不要在不同标签之间混用 ZIP 与校验清单。 |
 
-选择当前公开预发布请查看上面的 rc.2 验收报告与本族 Release，并先用模型副本验证自己的工作流。
+选择当前公开预发布请使用上面的 rc.3 索引，并查阅对应 Release 的验收范围。下方 rc.2 验收报告仅供历史参考。建议先用模型副本验证自己的工作流。
 需要稳定发布策略的用户可保留 Latest，但应先阅读其已知限制。
 [五版本族验收报告](docs/five-family-rc2-acceptance-20261020.md)列出精确源码、25 个原生包、
 清单哈希和 GUI 边界；[逐页汉化状态](docs/localization-status.md)列出尚未目视验收的页面。
