@@ -286,7 +286,7 @@ bool ManageBackground3DScreen::Update()
         // Add probes to browser.
         for( int i = 0; i < ( int )bg3Ds.size(); i++ )
         {
-            string dir = bg3Ds[i]->GetDirectionName();
+            string dir = VSPTranslate( bg3Ds[i]->GetDirectionName() );
             string vis;
             if ( bg3Ds[i]->m_Visible() )
             {
@@ -312,7 +312,14 @@ bool ManageBackground3DScreen::Update()
     {
         m_FileOutput.Activate();
         m_FileSelect.Activate();
-        m_ImagePreviewButton.Activate();
+        if ( bg3D->m_ImageReady && bg3D->m_ImageW() > 0 && bg3D->m_ImageH() > 0 )
+        {
+            m_ImagePreviewButton.Activate();
+        }
+        else
+        {
+            m_ImagePreviewButton.Deactivate();
+        }
 
         m_Background3DNameInput.Update( bg3D->GetName() );
         m_FileOutput.Update( StringUtil::truncateFileName( bg3D->m_BGFile, 35 ).c_str() );
@@ -573,7 +580,11 @@ void ManageBackground3DScreen::GuiDeviceCallBack( GuiDevice* device )
     }
     else if ( device == &m_ImagePreviewButton )
     {
-        m_ScreenMgr->ShowScreen( vsp::VSP_BACKGROUND3D_PREVIEW_SCREEN );
+        Background3D * bg3D = Background3DMgr.GetCurrentBackground3D();
+        if ( bg3D && bg3D->m_ImageReady && bg3D->m_ImageW() > 0 && bg3D->m_ImageH() > 0 )
+        {
+            m_ScreenMgr->ShowScreen( vsp::VSP_BACKGROUND3D_PREVIEW_SCREEN );
+        }
     }
 
     m_ScreenMgr->SetUpdateFlag( true );

@@ -79,6 +79,37 @@ int main()
          "@b@.常规集合:@b@.退化几何集合" ) return 5;
     if ( VSPTranslate( "@b@.DEGEN SET" ) != "@b@.DEGEN SET" ) return 6;
     if ( VSPTranslateBrowserHeader( "User:DEGEN SET" ) != "User:DEGEN SET" ) return 7;
+
+    const std::vector<std::pair<std::string, std::string>> attribute_types = {
+        { "Boolean", "布尔值" },
+        { "Integer", "整数" },
+        { "Double", "双精度浮点数" },
+        { "String", "字符串" },
+        { "Parm", "参数引用" },
+        { "Vec3d", "三维向量（Vec3D）" },
+        { "Int Matrix", "整数矩阵" },
+        { "Double Matrix", "双精度浮点矩阵" },
+        { "Attribute Group", "属性组" },
+        { "Invalid", "无效类型" },
+        { "UnsetCustomType", "UnsetCustomType" }
+    };
+    for ( const auto &entry : attribute_types )
+    {
+        if ( VSPTranslateAttributeType( entry.first ) != entry.second )
+        {
+            std::cerr << "Attribute datatype display regression: " << entry.first << '\n';
+            return 8;
+        }
+    }
+    for ( const std::string &value : { "Boolean", "Double", "Vec3d", "Int Matrix" } )
+    {
+        if ( VSPTranslate( value ) != value ||
+             VSPTranslateLabelAndValue( "Name", value ) != "名称" + value )
+        {
+            std::cerr << "Outside datatype context a user name changed: " << value << '\n';
+            return 9;
+        }
+    }
     std::cout << "Engineering terminology passed: " << labels.size() << " labels, "
               << identifiers.size() << " identifiers, " << values.size()
               << " opaque values, 4 menu/header boundaries.\n";

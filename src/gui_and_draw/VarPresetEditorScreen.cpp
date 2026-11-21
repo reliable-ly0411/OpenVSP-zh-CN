@@ -447,7 +447,7 @@ void VarPresetEditorScreen::CheckSaveStatus()
         {
             if ( !sg->CheckSetting( sid ) )
             {
-                m_UpdateSettingButton.GetFlButton()->label( "*UPDATE*" );
+                m_UpdateSettingButton.GetFlButton()->copy_label( VSPTranslate( "*UPDATE*" ).c_str() );
                 m_UpdateSettingButton.Activate();
             }
 

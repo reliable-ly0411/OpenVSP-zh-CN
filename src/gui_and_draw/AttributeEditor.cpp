@@ -16,6 +16,20 @@
 
 #define MIN_ATTR_EDITOR_PX_HEIGHT 60
 
+namespace
+{
+string AttributeTreeDisplayValue( NameValData * data )
+{
+    if ( data->GetType() == vsp::ATTR_COLLECTION_DATA )
+    {
+        const AttributeCollection * collection = data->GetAttributeCollectionPtr();
+        const int count = collection ? collection->GetNumAttrs() : 0;
+        return VSPTranslateLabelAndValue( "Attributes: ", std::to_string( count ) );
+    }
+    return data->GetAsString( true );
+}
+}
+
 //==== Attribute Tree GUI ====//
 AttributeTree::AttributeTree()
 {
@@ -99,7 +113,7 @@ void AttributeTree::UpdateLabels()
             NameValData* nvd = AttributeMgr.GetAttributePtr( attr_id );
             if ( nvd )
             {
-                string attr_label = nvd->GetName() + '\t' + nvd->GetAsString( true ) + '\t' + nvd->GetTypeName( nvd->GetType(), true , true );
+                string attr_label = nvd->GetName() + '\t' + AttributeTreeDisplayValue( nvd ) + '\t' + nvd->GetTypeName( nvd->GetType(), true , true );
                 tree_item->label( attr_label.c_str() );
             }
         }
@@ -177,7 +191,7 @@ void AttributeTree::RebuildTree()
 
                     if ( nvd )
                     {
-                        row_str += '\t' + nvd->GetAsString( true ) + '\t' + nvd->GetTypeName( nvd->GetType(), true , true );
+                        row_str += '\t' + AttributeTreeDisplayValue( nvd ) + '\t' + nvd->GetTypeName( nvd->GetType(), true , true );
                     }
                     else
                     {

@@ -16,6 +16,7 @@ from urllib.parse import quote
 import zipfile
 
 from backfill_verify import digest
+from check_localization_release import check_archive_models
 from native_functional import validate_functional_summary
 from native_plan import MACOS_15_ARM64, REQUIRED_CHECKS, asset_name, platform_for, platforms_for, validate_inputs
 from upstream_release_notes import upstream_release_notes
@@ -46,6 +47,8 @@ def validate_report(report, package, source_sha, tag, run_id, workflow_sha):
     with zipfile.ZipFile(package) as archive:
         if archive.testzip():
             raise ValueError('Package ZIP integrity failed')
+        if version == '3.56.0':
+            check_archive_models(archive)
     return native_platform
 
 
@@ -91,6 +94,9 @@ def verify_manifest(directory, version):
     for name, checksum in sums.items():
         if digest(directory / name) != checksum:
             raise ValueError('Package checksum mismatch: ' + name)
+        if version == '3.56.0':
+            with zipfile.ZipFile(directory / name) as archive:
+                check_archive_models(archive)
     return sums
 
 
@@ -136,6 +142,7 @@ def release_body(tag, source_sha, repository, linux_gui_reviewed=False):
             '以官方 OpenVSP_3.56.0 标签的精确源码为上游基线，保留汉化与平台兼容改动。',
             '沿用显示时翻译与用户模型名称保护；本次汉化范围和已执行检查见对应源码说明。',
             '独立原生候选版本清单支持 3.56.0；历史补构清单与原包验收门禁保持不变。',
+            '保留全部上游示例与五个有 CC0 来源记录的整机案例；三份许可版本未核实的社区模型不再随源码和安装包分发。',
         ]
     gui = ('五个平台均经原生构建和包内 CLI、模型读写、分析、Python 导入、依赖与校验检查。'
            'Linux AMD64 原始 ZIP 的主界面、机翼页及模型名称/路径回归已人工抽查；'

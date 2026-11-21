@@ -466,7 +466,7 @@ WingScreen::WingScreen( ScreenMgr* mgr ) : BlendScreen( mgr, 460, 800, "Wing", "
     m_ModifyLayout.AddSlider( m_FlapTEDeflectionSlider, "Deflection", 10.0, "%6.5f" );
 
 
-    m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_CONTROL ), vsp::SS_CONTROL );
+    m_SubSurfChoice.AddItem( "Control Surface", vsp::SS_CONTROL );
     m_SubSurfChoice.UpdateItems();
 }
 

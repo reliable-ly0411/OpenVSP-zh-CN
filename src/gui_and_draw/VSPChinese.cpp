@@ -16,6 +16,28 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
     static const std::unordered_map<std::string, std::string> table = {
 
+        // Parasite Drag column tooltips: retain the symbols used in table headings.
+        { "Geometry Name", "几何体名称" },
+        { "Wetted Area of Geometry", "几何体的湿表面积（S_wet）" },
+        { "Option to blend individual component with ancestor", "将此部件并入上级部件计算" },
+        { "Form Factor Equation Choice \n One per Geometry", "选择形状因子公式\n每个几何体选用一个公式" },
+        { "Manual or Calculated Form Factor", "形状因子（FF），可手动输入或由公式计算" },
+        { "Reference Length of Geometry", "几何体的参考长度（L_ref）" },
+        { "Thickness over Chord \n \t or \n Fineness Ratio", "翼型厚弦比（t/c）或机身长细比（l/d）" },
+        { "Unitless Reynolds Number", "雷诺数（Re，无量纲）" },
+        { "Percentage of Flow that is Laminar \n Values should be input from 0 - 100", "层流所占百分比\n请输入 0～100" },
+        { "Friction Coefficient Calculated from Selected Equations", "按所选公式计算的表面摩擦系数（C_f）" },
+        { "Interference Factor", "干扰因子（Q）" },
+        { "Flat Plate Friction Drag", "等效平板阻力面积（f）" },
+        { "Coefficient of Parasite Drag Per Component", "本部件的寄生阻力系数（C_D）" },
+        { "Percentage Total Contributed to Final Cd0", "本部件占总寄生阻力系数（Cd0）的百分比" },
+        { "Roughness Height", "表面粗糙度高度" },
+
+        // Fixed dropdowns and explanatory labels for structure and attribute types.
+        { "Cross Section Curve Sub-Surface", "截面曲线子曲面" },
+        { "Multiple Data Types", "多种数据类型" },
+        { "Attribute type abbreviations: Bool, Int, Dbl, Str, Parm, Vec3d, Imat, Dmat, Grp", "属性类型缩写：Bool 布尔值、Int 整数、Dbl 双精度浮点数\nStr 字符串、Parm 参数引用、Vec3d 三维向量\nImat 整数矩阵、Dmat 双精度浮点矩阵、Grp 属性组" },
+
         // OpenVSP 3.56.0 display labels. Collective applies to flap, lag and
         // feather together; it is not exclusively collective pitch. Keep rotor
         // notation intact and match composed labels without widening fallback.
@@ -1152,6 +1174,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Excrescence", "附加阻力项" }, { "Documentation", "文档" }, { "Info", "信息" },
         { "Links", "链接" }, { "Adv Links", "高级链接" }, { "Blade", "桨叶" },
         { "More", "更多" }, { "Project", "工程" }, { "Attributes", "属性" },
+        { "Attributes: ", "属性数： " },
         { "Mass", "质量" }, { "Sub", "子项" }, { "Skinning", "蒙皮" },
         { "Blending", "过渡" }, { "Assembly", "装配" }, { "Structures", "结构" },
         { "Connections", "连接" }, { "Part", "部件" }, { "Material", "材料" },
@@ -2063,6 +2086,24 @@ std::string VSPTranslate( const std::string &text )
 std::string VSPTranslate( const char *text )
 {
     return text ? VSPTranslate( std::string( text ) ) : std::string();
+}
+
+std::string VSPTranslateAttributeType( const std::string &type )
+{
+    static const std::unordered_map<std::string, std::string> names = {
+        { "Boolean", "布尔值" },
+        { "Integer", "整数" },
+        { "Double", "双精度浮点数" },
+        { "String", "字符串" },
+        { "Parm", "参数引用" },
+        { "Vec3d", "三维向量（Vec3D）" },
+        { "Int Matrix", "整数矩阵" },
+        { "Double Matrix", "双精度浮点矩阵" },
+        { "Attribute Group", "属性组" },
+        { "Invalid", "无效类型" },
+    };
+    const auto name = names.find( type );
+    return name != names.end() ? name->second : type;
 }
 
 std::string VSPTranslateMessage( const std::string &text )

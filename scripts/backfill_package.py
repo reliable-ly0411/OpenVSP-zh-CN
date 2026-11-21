@@ -5,6 +5,8 @@ import subprocess
 import sys
 import zipfile
 
+from check_localization_release import check_archive_models
+
 
 def verify(archive_path, source, runtime_resources=False):
     tracked = subprocess.check_output(['git', '-C', str(source), 'ls-files', '-z']).decode().split('\0')
@@ -55,6 +57,10 @@ def verify(archive_path, source, runtime_resources=False):
             data = subprocess.check_output(command)
             if archive.read(prefix + destination) != data:
                 raise ValueError(f'Package differs from immutable source: {destination}')
+        # Apply the new 3.56 release policy only to revised source trees.
+        # Older immutable checkouts did not contain this policy marker.
+        if 'scripts/test_airshow_356_models.py' in tracked:
+            check_archive_models(archive)
         if archive.testzip():
             raise ValueError('Invalid ZIP CRC')
     return len(expected)

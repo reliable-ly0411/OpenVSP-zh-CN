@@ -13,6 +13,7 @@
 #endif
 
 #include "VSPAEROPlotScreen.h"
+#include "VSPChinese.h"
 #include <cfloat>
 
 #include "VspUtil.h"
@@ -2440,7 +2441,7 @@ void VSPAEROPlotScreen::RedrawSweepPlot()
         }
         else
         {
-            m_SweepPlotCanvas->current_x()->copy_label( "[multiple]" );
+            m_SweepPlotCanvas->current_x()->copy_label( VSPTranslate( "[multiple]" ).c_str() );
         }
         if( yDataSetNames.size() == 1 )
         {
@@ -2448,7 +2449,7 @@ void VSPAEROPlotScreen::RedrawSweepPlot()
         }
         else
         {
-            m_SweepPlotCanvas->current_y()->copy_label( "[multiple]" );
+            m_SweepPlotCanvas->current_y()->copy_label( VSPTranslate( "[multiple]" ).c_str() );
         }
 
     }
@@ -2796,7 +2797,7 @@ void VSPAEROPlotScreen::PlotConvergence( const string &resultID, vector <string>
         }
         else
         {
-            labelStr = "[multiple]";
+            labelStr = VSPTranslate( "[multiple]" );
         }
         if ( m_ConvergenceYDataResidualToggle.GetFlButton()->value() == 1 )
         {
@@ -2976,7 +2977,7 @@ void VSPAEROPlotScreen::PlotLoadDistribution( const string &resultID, vector <st
         }
         else
         {
-            x_label = "[multiple]";
+            x_label = VSPTranslate( "[multiple]" );
         }
         m_LoadDistPlotCanvas->current_y()->copy_label( x_label.c_str() );
         m_LoadDistPlotCanvas->current_x()->copy_label( y_label.c_str() );
@@ -3106,7 +3107,7 @@ void VSPAEROPlotScreen::PlotUnsteady( const string &resultID, vector <string> yD
         }
         else
         {
-            labelStr = "[multiple]";
+            labelStr = VSPTranslate( "[multiple]" );
         }
 
         m_UnsteadyPlotCanvas->current_y()->copy_label( labelStr.c_str() );

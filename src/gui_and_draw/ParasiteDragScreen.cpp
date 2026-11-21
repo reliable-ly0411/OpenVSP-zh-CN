@@ -1496,49 +1496,49 @@ void ParasiteDragScreen::RebuildBuildUpTableLabels()
     m_ComponentLabelLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH * 2 + 20 );
     m_ComponentLabelLayout.AddButton( m_CompLabel, "Component" );
     m_CompLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_CompLabel.GetFlButton()->copy_tooltip( "Geometry Name" );
+    m_CompLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Geometry Name" ).c_str() );
 
     //  Changing Units - therefore isButton
     m_MainTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH + 20 );
     m_MainTableLabelsLayout.AddButton( m_SwetUnitLabel, "S_wet (ft2)" );
     m_SwetUnitLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_SwetUnitLabel.GetFlButton()->copy_tooltip( "Wetted Area of Geometry" );
+    m_SwetUnitLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Wetted Area of Geometry" ).c_str() );
 
     m_MainTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH );
     m_MainTableLabelsLayout.AddButton( m_GroupedGeomLabel, "Group" );
     m_GroupedGeomLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_GroupedGeomLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_GroupedGeomLabel.GetFlButton()->copy_tooltip( "Option to blend individual component with ancestor" );
+    m_GroupedGeomLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Option to blend individual component with ancestor" ).c_str() );
 
     m_MainTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH + 30 );
     m_MainTableLabelsLayout.AddButton( m_FFEqnChoiceLabel, "FF Equation" );
     m_FFEqnChoiceLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_FFEqnChoiceLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_FFEqnChoiceLabel.GetFlButton()->copy_tooltip( "Form Factor Equation Choice \n One per Geometry" );
+    m_FFEqnChoiceLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Form Factor Equation Choice \n One per Geometry" ).c_str() );
 
     m_MainTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH - 20 );
     m_MainTableLabelsLayout.AddButton( m_FFLabel, "FF" );
     m_FFLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_FFLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_FFLabel.GetFlButton()->copy_tooltip( "Manual or Calculated Form Factor" );
+    m_FFLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Manual or Calculated Form Factor" ).c_str() );
 
     m_MainTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH + 5 );
     m_MainTableLabelsLayout.AddButton( m_LrefUnitLabel, "L_ref (ft)" );
     m_LrefUnitLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_LrefUnitLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_LrefUnitLabel.GetFlButton()->copy_tooltip( "Reference Length of Geometry" );
+    m_LrefUnitLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Reference Length of Geometry" ).c_str() );
 
     m_MainTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH - 10 );
     m_MainTableLabelsLayout.AddButton( m_FineRatorToCLabel, "t/c or l/d" );
     m_FineRatorToCLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_FineRatorToCLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_FineRatorToCLabel.GetFlButton()->copy_tooltip( "Thickness over Chord \n \t or \n Fineness Ratio" );
+    m_FineRatorToCLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Thickness over Chord \n \t or \n Fineness Ratio" ).c_str() );
 
     m_MainTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH );
     m_MainTableLabelsLayout.AddButton( m_ReLabel, "Re (1e6)" );
     m_ReLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_ReLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_ReLabel.GetFlButton()->copy_tooltip( "Unitless Reynolds Number" );
+    m_ReLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Unitless Reynolds Number" ).c_str() );
 
     if ( ParasiteDragMgr.m_TurbCfEqnType() >= vsp::CF_TURB_ROUGHNESS_SCHLICHTING_AVG &&
               ParasiteDragMgr.m_TurbCfEqnType() <= vsp::CF_TURB_ROUGHNESS_SCHLICHTING_AVG_FLOW_CORRECTION )
@@ -1550,34 +1550,34 @@ void ParasiteDragScreen::RebuildBuildUpTableLabels()
     m_MainTableLabelsLayout.AddButton( m_PercLamLabel, "% Lam" );
     m_PercLamLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_PercLamLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_PercLamLabel.GetFlButton()->copy_tooltip( "Percentage of Flow that is Laminar \n Values should be input from 0 - 100" );
+    m_PercLamLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Percentage of Flow that is Laminar \n Values should be input from 0 - 100" ).c_str() );
 
     m_MainTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH );
     m_MainTableLabelsLayout.AddButton( m_CfLabel, "C_f (1e-3)" );
     m_CfLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_CfLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_CfLabel.GetFlButton()->copy_tooltip( "Friction Coefficient Calculated from Selected Equations" );
+    m_CfLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Friction Coefficient Calculated from Selected Equations" ).c_str() );
 
     m_MainTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH - 20 );
     m_MainTableLabelsLayout.AddButton( m_QLabel, "Q" );
     m_QLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_QLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_QLabel.GetFlButton()->copy_tooltip( "Interference Factor" );
+    m_QLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Interference Factor" ).c_str() );
 
     m_ConstantTableLabelsLayout.SetButtonWidth( TYPICAL_INPUT_WIDTH - 10 );
     m_ConstantTableLabelsLayout.AddButton( m_fLabel, "f" );
     m_fLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_fLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_fLabel.GetFlButton()->copy_tooltip( "Flat Plate Friction Drag" );
+    m_fLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Flat Plate Friction Drag" ).c_str() );
 
     m_ConstantTableLabelsLayout.AddButton( m_CdLabel, "C_D" );
     m_CdLabel.GetFlButton()->box( FL_THIN_UP_BOX );
     m_CdLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_CdLabel.GetFlButton()->copy_tooltip( "Coefficient of Parasite Drag Per Component" );
+    m_CdLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Coefficient of Parasite Drag Per Component" ).c_str() );
 
     m_ConstantTableLabelsLayout.AddButton( m_PercTotalLabel, "% Total" );
     m_PercTotalLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_PercTotalLabel.GetFlButton()->copy_tooltip( "Percentage Total Contributed to Final Cd0" );
+    m_PercTotalLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Percentage Total Contributed to Final Cd0" ).c_str() );
 
     InitSortToggleGroup();
 }
@@ -2530,7 +2530,7 @@ void ParasiteDragScreen::AddRoughnessLabel()
         m_MainTableLabelsLayout.AddButton( m_RoughnessLabel, "Rough. Ht." );
     }
     m_RoughnessLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_RoughnessLabel.GetFlButton()->copy_tooltip( "Roughness Height" );
+    m_RoughnessLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Roughness Height" ).c_str() );
 }
 
 void ParasiteDragScreen::UpdateReynoldsLabel()

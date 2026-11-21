@@ -1038,8 +1038,8 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_ELLIPSE ), vsp::SS_ELLIPSE );
 // Only add control surface in WingScreen.
 //    m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_CONTROL ), vsp::SS_CONTROL );
-    m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_FINITE_LINE ), vsp::SS_FINITE_LINE );
-    m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_XSEC_CURVE ), vsp::SS_XSEC_CURVE );
+    m_SubSurfChoice.AddItem( "Finite Line Sub-Surface", vsp::SS_FINITE_LINE );
+    m_SubSurfChoice.AddItem( "Cross Section Curve Sub-Surface", vsp::SS_XSEC_CURVE );
     m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_INTERSECT ), vsp::SS_INTERSECT );
 
     m_SubSurfLayout.SetChoiceButtonWidth( 60 );
@@ -7619,7 +7619,7 @@ void Background3DPreviewScreen::SetZoom()
 {
     Background3D *bg3d = Background3DMgr.GetCurrentBackground3D();
 
-    if ( bg3d )
+    if ( bg3d && bg3d->m_ImageReady && bg3d->m_ImageW() > 0 && bg3d->m_ImageH() > 0 && m_GlWin )
     {
         double whi = ( 1.0 * bg3d->m_ImageW() ) / ( 1.0 * bg3d->m_ImageH() );
 
@@ -7627,6 +7627,11 @@ void Background3DPreviewScreen::SetZoom()
 
         px_w = m_GlWin->pixel_w() - 10;
         px_h = m_GlWin->pixel_h() - 10;
+
+        if ( px_w <= 0.0 || px_h <= 0.0 )
+        {
+            return;
+        }
 
         double whs = px_w / px_h;
 

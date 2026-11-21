@@ -167,6 +167,11 @@ class NativeAssetGateTests(unittest.TestCase):
             package = folder / name
             with zipfile.ZipFile(package, 'w') as z:
                 z.writestr('OpenVSP/fixture.txt', 'Inert fixture for ' + target['platform'])
+                if version == '3.56.0':
+                    from check_localization_release import AIRSHOW_356_MODELS
+                    model_root = Path(__file__).resolve().parents[1] / 'examples' / 'Complete_Aircraft'
+                    for model in AIRSHOW_356_MODELS:
+                        z.write(model_root / model, 'OpenVSP/Official_Examples/Complete_Aircraft/' + model)
             report = dict(schema=2, tag=tag, source_sha=SOURCE, version=version,
                           platform=target['platform'], architecture=target['arch'], python=target['python'],
                           workflow_sha=WORKFLOW, run_id=RUN, archive=name, bytes=package.stat().st_size,

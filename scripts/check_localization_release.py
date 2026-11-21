@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import xml.etree.ElementTree as ET
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,42 @@ RELEASE_NOTES_FILE = ROOT / "README_zh-CN.md"
 TAG_RE = re.compile(
     r"^(?P<version>\d+\.\d+\.\d+)(?:-Codex-AI-zh-CN(?:-r[1-9]\d*|-auto\.(?P<upstream>[0-9a-f]{12}))?|-zh-CN\.rc\.[1-9]\d*|-zh-CN\.(?:dev|candidate)\.[0-9a-f]{12})$"
 )
+
+
+# Keep official upstream examples outside this supplemental directory unchanged.
+AIRSHOW_356_MODELS = {
+    'Community_Vans_RV-12.vsp3': '289590c6090a2e9b25578c4330b0aeaa1c5fd2a4e11de824caa1786b32f68e80',
+    'NASA_N2A_Hybrid_Wing_Body.vsp3': '542d720d0131f0c46e8438c566ef878da5b4ce1091ea65bf3a6ac702e34ec2c3',
+    'NASA_Six-Passenger_Tiltwing_UAM.vsp3': 'b50187604f1d170445a6abe8e97f8edb61b82514bccab23ce22ab88dd4719aa6',
+    'NASA_X-57_Maxwell_Simplified_CRM_v4.4.1.vsp3': '4ff64f38baf3648806d99855b2f26519ad643f5fc6272617950921f78e8fe3b6',
+    'Uber_eCRM-002_Lift-Plus-Cruise.vsp3': 'a5221c9ce64b3fdaaf4df6e9b7df96371be205ff2e640050b0a8fb95a16c421d',
+}
+
+
+def check_model_bytes(files):
+    if set(files) != set(AIRSHOW_356_MODELS):
+        raise ValueError("OpenVSP 3.56 must include only the five reviewed Airshow model files")
+    for name, data in files.items():
+        if hashlib.sha256(data).hexdigest() != AIRSHOW_356_MODELS[name]:
+            raise ValueError("Airshow model bytes differ from reviewed source: " + name)
+
+
+def check_source_models(path):
+    check_model_bytes({model.name: model.read_bytes() for model in path.iterdir()
+                       if model.suffix.lower() == ".vsp3"})
+
+
+def check_archive_models(archive):
+    files = {}
+    for entry in archive.infolist():
+        parts = PurePosixPath(entry.filename).parts
+        if (len(parts) < 4 or parts[1:3] != ("Official_Examples", "Complete_Aircraft")
+                or not parts[-1].lower().endswith(".vsp3")):
+            continue
+        if len(parts) != 4 or parts[-1] in files:
+            raise ValueError("Additional or duplicate Airshow model entry: " + entry.filename)
+        files[parts[-1]] = archive.read(entry)
+    check_model_bytes(files)
 
 
 def read_version() -> str:
@@ -121,6 +158,12 @@ def main() -> None:
     about = (ROOT / "src/gui_and_draw/MainVSPScreen.cpp").read_text(encoding="utf-8")
     if "【显著声明】" in about:
         raise SystemExit("本地化守卫失败：关于窗口仍包含旧的【显著声明】")
+
+    if version == "3.56.0":
+        try:
+            check_source_models(ROOT / "examples" / "Complete_Aircraft")
+        except (OSError, ValueError) as error:
+            raise SystemExit(f"整机案例许可校验失败：{error}") from error
 
     bundled_model_count, bundled_geometry_count = verify_bundled_model_data()
 

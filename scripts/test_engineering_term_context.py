@@ -95,5 +95,77 @@ class EngineeringTermContextTests(unittest.TestCase):
         self.assertIn("FF_W_COVERT", enums)
 
 
+
+    def test_parasite_drag_abbreviation_tooltips_use_display_translation(self):
+        import json
+
+        source = (GUI / "ParasiteDragScreen.cpp").read_text(encoding="utf-8")
+        cases = json.loads((ROOT / "scripts/localization_tests/catalog_cases.json").read_text(encoding="utf-8"))
+        translated = re.findall(r'copy_tooltip\(\s*VSPTranslate\(\s*("(?:\\.|[^"\\])*")\s*\)\.c_str\(\)\s*\)', source)
+        keys = [json.loads(text) for text in translated]
+        self.assertEqual(source.count("copy_tooltip("), 15)
+        self.assertEqual(len(keys), 15)
+        self.assertEqual(len(set(keys)), 15)
+        self.assertTrue(set(keys) <= cases.keys(), set(keys) - cases.keys())
+        for key in keys:
+            self.assertRegex(cases[key], r"[\u3400-\u9fff]")
+        # Visible engineering symbols must stay recognizable if expanded in a tooltip.
+        for key, symbol in (
+            ("Wetted Area of Geometry", "S_wet"), ("Unitless Reynolds Number", "Re"),
+            ("Manual or Calculated Form Factor", "FF"), ("Interference Factor", "Q"),
+            ("Friction Coefficient Calculated from Selected Equations", "C_f"),
+            ("Coefficient of Parasite Drag Per Component", "C_D"),
+            ("Percentage Total Contributed to Final Cd0", "Cd0"),
+        ):
+            self.assertIn(symbol, cases[key])
+
+
+    def test_structural_dropdown_displays_do_not_change_enum_identity(self):
+        source = (GUI / "StructScreen.cpp").read_text(encoding="utf-8")
+        structural_labels = {
+            "PolySpar": "FEA_POLY_SPAR", "Fixed Point": "FEA_FIX_POINT",
+            "RibArray": "FEA_RIB_ARRAY", "SliceArray": "FEA_SLICE_ARRAY",
+        }
+        for label, enum in structural_labels.items():
+            self.assertIn(f'm_FeaPartChoice.AddItem( "{label}", vsp::{enum} );', source)
+        sub_labels = {
+            "Control Surface": "SS_CONTROL", "Line Array Sub-Surface": "SS_LINE_ARRAY",
+            "Finite Line Sub-Surface": "SS_FINITE_LINE", "Cross Section Curve Sub-Surface": "SS_XSEC_CURVE",
+        }
+        for label, enum in sub_labels.items():
+            self.assertIn(f'm_FeaPartChoice.AddItem( "{label}", vsp::{enum} + m_FeaPartChoiceSubSurfOffset', source)
+        for name in ("WingScreen.cpp", "PropScreen.cpp"):
+            source = (GUI / name).read_text(encoding="utf-8")
+            self.assertIn('m_SubSurfChoice.AddItem( "Control Surface", vsp::SS_CONTROL );', source)
+        source = (GUI / "ScreenBase.cpp").read_text(encoding="utf-8")
+        for enum in ("SS_FINITE_LINE", "SS_XSEC_CURVE"):
+            label = next(label for label, identifier in sub_labels.items() if identifier == enum)
+            self.assertIn(f'm_SubSurfChoice.AddItem( "{label}", vsp::{enum} );', source)
+
+    def test_dynamic_attribute_type_choices_use_translated_labels_with_unchanged_ids(self):
+        source = (GUI / "AttributeScreen.cpp").read_text(encoding="utf-8")
+        expected = set(("BOOL_DATA", "INT_DATA", "DOUBLE_DATA", "STRING_DATA", "PARM_REFERENCE_DATA",
+                        "VEC3D_DATA", "INT_MATRIX_DATA", "DOUBLE_MATRIX_DATA"))
+        for name, names in (("m_AttrTypeChoice", expected), ("m_AttrTypeSearchChoice", expected | {"ATTR_COLLECTION_DATA"})):
+            call = re.escape(name) + r'\.AddItemRaw\(\s*VSPTranslateAttributeType\(\s*NameValData::GetTypeName\(\s*vsp::([A-Z0-9_]+)\s*,\s*capitalize\s*\)\s*\)\s*,\s*vsp::([A-Z0-9_]+)'
+            pairs = re.findall(call, source)
+            self.assertEqual(len(pairs), len(names))
+            self.assertEqual(set(pairs), {(enum, enum) for enum in names})
+        self.assertIn('data_name += " : " + to_string(row_col_size.first) + " x " + to_string(row_col_size.second);', source)
+        self.assertIn('m_DataLabel->copy_tooltip( VSPTranslate( "Attribute type abbreviations:', source)
+
+    def test_conditional_plot_and_preset_labels_translate_at_display_boundary(self):
+        source = (GUI / "VSPAEROPlotScreen.cpp").read_text(encoding="utf-8")
+        self.assertIn('#include "VSPChinese.h"', source)
+        self.assertEqual(source.count('VSPTranslate( "[multiple]" )'), 5)
+        self.assertEqual(source.count('"[multiple]"'), 5)
+        # Data-owner paths continue to display exact upstream field names.
+        self.assertIn('copy_label( xDataSetNames[0].c_str() );', source)
+        self.assertIn('copy_label( yDataSetNames[0].c_str() );', source)
+        self.assertIn('labelStr = "log10(|" + labelStr + "|)";', source)
+        preset = (GUI / "VarPresetEditorScreen.cpp").read_text(encoding="utf-8")
+        self.assertIn('copy_label( VSPTranslate( "*UPDATE*" ).c_str() );', preset)
+        self.assertIn('if ( !sg->CheckSetting( sid ) )', preset)
+
 if __name__ == "__main__":
     unittest.main()

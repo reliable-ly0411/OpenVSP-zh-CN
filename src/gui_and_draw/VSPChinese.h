@@ -8,6 +8,10 @@
 std::string VSPTranslate( const std::string &text );
 std::string VSPTranslate( const char *text );
 
+// Translate fixed attribute datatype names at their display sites only.
+// This is not for attribute names, values, IDs, or API identifiers.
+std::string VSPTranslateAttributeType( const std::string &type );
+
 // Use exact UI messages only when the string may contain user or filesystem data.
 // Unknown messages remain byte-for-byte unchanged; never translate embedded values.
 std::string VSPTranslateMessage( const std::string &text );

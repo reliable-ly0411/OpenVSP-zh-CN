@@ -61,15 +61,15 @@ AttributeExplorer::AttributeExplorer( ScreenMgr* mgr ) : BasicScreen( mgr, 800, 
 
     m_TreeGroupLayout.SetChoiceButtonWidth( 0 );
     m_AttrTypeSearchChoice.AddItem( "All Types" , vsp::INVALID_TYPE );
-    m_AttrTypeSearchChoice.AddItem( NameValData::GetTypeName( vsp::BOOL_DATA , capitalize ) , vsp::BOOL_DATA );
-    m_AttrTypeSearchChoice.AddItem( NameValData::GetTypeName( vsp::INT_DATA, capitalize ), vsp::INT_DATA );
-    m_AttrTypeSearchChoice.AddItem( NameValData::GetTypeName( vsp::DOUBLE_DATA, capitalize ), vsp::DOUBLE_DATA );
-    m_AttrTypeSearchChoice.AddItem( NameValData::GetTypeName( vsp::STRING_DATA, capitalize ), vsp::STRING_DATA );
-    m_AttrTypeSearchChoice.AddItem( NameValData::GetTypeName( vsp::PARM_REFERENCE_DATA, capitalize ), vsp::PARM_REFERENCE_DATA );
-    m_AttrTypeSearchChoice.AddItem( NameValData::GetTypeName( vsp::VEC3D_DATA, capitalize ), vsp::VEC3D_DATA );
-    m_AttrTypeSearchChoice.AddItem( NameValData::GetTypeName( vsp::INT_MATRIX_DATA, capitalize ), vsp::INT_MATRIX_DATA );
-    m_AttrTypeSearchChoice.AddItem( NameValData::GetTypeName( vsp::DOUBLE_MATRIX_DATA, capitalize ), vsp::DOUBLE_MATRIX_DATA );
-    m_AttrTypeSearchChoice.AddItem( NameValData::GetTypeName( vsp::ATTR_COLLECTION_DATA, capitalize ), vsp::ATTR_COLLECTION_DATA );
+    m_AttrTypeSearchChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::BOOL_DATA , capitalize ) ), vsp::BOOL_DATA );
+    m_AttrTypeSearchChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::INT_DATA, capitalize ) ), vsp::INT_DATA );
+    m_AttrTypeSearchChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::DOUBLE_DATA, capitalize ) ), vsp::DOUBLE_DATA );
+    m_AttrTypeSearchChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::STRING_DATA, capitalize ) ), vsp::STRING_DATA );
+    m_AttrTypeSearchChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::PARM_REFERENCE_DATA, capitalize ) ), vsp::PARM_REFERENCE_DATA );
+    m_AttrTypeSearchChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::VEC3D_DATA, capitalize ) ), vsp::VEC3D_DATA );
+    m_AttrTypeSearchChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::INT_MATRIX_DATA, capitalize ) ), vsp::INT_MATRIX_DATA );
+    m_AttrTypeSearchChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::DOUBLE_MATRIX_DATA, capitalize ) ), vsp::DOUBLE_MATRIX_DATA );
+    m_AttrTypeSearchChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::ATTR_COLLECTION_DATA, capitalize ) ), vsp::ATTR_COLLECTION_DATA );
 
     m_ObjTypeSearchChoice.AddItem( "All Objects", vsp::ATTROBJ_FREE );
     m_ObjTypeSearchChoice.AddItem( "Parm", vsp::ATTROBJ_PARM );
@@ -147,14 +147,14 @@ AttributeExplorer::AttributeExplorer( ScreenMgr* mgr ) : BasicScreen( mgr, 800, 
 
     m_CommonEntryLayout.SetChoiceButtonWidth( 0 );
     int w_btn = m_CommonEntryLayout.GetW() / 2;
-    m_AttrTypeChoice.AddItem( NameValData::GetTypeName( vsp::BOOL_DATA , capitalize ) , vsp::BOOL_DATA );
-    m_AttrTypeChoice.AddItem( NameValData::GetTypeName( vsp::INT_DATA, capitalize ), vsp::INT_DATA );
-    m_AttrTypeChoice.AddItem( NameValData::GetTypeName( vsp::DOUBLE_DATA, capitalize ), vsp::DOUBLE_DATA );
-    m_AttrTypeChoice.AddItem( NameValData::GetTypeName( vsp::STRING_DATA, capitalize ), vsp::STRING_DATA );
-    m_AttrTypeChoice.AddItem( NameValData::GetTypeName( vsp::PARM_REFERENCE_DATA, capitalize ), vsp::PARM_REFERENCE_DATA );
-    m_AttrTypeChoice.AddItem( NameValData::GetTypeName( vsp::VEC3D_DATA, capitalize ), vsp::VEC3D_DATA );
-    m_AttrTypeChoice.AddItem( NameValData::GetTypeName( vsp::INT_MATRIX_DATA, capitalize ), vsp::INT_MATRIX_DATA );
-    m_AttrTypeChoice.AddItem( NameValData::GetTypeName( vsp::DOUBLE_MATRIX_DATA, capitalize ), vsp::DOUBLE_MATRIX_DATA );
+    m_AttrTypeChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::BOOL_DATA , capitalize ) ), vsp::BOOL_DATA );
+    m_AttrTypeChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::INT_DATA, capitalize ) ), vsp::INT_DATA );
+    m_AttrTypeChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::DOUBLE_DATA, capitalize ) ), vsp::DOUBLE_DATA );
+    m_AttrTypeChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::STRING_DATA, capitalize ) ), vsp::STRING_DATA );
+    m_AttrTypeChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::PARM_REFERENCE_DATA, capitalize ) ), vsp::PARM_REFERENCE_DATA );
+    m_AttrTypeChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::VEC3D_DATA, capitalize ) ), vsp::VEC3D_DATA );
+    m_AttrTypeChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::INT_MATRIX_DATA, capitalize ) ), vsp::INT_MATRIX_DATA );
+    m_AttrTypeChoice.AddItemRaw( VSPTranslateAttributeType( NameValData::GetTypeName( vsp::DOUBLE_MATRIX_DATA, capitalize ) ), vsp::DOUBLE_MATRIX_DATA );
 
     m_CommonEntryLayout.AddChoice( m_AttrTypeChoice, "Type" );
     m_CommonEntryLayout.AddButton( m_AttrAddTrigger, "Add" );
@@ -173,6 +173,7 @@ AttributeExplorer::AttributeExplorer( ScreenMgr* mgr ) : BasicScreen( mgr, 800, 
 
     m_CommonEntryLayout.AddYGap();
     m_DataLabel = m_CommonEntryLayout.AddDividerBox( "Attribute Data Entry" );
+    m_DataLabel->copy_tooltip( VSPTranslate( "Attribute type abbreviations: Bool, Int, Dbl, Str, Parm, Vec3d, Imat, Dmat, Grp" ).c_str() );
 
     m_CommonEntryLayout.AddInput( m_AttrNameIn, "Name" );
     m_CommonEntryLayout.AddInput( m_AttrDescIn, "Desc" );
@@ -906,21 +907,16 @@ void AttributeExplorer::AttrTypeDispGroup( int attr_type, GroupLayout * group )
             attr_type = nvd_temp->GetType();
         }
 
-        data_name = NameValData::GetTypeName( attr_type, cap, short_name );
-
-        if ( data_name.size() )
-        {
-            data_name += " ";
-        }
-        data_name += "Data";
+        const string type = VSPTranslateAttributeType( NameValData::GetTypeName( attr_type, cap, short_name ) );
+        data_name = type + VSPTranslate( "Data" );
     }
     else if ( m_types_selected > 1 )
     {
-        data_name = "Multiple Data Types";
+        data_name = VSPTranslate( "Multiple Data Types" );
     }
     else
     {
-        data_name = "No Attributes Selected";
+        data_name = VSPTranslate( "No Attributes Selected" );
     }
 
     NameValData* attr_ptr = nullptr;
