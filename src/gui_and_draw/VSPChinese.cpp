@@ -88,6 +88,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Import STL file?", "导入 STL 文件？" },
         { "Import XSec File?", "导入截面文件？" },
         { "Insert VSP File", "插入 VSP 文件" },
+        { "Could not open VSP file. The current model was not changed:", "无法打开 VSP 文件，当前模型未更改：" },
         { "Open VSP File", "打开 VSP 文件" },
         { "Save Custom Geom Script", "保存自定义几何体脚本" },
         { "Save VSP File", "保存 VSP 文件" },
