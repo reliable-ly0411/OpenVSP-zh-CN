@@ -26,6 +26,8 @@ public:
 
     virtual void UpdateImageInfo();
 
+    bool IsImageReady() const { return m_ImageReady; }
+
     string GetDirectionName();
 
     string GetRelativePathToFile();

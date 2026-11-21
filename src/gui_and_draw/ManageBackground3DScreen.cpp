@@ -312,7 +312,7 @@ bool ManageBackground3DScreen::Update()
     {
         m_FileOutput.Activate();
         m_FileSelect.Activate();
-        if ( bg3D->m_ImageReady && bg3D->m_ImageW() > 0 && bg3D->m_ImageH() > 0 )
+        if ( bg3D->IsImageReady() && bg3D->m_ImageW() > 0 && bg3D->m_ImageH() > 0 )
         {
             m_ImagePreviewButton.Activate();
         }
@@ -581,7 +581,7 @@ void ManageBackground3DScreen::GuiDeviceCallBack( GuiDevice* device )
     else if ( device == &m_ImagePreviewButton )
     {
         Background3D * bg3D = Background3DMgr.GetCurrentBackground3D();
-        if ( bg3D && bg3D->m_ImageReady && bg3D->m_ImageW() > 0 && bg3D->m_ImageH() > 0 )
+        if ( bg3D && bg3D->IsImageReady() && bg3D->m_ImageW() > 0 && bg3D->m_ImageH() > 0 )
         {
             m_ScreenMgr->ShowScreen( vsp::VSP_BACKGROUND3D_PREVIEW_SCREEN );
         }

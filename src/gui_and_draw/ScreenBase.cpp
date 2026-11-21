@@ -7619,7 +7619,7 @@ void Background3DPreviewScreen::SetZoom()
 {
     Background3D *bg3d = Background3DMgr.GetCurrentBackground3D();
 
-    if ( bg3d && bg3d->m_ImageReady && bg3d->m_ImageW() > 0 && bg3d->m_ImageH() > 0 && m_GlWin )
+    if ( bg3d && bg3d->IsImageReady() && bg3d->m_ImageW() > 0 && bg3d->m_ImageH() > 0 && m_GlWin )
     {
         double whi = ( 1.0 * bg3d->m_ImageW() ) / ( 1.0 * bg3d->m_ImageH() );
 
