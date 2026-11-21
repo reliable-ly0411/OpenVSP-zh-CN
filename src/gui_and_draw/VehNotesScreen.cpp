@@ -11,6 +11,7 @@
 #include "VehNotesScreen.h"
 #include "AttributeManager.h"
 #include "ScreenBase.h"
+#include "VSPChinese.h"
 
 //===============================================================================//
 //===============================================================================//
@@ -96,14 +97,12 @@ bool VehNotesScreen::Update()
     }
 
     m_ShowDataToggleIn.Update( veh->m_ShowNotesScreenParm.GetID() );
-    if ( veh->m_ShowNotesScreenParm.Get() )
-    {
-        m_ShowToggleField.Update( "True" );
-    }
-    else
-    {
-        m_ShowToggleField.Update( "False" );
-    }
+    const bool show_on_open = veh->m_ShowNotesScreenParm.Get();
+    const char *toggle_label = show_on_open ? "On" : "Off";
+    const string localized = VSPTranslateMessage( toggle_label );
+    // Only this display is an on/off setting; the stored value remains a bool.
+    m_ShowToggleField.Update( localized == toggle_label ?
+                              ( show_on_open ? "True" : "False" ) : localized );
 
     if ( attr )
     {
