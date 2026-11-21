@@ -3,8 +3,14 @@
 > 本仓库基于 OpenVSP 3.56.0，提供简体中文界面；原软件版权、
 > 作者归属及 NOSA 1.3 许可不变。汉化仓库：
 > <https://github.com/reliable-ly0411/OpenVSP-zh-CN>。
+> 原仓库：[OpenVSP/OpenVSP](https://github.com/OpenVSP/OpenVSP)；官方网站：[openvsp.org](https://openvsp.org/)。
 > 中文使用说明及版本变化见 [`README_zh-CN.md`](README_zh-CN.md)，维护架构与强制规则见
 > [`AGENTS.md`](AGENTS.md)。
+
+[![领先上游提交](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Freliable-ly0411%2FOpenVSP-zh-CN%2Fcompare%2Fupstream-main...main&query=%24.ahead_by&label=%E9%A2%86%E5%85%88%E4%B8%8A%E6%B8%B8&color=blue&cacheSeconds=300)](https://github.com/reliable-ly0411/OpenVSP-zh-CN/compare/upstream-main...main)
+[![落后上游提交](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Freliable-ly0411%2FOpenVSP-zh-CN%2Fcompare%2Fupstream-main...main&query=%24.behind_by&label=%E8%90%BD%E5%90%8E%E4%B8%8A%E6%B8%B8&color=orange&cacheSeconds=300)](https://github.com/reliable-ly0411/OpenVSP-zh-CN/compare/main...upstream-main)
+
+汉化 `main` 相对纯上游镜像的提交数；[比较含义与刷新频率](README_zh-CN.md#上游提交差异)。
 
 # Build and Installation Instructions for OpenVSP
 
