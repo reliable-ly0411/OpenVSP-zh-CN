@@ -1311,6 +1311,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Init Shape", "初始化形状" }, { "Invert Hidden", "反转隐藏项" },
         { "Keep Shell", "保留壳体" }, { "Light Quality", "光照质量" },
         { "Light:", "光源：" }, { "Mid U", "U 向中点" }, { "Mid W", "W 向中点" },
+        { "Mid Geom", "顶点几何体" },
         { "Nose ULSymm", "头部上下对称" }, { "PARTIAL", "部分" },
         { "Pre-cone", "预锥角" }, { "Preconditioner", "预条件器" },
         { "Rough. Ht.", "粗糙度高度" }, { "Rt. Cluster", "根部网格聚集" },
