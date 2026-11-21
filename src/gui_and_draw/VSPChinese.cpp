@@ -1329,7 +1329,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Sweep Stretch", "后掠拉伸" }, { "Demote Surfs to Cubic", "将曲面降为三次" },
         { "Set:", "集合：" }, { "Geom Name", "几何体名称" }, { "Geom ID", "几何体 ID" },
         { "Split Number", "拆分数量" }, { "Min Edge Len", "最小边长" },
-        { "Max Edge Len", "最大边长" }, { "Normal Set:", "法向集合：" },
+        { "Max Edge Len", "最大边长" }, { "Normal Set:", "常规集合：" },
         { "Degen Set:", "退化几何集合：" }, { "Trim:", "修剪：" },
         { "Closure:", "闭合：" }, { "TL Radius", "左上半径" },
         { "TR Radius", "右上半径" }, { "BL Radius", "左下半径" },

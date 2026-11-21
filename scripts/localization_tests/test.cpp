@@ -5,6 +5,7 @@
 int main()
 {
     const std::vector<std::pair<std::string, std::string>> cases = {
+        {"Normal Set:", "常规集合："}, {"Degen Set:", "退化几何集合："},
         {"Clone", "克隆"},
         {"Mid Geom", "顶点几何体"},
         {"On", "开"}, {"Off", "关"},
@@ -51,5 +52,7 @@ int main()
     if (VSPTranslateMenuPath("File/Open...") != "文件/打开...") return 2;
     if (!VSPTranslate(static_cast<const char *>(nullptr)).empty()) return 3;
     if (VSPTranslateMessage("On") != "开" || VSPTranslateMessage("Off") != "关") return 4;
+    if (VSPTranslateBrowserHeader("@b@.NAME:@b@.NORMAL SET:@b@.DEGEN SET:@b@.SETTINGS") !=
+        "@b@.名称:@b@.常规集合:@b@.退化几何集合:@b@.设置") return 5;
     std::cout << "Localization display boundary tests passed\n";
 }
