@@ -1,0 +1,72 @@
+name: "Original OpenVSP 3.56 RC1 N-Gon VSPGEOM (Ubuntu x64 runtime only)"
+on:
+  push:
+    branches: [ci/openvsp-rc1-ngon-runtime]
+    paths:
+      - '.github/workflows/ci-openvsp-rc1-ngon-runtime.yml'
+      - 'scripts/ci/openvsp-ngon-rc/**'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  original-ngon:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      RC_ARTIFACT_ID: '14702330406'
+      RC_ARTIFACT_SHA: bb8ab2168ba31555ad57044c9be10e7c165db0daf7a8d29fc0f3b9e284a56da7
+      RC_ZIP_SHA: 3b23e7d116ca0f30f301f6f2400fb88c30d6e98d1d37e34e10d38f3af7a3e560
+      RC_VSP_SHA: 0c5464ac8d9c418ac05ad4f06199088b1a644bf9a0e572380d6138d6d0ba8594
+      LANG: C.UTF-8
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      MESA_SHADER_CACHE_DISABLE: 'true'
+    steps:
+      - name: Checkout read-only exact test controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Recover and verify exactly the previous Noble x64 package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          mkdir evidence
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$RC_ARTIFACT_ID" --jq '[.workflow_run.id,.expired,.digest] | @tsv' > evidence/origin.txt
+          grep -Fqx $'44889750790\tfalse\tsha256:'"$RC_ARTIFACT_SHA" evidence/origin.txt
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$RC_ARTIFACT_ID/zip" > "$RUNNER_TEMP/outer.zip"
+          printf '%s  %s\n' "$RC_ARTIFACT_SHA" "$RUNNER_TEMP/outer.zip" | sha256sum -c -
+          unzip -p "$RUNNER_TEMP/outer.zip" OpenVSP-3.56.0-Ubuntu-24.04_amd64-zh-CN.zip > "$RUNNER_TEMP/rc1.zip"
+          printf '%s  %s\n' "$RC_ZIP_SHA" "$RUNNER_TEMP/rc1.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/rc1.zip" -d "$RUNNER_TEMP/original"
+          printf '%s  %s\n' "$RC_VSP_SHA" "$RUNNER_TEMP/original/OpenVSP-3.56.0-Linux/vsp" | sha256sum -c -
+          printf 'controller=%s\noriginal_artifact=%s\ninner_zip_sha=%s\noriginal_vsp_sha=%s\n' "$GITHUB_SHA" "$RC_ARTIFACT_ID" "$RC_ZIP_SHA" "$RC_VSP_SHA" >> evidence/origin.txt
+      - name: Install only Noble runtime and GUI automation prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          grep -q '^VERSION_ID="24.04"$' /etc/os-release
+          sudo apt-get update
+          sudo apt-get install --yes unzip libglew2.2 libglu1-mesa libgl1-mesa-dri libxml2 libjpeg-turbo8 libxft2 libxinerama1 libxfixes3 libxcursor1 fonts-noto-cjk xvfb xauth x11-utils xdotool imagemagick tesseract-ocr tesseract-ocr-chi-sim
+      - name: Verify original archive's actual N-Gon GUI VSPGEOM export
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts="$GITHUB_WORKSPACE/scripts/ci/openvsp-ngon-rc"
+          app="$RUNNER_TEMP/original/OpenVSP-3.56.0-Linux"
+          work=$(mktemp -d "$RUNNER_TEMP/ngon-vspgeom.XXXXXX")
+          cd "$work"
+          "$app/vspscript" -script "$scripts/fixture.as"
+          test -s fixture.vsp3
+          xvfb-run -a -s '-screen 0 1280x960x24' bash "$scripts/gui.sh" "$app/vsp" "$GITHUB_WORKSPACE/evidence" "$scripts"
+      - name: Upload original runtime synthetic evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openvsp-original-rc1-ngon-runtime-proof
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 14
