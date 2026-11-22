@@ -10,6 +10,8 @@
 #include "StringUtil.h"
 #include "MeshGeom.h"
 #include "ModeMgr.h"
+#include "DegenGeomWriteStatus.h"
+#include "VSPChinese.h"
 
 DegenGeomScreen::DegenGeomScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 375, 405 + 60, "Degen Geom - Compute Models, File IO" )
 {
@@ -240,22 +242,24 @@ void DegenGeomScreen::GuiDeviceCallBack( GuiDevice* device )
     else if ( device == &m_Execute )
     {
         m_TextDisplay->buffer()->text("");
-        m_TextDisplay->buffer()->append("Computing degenerate geometry...\n");
+        m_TextDisplay->buffer()->append( (VSPTranslateMessage( "Computing degenerate geometry..." ) + "\n").c_str() );
         Fl::flush();
 
         bool useMode = vehiclePtr->m_UseModeDegenGeomFlag();
         string modeID = vehiclePtr->m_DegenGeomModeID;
 
         vehiclePtr->CreateDegenGeom( m_SelectedSetIndex, useMode, modeID );
-        m_TextDisplay->buffer()->append("Done!\n");
+        m_TextDisplay->buffer()->append( (VSPTranslateMessage( "Done!" ) + "\n").c_str() );
 
         if ( vehiclePtr->getExportDegenGeomCsvFile() || vehiclePtr->getExportDegenGeomMFile() )
         {
             m_TextDisplay->buffer()->append("--------------------------------\n");
-            m_TextDisplay->buffer()->append("\nWriting output...\n");
+            m_TextDisplay->buffer()->append( ("\n" + VSPTranslateMessage( "Writing output..." ) + "\n").c_str() );
             Fl::flush();
 
-            m_TextDisplay->buffer()->append( vehiclePtr->WriteDegenGeomFile().c_str() );
+            DegenGeomWriteReport report;
+            vehiclePtr->WriteDegenGeomFile( &report );
+            m_TextDisplay->buffer()->append( FormatDegenGeomWriteStatus( report ).c_str() );
         }
     }
     else if ( device == & m_MakeDegenMeshGeom )
