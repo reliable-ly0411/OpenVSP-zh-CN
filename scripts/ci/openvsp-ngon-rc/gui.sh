@@ -74,5 +74,11 @@ for ((i=0; i<50; ++i)); do
   if [[ -s dedicated-ngon.vspgeom && -s dedicated-ngon.vkey ]]; then break; fi
   kill -0 "$pid"; sleep .15
 done
+cp fixture.vsp3 "$evidence/"
+shopt -s nullglob
+outputs=(dedicated-ngon.*)
+if (( ${#outputs[@]} > 0 )); then
+  cp "${outputs[@]}" "$evidence/"
+  sha256sum "${outputs[@]}" | tee "$evidence/export-sha256.txt"
+fi
 python3 "$tools/check.py" "$PWD/dedicated-ngon.vspgeom" "$PWD/dedicated-ngon.vkey" | tee "$evidence/verification.txt"
-cp fixture.vsp3 dedicated-ngon.* "$evidence/"
