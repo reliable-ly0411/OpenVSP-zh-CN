@@ -1,0 +1,6 @@
+src/geom_core/DegenGeomWriteReport.h
+src/geom_core/Vehicle.cpp
+src/geom_core/Vehicle.h
+src/gui_and_draw/DegenGeomScreen.cpp
+src/gui_and_draw/DegenGeomWriteStatus.h
+src/gui_and_draw/VSPChinese.cpp
