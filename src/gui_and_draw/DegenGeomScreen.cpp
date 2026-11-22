@@ -11,6 +11,7 @@
 #include "MeshGeom.h"
 #include "ModeMgr.h"
 #include "DegenGeomWriteStatus.h"
+#include "VSPChinese.h"
 
 DegenGeomScreen::DegenGeomScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 375, 405 + 60, "Degen Geom - Compute Models, File IO" )
 {
