@@ -1,49 +1,56 @@
 ---
-title:  'Blank'
+title: '空白组件（Blank）'
+help-renderer: pandoc
 ---
 
-The Blank component has no shape.  It is a coordinate frame -- an origin and a set of axes -- placed in the model like
-any other component, and drawn in the 3D view as an axis triad at its origin (red $X$, green $Y$, blue $Z$), with one
-triad at each symmetric copy.  With *Pick* on in the Geom Browser, click the triad to select the Blank.
+空白组件没有形状。它是一个坐标系——原点及一组坐标轴——像其他组件一样放置在模型中，
+三维视图在其原点绘制三轴标记（红色 $X$、绿色 $Y$、蓝色 $Z$），每个对称副本都有自己的标记。
+在几何体浏览器中启用 *Pick* 后，单击三轴标记即可选中空白组件。
 
-| Topic                                       | Tab              |
-|:--------------------------------------------|:-----------------|
-| [What a Blank Is For](#what-a-blank-is-for) |                  |
-| [Point Mass](#point-mass)                   | Mass             |
-| [Shared Tabs](#shared-tabs)                 | Gen, XForm, Mass |
-| [Scripting](#scripting)                     |                  |
+| 主题 | 标签页 |
+|:-----|:-------|
+| [空白组件的用途](#what-a-blank-is-for) | |
+| [点质量](#point-mass) | Mass |
+| [通用标签页](#shared-tabs) | Gen, XForm, Mass |
+| [脚本](#scripting) | |
 
-## What a Blank Is For
+<a id="what-a-blank-is-for"></a>
 
-A Blank gives a model a frame that belongs to no part of the airframe.  It is used to:
+## 空白组件的用途
 
-- Hold a group of components together.  Components attached to a Blank move with it, so an engine installation, a
-  cockpit or a payload bay built under a Blank is moved or turned by changing the Blank alone.  Put a Blank at the top
-  of any assembly whose origin should not be on one of its parts.
-- Carry a mass that has no shape, such as equipment, fuel or passengers (see [Point Mass](#point-mass)).
-- Mark a point for components that refer to a point rather than a surface.  A [Routing](Routing.md) point on a Blank
-  lies at the Blank's origin, so a route can run through free space.  An [Auxiliary](Auxiliary.md) super cone or rotor
-  fragment zone hung from a Blank sits at the Blank's origin with the Blank's axes, which is more flexible than the
-  origin of the component it describes.
+空白组件为模型提供一个不属于任何机体零件的坐标系。用途包括：
 
-A Blank has no surface, so it is left out of every analysis that works on shape (CompGeom, DegenGeom, CFD meshing,
-export).  Children attached to it by UW, RST, LMN or $\eta$MN coordinates fall back to its origin and axes.  A Blank
-cannot be flipped: its axes always stay right-handed.
+- 将一组组件组织在一起。附着于空白组件的组件会随它移动，因此在其下建立的发动机安装组件、
+  座舱或载荷舱，只需改变空白组件即可整体移动或旋转。若一个装配体的原点不应位于任何零件上，
+  可将空白组件放在其层级顶部。
+- 承载没有形状的质量，例如设备、燃油或乘员（见[点质量](#point-mass)）。
+- 为引用点而非曲面的组件标记位置。[管线](Routing.md)在空白组件上的点位于其原点，
+  因而管线可以穿过自由空间。[辅助几何体](Auxiliary.md)的超椭圆锥或转子碎片区域挂接在空白组件下时，
+  采用其原点和坐标轴，比直接使用所描述组件的原点更灵活。
 
-## Point Mass
+空白组件没有曲面，因此不参与任何基于形状的分析（CompGeom、DegenGeom、CFD 网格划分和导出）。
+以 UW、RST、LMN 或 $\eta$MN 坐标附着其上的子组件，会退回使用它的原点和坐标轴。
+空白组件不能翻转：其坐标系始终保持右手系。
 
-A Blank's only mass is the concentrated mass of the *Specified Mass Properties* on the Mass tab (see
-[Mass](MassTab.md)); the density, priority and thin-shell settings are greyed, since a Blank has no volume or area for
-them to act on.  The center of gravity is measured from the Blank's origin in its own axes, so a Blank placed at an item
-of equipment carries that item's mass with its center of gravity at zero.  While the Blank is selected and has a mass,
-the 3D view marks the center of gravity with a blue point.
+<a id="point-mass"></a>
 
-## Shared Tabs
+## 点质量
 
-The Gen, XForm and Mass tabs are common to every component; see [Gen](GenTab.md), [XForm](XFormTab.md)
-and [Mass](MassTab.md).  A Blank has no Sub tab, since it has no surface to carry sub-surfaces.
+空白组件唯一的质量来自 Mass 标签页 *Specified Mass Properties* 中的集中质量
+（见[质量](MassTab.md)）；密度、优先级和薄壳设置呈灰色，因为空白组件没有可供它们作用的体积或面积。
+重心在空白组件自身坐标系中相对于其原点测量，因此将空白组件放在某设备处、重心设为零，
+即可在该处承载设备质量。选中且具有质量的空白组件，其重心在三维视图中显示为蓝点。
 
-## Scripting
+<a id="shared-tabs"></a>
 
-A script adds a Blank with `AddGeom( "BLANK" )` and sets its point mass through the parms `PointMass`, `CGx`, `CGy`,
-`CGz` and `Ixx` to `Iyz` in the group `Mass_Props`.
+## 通用标签页
+
+Gen、XForm 和 Mass 是通用组件标签页；见 [Gen](GenTab.md)、[XForm](XFormTab.md) 和 [Mass](MassTab.md)。
+空白组件没有用于承载子曲面的曲面，因此没有 Sub 标签页。
+
+<a id="scripting"></a>
+
+## 脚本
+
+脚本用 `AddGeom( "BLANK" )` 添加空白组件，并通过 `Mass_Props` 组的 `PointMass`、`CGx`、`CGy`、
+`CGz` 以及 `Ixx` 至 `Iyz` 参数设置点质量。

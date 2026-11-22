@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Conformal</title>
+  <title>共形组件（Conformal）</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -31,285 +25,245 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Conformal</h1>
+<h1 class="title">共形组件（Conformal）</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>A Conformal is a surface that follows another component's surface a
-set distance inside it, or outside it. It is made from that component,
-its <em>conformal parent</em>, so it changes whenever the parent does.
-It can be trimmed along the parent's length and around it, so one
-Conformal can be a fuel tank in a wing, a cabin or a cargo hold in a
-fuselage, the envelope of the structure under a skin, or a layer of
-coating or insulation over it.</p>
+<p><a href="index.html">目录</a></p>
+<p>Conformal
+是跟随另一个组件表面的曲面，与该表面保持指定的向内或向外距离。它由该组件（<em>conformal
+parent</em>，共形父件）生成，并随父件修改而变化。可沿父件长度及周向裁剪，因此可表示机翼油箱、机身客舱或货舱、蒙皮内的结构包络，或表面的涂层和隔热层。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Topic</th>
-<th style="text-align: left;">Tab</th>
+<th style="text-align: left;">主题</th>
+<th style="text-align: left;">标签页</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><a href="#quick-start">Quick
-Start</a></td>
+<td style="text-align: left;"><a href="#quick-start">快速开始</a></td>
 <td style="text-align: left;"></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#the-conformal-parent">The
-Conformal Parent</a></td>
+<td style="text-align: left;"><a
+href="#the-conformal-parent">共形父件</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#offset">Offset</a></td>
+<td style="text-align: left;"><a href="#offset">偏移</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
 <td style="text-align: left;"><a
-href="#trimming-along-the-length">Trimming Along the Length</a></td>
+href="#trimming-along-the-length">纵向裁剪</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
 <td style="text-align: left;"><a
-href="#trimming-around-the-surface">Trimming Around the Surface</a></td>
+href="#trimming-around-the-surface">周向裁剪</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#trimming-a-wing">Trimming a
-Wing</a></td>
+<td style="text-align: left;"><a
+href="#trimming-a-wing">机翼裁剪</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#a-hinged-flap">A Hinged
-Flap</a></td>
+<td style="text-align: left;"><a href="#a-hinged-flap">铰接襟翼</a></td>
 <td style="text-align: left;">Design</td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#scripting">Scripting</a></td>
+<td style="text-align: left;"><a href="#scripting">脚本</a></td>
 <td style="text-align: left;"></td>
 </tr>
 </tbody>
 </table>
-<p>The <a href="GenTab.html">Gen</a>, <a href="XFormTab.html">XForm</a>,
-<a href="MassTab.html">Mass</a> and <a href="SubTab.html">Sub</a> tabs
-are described on their own pages.</p>
-<h2 id="quick-start">Quick Start</h2>
-<h3 id="a-tank-in-a-fuselage">A tank in a fuselage</h3>
+<p><a href="GenTab.html">Gen</a>、<a href="XFormTab.html">XForm</a>、<a
+href="MassTab.html">Mass</a> 和 <a href="SubTab.html">Sub</a>
+标签页另有说明。</p>
+<p><a id="quick-start"></a></p>
+<h2 id="快速开始">快速开始</h2>
+<p><a id="a-tank-in-a-fuselage"></a></p>
+<h3 id="机身内油箱">机身内油箱</h3>
 <ol type="1">
-<li>Choose the Fuselage, and add a Conformal: it becomes the Fuselage's
-child and lies on it.</li>
-<li>Set <em>Offset</em> to the thickness of the structure between the
-skin and the tank.</li>
-<li>Check <em>Enable U Trimming</em> and set where the tank begins and
-ends, by <em>L Min</em> and <em>L Max</em> along the length.</li>
-<li>Cut its sides flat under Side Trim if it must clear a floor or a
-keel.</li>
+<li>选择 Fuselage，再添加
+Conformal。它成为机身子级，并位于机身表面。</li>
+<li>将 <em>Offset</em> 设为蒙皮与油箱之间的结构厚度。</li>
+<li>勾选 <em>Enable U Trimming</em>，用纵向 <em>L Min</em>、<em>L
+Max</em> 设置油箱起止位置。</li>
+<li>如需避开地板或龙骨，用 Side Trim 将对应侧面裁平。</li>
 </ol>
-<h3 id="a-tank-in-a-wing">A tank in a wing</h3>
+<p><a id="a-tank-in-a-wing"></a></p>
+<h3 id="机翼内油箱">机翼内油箱</h3>
 <ol type="1">
-<li>Choose the Wing, and add a Conformal.</li>
-<li>Set <em>Offset</em> to the thickness of the skin.</li>
-<li>Check <em>Enable U Trimming</em>, choose <em>Eta Min</em> and
-<em>Eta Max</em>, and set the spanwise ends.</li>
-<li>Check the toggle beside <em>Chord Min</em> under Wing Trim, and set
-the chordwise ends.</li>
+<li>选择 Wing，再添加 Conformal。</li>
+<li>将 <em>Offset</em> 设为蒙皮厚度。</li>
+<li>勾选 <em>Enable U Trimming</em>，选择 <em>Eta Min</em>、<em>Eta
+Max</em> 设置展向两端。</li>
+<li>勾选 Wing Trim 中 <em>Chord Min</em> 旁的开关，设置弦向两端。</li>
 </ol>
-<h2 id="the-conformal-parent">The Conformal Parent</h2>
-<p>A new Conformal takes its shape from its parent in the model, and is
-attached to it, so it moves and mirrors with it: its attachment and
-symmetry on the XForm tab are set to follow the parent, and greyed.</p>
-<p><em>Detach</em> frees its attachment. The <em>Parent</em> chooser
-beside it then picks the conformal parent, any component with a surface
-except a Gear (it lists other Conformals too, but choosing one has no
-effect), and the Conformal is placed by its own XForm settings from its
-parent in the model, which may be a different component. This is how a
-part of a skin is made to move apart from the body it was shaped on,
-such as a door, a fairing or a flap (<a href="#a-hinged-flap">A Hinged
-Flap</a>) on a hinge. When the Conformal's parent in the model is a
-Hinge, <em>Position on Hinge relative to Conformal Parent</em> places
-it, relative to the hinge, exactly where its conformal parent is, so
-that it lies on the body with the hinge at rest and swings with the
-hinge. A detached Conformal's symmetry still follows its conformal
-parent's, and its symmetry controls stay greyed.</p>
-<p>A Conformal can be made on a Fuselage, Stack, Wing, Pod, Ellipsoid,
-Body of Revolution, Cobra or Custom component, or on a Clone of one,
-which gives it the Clone's placement. It cannot be made on a Human, a
-Gear, nor on another Conformal; OpenVSP reports an error instead. On a
-component that has no notion of an offset, such as a Propeller, the
-Conformal is a copy of the parent's surface. A Conformal on a Cobra is
-offset but not trimmed: every trim is ignored.</p>
-<h2 id="offset">Offset</h2>
-<p><em>Offset</em> is the distance from the parent's surface, positive
-inward (Figure 1). A negative offset puts the Conformal outside the
-parent. The offset is held at the parent's cross sections and only
-approximately between them: on the default Fuselage an offset of 0.1
-lies between 0.092 and 0.104 from the skin.</p>
-<p><img src="images/Conformal_offset.png" title="Figure 1. Offset"
-alt="Figure 1. Offset" /></p>
-<p><em>Figure 1. A Conformal of Offset 0.25 in the default Fuselage, cut
-across both at mid-length.</em></p>
-<p><em>Offset Ends</em> moves the ends of the Conformal in as well,
-where the parent ends in a point or in a cap: each end moves along the
-body until it is the offset from the parent's surface, so the Conformal
-closes inside the parent (Figure 2). Unchecked, the ends stay at the
-parent's nose and tail points and the Conformal touches the parent
-there. On a Wing the ends move in along the span by the offset. The
-check box acts on a component built from cross sections: a Fuselage,
-Stack, Wing or custom component. On a Pod, Ellipsoid, Body of Revolution
-or Cobra the ends always move in by the offset, and the check box is
-greyed.</p>
-<p><img src="images/Conformal_ends.png" title="Figure 2. Offset Ends"
-alt="Figure 2. Offset Ends" /></p>
-<p><em>Figure 2. The nose of the same Fuselage and Conformal, cut
-through the axis: with Offset Ends (filled) and without
-(dashed).</em></p>
-<p>The Conformal's end caps are the parent's, unless it is trimmed along
-its length.</p>
-<h2 id="trimming-along-the-length">Trimming Along the Length</h2>
-<p><em>Enable U Trimming</em> cuts off the Conformal's ends. Each end is
-set one of three ways, chosen by the toggles before the sliders (Figure
-3):</p>
+<p><a id="the-conformal-parent"></a></p>
+<h2 id="共形父件">共形父件</h2>
+<p>新共形组件从模型树中的父级获取形状，并挂接到父级，因此随之移动和镜像。XForm
+的挂接与对称设置固定为跟随父级，控件呈灰色。</p>
+<p><em>Detach</em> 解除挂接绑定。旁边的 <em>Parent</em>
+可选择共形父件，即除 Gear 外具有曲面的组件；列表虽也显示其他
+Conformal，选择它们并不起作用。解除后，共形组件根据模型树中父级及自己的
+XForm
+设置放置，而模型树父级可以与共形父件不同。这样即可让舱门、整流罩或<a
+href="#a-hinged-flap">襟翼</a>等蒙皮部分挂在铰链上，独立于提供形状的机体运动。</p>
+<p>模型树中的父级为 Hinge 时，<em>Position on Hinge relative to
+Conformal Parent</em>
+按共形父件所在位置确定组件相对铰链的位置，使铰链静止时组件贴合机体，偏转时随铰链运动。解除挂接后，对称仍跟随共形父件，对称控件仍呈灰色。</p>
+<p>共形组件可基于 Fuselage、Stack、Wing、Pod、Ellipsoid、Body of
+Revolution、Cobra、Custom，或这些组件的 Clone
+创建；基于克隆体时采用其位置。不能基于 Human、Gear 或另一个 Conformal
+创建，否则 OpenVSP 报错。对于 Propeller
+等没有偏移概念的组件，共形组件只是父件曲面的副本。基于 Cobra
+时可以偏移，但所有裁剪均被忽略。</p>
+<p><a id="offset"></a></p>
+<h2 id="偏移">偏移</h2>
+<p><em>Offset</em> 为距父件表面的距离，向内为正（图
+1），负值使共形组件位于父件外侧。父件截面处保持指定偏移，截面之间仅近似满足。例如默认
+Fuselage 设置偏移 0.1，实际距蒙皮约为 0.092 至 0.104。</p>
+<p><img src="images/Conformal_offset.png" title="图 1：偏移"
+alt="图 1：偏移" /></p>
+<p><em>图 1：默认机身内 Offset 0.25
+的共形组件，在长度中点同时截开两者。</em></p>
+<p>父件两端为尖点或端盖时，<em>Offset Ends</em>
+也将共形组件两端向内移动。每端沿机体移动至与父件表面保持指定偏移，使组件在父件内部闭合（图
+2）。取消时，两端仍位于父件头尾点并在那里与父件接触。对于机翼，两端沿展向内移相应偏移距离。</p>
+<p>该复选框作用于截面构造组件：Fuselage、Stack、Wing 或
+Custom。Pod、Ellipsoid、Body of Revolution 和 Cobra
+的两端始终按偏移内移，复选框呈灰色。</p>
+<p><img src="images/Conformal_ends.png" title="图 2：端部偏移"
+alt="图 2：端部偏移" /></p>
+<p><em>图 2：同一机身及共形组件的头部轴向剖面，填充部分启用了 Offset
+Ends，虚线未启用。</em></p>
+<p>除非进行了纵向裁剪，共形组件的端盖沿用父件端盖。</p>
+<p><a id="trimming-along-the-length"></a></p>
+<h2 id="纵向裁剪">纵向裁剪</h2>
+<p><em>Enable U Trimming</em>
+裁掉共形组件两端。每端可用滑块前的切换按钮选择三种定位方式（图 3）：</p>
 <ul>
-<li><em>U Min</em> and <em>U Max</em>: a fraction of the parent's
-surface parameter
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>U</mi><annotation encoding="application/x-tex">U</annotation></semantics></math>,
-which advances by the same amount from each cross section to the next,
-however far apart they are.</li>
-<li><em>L Min</em> and <em>L Max</em>: a position along the body's
-length. With <em>01</em> it is a fraction of the length, with
-<em>0D</em> a distance from the start.</li>
-<li><em>Eta Min</em> and <em>Eta Max</em>: for a Wing, a fraction of the
-span (see <a href="#trimming-a-wing">Trimming a Wing</a>).</li>
+<li><em>U Min</em>、<em>U Max</em>：父件曲面参数
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>U</mi><annotation encoding="application/x-tex">U</annotation></semantics></math>
+的比例；相邻截面之间的
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>U</mi><annotation encoding="application/x-tex">U</annotation></semantics></math>
+增量相同，与实际间距无关。</li>
+<li><em>L Min</em>、<em>L Max</em>：沿机体长度的位置。<em>01</em>
+表示长度比例，<em>0D</em> 表示距起点的实际距离。</li>
+<li><em>Eta Min</em>、<em>Eta Max</em>：机翼展向比例，见<a
+href="#trimming-a-wing">机翼裁剪</a>。</li>
 </ul>
-<p><img src="images/Conformal_gui_utrim.png" title="Figure 3. U Trim"
-alt="Figure 3. U Trim" /></p>
-<p><em>Figure 3. The U Trim group of a Conformal in the default Fuselage
-with U trimming on, the start set by U Min and the end by L Max as a
-fraction of the length. The forms not chosen are greyed and show the
-same end; beside each L is its distance from the start.</em></p>
-<p>Each setting shows the same end in the other forms. Use <em>L</em> to
-place an end at a known station of a body: on the default Fuselage,
-<em>U</em> 0.1 falls 2.5 from the nose, while <em>L</em> 0.1 falls at
-about 3, a tenth of its length. The ends cannot cross; each is kept at
-least 0.001 short of the other.</p>
-<p>The trimmed ends are closed by the caps chosen under <em>U Trim Tip
-Treatment</em>, Flat by default. They work as the end caps of a Fuselage
-do (see <a href="FuselageStack.html#end-caps">End Caps</a>).</p>
-<h2 id="trimming-around-the-surface">Trimming Around the Surface</h2>
-<p>The trims around the surface cut a band off each cross section and
-close the cut with a straight line, so the Conformal stays closed and is
-left with a flat face along it (Figure 4): the flat floor of a cabin, or
-the walls of a tank between two spars.
+<p><img src="images/Conformal_gui_utrim.png" title="图 3：U 裁剪"
+alt="图 3：U 裁剪" /></p>
+<p><em>图 3：默认机身内共形组件的 U Trim，已启用 U 裁剪。起点使用 U
+Min，终点使用长度比例 L Max。未选形式呈灰色并显示同一端点的等价值，每个
+L 旁还显示距起点的距离。</em></p>
+<p>每种设置都会换算并显示其他形式。已知机体站位时宜用
+<em>L</em>。默认机身中，<em>U</em> 0.1 距头部为 2.5，而 <em>L</em> 0.1
+约为 3，即全长的十分之一。两端不能交叉，彼此至少保留 0.001 的间隔。</p>
+<p>裁剪端面使用 <em>U Trim Tip Treatment</em> 指定的端盖闭合，默认为
+Flat。其工作方式与机身端盖相同，见<a
+href="FuselageStack.html#end-caps">端盖</a>。</p>
+<p><a id="trimming-around-the-surface"></a></p>
+<h2 id="周向裁剪">周向裁剪</h2>
+<p>周向裁剪在每个截面切掉一段，并以直线封闭切口。组件因此保持封闭，同时沿长度方向形成平面（图
+4），可表示客舱平地板，或油箱两根翼梁之间的壁面。<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>W</mi><annotation encoding="application/x-tex">W</annotation></semantics></math>
+是按父件曲面定义的截面周向比例。</p>
+<p><em>V Trim</em> 按
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>W</mi><annotation encoding="application/x-tex">W</annotation></semantics></math>
-is the fraction of the way around each section, as the parent's surface
-measures it.</p>
-<p><em>V Trim</em> cuts off bands given by
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>W</mi><annotation encoding="application/x-tex">W</annotation></semantics></math>.
-<em>V1</em> cuts off the band from <em>V1 Begin</em> to <em>V1 End</em>,
-going the way
+指定切除区间。<em>V1</em> 沿
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>W</mi><annotation encoding="application/x-tex">W</annotation></semantics></math>
-increases, and through
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">W = 0</annotation></semantics></math>
-if <em>V1 Begin</em> is the larger; <em>V2</em> cuts a second band the
-same way. The default bands are centered on
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">W = 0</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>=</mo><mn>0.5</mn></mrow><annotation encoding="application/x-tex">W = 0.5</annotation></semantics></math>,
-each 0.2 wide.</p>
-<p>Prefer <em>Side Trim</em> to <em>V Trim</em> off a Wing. Each Side
-Trim is one number and stays centered on its side, so a flat floor stays
-level as it is widened, and four sides can be cut; V Trim needs both
-ends of each band and gives only two. Use V Trim only for a band that is
-not centered on a side.</p>
-<p><em>Side Trim</em>, offered when the parent is not a Wing, cuts off a
-band centered on one side, <em>Side 1</em> to <em>Side 4</em> at
+增大方向切掉 <em>V1 Begin</em> 至 <em>V1 End</em>；若 Begin 大于
+End，则区间跨过
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">W = 0</annotation></semantics></math>。<em>V2</em>
+同样切除第二段。默认两段分别以
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">W = 0</annotation></semantics></math>、<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>=</mo><mn>0.5</mn></mrow><annotation encoding="application/x-tex">W = 0.5</annotation></semantics></math>
+为中心，宽度均为 0.2。</p>
+<p>非机翼组件优先使用 <em>Side
+Trim</em>。每侧只需一个值，切除区间始终以该侧为中心，因此加宽平地板时仍保持水平，且可裁四侧；V
+Trim 需指定每段两端，只能裁两段。只有区间不以某侧为中心时才使用 V
+Trim。</p>
+<p>父件不是 Wing 时提供 <em>Side Trim</em>。<em>Side 1</em> 至 <em>Side
+4</em> 的区间中心依次位于
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>W</mi><annotation encoding="application/x-tex">W</annotation></semantics></math>
-= 0, 0.5, 0.25 and 0.75; each value is the width of the band, as a
-fraction of the way around. On a Fuselage, a Stack or an Ellipsoid these
-are the right
-(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">+Y</annotation></semantics></math>),
-left, bottom and top; on a Pod, whose
+=
+0、0.5、0.25、0.75；每个值是切除区间占整周的比例。Fuselage、Stack、Ellipsoid
+对应右侧（<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>+</mi><mi>Y</mi></mrow><annotation encoding="application/x-tex">+Y</annotation></semantics></math>）、左侧、底部、顶部；Pod
+的
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>W</mi><annotation encoding="application/x-tex">W</annotation></semantics></math>
-starts at the top, they are the top, bottom, right and left. On a Body
-of Revolution
+从顶部起算，因此依次为顶部、底部、右侧、左侧。Body of Revolution 的
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>W</mi><annotation encoding="application/x-tex">W</annotation></semantics></math>
-runs around the section, not around the axis, and <em>U</em> runs around
-the axis.</p>
-<p><img src="images/Conformal_trims.png" title="Figure 4. Trims"
-alt="Figure 4. Trims" /></p>
-<p><em>Figure 4. A Conformal of Offset 0.15 in the default Fuselage
-(outline), trimmed to L 0.3 to 0.7, with Side 4 0.3 cutting its top
-flat.</em></p>
-<h2 id="trimming-a-wing">Trimming a Wing</h2>
-<p>On a Wing, the Conformal's sections are the wing's airfoils, each
-offset into the wing, and its ends move in along the span by the offset.
-The Side Trim group is replaced by Wing Trim.</p>
+绕截面变化，不是绕旋转轴；其 <em>U</em> 才绕轴变化。</p>
+<p><img src="images/Conformal_trims.png" title="图 4：裁剪"
+alt="图 4：裁剪" /></p>
+<p><em>图 4：默认机身（轮廓）内 Offset 0.15 的共形组件，纵向保留 L 0.3
+至 0.7，Side 4 0.3 将顶部裁平。</em></p>
+<p><a id="trimming-a-wing"></a></p>
+<h2 id="机翼裁剪">机翼裁剪</h2>
+<p>基于 Wing
+时，共形截面由机翼翼型向内偏移得到，两端沿展向内移相应偏移距离。Side
+Trim 区域改为 Wing Trim。</p>
 <ul>
-<li><em>Chord Min</em> and <em>Chord Max</em>, with their toggle
-checked, keep the part of each airfoil between two fractions of the
-chord and cut off the leading and trailing edges, leaving flat walls
-where the spars of a tank would be. They set <em>V1</em> and
-<em>V2</em>, which are then greyed (Figure 5). The fractions are
-measured from the trailing edge of the Conformal's root airfoil, and the
-cut follows the same points of each airfoil out along the span: on the
-default Wing, Chord Min 0.2 and Chord Max 0.6 keep 0.41 to 0.79 of the
-chord from the leading edge at the root, and 0.38 to 0.71 at the tip
-(Figure 6).</li>
-<li><em>Eta Min</em> and <em>Eta Max</em> trim along the span by the
-wing's span fraction, 0 at the root and 1 at the tip. Choose them with
-the toggles before them, in place of <em>U</em> or <em>L</em>.</li>
+<li>勾选 <em>Chord Min</em>、<em>Chord Max</em>
+对应开关后，保留各翼型两个弦向比例之间的部分，裁去前后缘，形成类似油箱翼梁壁面的平壁。这会设置
+<em>V1</em>、<em>V2</em>，使它们呈灰色（图
+5）。比例从共形根部翼型的后缘计量，裁剪沿展向跟随各翼型的对应点：默认
+Wing 设置 Chord Min 0.2、Chord Max 0.6 时，根部实际保留距前缘 0.41 至
+0.79 弦长，翼尖保留 0.38 至 0.71（图 6）。</li>
+<li><em>Eta Min</em>、<em>Eta Max</em> 按机翼展向比例裁剪，翼根为
+0、翼尖为 1。用其前面的切换按钮代替 <em>U</em> 或 <em>L</em> 定位。</li>
 </ul>
 <p><img src="images/Conformal_gui_wingtrim.png"
-title="Figure 5. V Trim and Wing Trim"
-alt="Figure 5. V Trim and Wing Trim" /></p>
-<p><em>Figure 5. The V Trim and Wing Trim groups of a Conformal of
-Offset 0.1 in the default Wing, with Chord Min 0.2 and Chord Max 0.6 and
-Eta 0.2 to 0.7: the tank of Figure 6. The chord trim has set V1 and V2,
-which are greyed.</em></p>
-<p><img src="images/Conformal_wing.png" title="Figure 6. A wing tank"
-alt="Figure 6. A wing tank" /></p>
-<p><em>Figure 6. A Conformal in the default Wing, seen from above:
-Offset 0.1, Eta 0.2 to 0.7, Chord Min 0.2 and Chord Max 0.6.</em></p>
-<h2 id="a-hinged-flap">A Hinged Flap</h2>
-<p>A Wing can be split into a main element and a deflectable flap, each
-a Conformal, with the flap detached and hung from a Hinge as described
-in <a href="#the-conformal-parent">The Conformal Parent</a> (Figure 7).
-Add two Conformals to the Wing with <em>Offset</em> 0 and the chord trim
-of <a href="#trimming-a-wing">Trimming a Wing</a>: a main element that
-keeps the chord ahead of the hinge, and a flap that keeps the part
-behind it, so that Chord Min of the main element is Chord Max of the
-flap. Add a <a href="Hinge.html">Hinge</a> to the Wing, on the flap's
-front edge with its axis along it. Move the flap under the Hinge
-(<em>Cut</em> it, select the Hinge, <em>Paste</em>) and check
-<em>Detach</em>; the Wing stays its conformal parent. The flap then
-keeps its place on the wing while the Hinge is at rest and follows the
-Hinge's <em>Rotate</em>; a positive Rotate about an axis pointing toward
-the tip turns its trailing edge down. Leave the Wing itself out of the
-views and analyses, so that the two Conformals stand in for it.</p>
-<p><img src="images/Conformal_flap.png" title="Figure 7. A hinged flap"
-alt="Figure 7. A hinged flap" /></p>
-<p><em>Figure 7. The default Wing split by two Conformals meeting at a
-chord trim of 0.25, the flap hung from a Hinge along its front edge and
-turned by Rotate 30. The dashed outline is the flap at rest.</em></p>
-<h2 id="scripting">Scripting</h2>
+title="图 5：V Trim 与 Wing Trim" alt="图 5：V Trim 与 Wing Trim" /></p>
+<p><em>图 5：默认机翼内 Offset 0.1 的共形组件，Chord Min 0.2、Chord Max
+0.6，Eta 0.2 至 0.7，即图 6 的油箱。弦向裁剪已设定
+V1、V2，因此两者呈灰色。</em></p>
+<p><img src="images/Conformal_wing.png" title="图 6：机翼油箱"
+alt="图 6：机翼油箱" /></p>
+<p><em>图 6：默认机翼内共形组件的俯视图，Offset 0.1，Eta 0.2 至
+0.7，Chord Min 0.2，Chord Max 0.6。</em></p>
+<p><a id="a-hinged-flap"></a></p>
+<h2 id="铰接襟翼">铰接襟翼</h2>
+<p>可用两个共形组件将 Wing
+分为主翼面和可偏转襟翼，并将襟翼解除挂接后挂在铰链上，见<a
+href="#the-conformal-parent">共形父件</a>和图 7。</p>
+<p>给机翼添加两个 <em>Offset</em> 为 0 的共形组件，使用<a
+href="#trimming-a-wing">机翼裁剪</a>：主翼面保留铰线前方，襟翼保留后方，使主翼面的
+Chord Min 等于襟翼的 Chord Max。向机翼添加 <a
+href="Hinge.html">Hinge</a>，放在襟翼前缘且轴线沿前缘。将襟翼移到铰链下（<em>Cut</em>
+襟翼，选择铰链，再 <em>Paste</em>），勾选 <em>Detach</em>，Wing
+仍作为共形父件。</p>
+<p>铰链静止时襟翼保持在机翼上的原位，随后跟随铰链
+<em>Rotate</em>。绕指向翼尖的轴正向旋转，会使襟翼后缘下偏。将原 Wing
+从显示及分析集合中排除，由两个共形组件代表机翼。</p>
+<p><img src="images/Conformal_flap.png" title="图 7：铰接襟翼"
+alt="图 7：铰接襟翼" /></p>
+<p><em>图 7：默认机翼由两个共形组件在弦向裁剪值 0.25
+处拼接。襟翼挂在沿其前缘的铰链上，Rotate
+30；虚线轮廓表示未偏转位置。</em></p>
+<p><a id="scripting"></a></p>
+<h2 id="脚本">脚本</h2>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Control</th>
-<th style="text-align: left;">Parm</th>
-<th style="text-align: left;">Default</th>
+<th style="text-align: left;">控件</th>
+<th style="text-align: left;">参数</th>
+<th style="text-align: left;">默认值</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;">Detach</td>
 <td style="text-align: left;"><code>DetachFlag</code></td>
-<td style="text-align: left;">off</td>
+<td style="text-align: left;">关闭</td>
 </tr>
 <tr>
 <td style="text-align: left;">Position on Hinge</td>
 <td
 style="text-align: left;"><code>HingeConformalPositionFlag</code></td>
-<td style="text-align: left;">on</td>
+<td style="text-align: left;">开启</td>
 </tr>
 <tr>
 <td style="text-align: left;">Offset</td>
@@ -319,76 +273,72 @@ style="text-align: left;"><code>HingeConformalPositionFlag</code></td>
 <tr>
 <td style="text-align: left;">Offset Ends</td>
 <td style="text-align: left;"><code>OffSetEnds</code></td>
-<td style="text-align: left;">on</td>
+<td style="text-align: left;">开启</td>
 </tr>
 <tr>
 <td style="text-align: left;">Enable U Trimming</td>
 <td style="text-align: left;"><code>UTrimFlag</code></td>
-<td style="text-align: left;">off</td>
+<td style="text-align: left;">关闭</td>
 </tr>
 <tr>
-<td style="text-align: left;">Trim type of each end</td>
-<td style="text-align: left;"><code>UMinTrimTypeFalg</code>,
-<code>UMaxTrimTypeFalg</code></td>
-<td style="text-align: left;"><code>U_TRIM</code>; also
-<code>L_TRIM</code>, <code>ETA_TRIM</code></td>
+<td style="text-align: left;">两端裁剪类型</td>
+<td
+style="text-align: left;"><code>UMinTrimTypeFalg</code>、<code>UMaxTrimTypeFalg</code></td>
+<td style="text-align: left;"><code>U_TRIM</code>；另可选
+<code>L_TRIM</code>、<code>ETA_TRIM</code></td>
 </tr>
 <tr>
 <td style="text-align: left;">U Min, U Max</td>
-<td style="text-align: left;"><code>UTrimMin</code>,
-<code>UTrimMax</code></td>
-<td style="text-align: left;">0.1, 0.9</td>
+<td
+style="text-align: left;"><code>UTrimMin</code>、<code>UTrimMax</code></td>
+<td style="text-align: left;">0.1、0.9</td>
 </tr>
 <tr>
 <td style="text-align: left;">L Min, L Max</td>
-<td style="text-align: left;"><code>LTrimMin</code>,
-<code>LTrimMax</code>; <code>L0LenTrimMin</code>,
-<code>L0LenTrimMax</code></td>
-<td style="text-align: left;">0.1, 0.9</td>
+<td
+style="text-align: left;"><code>LTrimMin</code>、<code>LTrimMax</code>；<code>L0LenTrimMin</code>、<code>L0LenTrimMax</code></td>
+<td style="text-align: left;">0.1、0.9</td>
 </tr>
 <tr>
-<td style="text-align: left;">01 or 0D</td>
-<td style="text-align: left;"><code>L01Min</code>,
-<code>L01Max</code></td>
+<td style="text-align: left;">01 / 0D</td>
+<td
+style="text-align: left;"><code>L01Min</code>、<code>L01Max</code></td>
 <td style="text-align: left;">01</td>
 </tr>
 <tr>
 <td style="text-align: left;">Eta Min, Eta Max</td>
-<td style="text-align: left;"><code>EtaTrimMin</code>,
-<code>EtaTrimMax</code></td>
-<td style="text-align: left;">0.1, 0.9</td>
+<td
+style="text-align: left;"><code>EtaTrimMin</code>、<code>EtaTrimMax</code></td>
+<td style="text-align: left;">0.1、0.9</td>
 </tr>
 <tr>
 <td style="text-align: left;">V1, V2</td>
-<td style="text-align: left;"><code>V1TrimFlag</code>,
-<code>V1TrimBegin</code>, <code>V1TrimEnd</code>,
-<code>V2TrimFlag</code>, <code>V2TrimBegin</code>,
-<code>V2TrimEnd</code></td>
-<td style="text-align: left;">off; 0.9, 0.1; 0.4, 0.6</td>
+<td
+style="text-align: left;"><code>V1TrimFlag</code>、<code>V1TrimBegin</code>、<code>V1TrimEnd</code>、<code>V2TrimFlag</code>、<code>V2TrimBegin</code>、<code>V2TrimEnd</code></td>
+<td style="text-align: left;">关闭；0.9、0.1；0.4、0.6</td>
 </tr>
 <tr>
-<td style="text-align: left;">Chord trim</td>
-<td style="text-align: left;"><code>ChordTrimFlag</code>,
-<code>ChordTrimMin</code>, <code>ChordTrimMax</code></td>
-<td style="text-align: left;">off; 0.1, 0.9</td>
+<td style="text-align: left;">弦向裁剪</td>
+<td
+style="text-align: left;"><code>ChordTrimFlag</code>、<code>ChordTrimMin</code>、<code>ChordTrimMax</code></td>
+<td style="text-align: left;">关闭；0.1、0.9</td>
 </tr>
 <tr>
-<td style="text-align: left;">Side trims</td>
-<td style="text-align: left;"><code>Side1TrimFlag</code> ...
-<code>Side4TrimFlag</code>, <code>Side1Trim</code> ...
+<td style="text-align: left;">侧面裁剪</td>
+<td style="text-align: left;"><code>Side1TrimFlag</code> …
+<code>Side4TrimFlag</code>、<code>Side1Trim</code> …
 <code>Side4Trim</code></td>
-<td style="text-align: left;">off; 0.1</td>
+<td style="text-align: left;">关闭；0.1</td>
 </tr>
 </tbody>
 </table>
-<p>These are in the <em>Design</em> group; note the spelling of
-<code>UMinTrimTypeFalg</code> and <code>UMaxTrimTypeFalg</code>. The
-trim caps are <code>CapUMinTrimOption</code>,
-<code>CapUMinTrimLength</code>, <code>CapUMinTrimOffset</code>,
-<code>CapUMinTrimStrength</code>, <code>CapUMinTrimSweepFlag</code> and
-their <code>CapUMax...</code> counterparts, in the <em>EndCap</em>
-group. A Conformal is added with
-<code>AddGeom( "CONFORMAL", parent_id )</code>, and moved under a Hinge
-with <code>SetGeomParent</code>, which keeps its conformal parent.</p>
+<p>以上参数位于 <em>Design</em> 组，注意原参数拼写确为
+<code>UMinTrimTypeFalg</code>、<code>UMaxTrimTypeFalg</code>。</p>
+<p>裁剪端盖参数位于 <em>EndCap</em> 组，包括
+<code>CapUMinTrimOption</code>、<code>CapUMinTrimLength</code>、<code>CapUMinTrimOffset</code>、<code>CapUMinTrimStrength</code>、<code>CapUMinTrimSweepFlag</code>
+及对应的 <code>CapUMax...</code> 参数。</p>
+<p>使用 <code>AddGeom( "CONFORMAL", parent_id )</code>
+添加共形组件；使用 <code>SetGeomParent</code>
+移到铰链下时，仍保留其共形父件。</p>
 </body>
 </html>

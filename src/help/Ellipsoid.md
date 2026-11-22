@@ -1,35 +1,39 @@
 ---
-title:  'Ellipsoid'
+title: '椭球体（Ellipsoid）'
+help-renderer: pandoc
 ---
 
-The Ellipsoid is a closed body with three radii, one along each axis.  With all three equal it is a sphere; with two
-equal, a spheroid such as a radome, a tank end or a blister.  It has one tab of its own, Design.  The [Gen](GenTab.md),
-[XForm](XFormTab.md), [Mass](MassTab.md) and [Sub](SubTab.md) tabs are described on their own pages.
+椭球体是由三个半径确定的封闭体，每个坐标轴对应一个半径。三个半径相等时为球体，两个相等时为
+旋转椭球体，可用于雷达罩、油箱端部或鼓包。它只有一个专用标签页 Design（设计）。通用的
+[Gen](GenTab.md)、[XForm](XFormTab.md)、[Mass](MassTab.md) 和 [Sub](SubTab.md) 标签页分别见对应帮助。
 
-## Quick Start
+<a id="quick-start"></a>
 
-1. Add an Ellipsoid.  A new one is a sphere of radius 1.
-2. Place it with the XForm tab.
-3. Set *A Radius*, *B Radius* and *C Radius*.
+## 快速开始
 
-## Design
+1. 添加椭球体。新组件是半径为 1 的球体。
+2. 在 XForm 标签页调整位置。
+3. 设置 *A Radius*、*B Radius* 和 *C Radius*。
 
-| Control  | Parm       | Default | Meaning                    |
-|:---------|:-----------|:--------|:---------------------------|
-| A Radius | `A_Radius` | 1       | Semi-axis along $X$, $a$.  |
-| B Radius | `B_Radius` | 1       | Semi-axis along $Y$, $b$.  |
-| C Radius | `C_Radius` | 1       | Semi-axis along $Z$, $c$.  |
+<a id="design"></a>
 
-The surface is
+## 设计
+
+| 控件 | 参数 | 默认值 | 含义 |
+|:-----|:-----|:-------|:-----|
+| A Radius（A 半径） | `A_Radius` | 1 | 沿 $X$ 轴的半轴长 $a$。 |
+| B Radius（B 半径） | `B_Radius` | 1 | 沿 $Y$ 轴的半轴长 $b$。 |
+| C Radius（C 半径） | `C_Radius` | 1 | 沿 $Z$ 轴的半轴长 $c$。 |
+
+曲面方程为
 
 $$
 \left(\frac{x - a}{a}\right)^2 + \left(\frac{y}{b}\right)^2 + \left(\frac{z}{c}\right)^2 = 1
 $$
 
-so the Ellipsoid's nose, not its center, is at its origin, and it runs from $X = 0$ to $X = 2a$.  Changing *A Radius*
-keeps the nose in place and moves the center.  *Rot Origin(X)* on the XForm tab is a fraction of the length $2a$, so 0.5
-turns the Ellipsoid about its center.
+因此位于组件原点的是椭球体的头部，而不是中心；其范围从 $X = 0$ 延伸至 $X = 2a$。
+改变 *A Radius* 时，头部保持不动，中心随之移动。XForm 标签页的 *Rot Origin(X)* 以长度 $2a$
+的比例表示旋转中心位置，因此设为 0.5 时绕椭球体中心旋转。
 
-The surface follows this equation closely but not exactly: every point lies within 0.04 percent of the radius in its
-direction from the true ellipsoid.  A radius may be zero, which flattens the Ellipsoid into an elliptical
-disk.
+实际曲面与此方程十分接近，但并非完全一致：沿各方向测量，每个点相对精确椭球面的误差均不超过
+该方向半径的 0.04%。半径可以为零，此时椭球体压扁为椭圆盘。

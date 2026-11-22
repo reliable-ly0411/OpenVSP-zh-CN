@@ -1,125 +1,112 @@
 ---
-title:  'Body of Revolution'
+title: '回转体（Body of Revolution）'
+help-renderer: pandoc
 ---
 
-The Body of Revolution (BOR) sweeps a single cross section once around the $X$ axis.  In *Flowthrough* mode the
-section is set off from the axis, and the result is an open ring: a duct, a fan shroud, a ring wing or a short
-nacelle, with an airfoil for its wall.  In *Upper* and *Lower* mode the axis runs along the section's chord, and the
-result is a closed, streamlined body whose radius follows the section's upper or lower surface.
+Body of Revolution（BOR，回转体）将单个截面绕 $X$ 轴旋转一周。*Flowthrough* 模式把截面偏置于轴外，形成开口环形体，可表示以翼型为壁面的涵道、风扇罩、环形翼或短舱。*Upper*、*Lower* 模式使轴线沿截面弦线，分别旋转上表面或下表面，形成两端封闭的流线型回转体。
 
-| Topic                                                   | Tab    |
-|:--------------------------------------------------------|:-------|
-| [Quick Start](#quick-start)                             |        |
-| [Flowthrough](#flowthrough)                             | Design |
-| [Upper and Lower](#upper-and-lower)                     | Design |
-| [The Cross Section](#the-cross-section)                 | XSec, Modify |
-| [Tessellation](#tessellation)                           | Design |
-| [Scripting](#scripting)                                 |        |
+| 主题 | 标签页 |
+|:-----|:-------|
+| [快速开始](#quick-start) | |
+| [贯通模式](#flowthrough) | Design |
+| [上表面与下表面模式](#upper-and-lower) | Design |
+| [截面](#the-cross-section) | XSec、Modify |
+| [曲面离散](#tessellation) | Design |
+| [脚本](#scripting) | |
 
-The [Gen](GenTab.md), [XForm](XFormTab.md), [Mass](MassTab.md) and [Sub](SubTab.md) tabs are described on their own
-pages.
+[Gen](GenTab.md)、[XForm](XFormTab.md)、[Mass](MassTab.md)、[Sub](SubTab.md) 标签页另有说明。
 
-## Quick Start
+<a id="quick-start"></a>
 
-### A duct
+## 快速开始
 
-1. Add a Body of Revolution.  A new one is a torus: a circle of diameter 1 swept around a circle of diameter 2.
-2. Place it with the XForm tab.
-3. Choose an airfoil for the section on the XSec tab, and set its chord and *T/C*.
-4. Set *Diameter* and *Angle* on the Design tab.
+<a id="a-duct"></a>
 
-### A streamlined body
+### 涵道
 
-1. Add a Body of Revolution and set *Mode* to Upper.
-2. Place it with the XForm tab.
-3. Choose a symmetric airfoil for the section on the XSec tab.
-4. Set the chord to the body's length, and *T/C* to its diameter over its length.
+1. 添加 Body of Revolution。初始形状是圆环面：直径为 1 的圆沿直径为 2 的圆周旋转。
+2. 在 XForm 标签页设置位置与姿态。
+3. 在 XSec 标签页选择翼型，并设置弦长和 *T/C*（相对厚度）。
+4. 在 Design 标签页设置 *Diameter* 和 *Angle*。
 
-## Flowthrough
+<a id="a-streamlined-body"></a>
 
-The section is laid with its chord along $X$, its leading edge at $X = 0$ and at a radius of half the *Diameter*,
-and its upper surface outward (Figure 1).  *Angle* then turns the section about its leading edge; a positive angle
-turns its trailing edge toward the axis, so the ring narrows toward the back.  The section is swept a full turn around
-the $X$ axis; its inner surface is the inside of the duct.
+### 流线型回转体
 
-![Figure 1. Flowthrough](images/BOR_flowthrough.png "Figure 1. Flowthrough")
+1. 添加 Body of Revolution，将 *Mode* 设为 Upper。
+2. 在 XForm 标签页设置位置与姿态。
+3. 在 XSec 标签页选择对称翼型。
+4. 将弦长设为回转体长度，*T/C* 设为直径与长度之比。
 
-*Figure 1. A Flowthrough BOR cut through its axis, above the axis: a NACA 4412 section, chord 1, Diameter 2, at Angle
-0 (dashed) and 10 degrees.*
+<a id="flowthrough"></a>
 
-Four areas are reported, each the area of a circle about the axis:
+## 贯通模式（Flowthrough）
 
-| Output | Area                                                                                         |
-|:-------|:---------------------------------------------------------------------------------------------|
-| A0     | Enclosed by the leading edge: the capture area of a duct, $\pi (D/2)^2$.                     |
-| Ae     | Enclosed by the trailing edge: the exit area.                                                |
-| Amin   | Enclosed by the point of the section nearest the axis: the throat.                           |
-| Amin W | Where that point lies: the fraction $W$ of the way around the section from the trailing edge.  |
+截面弦线沿 $X$，前缘位于 $X = 0$、距轴为 *Diameter* 的一半，上表面朝外（图 1）。*Angle* 绕前缘旋转截面，正值使后缘朝轴线偏转，因此环形体向后收窄。截面绕 $X$ 轴旋转整周，其内表面构成涵道内壁。
 
-In Upper and Lower mode they are zero.
+![图 1：贯通模式](images/BOR_flowthrough.png "图 1：贯通模式")
 
-Figure 2 shows the radius behind each area.  Once a positive *Angle* turns the trailing edge in far enough, the trailing
-edge is the point nearest the axis, and *Amin* equals *Ae*; on the section of Figure 1 that happens from an *Angle* of
-about 2 degrees.
+*图 1：沿轴剖开贯通 BOR，显示轴线上方部分。截面为 NACA 4412，弦长 1，Diameter 2；虚线为 Angle 0，另一位置为 10 度。*
 
-![Figure 2. Areas](images/BOR_areas.png "Figure 2. Areas")
+界面报告下列面积及最小面积位置。面积均指绕轴圆形截面的面积：
 
-*Figure 2. The section of Figure 1 at Angle -5 degrees, cut through the axis above it, with the radii of the circles
-whose areas are A0, Ae and Amin: $A_0 = \pi r_0^2$, $A_e = \pi r_e^2$, $A_{min} = \pi r_{min}^2$.  The dot is the
-point nearest the axis, on the inner surface.*
+| 输出 | 含义 |
+|:-----|:-----|
+| A0 | 前缘围成的面积，即涵道捕获面积 $\pi (D/2)^2$。 |
+| Ae | 后缘围成的面积，即出口面积。 |
+| Amin | 由截面最靠近轴线的点确定的面积，即喉道面积。 |
+| Amin W | 该最近点的位置：从后缘起沿截面周向计量的比例 $W$。 |
 
-A Flowthrough BOR is the quickest model of a round duct or nacelle: one airfoil, a diameter and an angle.  It is always
-the open ring, though, and always round.  When an analysis needs the nacelle closed at its lips or faces, a flowpath
-that cuts through the wing or fuselage it is buried in, or an inlet carried upstream to the edge of a CFD domain, or
-when the nacelle is not round, build it as a Stack from a nacelle preset (see [Stack Presets](StackPresets.md)) and
-choose its representation with the [Engine Model](EngineModel.md).
+Upper、Lower 模式下这些输出为零。
 
-## Upper and Lower
+图 2 表示各面积对应的半径。正 *Angle* 足够大，使后缘成为距轴最近点时，*Amin* 等于 *Ae*；图 1 截面约从 2 度开始出现这种情况。
 
-In *Upper* mode the section's chord lies on the $X$ axis, leading edge at the origin, and its upper surface is swept
-around the axis, so the body's radius at each point along the chord is the height of the upper surface there.
-*Lower* does the same with the lower surface, measured below the chord.  The result is closed at both ends, and as
-long as the chord (Figure 3).  *Diameter* and *Angle* are not used, and are greyed.
+![图 2：面积](images/BOR_areas.png "图 2：面积")
 
-The radius of the body is the section's thickness above (or below) its chord line, so a symmetric section of
-thickness ratio $t/c$ gives a body of diameter $t$ and length-to-diameter ratio $c/t$.  Camber makes the Upper body
-fatter and the Lower body thinner.
+*图 2：图 1 截面在 Angle -5 度时的轴向剖面，显示轴上方部分及 A0、Ae、Amin 对应的圆半径：$A_0 = \pi r_0^2$、$A_e = \pi r_e^2$、$A_{min} = \pi r_{min}^2$。圆点为内表面上距轴最近的位置。*
 
-![Figure 3. Upper and Lower](images/BOR_upperlower.png "Figure 3. Upper and Lower")
+贯通 BOR 只需一个翼型、直径和角度，即可快速构建圆形涵道或短舱，但始终是开口圆环。若分析需要将短舱唇口或端面封闭、需要穿过所埋入机翼或机身的流道、需要把进口延伸至上游 CFD 域边界，或短舱并非圆形，应使用短舱预设构建 Stack，见[堆叠体预设](StackPresets.md)，再通过[发动机模型](EngineModel.md)选择表达方式。
 
-*Figure 3. The Upper (above) and Lower (below) bodies of a NACA 4412 section of chord 1, cut through their axis, with
-the section (dashed).*
+<a id="upper-and-lower"></a>
 
-## The Cross Section
+## 上表面与下表面模式（Upper / Lower）
 
-The section may be any of the [Cross Section Curves](XSecCurves.md) or [Airfoils](Airfoils.md), and the Modify tab
-treats it as it treats a wing's airfoil (see [Airfoils](Airfoils.md)).
+*Upper* 模式使截面弦线位于 $X$ 轴、前缘位于原点，并绕轴旋转上表面。因此沿弦向各位置的回转体半径等于该处上表面高度。*Lower* 同理使用弦线下方的下表面。生成结果两端封闭，长度等于弦长（图 3）。*Diameter*、*Angle* 不参与计算，呈灰色。
 
-A new BOR's section is a circle of diameter 1.  An airfoil chosen in its place keeps its width and height, so it
-starts with a chord of 1 and a *T/C* of 1: set the thickness straight away.
+回转体半径是截面在弦线上方或下方的厚度。因此相对厚度为 $t/c$ 的对称截面，生成直径为 $t$、长细比为 $c/t$ 的回转体。弯度使 Upper 回转体更粗，Lower 更细。
 
-In every mode the BOR is a wing-type surface with the section as its airfoil, so analyses that reduce wings to thin
-lifting surfaces (DegenGeom, the VSPAERO vortex lattice) treat a Flowthrough BOR as a ring wing, and treat an Upper or
-Lower BOR as a lifting surface too, not as a body.  Model a streamlined body that such an analysis should see as a
-body with a [Fuselage or Stack](FuselageStack.md) or a [Pod](Pod.md).
+![图 3：Upper 与 Lower](images/BOR_upperlower.png "图 3：Upper 与 Lower")
 
-## Tessellation
+*图 3：弦长 1 的 NACA 4412 截面生成的 Upper（上图）和 Lower（下图）回转体轴向剖面，虚线为原截面。*
 
-The Gen tab's *Num_U* sets the points around the axis, and *Num_W* the points around the section.  *LE Clustering*
-and *TE Clustering* on the Design tab bunch the points around the section toward its leading and trailing edges
-(values below 1 bunch them).  *Cap Tess* sets the points across the section's trailing edge when the Modify tab
-leaves it blunt.
+<a id="the-cross-section"></a>
 
-## Scripting
+## 截面
 
-| Control         | Parm                     | Default                                              |
-|:----------------|:-------------------------|:-----------------------------------------------------|
-| Mode            | `Mode`                   | `BOR_FLOWTHROUGH`; also `BOR_UPPER`, `BOR_LOWER`     |
-| Diameter        | `Diameter`               | 2                                                    |
-| Angle           | `Angle`                  | 0                                                    |
-| A0, Ae, Amin, Amin W | `A0`, `Ae`, `Amin`, `AminW` | outputs                                     |
-| LE, TE Clustering | `LECluster`, `TECluster` | 0.25                                               |
+可选择任意[截面曲线](XSecCurves.md)或[翼型](Airfoils.md)。Modify 标签页对其处理方式与机翼翼型相同，见[翼型](Airfoils.md)。
 
-All are in the *Design* group.  The section is changed with `ChangeBORXSecShape` and read with `GetBORXSecShape`;
-its parameters are in the BOR's *XSecCurve* group.  `ReadBORFileXSec`, `ReadBORFileAirfoil`, `SetBORXSecPnts`,
-`SetBORAirfoilPnts` and the `...BORCST...` calls set a section from a file, from points, or as a CST airfoil.
+新 BOR 的截面为直径 1 的圆。替换为翼型时保留原宽高，因此初始弦长为 1、*T/C* 也为 1，应立即调整相对厚度。
+
+所有模式下 BOR 都属于以该截面为翼型的机翼类曲面。因此，将机翼简化为薄升力面的分析（DegenGeom、VSPAERO 涡格法）会把贯通 BOR 看作环形翼，也会把 Upper、Lower BOR 看作升力面而非机体。若需要这些分析将流线型组件识别为机体，应改用[机身或堆叠体](FuselageStack.md)，或[吊舱](Pod.md)。
+
+<a id="tessellation"></a>
+
+## 曲面离散
+
+Gen 标签页的 *Num_U* 设置绕轴点数，*Num_W* 设置截面周向点数。Design 的 *LE Clustering*、*TE Clustering* 使截面点向前缘、后缘聚集，小于 1 时产生加密。若 Modify 留下钝后缘，*Cap Tess* 设置跨越后缘的点数。
+
+<a id="scripting"></a>
+
+## 脚本
+
+| 控件 | 参数 | 默认值 |
+|:-----|:-----|:-------|
+| Mode | `Mode` | `BOR_FLOWTHROUGH`；另可选 `BOR_UPPER`、`BOR_LOWER` |
+| Diameter | `Diameter` | 2 |
+| Angle | `Angle` | 0 |
+| A0, Ae, Amin, Amin W | `A0`、`Ae`、`Amin`、`AminW` | 输出量 |
+| LE, TE Clustering | `LECluster`、`TECluster` | 0.25 |
+
+以上参数均位于 *Design* 组。使用 `ChangeBORXSecShape` 修改截面类型，`GetBORXSecShape` 读取类型；截面参数位于 BOR 的 *XSecCurve* 组。
+
+`ReadBORFileXSec`、`ReadBORFileAirfoil`、`SetBORXSecPnts`、`SetBORAirfoilPnts` 和 `...BORCST...` 系列调用，分别支持从文件、点列或 CST 翼型定义截面。

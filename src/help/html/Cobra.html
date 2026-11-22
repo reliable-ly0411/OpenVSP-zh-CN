@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Cobra</title>
+  <title>Cobra 前体</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -31,116 +25,94 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Cobra</h1>
+<h1 class="title">Cobra 前体</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>The Cobra is a forebody described by a handful of dimensions. Its
-nose is a super-ellipse in planform and in profile; its aft body runs
-straight back from the nose, tangent to it, to a flat base; and every
-cross section is a super-ellipse whose upper and lower halves may
-differ, its corners filling out from the nose to the base. It suits
-blunt-based bodies such as missile and hypersonic forebodies, canopies
-and fairings, where a few numbers should set the whole shape.</p>
-<p>The shape is NASA's COBRA (Co-Optimization of Blunt-body Re-entry
-Analysis) body, defined at NASA Ames Research Center as a parametric
-family of lifting entry vehicles and used to optimize mid lift-to-drag
-aeroshells for Mars entry [1, 2].</p>
-<p>The Cobra has one tab of its own, Design. The <a
-href="GenTab.html">Gen</a>, <a href="XFormTab.html">XForm</a>, <a
-href="MassTab.html">Mass</a> and <a href="SubTab.html">Sub</a> tabs are
-described on their own pages.</p>
-<h2 id="quick-start">Quick Start</h2>
+<p><a href="index.html">目录</a></p>
+<p>Cobra
+用少量尺寸定义前体形状。头部的俯视与侧视轮廓为超椭圆；后体从头部沿切线直线延伸至平底；每个横截面也是超椭圆，上下半部可以不同，截面角部从头部到尾底逐渐变得饱满。它适合导弹及高超声速前体、座舱盖、整流罩等钝底外形，以少数数值控制完整形状。</p>
+<p>该形状源自 NASA Ames 研究中心定义的 COBRA（Co-Optimization of
+Blunt-body Re-entry
+Analysis，钝体再入分析协同优化）参数化升力再入飞行器系列，用于优化火星进入任务的中等升阻比气动外壳
+[1, 2]。</p>
+<p>Cobra 自有标签页为 Design。<a href="GenTab.html">Gen</a>、<a
+href="XFormTab.html">XForm</a>、<a href="MassTab.html">Mass</a>、<a
+href="SubTab.html">Sub</a> 另有说明。</p>
+<p><a id="quick-start"></a></p>
+<h2 id="快速开始">快速开始</h2>
 <ol type="1">
-<li>Add a Cobra. A new one is a hemisphere of radius 1 on a cylinder of
-length 1, closed by a flat base.</li>
-<li>Place it with the XForm tab.</li>
-<li>Set the nose's <em>Length</em>, <em>Width</em>, <em>Upper
-Height</em> and <em>Lower Height</em>, and <em>PowX</em> for the
-fullness of the nose.</li>
-<li>Set the aft body's <em>Length</em>, and the <em>Width</em> and
-heights of the base, and the cross section exponents.</li>
+<li>添加 Cobra。初始外形为半径 1 的半球接长度 1
+的圆柱，以平底封闭。</li>
+<li>在 XForm 标签页设置位置与姿态。</li>
+<li>设置头部的 <em>Length</em>、<em>Width</em>、<em>Upper
+Height</em>、<em>Lower Height</em>，并用 <em>PowX</em>
+控制头部饱满程度。</li>
+<li>设置后体 <em>Length</em>、尾底的 <em>Width</em>
+和上下高度，以及横截面指数。</li>
 </ol>
-<h2 id="planform-and-profile">Planform and Profile</h2>
-<p>The nose runs from its tip, at the origin, to the station a nose
-<em>Length</em> aft,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>x</mi><mi>N</mi></msub><annotation encoding="application/x-tex">x_N</annotation></semantics></math>,
-where it reaches its full half-width <em>Width</em> and half-heights
-<em>Upper Height</em> and <em>Lower Height</em> (Figure 1). Seen from
-above its outline is the super-ellipse</p>
+<p><a id="planform-and-profile"></a></p>
+<h2 id="俯视与侧视轮廓">俯视与侧视轮廓</h2>
+<p>头部从原点处的尖端延伸至后方距离为头部 <em>Length</em> 的站位
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>x</mi><mi>N</mi></msub><annotation encoding="application/x-tex">x_N</annotation></semantics></math>，在该处达到完整半宽
+<em>Width</em>、上半高 <em>Upper Height</em> 和下半高 <em>Lower
+Height</em>（图 1）。俯视轮廓为超椭圆：</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mrow><mo stretchy="true" form="prefix">|</mo><mfrac><mrow><mi>x</mi><mo>−</mo><msub><mi>x</mi><mi>N</mi></msub></mrow><msub><mi>x</mi><mi>N</mi></msub></mfrac><mo stretchy="true" form="postfix">|</mo></mrow><msub><mi>p</mi><mi>x</mi></msub></msup><mo>+</mo><msup><mrow><mo stretchy="true" form="prefix">|</mo><mfrac><mi>y</mi><msub><mi>w</mi><mi>N</mi></msub></mfrac><mo stretchy="true" form="postfix">|</mo></mrow><msub><mi>p</mi><mi>x</mi></msub></msup><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">
 \left|\frac{x - x_N}{x_N}\right|^{p_x} + \left|\frac{y}{w_N}\right|^{p_x} = 1
 </annotation></semantics></math></p>
-<p>where
+<p>其中
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>w</mi><mi>N</mi></msub><annotation encoding="application/x-tex">w_N</annotation></semantics></math>
-is the nose <em>Width</em> and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>p</mi><mi>x</mi></msub><annotation encoding="application/x-tex">p_x</annotation></semantics></math>
-is <em>PowX</em>; seen from the side, its upper and lower outlines are
-the same curve with the heights in place of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>w</mi><mi>N</mi></msub><annotation encoding="application/x-tex">w_N</annotation></semantics></math>.
-<em>PowX</em> 2 gives an elliptical nose, larger values a blunter one,
-and 1 a pointed one with straight sides. Close to the tip the surface
-lies slightly inside this outline, which gives the tip a small point:
-with the default <em>PowX</em> of 2, by up to 5 percent of the width,
-within the first 5 percent of the nose <em>Length</em> (Figure 1).</p>
-<p>The aft body ends in the base, an aft <em>Length</em> behind the nose
-station, with half-width <em>Width</em> and half-heights <em>Upper
-Height</em> and <em>Lower Height</em>. Its sides, top and bottom are
-straight lines from the edges of the base, each tangent to the nose's
-outline. An aft body narrower than the nose meets the nose just aft of
-its widest station; a wider one, ahead of it; one of the same width runs
-straight back from it. The body is the nose <em>Length</em> plus the aft
-<em>Length</em> long, and <em>Rot Origin(X)</em> on the XForm tab is a
-fraction of that.</p>
-<p><img src="images/Cobra_views.png"
-title="Figure 1. Planform and profile"
-alt="Figure 1. Planform and profile" /></p>
-<p><em>Figure 1. A Cobra from above and from the side: nose Length 2,
-Width 1, Upper Height 0.8, Lower Height 0.5; aft Length 4, Width 0.5,
-Upper Height 0.5, Lower Height 0.2; PowX 2.</em></p>
-<p>Either length may be zero. With no aft length the body is the nose
-alone, closed flat at its widest station. With no nose length it is the
-aft body alone, running straight from the nose's section to the base,
-and its front is left open.</p>
-<h2 id="cross-sections">Cross Sections</h2>
-<p>Each cross section is a super-ellipse, its upper and lower halves
-separate:</p>
+是头部
+<em>Width</em>，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>p</mi><mi>x</mi></msub><annotation encoding="application/x-tex">p_x</annotation></semantics></math>
+是 <em>PowX</em>。侧视的上下轮廓使用相同曲线，只需分别用上下高度替代
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>w</mi><mi>N</mi></msub><annotation encoding="application/x-tex">w_N</annotation></semantics></math>。<em>PowX</em>
+为 2 时头部为椭圆轮廓，更大时更钝，为 1 时成为两侧直线的尖头。</p>
+<p>靠近尖端处，实际曲面略位于该轮廓内部，因此头部带有一个小尖点。默认
+<em>PowX</em> 2 时，这一差别发生在头部 <em>Length</em> 的前 5%
+内，最大约为宽度的 5%（图 1）。</p>
+<p>后体终止于尾底，距头部站位为后体
+<em>Length</em>，尾底半宽、上下半高分别由 <em>Width</em>、<em>Upper
+Height</em>、<em>Lower Height</em>
+给出。后体两侧、顶部和底部均为从尾底边缘向头部轮廓作出的切线。后体比头部窄时，连接点略在头部最宽站位之后；较宽时位于其前方；等宽时从该站位直向后延伸。总长等于头部
+<em>Length</em> 与后体 <em>Length</em> 之和，XForm 的 <em>Rot
+Origin(X)</em> 以该总长的比例表示。</p>
+<p><img src="images/Cobra_views.png" title="图 1：俯视与侧视轮廓"
+alt="图 1：俯视与侧视轮廓" /></p>
+<p><em>图 1：Cobra 的俯视和侧视。头部 Length 2、Width 1、Upper Height
+0.8、Lower Height 0.5；后体 Length 4、Width 0.5、Upper Height 0.5、Lower
+Height 0.2；PowX 2。</em></p>
+<p>两段长度都允许为零。后体长度为零时，只保留头部，在最宽站位以平面封闭；头部长度为零时，只保留从头部截面直线延伸到尾底的后体，前端保持开口。</p>
+<p><a id="cross-sections"></a></p>
+<h2 id="横截面">横截面</h2>
+<p>各横截面为上下半部分别定义的超椭圆：</p>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mrow><mo stretchy="true" form="prefix">|</mo><mfrac><mi>y</mi><mi>w</mi></mfrac><mo stretchy="true" form="postfix">|</mo></mrow><mi>p</mi></msup><mo>+</mo><msup><mrow><mo stretchy="true" form="prefix">|</mo><mfrac><mi>z</mi><mi>h</mi></mfrac><mo stretchy="true" form="postfix">|</mo></mrow><mi>p</mi></msup><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">
 \left|\frac{y}{w}\right|^{p} + \left|\frac{z}{h}\right|^{p} = 1
 </annotation></semantics></math></p>
-<p>where
+<p>其中
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>w</mi><annotation encoding="application/x-tex">w</annotation></semantics></math>
-is the half-width and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math>
-the upper or lower half-height at that station, read from the outlines
-above. The exponent
+为该站位半宽，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math>
+为对应上半高或下半高，由上述外轮廓确定。头部截面的指数
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
-is <em>PowNU</em> (upper) or <em>PowNL</em> (lower) over the nose. From
-the farther aft of the two points where the aft body's sides and its top
-(or bottom) leave the nose, or from the nose's widest station if both
-lie ahead of it, it changes smoothly, as a half cosine, to
-<em>PowAU</em> or <em>PowAL</em> at the base (Figure 2). An exponent of
-2 gives an ellipse, larger values fill out the corners toward a
-rectangle, and 1 gives a diamond.</p>
-<p><img src="images/Cobra_sections.png" title="Figure 2. Cross sections"
-alt="Figure 2. Cross sections" /></p>
-<p><em>Figure 2. Cross sections of the Cobra of Figure 1, seen from the
-front: the nose's widest station, with exponent 2, and the base, with
-exponent 4, and stations between them.</em></p>
-<p><em>Nose ULSymm</em> and <em>Aft ULSymm</em> make the lower half the
-same as the upper, taking its height and exponent; the lower controls
-are then greyed. Both are on by default.</p>
-<h2 id="parameters">Parameters</h2>
-<p>Every width and height is measured from the axis: <em>Width</em> is a
-half-width, and the two heights are the extents above and below the
-axis, so a section's full height is their sum.</p>
+为上半部 <em>PowNU</em> 或下半部 <em>PowNL</em>。</p>
+<p>指数从后体侧面与顶部（或底部）离开头部的两个切点中较靠后的站位开始变化；若两个切点都位于头部最宽站位前方，则从最宽站位开始。它按半余弦规律平滑变化，到尾底达到
+<em>PowAU</em> 或 <em>PowAL</em>（图 2）。指数 2
+对应椭圆，更大时角部趋于饱满、接近矩形，1 对应菱形。</p>
+<p><img src="images/Cobra_sections.png" title="图 2：横截面"
+alt="图 2：横截面" /></p>
+<p><em>图 2：从前方观察图 1 的 Cobra 截面，包括指数 2
+的头部最宽截面、指数 4 的尾底，以及中间站位。</em></p>
+<p><em>Nose ULSymm</em>、<em>Aft ULSymm</em>
+分别使头部、后体下半部采用上半部的高度和指数，此时下半部控件呈灰色。两项默认均开启。</p>
+<p><a id="parameters"></a></p>
+<h2 id="参数">参数</h2>
+<p>所有宽度和高度都从轴线计量：<em>Width</em>
+是半宽，两项高度分别为轴线上方和下方的范围，因此截面总高为两者之和。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Group</th>
-<th style="text-align: left;">Control</th>
-<th style="text-align: left;">Parm</th>
-<th style="text-align: left;">Default</th>
-<th style="text-align: left;">Meaning</th>
+<th style="text-align: left;">区域</th>
+<th style="text-align: left;">控件</th>
+<th style="text-align: left;">参数</th>
+<th style="text-align: left;">默认值</th>
+<th style="text-align: left;">含义</th>
 </tr>
 </thead>
 <tbody>
@@ -149,118 +121,111 @@ axis, so a section's full height is their sum.</p>
 <td style="text-align: left;">Length</td>
 <td style="text-align: left;"><code>XradN</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Length of the nose, tip to widest
-station.</td>
+<td style="text-align: left;">头部尖端至最宽站位的长度。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Nose</td>
 <td style="text-align: left;">Width</td>
 <td style="text-align: left;"><code>YradN</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Half-width at the widest station.</td>
+<td style="text-align: left;">最宽站位的半宽。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Nose</td>
 <td style="text-align: left;">PowX</td>
 <td style="text-align: left;"><code>PowX</code></td>
 <td style="text-align: left;">2</td>
-<td style="text-align: left;">Exponent of the nose's planform and
-profile.</td>
+<td style="text-align: left;">头部俯视、侧视轮廓指数。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Nose</td>
 <td style="text-align: left;">Upper Height</td>
 <td style="text-align: left;"><code>ZradNU</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Height above the axis at the widest
-station.</td>
+<td style="text-align: left;">最宽站位高于轴线的高度。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Nose</td>
 <td style="text-align: left;">PowNU</td>
 <td style="text-align: left;"><code>PowNU</code></td>
 <td style="text-align: left;">2</td>
-<td style="text-align: left;">Exponent of the upper cross section.</td>
+<td style="text-align: left;">上半横截面指数。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Nose</td>
 <td style="text-align: left;">Nose ULSymm</td>
 <td style="text-align: left;"><code>NoseULSymm</code></td>
-<td style="text-align: left;">on</td>
-<td style="text-align: left;">Lower half the same as the upper.</td>
+<td style="text-align: left;">开启</td>
+<td style="text-align: left;">下半部与上半部相同。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Nose</td>
 <td style="text-align: left;">Lower Height</td>
 <td style="text-align: left;"><code>ZradNL</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Depth below the axis at the widest
-station.</td>
+<td style="text-align: left;">最宽站位低于轴线的深度。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Nose</td>
 <td style="text-align: left;">PowNL</td>
 <td style="text-align: left;"><code>PowNL</code></td>
 <td style="text-align: left;">2</td>
-<td style="text-align: left;">Exponent of the lower cross section.</td>
+<td style="text-align: left;">下半横截面指数。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Aft</td>
 <td style="text-align: left;">Length</td>
 <td style="text-align: left;"><code>XlenA</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Length from the nose's widest station to
-the base.</td>
+<td style="text-align: left;">头部最宽站位至尾底的长度。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Aft</td>
 <td style="text-align: left;">Width</td>
 <td style="text-align: left;"><code>YradA</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Half-width of the base.</td>
+<td style="text-align: left;">尾底半宽。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Aft</td>
 <td style="text-align: left;">Upper Height</td>
 <td style="text-align: left;"><code>ZradAU</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Height of the base above the axis.</td>
+<td style="text-align: left;">尾底高于轴线的高度。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Aft</td>
 <td style="text-align: left;">PowAU</td>
 <td style="text-align: left;"><code>PowAU</code></td>
 <td style="text-align: left;">2</td>
-<td style="text-align: left;">Exponent of the upper cross section at the
-base.</td>
+<td style="text-align: left;">尾底上半横截面指数。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Aft</td>
 <td style="text-align: left;">Aft ULSymm</td>
 <td style="text-align: left;"><code>AftULSymm</code></td>
-<td style="text-align: left;">on</td>
-<td style="text-align: left;">Lower half the same as the upper.</td>
+<td style="text-align: left;">开启</td>
+<td style="text-align: left;">下半部与上半部相同。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Aft</td>
 <td style="text-align: left;">Lower Height</td>
 <td style="text-align: left;"><code>ZradAL</code></td>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">Depth of the base below the axis.</td>
+<td style="text-align: left;">尾底低于轴线的深度。</td>
 </tr>
 <tr>
 <td style="text-align: left;">Aft</td>
 <td style="text-align: left;">PowAL</td>
 <td style="text-align: left;"><code>PowAL</code></td>
 <td style="text-align: left;">2</td>
-<td style="text-align: left;">Exponent of the lower cross section at the
-base.</td>
+<td style="text-align: left;">尾底下半横截面指数。</td>
 </tr>
 </tbody>
 </table>
-<p>The exponents run from 1 to 10. All the parms are in the
-<em>Design</em> group.</p>
-<h2 id="references">References</h2>
+<p>指数范围为 1 至 10。上述所有参数均位于 <em>Design</em> 组。</p>
+<p><a id="references"></a></p>
+<h2 id="参考文献">参考文献</h2>
 <ol type="1">
 <li>Brown, J. L., Garcia, J. A., Kinney, D. J., Bowles, J. V. and
 Mansour, N. N., "Co-optimization of Blunt Body Shapes for Moving
