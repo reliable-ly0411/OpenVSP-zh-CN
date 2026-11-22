@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Gen Tab</title>
+  <title>通用标签页（Gen）</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -31,128 +25,111 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Gen Tab</h1>
+<h1 class="title">通用标签页（Gen）</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>Every component (Geom) in OpenVSP is edited in a window whose first
-tabs are the same for all of them: Gen, <a
-href="XFormTab.html">XForm</a>, <a href="MassTab.html">Mass</a> and <a
-href="SubTab.html">Sub</a>. The Gen tab holds what does not depend on
-the Geom's shape: its name and look, how finely it is tessellated,
-whether it cuts the Geoms it overlaps, which sets it belongs to, and its
-attributes. The tabs after the common ones shape the particular Geom and
-are described on its own page.</p>
+<p><a href="index.html">目录</a></p>
+<p>OpenVSP
+中每个组件（Geom）都在各自的窗口中编辑，窗口前面的通用标签页为 Gen、<a
+href="XFormTab.html">XForm</a>、 <a href="MassTab.html">Mass</a> 和 <a
+href="SubTab.html">Sub</a>。Gen
+管理与组件形状无关的设置：名称与外观、曲面离散精度、
+是否切除与其重叠的组件、所属集合及属性。后面的专用标签页用于改变该类组件的形状，详见对应组件帮助。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Topic</th>
+<th style="text-align: left;">主题</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><a href="#name-color-and-material">Name,
-Color and Material</a></td>
-</tr>
-<tr>
 <td style="text-align: left;"><a
-href="#tessellation">Tessellation</a></td>
+href="#name-color-and-material">名称、颜色与材质</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#negative-volume">Negative
-Volume</a></td>
+<td style="text-align: left;"><a href="#tessellation">曲面离散</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#sets">Sets</a></td>
+<td style="text-align: left;"><a href="#negative-volume">负体积</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#attributes">Attributes</a></td>
+<td style="text-align: left;"><a href="#sets">集合</a></td>
 </tr>
 <tr>
-<td style="text-align: left;"><a href="#scripting">Scripting</a></td>
+<td style="text-align: left;"><a href="#attributes">属性</a></td>
+</tr>
+<tr>
+<td style="text-align: left;"><a href="#scripting">脚本</a></td>
 </tr>
 </tbody>
 </table>
-<h2 id="name-color-and-material">Name, Color and Material</h2>
-<p>The <em>Name</em> is the Geom's name in the Geom Browser, in analysis
-results and in exported files. <em>Color</em> and <em>Material</em> set
-only how it is drawn.</p>
-<h2 id="tessellation">Tessellation</h2>
-<p>OpenVSP's surfaces are smooth; <em>Num_U</em> and <em>Num_W</em> set
-how finely they are cut into the triangles and quadrilaterals that the
-3D view draws and that the mesh-based analyses use (CompGeom, Mass
-Properties, VSPAERO, the mesh exports). <em>Num_U</em> is the number of
-points along each span of the surface between two of its cross sections
-(a pod has two such spans, nose to middle and middle to tail), and
-<em>Num_W</em> the number of points around each section. Fuselage and
-Stack set the points along each span section by section on the XSec tab
-instead (see <a
-href="FuselageStack.html#tessellation-along-the-body">Fuselage and
-Stack</a>), and Wing on its Sect tab (see <a
-href="Wing.html#tessellation">Wing</a>), so their <em>Num_U</em> is
-greyed.</p>
-<p>Choose the tessellation for the use. Finer is not always better: a
-surface smooth enough for 3D printing or an accurate wetted area is far
-finer than VSPAERO needs, and only makes it slower. One model can hold
-both (see <a href="#sets">Sets</a>).</p>
-<p><em>Num_W</em> is rounded up to one more than a multiple of four (of
-eight for Fuselage, Stack and Propeller), so that the tessellation
-always passes through the points a quarter of the way round each
-section: the top, bottom and sides of a body, or the leading and
-trailing edges of a wing.</p>
-<h2 id="negative-volume">Negative Volume</h2>
-<p>Almost every Geom with a surface is closed on its own, and Geoms are
-joined by overlapping them. The model keeps them as separate surfaces,
-and the 3D view draws them overlapping; only the analyses that need one
-outer surface, such as CompGeom, Mass Properties and CFD Mesh, intersect
-them and keep their union. So let parts overlap rather than just meet:
-carry a wing's root inside the fuselage instead of stopping it at the
-fuselage's surface.</p>
-<p>A Geom marked <em>Negative Volume</em>, under <em>CFDMesh Negative
-Volume</em> on the tab, is a cutter: in analyses that intersect the
-model, such as CompGeom, Mass Properties and CFD Mesh, its volume is
-removed from the Geoms it overlaps. The part of its surface inside them
-becomes the wall of the cut, and the part outside is dropped. Use it for
-a cut-out such as a wheel well or a cavity. It is greyed for a Geom
-whose surface the analyses already ignore, such as a propeller drawn as
-a disk.</p>
-<p>Make a cutter pass through the surface it opens, rather than end on
-it. Where a face of the cutter lies exactly on the surface of the Geom
-it cuts, which side of it each point lies on is ambiguous, and the cut
-can come out wrong. Carried a little past the surface, the same cutter
-cuts cleanly.</p>
-<h2 id="sets">Sets</h2>
-<p>The list holds every set in the model (named in the Set Editor, see
-<a href="SetEdit.html">Set Editor</a>), and the Geom is in each set that
-is checked. Analyses and exports each work on one set, so sets are how a
-Geom is left out of or included in each of them. Sets also let one model
-hold several versions of a part, each set up for a different use, such
-as a finely tessellated fuselage for wetted area in one set and a coarse
-one for VSPAERO in another; each analysis is then run on the set that
-holds its version.</p>
-<p><em>Shown</em> and <em>Not_Shown</em> are the two sets the 3D view
-uses: a Geom is always in exactly one of them, so checking one unchecks
-the other.</p>
-<h2 id="attributes">Attributes</h2>
-<p>The lower part of the Gen tab is an attribute editor for the Geom,
-and each sub-surface has one for itself on the <a
-href="SubTab.html">Sub</a> tab. Attributes are named values of any kind
-(text, numbers, vectors, matrices, references to Parms, groups of other
-attributes) that OpenVSP stores in the model file and the API can read,
-for notes or for data a downstream tool needs. They do not change the
-geometry. See <a href="AttributeExplorer.html">Attribute
-Explorer</a>.</p>
-<h2 id="scripting">Scripting</h2>
-<p>The tessellation and Negative Volume controls are Parms, set and read
-with <code>SetParmVal</code> and <code>GetParmVal</code> by name and
-group; <code>GetParmActiveFlag</code> tells whether a control is active
-or greyed, as of the last Update. The name, color, material and sets are
-not Parms and have functions of their own.</p>
+<p><a id="name-color-and-material"></a></p>
+<h2 id="名称颜色与材质">名称、颜色与材质</h2>
+<p><em>Name</em>
+是几何体浏览器、分析结果和导出文件中的组件名称。<em>Color</em>（颜色）与
+<em>Material</em>（材质） 只决定绘制外观。</p>
+<p><a id="tessellation"></a></p>
+<h2 id="曲面离散">曲面离散</h2>
+<p>OpenVSP 的曲面是光滑的。<em>Num_U</em> 和 <em>Num_W</em>
+决定将其离散为三角形及四边形的精细程度， 这些网格用于三维显示以及
+CompGeom、Mass Properties、VSPAERO 和网格导出等分析。 <em>Num_U</em>
+表示相邻两个截面之间每段曲面上的点数（吊舱有头部到中部、中部到尾部两段），
+<em>Num_W</em> 表示每个截面周向的点数。机身和堆叠体在 XSec
+标签页逐段设置纵向点数 （见<a
+href="FuselageStack.html#tessellation-along-the-body">机身与堆叠体</a>），机翼则在
+Sect 标签页设置 （见<a
+href="Wing.html#tessellation">机翼</a>），因此这些组件的 <em>Num_U</em>
+呈灰色。</p>
+<p>应按用途选择离散精度，并非越细越好。适合三维打印或精确计算湿面积的曲面网格，通常远比
+VSPAERO
+所需的网格密集，反而会降低其计算速度。同一模型可以保留两种版本，见<a
+href="#sets">集合</a>。</p>
+<p><em>Num_W</em>
+向上取为四的倍数加一；机身、堆叠体和螺旋桨则取八的倍数加一。
+这样网格一定经过截面周向四分之一处的点，也就是回转体的顶部、底部与两侧，或机翼的前缘与后缘。</p>
+<p><a id="negative-volume"></a></p>
+<h2 id="负体积">负体积</h2>
+<p>几乎所有有曲面的组件自身都是封闭的，各组件通过相互重叠连接。模型仍将它们保存为独立曲面，
+三维视图也直接绘制重叠部分。只有 CompGeom、Mass Properties 和 CFD Mesh
+等需要单一外表面的分析，
+才会计算曲面交线并保留并集。因此应让零件略有重叠，而不只是相接：例如让翼根伸入机身内部，
+而不是恰好停在机身表面。</p>
+<p>在 <em>CFDMesh Negative Volume</em> 区域勾选 <em>Negative Volume</em>
+的组件用作切除体。 CompGeom、Mass Properties 和 CFD Mesh
+等相交分析会从重叠组件中扣除它的体积。
+切除体位于其他组件内部的表面成为切口壁面，位于外部的部分被丢弃，可用于轮舱或空腔等开口。
+若分析本就忽略该组件曲面，例如以圆盘显示的螺旋桨，此选项呈灰色。</p>
+<p>切除体应穿过需要开口的表面，而不是恰好终止于该表面。若切除体的某个面与被切组件的表面完全重合，
+点位于哪一侧便难以判定，可能得到错误切口。将切除体稍微延伸到表面外侧即可避免这种情况。</p>
+<p><a id="sets"></a></p>
+<h2 id="集合">集合</h2>
+<p>列表包含模型的全部集合，名称在<a
+href="SetEdit.html">集合编辑器</a>中设置。勾选某集合即将组件纳入其中。
+分析和导出各自针对一个集合执行，因此可用集合控制哪些组件参与计算或导出。
+还可以在同一模型中保留同一部件的不同用途版本，例如一个集合包含用于湿面积计算的精细机身，
+另一个包含用于 VSPAERO 的粗网格机身，分别选择相应集合运行分析。</p>
+<p><em>Shown</em> 和 <em>Not_Shown</em>
+是三维视图使用的两个集合。组件始终只属于其中一个，勾选一个便会取消另一个。</p>
+<p><a id="attributes"></a></p>
+<h2 id="属性">属性</h2>
+<p>Gen 标签页下方是组件的属性编辑器；每个子曲面也在 <a
+href="SubTab.html">Sub</a> 标签页上有自己的属性编辑器。
+属性是带名称的各种数据，包括文本、数值、向量、矩阵、参数引用以及其他属性的分组。
+OpenVSP 将其保存到模型文件，API
+可以读取，用于备注或供后续工具使用的数据，不会改变几何形状。 详见<a
+href="AttributeExplorer.html">属性浏览器</a>。</p>
+<p><a id="scripting"></a></p>
+<h2 id="脚本">脚本</h2>
+<p>曲面离散和负体积控件属于参数（Parm），可通过名称和组名，用
+<code>SetParmVal</code>、<code>GetParmVal</code> 设置和读取。
+<code>GetParmActiveFlag</code> 返回最近一次 Update
+后控件处于启用还是灰显状态。名称、颜色、材质和集合不属于
+参数，各有专用函数。</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Control</th>
-<th style="text-align: left;">Parm</th>
-<th style="text-align: left;">Group</th>
+<th style="text-align: left;">控件</th>
+<th style="text-align: left;">参数</th>
+<th style="text-align: left;">组</th>
 </tr>
 </thead>
 <tbody>
@@ -163,7 +140,7 @@ not Parms and have functions of their own.</p>
 <td style="text-align: left;">Shape</td>
 </tr>
 <tr>
-<td style="text-align: left;">Negative Volume</td>
+<td style="text-align: left;">Negative Volume（负体积）</td>
 <td style="text-align: left;"><code>Negative_Volume_Flag</code></td>
 <td style="text-align: left;">Negative_Volume_Props</td>
 </tr>
@@ -172,28 +149,28 @@ not Parms and have functions of their own.</p>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Control</th>
-<th style="text-align: left;">Function</th>
+<th style="text-align: left;">控件</th>
+<th style="text-align: left;">函数</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Name</td>
+<td style="text-align: left;">Name（名称）</td>
 <td style="text-align: left;"><code>SetGeomName</code>,
 <code>GetGeomName</code></td>
 </tr>
 <tr>
-<td style="text-align: left;">Color</td>
+<td style="text-align: left;">Color（颜色）</td>
 <td style="text-align: left;"><code>SetGeomWireColor</code>,
 <code>GetGeomWireColor</code></td>
 </tr>
 <tr>
-<td style="text-align: left;">Material</td>
+<td style="text-align: left;">Material（材质）</td>
 <td style="text-align: left;"><code>SetGeomMaterialName</code>,
 <code>GetGeomMaterialName</code></td>
 </tr>
 <tr>
-<td style="text-align: left;">Sets</td>
+<td style="text-align: left;">Sets（集合）</td>
 <td style="text-align: left;"><code>SetSetFlag</code>,
 <code>GetSetFlag</code></td>
 </tr>

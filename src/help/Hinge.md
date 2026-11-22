@@ -1,188 +1,161 @@
 ---
-title:  'Hinge'
+title: '铰链（Hinge）'
+help-renderer: pandoc
 ---
 
-The Hinge component is a joint.  It has no shape of its own; it is a frame that turns about, and slides along, one of
-its own axes, and it carries every component attached to it.  Control surfaces, doors, folding wing tips, tilting
-nacelles and canopies are modeled by hanging the moving part off a Hinge and setting the Hinge's deflection.
+Hinge 组件表示关节，没有自身形状。它是一个可绕自身某条轴旋转、沿该轴平移的坐标系，并带动所有挂接组件。操纵面、舱门、折叠翼尖、倾转短舱和座舱盖等，都可将活动部件挂接到铰链，再设置铰链偏转来建模。
 
-| Topic                                                   | Tab          |
-|:--------------------------------------------------------|:-------------|
-| [Quick Start](#quick-start)                             |              |
-| [How a Hinge Moves Its Children](#how-a-hinge-moves-its-children) | Motion |
-| [Motion and Limits](#motion-and-limits)                 | Motion       |
-| [Orienting the Hinge](#orienting-the-hinge)             | Orient, XForm |
-| [Flip](#flip)                                           | XForm        |
-| [Other Uses of a Hinge](#other-uses-of-a-hinge)         |              |
-| [When Not to Use Hinge](#when-not-to-use-hinge)         |              |
-| [Shared Tabs](#shared-tabs)                             | Gen, XForm   |
-| [Scripting](#scripting)                                 |              |
+| 主题 | 标签页 |
+|:-----|:-------|
+| [快速开始](#quick-start) | |
+| [如何带动子组件](#how-a-hinge-moves-its-children) | Motion |
+| [运动与限位](#motion-and-limits) | Motion |
+| [确定铰链方向](#orienting-the-hinge) | Orient、XForm |
+| [翻转](#flip) | XForm |
+| [其他用途](#other-uses-of-a-hinge) | |
+| [不宜使用铰链的情况](#when-not-to-use-hinge) | |
+| [通用标签页](#shared-tabs) | Gen、XForm |
+| [脚本](#scripting) | |
 
-## Quick Start
+<a id="quick-start"></a>
 
-### A folding wing tip
+## 快速开始
 
-1. Add a Hinge.  Place it on the fold line with the XForm tab, attached to the wing if it should follow the wing.
-2. Turn it so that its $X$ axis lies along the fold line: with the XForm rotations, or on the Orient tab (see [Orienting
-   the Hinge](#orienting-the-hinge)).
-3. Select the Hinge and add the outer wing panel, so that the panel is the Hinge's child.
-4. Set *Rotate* on the Motion tab.
+<a id="a-folding-wing-tip"></a>
 
-### A sliding canopy
+### 折叠翼尖
 
-1. Add a Hinge.  Place it at the canopy with the XForm tab, attached to the fuselage.
-2. Turn it so that its $X$ axis lies along the direction the canopy slides.
-3. Select the Hinge and add the canopy, so that the canopy is the Hinge's child.
-4. On the Motion tab, allow *Translate*, disallow *Rotate*, and set *Translate*.
+1. 添加 Hinge，在 XForm 标签页将其放在折叠线上；若应随机翼移动，将它挂接到机翼。
+2. 用 XForm 旋转或 Orient 标签页，使自身 $X$ 轴沿折叠线，见[确定铰链方向](#orienting-the-hinge)。
+3. 选中 Hinge 后添加外翼段，使外翼段成为铰链的子级。
+4. 在 Motion 标签页设置 *Rotate*。
 
-## How a Hinge Moves Its Children
+<a id="a-sliding-canopy"></a>
 
-A Hinge has two frames, both drawn in the 3D view at its origin: its own frame, placed by the XForm tab and drawn with
-solid axes, and the joint frame, drawn dashed, which is its own frame moved by the deflection.  The joint frame is its
-own frame slid by *Translate* along the hinge axis and turned by *Rotate* about it, right-handed: a positive Rotate
-about $X$ turns $+Y$ toward $+Z$ (Figure 1).  The hinge axis is the Hinge's own $X$ unless the Orient tab chooses $Y$ or
-$Z$.
+### 滑动座舱盖
 
-![Figure 1. A hinged panel](images/Hinge_motion.png "Figure 1. A hinged panel")
+1. 添加 Hinge，用 XForm 将其放在座舱盖处并挂接到机身。
+2. 调整方向，使自身 $X$ 轴沿座舱盖滑动方向。
+3. 选中 Hinge 后添加座舱盖，使座舱盖成为其子级。
+4. 在 Motion 标签页允许 *Translate*、禁止 *Rotate*，再设置 *Translate*。
 
-*Figure 1. A wing panel hung off a Hinge whose axis is its $X$, at Rotate 0 (dashed outline) and Rotate 40.  The Hinge's
-own axes are solid; the joint frame, which carries the panel, is dashed.*
+<a id="how-a-hinge-moves-its-children"></a>
 
-Every child of a Hinge is attached rigidly to the joint frame.  The child's [Attach To
-Parent](XFormTab.md#attach-to-parent) choices are greyed, and its relative location and rotation on the XForm tab are
-measured in the joint frame, so the child keeps its place on the moving part as the Hinge deflects.  Its own children
-follow it as usual, so a whole assembly can ride one Hinge, and a Hinge can hang off another Hinge to make a chain of
-joints.  In the Geom Browser, the lines from a Hinge to its children are drawn double, to show that they are carried by
-the joint (Figure 2).
+## 如何带动子组件
 
-![Figure 2. A Hinge in the Geom Browser](images/Hinge_browser.png "Figure 2. A Hinge in the Geom Browser")
+铰链有两个坐标系，都在三维视图中以其原点为基准绘制：实线表示 XForm 设置的自身坐标系，虚线表示施加关节位移后的关节坐标系。后者沿铰链轴平移 *Translate*，并按右手规则绕该轴旋转 *Rotate*：绕 $X$ 的正转角将 $+Y$ 转向 $+Z$（图 1）。默认铰链轴为自身 $X$，也可在 Orient 中改为 $Y$ 或 $Z$。
 
-*Figure 2. A Hinge on a wing in the Geom Browser, carrying a flap: the line from the Hinge to its child is double.*
+![图 1：铰接翼段](images/Hinge_motion.png "图 1：铰接翼段")
 
-In a chain, each Hinge's deflection is measured on the part that carries it, so the joints compose the way the real
-mechanism does.  An aileron on a folding wing tip is a Hinge, attached to the outer panel along its
-trailing edge, that carries the aileron; the fold Hinge carries the outer panel, and with it the aileron Hinge.
-Folding the tip then carries the aileron and its hinge line with it, and the aileron deflects about its folded hinge
-line.  Build a mechanism this way, one Hinge per real joint, each a child of the part it is mounted on; the parts then
-stay together at any combination of deflections (Figure 3).
+*图 1：翼段挂接在以自身 $X$ 为轴的铰链上，虚线轮廓为 Rotate 0，另一位置为 Rotate 40。实线坐标轴是铰链自身坐标系，带动翼段的关节坐标系用虚线表示。*
 
-![Figure 3. A chain of Hinges](images/Hinge_chain.png "Figure 3. A chain of Hinges")
+所有子组件都刚性挂接到关节坐标系。子组件的 [Attach To Parent](XFormTab.md#attach-to-parent) 选项呈灰色，其 XForm 相对位置和旋转均以关节坐标系计量，因此铰链偏转时，子组件保持在活动部件上的相对位置。子组件的下级仍按通常规则跟随，整套组件可由同一铰链带动，也可将铰链挂在另一铰链下形成关节链。几何体浏览器中，铰链与子级之间用双线表示关节带动关系（图 2）。
 
-*Figure 3. A folding wing tip whose fold Hinge, along $X$, carries the outer panel, and an aileron Hinge, along the
-outer panel's trailing edge, that carries the aileron.  Dashed: Fold 0 and Aileron 0.  Solid: Fold 60 and Aileron
--20, which raises the aileron's trailing edge.  Below, enlarged: a section of the folded tip seen outboard along the
-aileron's folded hinge line, with the aileron at 0 dotted.*
+![图 2：几何体浏览器中的铰链](images/Hinge_browser.png "图 2：几何体浏览器中的铰链")
 
-Place the child where it should turn about the hinge axis: the axis passes through the Hinge's origin, so a child built
-with its own hinge line at its origin is placed at the Hinge's origin with zero relative location.
+*图 2：机翼上的铰链带动襟翼，铰链与子级之间为双线。*
 
-## Motion and Limits
+关节链中，每个铰链的偏转都相对于承载它的部件，因此组合运动与实际机构一致。例如折叠翼尖上的副翼由沿外翼段后缘挂接的铰链带动；折叠铰链带动外翼段，也连同带动副翼铰链。折叠翼尖时，副翼及其铰线一同移动，副翼随后绕折叠后的铰线偏转。每个实际关节对应一个 Hinge，并作为安装它的部件的子级，即可使各部件在各种偏转组合下保持连接（图 3）。
 
-A motion acts only while the check box beside its slider allows it; a motion that is not allowed is held at zero
-(Figure 4).  Rotate is allowed and Translate is not, by default.  A *Min* or *Max* whose check box is checked is a
-limit the deflection cannot pass.  To put a limit at a stop, pose the part there and click that limit's *Set*, which
-copies the current deflection into it.  *Rng* narrows or expands the slider to the checked limits, for easier control
-between them.
+![图 3：铰链链式连接](images/Hinge_chain.png "图 3：铰链链式连接")
 
-![Figure 4. Motion and limits](images/Hinge_gui_motion.png "Figure 4. Motion and limits")
+*图 3：沿 $X$ 的折叠铰链带动外翼段，沿外翼段后缘的副翼铰链带动副翼。虚线为 Fold 0、Aileron 0；实线为 Fold 60、Aileron -20，后者使副翼后缘抬起。下方放大图沿折叠后的副翼铰线向外看，点线表示副翼为 0 时的截面。*
 
-*Figure 4. The Motion tab with Translate allowed and Rotate limited to $-30^\circ$ and $60^\circ$, at Rotate
-$20^\circ$.  The Translate limits are not checked, so their sliders and Set buttons are greyed, and so is Translate's
-Rng.*
+铰链轴经过铰链原点，子组件应放在绕该轴运动的位置。若子组件建模时将自身铰线置于原点，则将其相对位置设为零，使两者原点重合。
 
-Translate is a length in model units, along the hinge axis.  Rotate is in degrees, between $-360$ and $360$.
+<a id="motion-and-limits"></a>
 
-The 3D view shows which motions are allowed: a circular arrow about the axis for Rotate, an arrowhead on the axis for
-Translate.
+## 运动与限位
 
-## Orienting the Hinge
+滑块旁的复选框决定是否允许对应运动，禁止的运动固定为零（图 4）。默认允许 Rotate，禁止 Translate。勾选 *Min* 或 *Max* 后，相应数值成为不能越过的限位。可先将部件摆到止挡位置，再点击该限位的 *Set*，把当前位移或转角写入。*Rng* 根据已启用限位收缩或扩展滑块范围，便于在限位之间控制。
 
-The Orient tab chooses how the Hinge's axes are set.
+![图 4：运动与限位](images/Hinge_gui_motion.png "图 4：运动与限位")
 
-- *Rotations (Use XForm Tab)*, the default, takes them from the XForm rotations, like any other component.
-- *Vectors* builds them from directions.  The XForm rotations are then computed from those directions and greyed.
+*图 4：已允许 Translate，Rotate 限位为 $-30^\circ$ 至 $60^\circ$，当前为 $20^\circ$。Translate 限位未勾选，因此限位滑块、Set 按钮及对应 Rng 均呈灰色。*
 
-*Axis* chooses which of the Hinge's own axes, $X$, $Y$ or $Z$, is the hinge axis, in either mode; the joint turns about
-and slides along it.  With Vectors (Figure 5), *Type* sets the direction of that axis:
+Translate 是沿铰链轴的长度，使用模型单位；Rotate 使用度，范围为 $-360$ 至 $360$。
 
-| Type     | The hinge axis points                                                                                   |
-|:---------|:--------------------------------------------------------------------------------------------------------|
-| VECTOR3D | Along the *Direction Vector*.                                                                           |
-| POINT3D  | From the Hinge's origin toward the point *Offset*.                                                      |
-| SURFPT   | From the Hinge's origin toward the point of the parent's surface at *U*, *W*, moved by *Offset*.        |
-| UDIR     | Along the parent's surface in its $u$ direction at *U*, *W*.                                            |
-| WDIR     | Along the parent's surface in its $w$ direction at *U*, *W*.                                            |
-| NDIR     | Along the parent's surface normal at *U*, *W*.                                                          |
+三维视图以绕轴圆箭头表示允许 Rotate，以轴上箭头表示允许 Translate。
 
-*Rel* gives a vector or an offset in the axes the Hinge is attached to (the parent's, when the Hinge is attached to its
-parent), except SURFPT's offset, which is always in the parent's axes; *Abs* gives it in the model's axes.  The surface
-types need the Hinge to have a parent with a surface.  UDIR on a wing, at the station of a control surface, gives a
-hinge axis that follows the wing's span there.
+<a id="orienting-the-hinge"></a>
 
-![Figure 5. Orient tab](images/Hinge_gui_orient.png "Figure 5. Orient tab")
+## 确定铰链方向
 
-*Figure 5. The Orient tab of a Hinge on a wing, oriented by Vectors with Type SURFPT at U 0.6, W 0.5.  The Offset and
-U, W are live; the Direction Vector is greyed and shows the hinge axis that results.  Axis and Reference cannot be the
-same axis, so Y is greyed under Axis and X under Reference.*
+Orient 标签页决定铰链自身坐标轴的设置方式：
 
-An axis alone allows a Hinge to rotate, but does not specify where zero rotation is.  The *Reference Vector*, along
-the model's or the attachment's $X$, $Y$ or $Z$, fixes that roll: the Hinge's axis chosen as *Reference* is set in
-the plane of the hinge axis and the reference vector, square to the hinge axis (Figure 6).  The reference vector is
-used with every Type.  Its *Rel* and *Abs* choose the attachment's axes and the model's, as for the direction vector;
-the default is *Rel*.
+- *Rotations (Use XForm Tab)* 为默认值，与其他组件一样采用 XForm 旋转。
+- *Vectors* 根据方向矢量构造坐标轴，XForm 转角由这些方向计算并呈灰色。
 
-![Figure 6. Orienting a Hinge by vectors](images/Hinge_orient.png "Figure 6. Orienting a Hinge by vectors")
+两种模式都由 *Axis* 选择自身 $X$、$Y$ 或 $Z$ 作为铰链轴，关节绕它旋转、沿它平移。Vectors 模式下（图 5），*Type* 决定该轴方向：
 
-*Figure 6. A Hinge on the swept hinge line of a left wing, oriented by Vectors: Type VECTOR3D along the hinge line, Axis
-$X$, Reference $Y$ and the reference vector along the model's $Z$.  The reference vector is turned about the Hinge's
-$Z$ until it is square to the hinge axis, and becomes the Hinge's $Y$.  The model's axes are drawn at its origin; the
-axes at the Hinge show directions only.*
+| Type | 铰链轴方向 |
+|:-----|:-----------|
+| VECTOR3D | 沿 *Direction Vector*（方向矢量）。 |
+| POINT3D | 从铰链原点指向 *Offset* 给出的点。 |
+| SURFPT | 从铰链原点指向父级曲面 *U*、*W* 处再加 *Offset* 偏移后的点。 |
+| UDIR | 沿父级曲面 *U*、*W* 处的 $u$ 方向。 |
+| WDIR | 沿父级曲面 *U*、*W* 处的 $w$ 方向。 |
+| NDIR | 沿父级曲面 *U*、*W* 处的法向。 |
 
-## Flip
+*Rel* 以铰链所挂接坐标系表达矢量或偏移；挂接父级时即为相应父级坐标系。SURFPT 的偏移是例外，始终使用父级坐标轴。*Abs* 使用模型坐标轴。曲面类型要求父级具有曲面。在机翼操纵面所在站位使用 UDIR，可令铰链轴跟随该处展向。
 
-[Flip](XFormTab.md#flip) on the XForm tab makes the Hinge move as the mirror image of its unflipped self, through each
-plane chosen.  The Hinge's frame itself is not reflected, nor are its children: a plane that contains the hinge axis
-reverses the sense of Rotate, and a plane square to the axis reverses the direction of Translate.  To mirror a hinged
-part, flip the part as well as its Hinge.
+![图 5：Orient 标签页](images/Hinge_gui_orient.png "图 5：Orient 标签页")
 
-A Hinge has no symmetry of its own; the symmetry controls are greyed.  A pair of mirrored control surfaces is two
-Hinges, or a Hinge and a [Clone](Clone.md) of it.
+*图 5：机翼上的铰链采用 Vectors、SURFPT，U 0.6、W 0.5。Offset 和 U、W 可编辑，Direction Vector 呈灰色并显示计算出的铰链轴方向。Axis 与 Reference 不能相同，因此 Axis 下的 Y 和 Reference 下的 X 呈灰色。*
 
-## Other Uses of a Hinge
+仅确定一条轴还不能确定零转角姿态。*Reference Vector*（参考矢量）沿模型或挂接坐标系的 $X$、$Y$、$Z$，用于确定绕铰链轴的基准转向：被选为 *Reference* 的铰链自身轴，放在铰链轴与参考矢量构成的平面内，并垂直于铰链轴（图 6）。
 
-- A [Clone](Clone.md) of a Hinge is a joint too.  Its own children ride on it, and it can take the original's deflection
-  or have its own.
-- The [Swept Volume](GeometryAnalysis.md#swept-volume) analysis can take a Hinge whose Translate is allowed as its
-  secondary geometry.  It then sweeps everything attached to the Hinge along the hinge axis, over the range the
-  analysis chooses: from *Min* to *Max*, from *Min* to the current Translate, from the current Translate to *Max*, or
-  out past the model forward or back.  The Min and Max values are used whether or not their check boxes are on.
+所有 Type 都使用参考矢量。与方向矢量相同，参考矢量的 *Rel* 与 *Abs* 分别选择挂接坐标轴和模型坐标轴，默认 *Rel*。
 
-## When Not to Use Hinge
+![图 6：由矢量确定铰链方向](images/Hinge_orient.png "图 6：由矢量确定铰链方向")
 
-- A [Gear](Gear.md) bogie has its own retraction mechanism; describe landing gear retraction there, not with a Hinge.
-- A [Propeller](Propeller.md) has its own mechanism for articulation and folding.  Describe the rotation of a
-  propeller, and movement within it (feather, flap, lag and folding), there, not with a Hinge.
+*图 6：左翼后掠铰线上的铰链采用 Vectors，VECTOR3D 沿铰线，Axis 为 $X$，Reference 为 $Y$，参考矢量沿模型 $Z$。参考矢量绕铰链 $Z$ 转至与铰链轴垂直，成为铰链 $Y$。模型坐标轴绘于模型原点，铰链处的坐标轴仅表示方向。*
 
-## Shared Tabs
+<a id="flip"></a>
 
-The Gen and XForm tabs are common to every component; see [Gen](GenTab.md) and [XForm](XFormTab.md).  A
-Hinge has neither a Mass tab nor a Sub tab, since it has no mass or surface.
+## 翻转
 
-## Scripting
+XForm 的 [Flip](XFormTab.md#flip) 使铰链运动相对于所选平面呈现镜像效果，但不反射铰链坐标系本身或子组件。包含铰链轴的平面会反转 Rotate 的方向，垂直于铰链轴的平面会反转 Translate 的方向。要镜像铰接部件，必须同时翻转部件及其铰链。
 
-A script adds a Hinge with `AddGeom( "HINGE" )`.  Its parms are in the group `Hinge`:
+铰链没有自身对称功能，对称控件呈灰色。一对镜像操纵面应使用两个铰链，或一个铰链及其[克隆体](Clone.md)。
 
-| Parm                                     | Meaning                                                                    |
-|:-----------------------------------------|:---------------------------------------------------------------------------|
-| `JointRotate`, `JointTranslate`          | The deflection: degrees, and model units along the axis.                   |
-| `JointRotateFlag`, `JointTranslateFlag`  | Whether each motion is allowed.                                            |
-| `JointRotMin`, `JointRotMax`, `JointTransMin`, `JointTransMax` | The limits.                                          |
-| `JointRotMinFlag`, `JointRotMaxFlag`, `JointTransMinFlag`, `JointTransMaxFlag` | Whether each limit is used.          |
-| `OrientRotFlag`                          | `HINGE_ORIENT_ROT` (Rotations) or `HINGE_ORIENT_VEC` (Vectors).            |
-| `PrimaryDir`, `SecondaryDir`             | *Axis* and *Reference*: `X_DIR`, `Y_DIR` or `Z_DIR`.                       |
-| `PrimType`                               | `HINGE_PRIM_VECTOR3D`, `_POINT3D`, `_SURFPT`, `_UDIR`, `_WDIR`, `_NDIR`.   |
-| `PrimXVec`, `PrimYVec`, `PrimZVec`, and `...Rel` | The direction vector, Abs and Rel.                                 |
-| `PrimXOff`, `PrimYOff`, `PrimZOff`, and `...Rel` | The offset, Abs and Rel.                                           |
-| `PrimVecAbsRelFlag`, `PrimOffAbsRelFlag`, `SecVecAbsRelFlag` | `ABS` or `REL`.                                        |
-| `PrimULoc`, `PrimWLoc`                   | *U* and *W* on the parent's surface.                                       |
-| `SecondaryVecDir`                        | The reference vector: `X_DIR`, `Y_DIR` or `Z_DIR`.                         |
+<a id="other-uses-of-a-hinge"></a>
+
+## 其他用途
+
+- 铰链的[克隆体](Clone.md)也是关节，自己的子级随它运动，可跟随原件偏转或独立设置。
+- [扫掠体积](GeometryAnalysis.md#swept-volume)分析可将允许 Translate 的铰链作为次级几何体，沿铰链轴扫掠全部挂接组件。分析范围可为 Min 至 Max、Min 至当前 Translate、当前 Translate 至 Max，或向模型前方／后方延伸至模型以外。无论限位复选框是否启用，分析都会使用 Min 和 Max 数值。
+
+<a id="when-not-to-use-hinge"></a>
+
+## 不宜使用铰链的情况
+
+- [起落架](Gear.md)轮架具有自身收放机构，应在该组件内描述收放，而不是另用 Hinge。
+- [螺旋桨](Propeller.md)具有自身铰接与折叠机构。旋转以及内部的变距、挥舞、摆振和折叠运动，应使用螺旋桨自身功能。
+
+<a id="shared-tabs"></a>
+
+## 通用标签页
+
+Gen、XForm 为组件通用标签页，详见[通用设置](GenTab.md)与[变换](XFormTab.md)。铰链没有质量或曲面，因此没有 Mass 和 Sub 标签页。
+
+<a id="scripting"></a>
+
+## 脚本
+
+脚本使用 `AddGeom( "HINGE" )` 添加铰链。参数位于 `Hinge` 组：
+
+| 参数 | 含义 |
+|:-----|:-----|
+| `JointRotate`、`JointTranslate` | 关节偏转：分别使用度和沿轴的模型长度单位。 |
+| `JointRotateFlag`、`JointTranslateFlag` | 是否允许相应运动。 |
+| `JointRotMin`、`JointRotMax`、`JointTransMin`、`JointTransMax` | 各限位数值。 |
+| `JointRotMinFlag`、`JointRotMaxFlag`、`JointTransMinFlag`、`JointTransMaxFlag` | 是否启用相应限位。 |
+| `OrientRotFlag` | `HINGE_ORIENT_ROT`（Rotations）或 `HINGE_ORIENT_VEC`（Vectors）。 |
+| `PrimaryDir`、`SecondaryDir` | *Axis* 与 *Reference*：`X_DIR`、`Y_DIR` 或 `Z_DIR`。 |
+| `PrimType` | `HINGE_PRIM_VECTOR3D`、`_POINT3D`、`_SURFPT`、`_UDIR`、`_WDIR`、`_NDIR`。 |
+| `PrimXVec`、`PrimYVec`、`PrimZVec` 和 `...Rel` | 方向矢量的 Abs 与 Rel 分量。 |
+| `PrimXOff`、`PrimYOff`、`PrimZOff` 和 `...Rel` | 偏移的 Abs 与 Rel 分量。 |
+| `PrimVecAbsRelFlag`、`PrimOffAbsRelFlag`、`SecVecAbsRelFlag` | `ABS` 或 `REL`。 |
+| `PrimULoc`、`PrimWLoc` | 父级曲面的 *U*、*W*。 |
+| `SecondaryVecDir` | 参考矢量：`X_DIR`、`Y_DIR` 或 `Z_DIR`。 |

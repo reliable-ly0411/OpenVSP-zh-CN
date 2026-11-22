@@ -1,132 +1,103 @@
 ---
-title:  'Routing'
+help-renderer: pandoc
+title: '管线布置（Routing）'
 ---
 
-The Routing component is a path through a series of points on other components: the run of a wire harness, a hydraulic,
-pneumatic, fuel or oxygen line, an air-conditioning duct, a control cable or pushrod, or a drive shaft.  Each point lies
-on a component, so the route follows when that component moves or changes shape.  The route reports its length and,
-given a mass per unit length, its mass, which Mass Properties includes.  A route is a curve, not a surface: it is drawn
-as a line, and it is not meshed or exported.
+Routing 组件是一条经过其他组件上一系列点的路径，可表示线束、液压管、气动管、燃油管、氧气管、空调风管、操纵拉索或推杆以及传动轴。各点依附于组件，因此组件移动或改变形状时，路径也会随之变化。路径提供长度；指定单位长度质量后，还可得到质量，并计入 Mass Properties。路径是曲线而非曲面，以线显示，不进行网格划分，也不导出。
 
-| Topic                                         | Tab          |
-|:----------------------------------------------|:-------------|
-| [Quick Start](#quick-start)                   |              |
-| [Routing Points](#routing-points)             | Design       |
-| [Placing a Point](#placing-a-point)           | Design       |
-| [Offset](#offset)                             | Design       |
-| [Rounded Corners](#rounded-corners)           | Design       |
-| [Length and Mass](#length-and-mass)           | Design, Mass |
-| [Symmetry](#symmetry)                         | XForm        |
-| [Shared Tabs](#shared-tabs)                   | Gen, XForm, Mass |
-| [Scripting](#scripting)                       |              |
+| 主题 | 选项卡 |
+|:-----|:-------|
+| [快速入门](#quick-start) | |
+| [路径点](#routing-points) | Design |
+| [定位路径点](#placing-a-point) | Design |
+| [偏移](#offset) | Design |
+| [圆角](#rounded-corners) | Design |
+| [长度与质量](#length-and-mass) | Design, Mass |
+| [对称](#symmetry) | XForm |
+| [通用选项卡](#shared-tabs) | Gen, XForm, Mass |
+| [脚本](#scripting) | |
 
-## Quick Start
+<a id="quick-start"></a>
+## 快速入门
 
-1. Add a Routing component.
-2. On the Design tab, click *Add Multiple*, then click on the components in the 3D view at each point of the route in
-   turn.  Click *Stop Adding* when done.
-3. Choose a point in the list to adjust it: its *Parent*, its coordinates, an *Offset*, and a *Radius* to round the
-   corner there.
-4. Give *Mass/Len* on the Mass tab to weigh the route.
+1. 添加 Routing 组件。
+2. 在 Design 选项卡点击 *Add Multiple（连续添加）*，然后在三维视图的组件上按顺序点击各路径点。完成后点击 *Stop Adding（停止添加）*。
+3. 在列表中选择一个点，调整其 *Parent（父组件）*、坐标、*Offset（偏移）*，以及用于将该处拐角倒圆的 *Radius（半径）*。
+4. 在 Mass 选项卡设置 *Mass/Len（单位长度质量）*，计算路径质量。
 
-## Routing Points
+<a id="routing-points"></a>
+## 路径点
 
-The route runs through its points in the order of the list (Figure 1); the arrows beside the list reorder them.
+路径按列表顺序经过各点（图 1）；列表旁的箭头可调整顺序。
 
-Most components follow only their parent.  A route follows every component it has a point on, wherever those are in
-the model's tree, and its own place in the tree does not matter.  So one route can run from the fuselage, along the
-wing, and into a nacelle that tilts on a [Hinge](Hinge.md), and it stretches and bends as the nacelle turns.
+大多数组件只跟随自己的父组件。路径则跟随承载其各点的所有组件，无论这些组件位于模型树何处；Routing 自身在树中的位置不影响这一行为。因此，一条路径可以从机身沿机翼延伸到由[铰链](Hinge.md)驱动倾转的短舱，并随短舱转动而伸展和弯曲。
 
-![Figure 1. A route](images/Routing_route.png "Figure 1. A route")
+![图 1. 路径](images/Routing_route.png "图 1. 路径")
 
-*Figure 1. A route over a pod and onto a wing through four points.  Point 1 is set off above the pod; the corner at
-point 3 is rounded.*
+*图 1. 一条经过四个点、从吊舱延伸到机翼的路径。点 1 偏移到吊舱上方，点 3 处的拐角已倒圆。*
 
-Points are placed by clicking in the 3D view (Figure 2).  *Add*, *Insert Before* and *Reset Point* act on the next
-click: Add puts a new point at the end of the route, Insert Before puts one before the chosen point, and Reset Point
-moves the chosen point.  *Add Multiple* and *Insert Multiple* do the same at every click until *Stop Adding*, and the
-route is drawn through the points placed so far.
+通过在三维视图中点击来放置点（图 2）。*Add*、*Insert Before* 和 *Reset Point* 对下一次点击生效：Add 在路径末端增加点，Insert Before 在选定点之前插入点，Reset Point 则移动选定点。*Add Multiple* 和 *Insert Multiple* 会对每次点击执行相应操作，直到点击 *Stop Adding*；路径会实时连接已经放置的点。
 
-![Figure 2. Routing points](images/Routing_gui_points.png "Figure 2. Routing points")
+![图 2. 路径点](images/Routing_gui_points.png "图 2. 路径点")
 
-*Figure 2. The Routing Points, Parent and Coordinate groups of the Design tab for the route over the pod and the
-wing, with point 1 chosen: it lies on the pod at U 0.12, W 0, given as UW, and its RST and LMN coordinates are
-greyed.*
+*图 2. 吊舱到机翼路径的 Design 选项卡中，Routing Points、Parent 和 Coordinate 分组。当前选中点 1：位于吊舱的 U 0.12、W 0 处，以 UW 表示，RST 和 LMN 坐标为灰色。*
 
-A click picks a point of a shown component's tessellation and sets the routing point at the nearest place on that
-component's surface: the component becomes the point's parent, and the point is given by its surface and its *U* and
-*W* on it.  A click sets the point's *Coord Type* to UW.  Its RST and LMN coordinates follow from where it now is,
-so either can be chosen again afterward without moving the point.
+点击会拾取一个已显示组件离散网格上的点，并将路径点放在该组件曲面上距离它最近的位置。该组件成为路径点的父组件，点的位置由曲面及其上的 *U*、*W* 给出。点击会将 *Coord Type* 设为 UW。RST 和 LMN 坐标随当前位置更新，因此之后改用其中任一种坐标表示，也不会使点移动。
 
-## Placing a Point
+<a id="placing-a-point"></a>
+## 定位路径点
 
-*Parent* is the component the point lies on, and *Surface* which of its surfaces, one for each symmetric copy and each
-surface of a multi-surface component.  *Coord Type* chooses how the point is given on that surface; the coordinates are
-those of the XForm tab's attachment, described in [Attachment Coordinates](XFormTab.md#attachment-coordinates):
+*Parent* 指定承载点的组件，*Surface* 指定它的哪个曲面：对称副本各有对应曲面，多曲面组件的各个曲面也分别列出。*Coord Type* 选择在该曲面上表示点的方法，其坐标与 XForm 选项卡附着功能使用的坐标相同，参见[附着坐标](XFormTab.md#attachment-coordinates)。
 
-| Coord Type | The point is                                                                                 |
-|:-----------|:---------------------------------------------------------------------------------------------|
-| Comp       | The parent's origin.                                                                         |
-| UW         | On the surface at *U*, *W*.                                                                  |
-| RST        | Inside the volume at *R*, *S*, *T*.                                                          |
-| LMN        | Inside the volume at *L*, *M*, *N*.                                                          |
-| $\eta$MN   | On a wing parent only: at the wing's spanwise station $\eta$ and *M*, *N*.                   |
+| 坐标类型 | 点的位置 |
+|:---------|:---------|
+| Comp | 父组件的原点。 |
+| UW | 曲面上 *U*、*W* 指定的位置。 |
+| RST | 体积内部 *R*、*S*、*T* 指定的位置。 |
+| LMN | 体积内部 *L*、*M*、*N* 指定的位置。 |
+| $\eta$MN | 仅适用于机翼父组件：机翼展向站位 $\eta$ 及 *M*、*N* 指定的位置。 |
 
-Whichever is chosen, the others are kept up to date and shown greyed; $\eta$MN is `ROUTE_PT_EtaMN` in the API.  A point
-on a component with no surface, such as a [Blank](Blank.md), lies at that component's origin, so Blanks can carry a
-route through free space.
+无论选择哪种表示，其他坐标都会同步更新并以灰色显示；$\eta$MN 在 API 中对应 `ROUTE_PT_EtaMN`。若点依附于没有曲面的组件，例如 [Blank](Blank.md)，它会位于该组件原点，因此可借助 Blank 将路径引导穿过自由空间。
 
-## Offset
+<a id="offset"></a>
+## 偏移
 
-*Offset* moves the point away from where it lies on its parent.  *Rel* gives the offset in the axes the point is
-attached by -- the surface's axes at that point for UW, RST and LMN, the parent's axes for Comp -- so the point keeps
-its place relative to the surface as the parent turns.  *Abs* gives it in the model's axes.  While the Routing component
-is selected, the 3D view draws those axes for the chosen point, at the point it is offset from.  Use an offset to run a
-route a set distance above a skin or inside a structure.
+*Offset* 将点从其在父组件上的附着位置移开。*Rel* 使用附着坐标轴表示偏移：UW、RST 和 LMN 使用该点处的曲面坐标轴，Comp 使用父组件坐标轴。因此，父组件转动时，点会保持相对于曲面的位置。*Abs* 使用模型坐标轴表示偏移。选中 Routing 组件时，三维视图会在选定点的偏移基准位置绘制这些坐标轴。可通过偏移使路径保持在蒙皮上方一定距离，或进入结构内部。
 
-## Rounded Corners
+<a id="rounded-corners"></a>
+## 圆角
 
-A route is a series of straight segments between its points.  *Radius* rounds the corner at a point with a circular arc
-of that radius, tangent to both segments, so the route no longer passes through the point itself; zero leaves a sharp
-corner.  The ends of the route are never rounded.  Give each corner the bend radius the real line will have, so that the
-length is right.
+路径由连接各点的直线段组成。*Radius* 在某点处以指定半径的圆弧替代拐角，圆弧与两条相邻线段相切，因此路径不再经过该点本身；半径为零时保留尖角。路径两端不会倒圆。为各拐角指定真实管线的弯曲半径，才能得到正确长度。
 
-## Length and Mass
+<a id="length-and-mass"></a>
+## 长度与质量
 
-*Length* is the length of the route, rounded corners included, and *Mass* is that length times *Mass/Len* from the Mass
-tab.  *Symm Length* and *Symm Mass* count every symmetric copy.  The Mass Properties analysis includes a route with a
-nonzero Mass/Len as a line of mass along it, with its center of gravity and moments of inertia, one for each symmetric
-copy.
+*Length* 是包含圆角的路径长度，*Mass* 为该长度乘以 Mass 选项卡中的 *Mass/Len*。*Symm Length* 和 *Symm Mass* 包含所有对称副本。对于 Mass/Len 非零的路径，Mass Properties 分析将其作为沿路径分布的线质量，计算重心和转动惯量，每个对称副本分别计入。
 
-## Symmetry
+<a id="symmetry"></a>
+## 对称
 
-A route has no placement of its own: its points are where its parents put them, so its location, rotation and attachment
-are greyed.  Its symmetry still applies, about the planes and axes the symmetry controls choose, so a route on one side
-of an aircraft can be mirrored to the other.  A route cannot be flipped.
+路径没有独立的放置变换：各点的位置由其父组件决定，因此位置、旋转和附着控件均为灰色禁用状态。对称仍然有效，按对称控件选择的平面和轴作用，因此可以把飞机一侧的路径镜像到另一侧。路径不能执行 Flip 翻转。
 
-## Shared Tabs
+<a id="shared-tabs"></a>
+## 通用选项卡
 
-The Gen, XForm and Mass tabs are common to every component; see [Gen](GenTab.md), [XForm](XFormTab.md)
-and [Mass](MassTab.md).  A route has no volume or area, so of the Mass tab only Mass/Len and the specified mass
-apply; with no placement of its own, a route's specified center of gravity is in the model's axes.  A route has no Sub
-tab.
+Gen、XForm 和 Mass 是组件通用选项卡，参见 [Gen](GenTab.md)、[XForm](XFormTab.md) 和 [Mass](MassTab.md)。路径没有体积或面积，因此 Mass 选项卡中仅 Mass/Len 和指定质量适用。由于路径没有独立的放置变换，其指定重心采用模型坐标轴。路径没有 Sub 选项卡。
 
-## Scripting
+<a id="scripting"></a>
+## 脚本
 
-The OpenVSP API builds and queries routes with these functions:
+OpenVSP API 使用以下函数构建和查询路径：
 
-| Call                                                                        | Purpose                                           |
-|:----------------------------------------------------------------------------|:--------------------------------------------------|
-| `AddRoutingPt`, `InsertRoutingPt`, `InsertRoutingPtByID`                    | Add a point on a component's surface.             |
-| `DelRoutingPt`, `DelRoutingPtByID`, `DelAllRoutingPt`                       | Delete points.                                    |
-| `MoveRoutingPt`, `MoveRoutingPtByID`                                        | Reorder the points.                               |
-| `GetNumRoutingPts`, `GetRoutingPtID`, `GetAllRoutingPtIds`                  | The points.                                       |
-| `GetRoutingPtParentID`, `SetRoutingPtParentID`                              | A point's parent.                                 |
-| `GetMainRoutingPtCoord`                                                     | A point's location, before symmetry.              |
-| `GetRoutingPtCoord`, `GetRoutingPtCoordByID`, `GetAllRoutingPtCoords`       | Points of one symmetric copy of the route.        |
-| `GetRoutingCurve`                                                           | The rounded route of one symmetric copy, as points. |
+| 调用 | 用途 |
+|:-----|:-----|
+| `AddRoutingPt`, `InsertRoutingPt`, `InsertRoutingPtByID` | 在组件曲面上添加点。 |
+| `DelRoutingPt`, `DelRoutingPtByID`, `DelAllRoutingPt` | 删除点。 |
+| `MoveRoutingPt`, `MoveRoutingPtByID` | 调整点的顺序。 |
+| `GetNumRoutingPts`, `GetRoutingPtID`, `GetAllRoutingPtIds` | 查询点的数量和标识。 |
+| `GetRoutingPtParentID`, `SetRoutingPtParentID` | 获取或设置点的父组件。 |
+| `GetMainRoutingPtCoord` | 获取应用对称前的点位置。 |
+| `GetRoutingPtCoord`, `GetRoutingPtCoordByID`, `GetAllRoutingPtCoords` | 获取路径某个对称副本中的点。 |
+| `GetRoutingCurve` | 以点列形式获取某个对称副本的圆角路径。 |
 
-A point's parms are in the group `RoutePt`: `CoordType` (`ROUTE_PT_COMP`, `ROUTE_PT_UV`, `ROUTE_PT_RST`, `ROUTE_PT_LMN`,
-`ROUTE_PT_EtaMN`), `SurfIndx`, `U`, `W`, `R`, `S`, `T`, `L`, `M`, `N`, `Eta`, `DeltaType` (`ABS` or `REL`), `DeltaX`,
-`DeltaY`, `DeltaZ` and their `...Rel` forms, and `Radius`.  The route's `LinearDensity` is in the group `Mass_Props`,
-and its `Length`, `SymmLength`, `Mass` and `m_SymmMass` in `Results`.
+点的参数位于 `RoutePt` 组：`CoordType`（`ROUTE_PT_COMP`、`ROUTE_PT_UV`、`ROUTE_PT_RST`、`ROUTE_PT_LMN`、`ROUTE_PT_EtaMN`）、`SurfIndx`、`U`、`W`、`R`、`S`、`T`、`L`、`M`、`N`、`Eta`、`DeltaType`（`ABS` 或 `REL`）、`DeltaX`、`DeltaY`、`DeltaZ` 及其 `...Rel` 形式，以及 `Radius`。路径的 `LinearDensity` 位于 `Mass_Props` 组，`Length`、`SymmLength`、`Mass` 和 `m_SymmMass` 位于 `Results` 组。

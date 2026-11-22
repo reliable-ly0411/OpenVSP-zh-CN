@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Pod</title>
+  <title>吊舱（Pod）</title>
   <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -31,90 +25,83 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Pod</h1>
+<h1 class="title">吊舱（Pod）</h1>
 </header>
-<p><a href="index.html">Contents</a></p>
-<p>The Pod is the simplest component: a streamlined body of revolution
-set by two numbers, a length and a fineness ratio. Its profile is fixed:
-a full, rounded nose, its greatest diameter at mid-length, and a tail
-that tapers to a point. It is the quickest way to put a store, a tank, a
-fairing or a placeholder body into a model. A body of any other shape is
-a <a href="FuselageStack.html">Fuselage or Stack</a>, or a <a
-href="BOR.html">Body of Revolution</a>.</p>
-<p>The Pod has one tab of its own, Design. The <a
-href="GenTab.html">Gen</a>, <a href="XFormTab.html">XForm</a>, <a
-href="MassTab.html">Mass</a> and <a href="SubTab.html">Sub</a> tabs are
-described on their own pages.</p>
-<h2 id="quick-start">Quick Start</h2>
+<p><a href="index.html">目录</a></p>
+<p>吊舱是最简单的组件：由长度和细长比两个数值确定的流线型回转体。其轮廓固定，头部丰满圆润，
+最大直径位于长度中点，尾部逐渐收缩至尖点。它适合快速建立外挂物、油箱、整流罩或占位体。
+其他外形可使用<a href="FuselageStack.html">机身或堆叠体</a>，或<a
+href="BOR.html">回转体</a>。</p>
+<p>吊舱只有一个专用标签页 Design（设计）。通用的 <a
+href="GenTab.html">Gen</a>、<a href="XFormTab.html">XForm</a>、 <a
+href="MassTab.html">Mass</a> 和 <a href="SubTab.html">Sub</a>
+标签页分别见对应帮助。</p>
+<p><a id="quick-start"></a></p>
+<h2 id="快速开始">快速开始</h2>
 <ol type="1">
-<li>Add a Pod. A new one is 10 long, with its nose at its origin and its
-axis along
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>.</li>
-<li>Place it with the XForm tab.</li>
-<li>Set <em>Length</em>.</li>
-<li>Set <em>Fine Ratio</em> to twice the length-to-diameter ratio wanted
-(see below).</li>
+<li>添加吊舱。新吊舱长度为 10，头部位于原点，轴线沿
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>
+方向。</li>
+<li>在 XForm 标签页调整位置。</li>
+<li>设置 <em>Length</em>（长度）。</li>
+<li>将 <em>Fine Ratio</em> 设为所需长径比的两倍，详见下文。</li>
 </ol>
-<h2 id="design">Design</h2>
+<p><a id="design"></a></p>
+<h2 id="设计">设计</h2>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Control</th>
-<th style="text-align: left;">Parm</th>
-<th style="text-align: left;">Default</th>
-<th style="text-align: left;">Meaning</th>
+<th style="text-align: left;">控件</th>
+<th style="text-align: left;">参数</th>
+<th style="text-align: left;">默认值</th>
+<th style="text-align: left;">含义</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">Length</td>
+<td style="text-align: left;">Length（长度）</td>
 <td style="text-align: left;"><code>Length</code></td>
 <td style="text-align: left;">10</td>
-<td style="text-align: left;">Length,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>L</mi><annotation encoding="application/x-tex">L</annotation></semantics></math>,
-from the nose at
+<td style="text-align: left;">从
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">X = 0</annotation></semantics></math>
-to the tail.</td>
+的头部到尾部的长度
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>L</mi><annotation encoding="application/x-tex">L</annotation></semantics></math>。</td>
 </tr>
 <tr>
-<td style="text-align: left;">Fine Ratio</td>
+<td style="text-align: left;">Fine Ratio（细长比）</td>
 <td style="text-align: left;"><code>FineRatio</code></td>
 <td style="text-align: left;">15</td>
-<td style="text-align: left;">The length divided by the greatest radius,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi><mi>/</mi><mi>R</mi></mrow><annotation encoding="application/x-tex">L / R</annotation></semantics></math>.</td>
+<td style="text-align: left;">长度与最大半径之比
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi><mi>/</mi><mi>R</mi></mrow><annotation encoding="application/x-tex">L / R</annotation></semantics></math>。</td>
 </tr>
 </tbody>
 </table>
-<p><em>Fine Ratio</em> is the length over the greatest radius, not the
-usual fineness ratio of length over diameter, and it keeps that
-definition so that existing models keep their shape. The
-length-to-diameter ratio is half of it: the default Pod, <em>Fine
-Ratio</em> 15, has a diameter of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>L</mi><mi>/</mi><mn>15</mn></mrow><annotation encoding="application/x-tex">2L/15</annotation></semantics></math>,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi><mi>/</mi><mi>D</mi><mo>=</mo><mn>7.5</mn></mrow><annotation encoding="application/x-tex">L/D = 7.5</annotation></semantics></math>.
-For a pod of length-to-diameter ratio
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi><mi>/</mi><mi>D</mi></mrow><annotation encoding="application/x-tex">L/D</annotation></semantics></math>,
-set <em>Fine Ratio</em> to
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mspace width="0.167em"></mspace><mi>L</mi><mi>/</mi><mi>D</mi></mrow><annotation encoding="application/x-tex">2\,L/D</annotation></semantics></math>.</p>
-<p>The radius is greatest,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mo>=</mo><mi>L</mi><mi>/</mi><mrow><mi mathvariant="normal">F</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">R</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">o</mi></mrow></mrow><annotation encoding="application/x-tex">R = L / \mathrm{FineRatio}</annotation></semantics></math>,
-at mid-length, and the profile is the same at every size (Figure 1). It
-reaches half of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>R</mi><annotation encoding="application/x-tex">R</annotation></semantics></math>
-at
+<p><em>Fine Ratio</em>
+是长度除以最大半径，不是通常以直径为分母的长径比。保留此定义是为了使既有模型的
+形状不变。长径比等于该值的一半：默认 <em>Fine Ratio</em> 为 15
+时，直径为
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>L</mi><mi>/</mi><mn>15</mn></mrow><annotation encoding="application/x-tex">2L/15</annotation></semantics></math>，<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi><mi>/</mi><mi>D</mi><mo>=</mo><mn>7.5</mn></mrow><annotation encoding="application/x-tex">L/D = 7.5</annotation></semantics></math>。
+若所需长径比为
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi><mi>/</mi><mi>D</mi></mrow><annotation encoding="application/x-tex">L/D</annotation></semantics></math>，应将
+<em>Fine Ratio</em> 设为
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mspace width="0.167em"></mspace><mi>L</mi><mi>/</mi><mi>D</mi></mrow><annotation encoding="application/x-tex">2\,L/D</annotation></semantics></math>。</p>
+<p>最大半径
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mo>=</mo><mi>L</mi><mi>/</mi><mrow><mi mathvariant="normal">F</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">R</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">o</mi></mrow></mrow><annotation encoding="application/x-tex">R = L / \mathrm{FineRatio}</annotation></semantics></math>
+位于长度中点，各种尺寸下的相对轮廓相同（图 1）。 在
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.05</mn><mi>L</mi></mrow><annotation encoding="application/x-tex">0.05L</annotation></semantics></math>
-and 90 percent of it at
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.19</mn><mi>L</mi></mrow><annotation encoding="application/x-tex">0.19L</annotation></semantics></math>;
-aft of mid-length it stays above 90 percent to
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.6</mn><mi>L</mi></mrow><annotation encoding="application/x-tex">0.6L</annotation></semantics></math>,
-falls to half at
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.82</mn><mi>L</mi></mrow><annotation encoding="application/x-tex">0.82L</annotation></semantics></math>,
-and closes to a point at the tail. Changing either value keeps the nose
-at the origin; <em>Rot Origin(X)</em> on the XForm tab is a fraction of
-the length.</p>
-<p><img src="images/Pod_profile.png" title="Figure 1. Pod profile"
-alt="Figure 1. Pod profile" /></p>
-<p><em>Figure 1. The radius of a Pod along its length, as fractions of
-its greatest radius R and its length L.</em></p>
+处半径达到
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>R</mi><annotation encoding="application/x-tex">R</annotation></semantics></math>
+的一半，在
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.19</mn><mi>L</mi></mrow><annotation encoding="application/x-tex">0.19L</annotation></semantics></math>
+处达到 90%；中点之后到
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.6</mn><mi>L</mi></mrow><annotation encoding="application/x-tex">0.6L</annotation></semantics></math>
+仍大于 90%， 在
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.82</mn><mi>L</mi></mrow><annotation encoding="application/x-tex">0.82L</annotation></semantics></math>
+处降至一半，最终在尾部收拢成尖点。改变任一数值时，头部仍在原点； XForm
+标签页的 <em>Rot Origin(X)</em> 以长度的比例表示旋转中心位置。</p>
+<p><img src="images/Pod_profile.png" title="图 1：吊舱轮廓"
+alt="图 1：吊舱轮廓" /></p>
+<p><em>图 1：吊舱沿长度方向的半径变化，分别以最大半径 R 和长度 L
+归一化。</em></p>
 </body>
 </html>

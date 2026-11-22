@@ -1,182 +1,162 @@
 ---
-title:  'Clone'
+title: '克隆体（Clone）'
+help-renderer: pandoc
 ---
 
-The Clone component shows the shape of another component, its original, placed by the Clone's own XForm.  A Clone stores
-no shape of its own: every change to the original appears at once in each of its Clones.  Use Clones for parts that are
-the same, such as the engines of a multi-engine aircraft, a row of seats or the propellers of a multirotor, so that each
-design change is made once.
+Clone 组件显示另一个组件（原件）的形状，并由克隆体自己的 XForm 设置其位置和姿态。克隆体不保存独立形状，原件的每次修改都会立即反映在所有克隆体上。多发飞机的发动机、成排座椅、多旋翼的螺旋桨等相同部件适合使用克隆体，每项设计修改只需进行一次。
 
-A Clone always takes its original's shape, at the original's scale, with the original's tessellation and end caps.
-Everything else -- where it sits, its symmetry, its sets, its color, its mass and drag settings and more -- it either
-takes from the original or keeps as its own, as chosen on the Clone tab.
+克隆体始终采用原件的形状、缩放、曲面离散和端盖。位置、对称、集合、颜色、质量和阻力设置等其他属性，则由 Clone 标签页决定跟随原件还是独立设置。
 
-| Topic                                                          | Tab        |
-|:---------------------------------------------------------------|:-----------|
-| [Quick Start](#quick-start)                                    |            |
-| [Making Clones](#making-clones)                                |            |
-| [The Original](#the-original)                                  | Clone      |
-| [What a Clone Copies](#what-a-clone-copies)                    | Clone      |
-| [Naming](#naming)                                              | Clone      |
-| [Clones of Hinges and Propellers](#clones-of-hinges-and-propellers) | Clone |
-| [Clones in Analyses](#clones-in-analyses)                      |            |
-| [Deleting an Original](#deleting-an-original)                  |            |
-| [Replacing a Clone with a Copy](#replacing-a-clone-with-a-copy) | Clone     |
-| [Shared Tabs](#shared-tabs)                                    | Gen, XForm, Mass, Sub |
-| [Scripting](#scripting)                                        |            |
+| 主题 | 标签页 |
+|:-----|:-------|
+| [快速开始](#quick-start) | |
+| [创建克隆体](#making-clones) | |
+| [选择原件](#the-original) | Clone |
+| [复制哪些属性](#what-a-clone-copies) | Clone |
+| [命名](#naming) | Clone |
+| [铰链与螺旋桨克隆体](#clones-of-hinges-and-propellers) | Clone |
+| [参与分析](#clones-in-analyses) | |
+| [删除原件](#deleting-an-original) | |
+| [替换为独立副本](#replacing-a-clone-with-a-copy) | Clone |
+| [通用标签页](#shared-tabs) | Gen、XForm、Mass、Sub |
+| [脚本](#scripting) | |
 
-## Quick Start
+<a id="quick-start"></a>
 
-1. Select the component, or several, in the Geom browser and click *Clone*.  Give a name suffix, `_Clone` by default,
-   and click *Clone*.
-2. Each new Clone sits on top of its original.  Move it with its XForm tab.
-3. Edit the original.  Every Clone follows.
+## 快速开始
 
-## Making Clones
+1. 在几何体浏览器中选择一个或多个组件，点击 *Clone*。输入名称后缀（默认为 `_Clone`），再点击 *Clone*。
+2. 新克隆体与原件重合；在克隆体的 XForm 标签页移动它。
+3. 修改原件，所有克隆体随之更新。
 
-The *Clone* button of the Geom browser makes one Clone for each selected component and keeps the hierarchy among them: a
-Clone of a child is made a child of the Clone of its parent.  The top Clone of each group is placed beside its original
-in the tree, starts at the original's placement, and has its own transformation, free to move.  The Clones below it copy
-their originals' placement relative to their parents, so moving the top Clone moves the whole group (Figure 1).  The
-Clones also take their originals' display settings.
+<a id="making-clones"></a>
 
-![Figure 1. Clones in the Geom browser](images/Clone_browser.png "Figure 1. Clones in the Geom browser")
+## 创建克隆体
 
-*Figure 1. The Geom browser after a pod and its child wing were cloned together: Pod_Clone sits beside Pod and
-carries Wing_Clone, which has none of Wing's children.  The Clones' names are in italics because they follow their
-originals' names.*
+几何体浏览器的 *Clone* 按钮为每个选中组件创建一个克隆体，并保留选中组件之间的层级关系：子组件的克隆体成为父组件克隆体的子级。每组最上层克隆体在树中与原件并列，初始位置与原件相同，但具有独立变换，可以自由移动。下层克隆体复制各自原件相对父级的位置与姿态，因此移动最上层克隆体即可移动整组（图 1）。克隆体还会采用原件的显示设置。
 
-A Clone added from the Add menu has no original yet.  On its first update it takes its parent as its original, so select
-the component to be copied before adding it; it starts with its own transformation at zero.  An original can also be
-chosen afterwards on the Clone tab.
+![图 1：几何体浏览器中的克隆体](images/Clone_browser.png "图 1：几何体浏览器中的克隆体")
 
-A Clone does not copy its original's children.  To copy a component together with its children, select all of them and
-use the Clone button.
+*图 1：吊舱及其子级机翼一同克隆后，Pod_Clone 与 Pod 并列，并包含 Wing_Clone；Wing_Clone 不包含 Wing 的子级。克隆体名称采用斜体，表示名称跟随原件。*
 
-## The Original
+通过 Add 菜单添加的克隆体尚未指定原件。首次更新时会将父组件作为原件，因此应先选择要复制的组件再添加克隆体；新克隆体的独立变换初始为零。也可稍后在 Clone 标签页选择原件。
 
-*Original* on the Clone tab lists the components a Clone can copy: any component except the Clone itself, the components
-attached below it, and any whose chain of Clones leads back to it.  A Clone of a Clone shows the shape at the end of the
-chain.
+克隆体不会自动复制原件的子级。若要复制组件及其子级，应全部选中后使用 Clone 按钮。
 
-## What a Clone Copies
+<a id="the-original"></a>
 
-The shape, with the original's scale, its tessellation (*Num_U*, *Num_W*) and its end caps are always the original's;
-their controls are greyed on the Clone, and so is *Scale*: a Clone has no size of its own.  The rest is chosen under
-*Copy From Original*.  Each item checked is copied on every update, and its controls are greyed on the Clone; an item
-unchecked is the Clone's own and can be edited.  Unchecking an item keeps the last copied values as the starting point.
+## 选择原件
 
-| Copy From Original | Default   | What is copied                                                                       |
-|:-------------------|:----------|:-------------------------------------------------------------------------------------|
-| Transformation     | off       | Location, rotation, rotation origin and the Abs/Rel choice.                          |
-| Attachment         | on        | The attachment to the parent and its coordinates.                                    |
-| Symmetry and Flip  | on        | The symmetry; the flip planes combine with the Clone's own.                          |
-| Set Membership     | on        | Membership of the user's sets.                                                       |
-| Color and Material | on        | The color, the material and the textures.                                            |
-| Negative Volume    | on        | The CFD Mesh negative volume setting.                                                |
-| Mass Properties    | on        | Density, priority, thin shell and the specified mass, CG and inertia.                |
-| Parasite Drag      | on        | The Parasite Drag settings used for the Clone.                                       |
-| Subsurfaces        | on        | The original's subsurfaces.                                                          |
-| Joint Deflection   | on        | A Hinge's Translate and Rotate (see below).                                          |
-| Rotor Rotation     | on        | A propeller's Rotate (see below).                                                    |
+Clone 标签页的 *Original* 列出可作为原件的组件，不包括克隆体自身、挂接在其下方的组件，以及克隆引用链最终返回自身的组件。克隆体也可以引用另一个克隆体，此时显示引用链末端原件的形状。
 
-Symmetry is copied by default because the symmetric copies of the original are part of its shape.  The copied symmetry
-mirrors the Clone where the Clone is placed: a Clone moved aft of a nacelle mirrored in $Y = 0$ makes a second pair,
-and a Clone moved onto $Y = 0$, such as a center engine, shows its two halves on top of each other (Figure 2).  For a
-single Clone on the mirror plane, uncheck Symmetry and Flip and then turn off the Clone's own symmetry, which keeps the
-copied setting until changed.  The Clone's own Flip planes combine with the original's while Symmetry and Flip is
-checked, so the same plane set on both cancels.  To make a Clone the mirror image of its original, set the mirror plane
-on the Clone's Flip.
+<a id="what-a-clone-copies"></a>
 
-![Figure 2. Copied symmetry](images/Clone_symmetry.png "Figure 2. Copied symmetry")
+## 复制哪些属性
 
-*Figure 2. A nacelle mirrored in $Y = 0$ and two Clones moved aft of it, the second onto $Y = 0$.  The second Clone's
-two coincident halves in (a) show darker than the single nacelle in (b).*
+形状、原件的缩放、曲面离散（*Num_U*、*Num_W*）及端盖始终跟随原件，对应控件呈灰色。*Scale* 也呈灰色，因为克隆体没有独立尺寸。
 
-Set membership covers the user's sets only; whether a Clone is shown is its own.
+其他属性由 *Copy From Original* 控制。勾选的项目在每次更新时复制，其控件呈灰色；取消勾选后成为克隆体自身的属性，可以编辑。取消时保留最后一次复制的值作为起点。
 
-A Clone's subsurfaces are copies of the original's that keep their identity as the original changes, so control surface
-groups and scripts that refer to them keep working.  Unchecking Subsurfaces keeps the copies as the Clone's own, to
-edit, and lets more be added.  Checking it again picks up the same copies rather than adding new ones.
+| Copy From Original 项目 | 默认 | 复制内容 |
+|:-----------------------|:-----|:---------|
+| Transformation（变换） | 关闭 | 位置、旋转、旋转原点以及 Abs/Rel 选择。 |
+| Attachment（挂接） | 开启 | 与父级的挂接方式及坐标。 |
+| Symmetry and Flip（对称与翻转） | 开启 | 对称设置；翻转平面与克隆体自身设置组合。 |
+| Set Membership（集合归属） | 开启 | 所属的用户集合。 |
+| Color and Material（颜色与材质） | 开启 | 颜色、材质和纹理。 |
+| Negative Volume（负体积） | 开启 | CFD Mesh 负体积设置。 |
+| Mass Properties（质量属性） | 开启 | 密度、优先级、薄壳，以及指定质量、重心和惯性。 |
+| Parasite Drag（寄生阻力） | 开启 | 克隆体使用的寄生阻力设置。 |
+| Subsurfaces（子曲面） | 开启 | 原件的子曲面。 |
+| Joint Deflection（关节偏转） | 开启 | 铰链的 Translate 和 Rotate，见下文。 |
+| Rotor Rotation（旋翼转角） | 开启 | 螺旋桨的 Rotate，见下文。 |
 
-A Clone always keeps its own name (unless named after the original), parent, children, attributes, CFD sources and FEA
-structures.
+对称副本属于原件形状的一部分，因此默认复制对称设置。复制后的对称作用于克隆体所在位置：将关于 $Y = 0$ 镜像的短舱克隆体后移，会得到第二对短舱；若将它移到 $Y = 0$，例如作为中置发动机，两半便会重合（图 2）。镜像面上只需一个克隆体时，先取消 Symmetry and Flip，再关闭克隆体自身的对称；后者在修改前仍保留复制来的设置。
 
-## Naming
+勾选 Symmetry and Flip 时，克隆体自身的 Flip 平面与原件组合，同一平面在两者中均启用会相互抵消。要让克隆体成为原件的镜像，在克隆体的 Flip 中选择相应平面。
 
-With *Name After Original* checked, the default, a Clone is named after its original with *Suffix* appended, and the
-name follows the original's when it is renamed.  The name on the Gen tab is greyed while this is checked.  The Geom
-browser shows such a name in italics and will not rename it.  Uncheck it to give the Clone a name of its own; the
-current name is kept as the starting point.
+![图 2：复制的对称设置](images/Clone_symmetry.png "图 2：复制的对称设置")
 
-## Clones of Hinges and Propellers
+*图 2：关于 $Y = 0$ 镜像的短舱及其后方两个克隆体，第二个移到 $Y = 0$。图 (a) 中第二个克隆体的两半重合，颜色比图 (b) 的单个短舱更深。*
 
-A Clone of a [Hinge](Hinge.md) is a joint too: its own children ride on its joint, just as the Hinge's children ride on
-the Hinge.  The Hinge decides which motions are allowed and their limits.  With *Joint Deflection* checked the Clone
-takes the Hinge's deflection; unchecked, the Clone's own *Translate* and *Rotate* in the *Joint* group pose it, so two
-Clones of one Hinge can sit at different angles.  *Rng* sets a slider's range to the Hinge's limits.
+集合归属只涵盖用户集合；克隆体是否显示始终独立控制。
 
-A Clone of a [Propeller](Propeller.md) takes the propeller's Rotate while *Rotor Rotation* is checked; unchecked, the
-*Rotate* in the *Rotor* group places the Clone's blades, so Clones of one rotor can turn apart in phase.  See [Clones of
-a Propeller](Propeller.md#clones-of-a-propeller) for counter-rotating rotors.
+复制的子曲面会在原件变化时保持自身标识，因此引用它们的操纵面组和脚本仍可工作。取消 Subsurfaces 后，保留这些副本作为克隆体自己的子曲面，可以编辑并添加更多子曲面。重新勾选会继续使用相同副本，而不是再新增一套。
 
-## Clones in Analyses
+克隆体始终保留自己的名称（启用随原件命名时除外）、父级、子级、属性、CFD 源和 FEA 结构。
 
-A Clone takes part in analyses as a component of its original's kind.  A Clone of a wing can be the reference wing of
-VSPAERO and Parasite Drag, with the wing's span, area and mean aerodynamic chord; a Clone of a propeller is a rotor to
-VSPAERO and to an [Auxiliary](Auxiliary.md) rotor zone; an Auxiliary component hung from a Clone of a [Gear](Gear.md)
-measures against the Clone; a Clone of a [Routing](Routing.md) component is weighed by Mass Properties as a route.  A
-Clone of a mesh, a point cloud, a wireframe or a polygon mesh is placed as one piece and has no symmetry; its symmetry
-controls are greyed.
+<a id="naming"></a>
 
-## Deleting an Original
+## 命名
 
-When a component that has Clones is deleted or cut, OpenVSP asks what becomes of its Clones:
+*Name After Original* 默认开启，名称由原件名称加 *Suffix* 后缀组成，并随原件重命名而更新。此时 Gen 标签页的名称控件呈灰色，几何体浏览器以斜体显示且不能重命名。取消该选项后可独立命名，当前名称保留作为起点。
 
-| Choice                 | Result                                                                              |
-|:-----------------------|:------------------------------------------------------------------------------------|
-| Cancel                 | Nothing is deleted.                                                                 |
-| Leave Empty            | The Clones stay where they are, copying nothing.                                    |
-| Replace                | Each Clone is replaced by a full copy of what it was copying (see below).           |
-| Delete Too, or Cut Too | The Clones go with the original, and so do any Clones of those Clones.              |
+<a id="clones-of-hinges-and-propellers"></a>
 
-A Clone left empty shows nothing, keeps its name and stops naming itself after an original; choose an original for it
-again on the Clone tab.  The same happens, with a message, when a file is opened whose Clone has lost its original, or
-when a Clone's original is moved to below the Clone in the tree.
+## 铰链与螺旋桨克隆体
 
-## Replacing a Clone with a Copy
+[铰链](Hinge.md)的克隆体也是关节：其子级随该关节运动，与原铰链的子级随原铰链运动相同。原铰链决定允许的运动及限位。勾选 *Joint Deflection* 时，克隆体跟随原铰链偏转；取消后，使用 *Joint* 区域内自己的 *Translate* 和 *Rotate* 设置姿态。因此同一铰链的两个克隆体可处于不同角度。*Rng* 将滑块范围设为原铰链的限位。
 
-*Replace With Copy Of Original* turns a Clone into an ordinary, independent component: a full copy of the component at
-the end of its chain of Clones.  The copy takes the Clone's place in the tree and its ID, so attached components, links,
-design variables and control surface groups that referred to the Clone keep working.  It keeps what the Clone showed --
-its name, placement, attachment, symmetry and flip, sets, mass and negative volume settings, the parasite drag settings
-it used, color and material, display settings, joint deflection and rotor angle -- and the Clone's subsurfaces, CFD
-sources, FEA structures and attributes.
+[螺旋桨](Propeller.md)的克隆体在勾选 *Rotor Rotation* 时跟随原件的 Rotate；取消后，使用 *Rotor* 区域的 *Rotate* 设置自身桨叶位置，使同一旋翼的克隆体具有不同相位。反向旋转旋翼见[螺旋桨克隆体](Propeller.md#clones-of-a-propeller)。
 
-A Clone of a polygon mesh cannot be replaced.  Some components place their own shape from other components, such as a
-route or a conformal component; their copy may not land where the Clone stood, and a message says so.
+<a id="clones-in-analyses"></a>
 
-## Shared Tabs
+## 参与分析
 
-The Gen, XForm, Mass and Sub tabs are common to every component; see [Gen](GenTab.md),
-[XForm](XFormTab.md), [Mass](MassTab.md) and [Sub-Surfaces](SubTab.md).  Controls
-copied from the original are greyed on them.
+克隆体以原件所属组件类型参与分析。机翼克隆体可以作为 VSPAERO 和 Parasite Drag 的参考机翼，提供翼展、面积及平均气动弦长；螺旋桨克隆体在 VSPAERO 和[辅助组件](Auxiliary.md)旋翼区域中作为旋翼；挂在[起落架](Gear.md)克隆体上的辅助组件以该克隆体为测量对象；[管线](Routing.md)克隆体由 Mass Properties 按管线计算质量。
 
-## Scripting
+网格、点云、线框或多边形网格的克隆体作为整体放置，不具有对称功能，其对称控件呈灰色。
 
-The OpenVSP API makes and manages Clones with these functions:
+<a id="deleting-an-original"></a>
 
-| Call                                               | Purpose                                                                  |
-|:---------------------------------------------------|:-------------------------------------------------------------------------|
-| `CloneGeomVec`                                     | Clone a group of components, keeping their hierarchy, as the Clone button does. |
-| `SetGeomCloneOriginal`, `GetGeomCloneOriginal`     | Set or read a Clone's original; an empty ID clears it.                   |
-| `SetGeomCloneNameSuffix`, `GetGeomCloneNameSuffix` | The suffix of automatic naming.                                          |
-| `FindGeomClones`                                   | The Clones of a set of components.                                       |
-| `ReplaceCloneGeom`                                 | Replace a Clone with a copy of its original.                             |
-| `DeleteGeom`, `DeleteGeomVec`, `CutGeomToClipboard` | Take a `CLONE_DELETE_TYPE` that says what becomes of the Clones.        |
+## 删除原件
 
-`AddGeom( "CLONE" )` adds a Clone.  The Copy From Original switches are parms in the group `Behavior`: `CloneXForm`,
-`CloneAttach`, `CloneSym`, `CloneSets`, `CloneAppearance`, `CloneNegativeVolume`, `CloneMassProps`, `CloneParasiteDrag`,
-`CloneSubSurfs`, `CloneJoint` and `CloneRotate`, with `AutoName` for Name After Original.  A Clone's own joint
-deflection is `JointTranslate` and `JointRotate` in the group `Hinge`, and its own rotor angle is `Rotate` in the group
-`Rotor`.
+删除或剪切具有克隆体的组件时，OpenVSP 会询问如何处理克隆体：
+
+| 选项 | 结果 |
+|:-----|:-----|
+| Cancel（取消） | 不删除任何内容。 |
+| Leave Empty（保留为空） | 克隆体保留在原处，不再复制任何组件。 |
+| Replace（替换） | 每个克隆体替换为其所复制内容的完整副本，见下文。 |
+| Delete Too / Cut Too（同时删除／剪切） | 克隆体随原件删除或剪切，引用这些克隆体的其他克隆体也同样处理。 |
+
+保留为空的克隆体不显示形状，保留名称，并停止随原件命名；可在 Clone 标签页重新选择原件。打开文件时若克隆体失去原件，或原件在树中被移至克隆体下方，也会发生同样情况并显示提示。
+
+<a id="replacing-a-clone-with-a-copy"></a>
+
+## 替换为独立副本
+
+*Replace With Copy Of Original* 将克隆体变为普通独立组件，即其克隆引用链末端原件的完整副本。副本接替克隆体在树中的位置和 ID，因此原先引用克隆体的挂接组件、链接、设计变量和操纵面组仍可工作。
+
+副本保留克隆体呈现的状态：名称、位置姿态、挂接、对称和翻转、集合、质量和负体积、所用寄生阻力设置、颜色材质、显示设置、关节偏转与旋翼转角，并保留克隆体的子曲面、CFD 源、FEA 结构和属性。
+
+多边形网格克隆体不能替换。管线、共形组件等根据其他组件决定自身形状的类型，替换后的副本可能不在克隆体原先的位置，程序会显示提示。
+
+<a id="shared-tabs"></a>
+
+## 通用标签页
+
+Gen、XForm、Mass 和 Sub 为组件通用标签页，详见[通用设置](GenTab.md)、[变换](XFormTab.md)、[质量](MassTab.md)和[子曲面](SubTab.md)。其中跟随原件的控件呈灰色。
+
+<a id="scripting"></a>
+
+## 脚本
+
+OpenVSP API 使用下列函数创建和管理克隆体：
+
+| 调用 | 用途 |
+|:-----|:-----|
+| `CloneGeomVec` | 与 Clone 按钮相同，克隆一组组件并保留层级关系。 |
+| `SetGeomCloneOriginal`、`GetGeomCloneOriginal` | 设置或读取原件；空 ID 清除原件。 |
+| `SetGeomCloneNameSuffix`、`GetGeomCloneNameSuffix` | 设置或读取自动命名后缀。 |
+| `FindGeomClones` | 查找一组组件的克隆体。 |
+| `ReplaceCloneGeom` | 将克隆体替换为原件副本。 |
+| `DeleteGeom`、`DeleteGeomVec`、`CutGeomToClipboard` | 接受 `CLONE_DELETE_TYPE`，指定如何处理克隆体。 |
+
+`AddGeom( "CLONE" )` 添加克隆体。Copy From Original 开关对应 `Behavior` 组中的参数：
+`CloneXForm`、`CloneAttach`、`CloneSym`、`CloneSets`、`CloneAppearance`、
+`CloneNegativeVolume`、`CloneMassProps`、`CloneParasiteDrag`、`CloneSubSurfs`、
+`CloneJoint`、`CloneRotate`；`AutoName` 对应 Name After Original。
+
+克隆体自身的关节偏转由 `Hinge` 组的 `JointTranslate`、`JointRotate` 控制；
+自身旋翼转角为 `Rotor` 组的 `Rotate`。

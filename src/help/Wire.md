@@ -1,39 +1,37 @@
 ---
-title:  'Wireframe'
+help-renderer: pandoc
+title: '线框（Wireframe）'
 ---
 
-A Wireframe component is a structured grid of points: rows of points that form a surface of quadrilaterals, the way
-legacy geometry and many CFD tools describe a shape.  It comes from an XSec (.hrm) or Plot3D (.p3d) file, and the
-controls on its WireFrame tab rearrange and tidy the grid -- turn it, trim it, thin it and close its open edges --
-so that it can take part in OpenVSP's analyses.  The points themselves cannot be moved one by one.
+Wireframe 组件是结构化点阵：各行点构成四边形曲面，这也是传统几何数据和许多 CFD 工具描述形状的方式。点阵从 XSec (.hrm) 或 Plot3D (.p3d) 文件导入。WireFrame 选项卡的控件用于重排和整理点阵，包括改变方向、裁剪、抽稀和封闭开口边缘，以便参与 OpenVSP 分析。不能逐个移动其中的点。
 
-| Topic                                              | Tab       |
-|:---------------------------------------------------|:----------|
-| [Quick Start](#quick-start)                        |           |
-| [Importing a Grid](#importing-a-grid)              |           |
-| [The Grid: I and J](#the-grid-i-and-j)             | WireFrame |
-| [Type and Normals](#type-and-normals)              | WireFrame |
-| [Rearranging the Grid](#rearranging-the-grid)      | WireFrame |
-| [Closing Open Edges](#closing-open-edges)          | WireFrame |
-| [Using a Wireframe](#using-a-wireframe)            |           |
-| [Scripting](#scripting)                            |           |
+| 主题 | 选项卡 |
+|:-----|:-------|
+| [快速入门](#quick-start) | |
+| [导入点阵](#importing-a-grid) | |
+| [点阵的 I 与 J](#the-grid-i-and-j) | WireFrame |
+| [类型与法向](#type-and-normals) | WireFrame |
+| [重排点阵](#rearranging-the-grid) | WireFrame |
+| [封闭开口边缘](#closing-open-edges) | WireFrame |
+| [使用线框](#using-a-wireframe) | |
+| [脚本](#scripting) | |
 
-The Gen and XForm tabs are the ones every component has; see [Gen](GenTab.md) and
-[XForm](XFormTab.md).  A wireframe has no mass, symmetry or sub-surfaces.
+Gen 和 XForm 是所有组件共有的选项卡，参见 [Gen](GenTab.md) 和 [XForm](XFormTab.md)。线框没有质量、对称或子曲面功能。
 
-## Quick Start
+<a id="quick-start"></a>
+## 快速入门
 
-1. Choose *File > Import* and *XSec as Wireframe (.hrm)* or *Plot3D as Wireframe (.p3d)*.  Each component of the
-   file becomes a wireframe, under a new Blank.
-2. Place the Blank with the XForm tab; the wireframes move with it.
-3. Check each wireframe's *Type* and normals, and close its open edges with the *Patch* choices.
+1. 选择 *File > Import（文件 > 导入）*，然后选择 *XSec as Wireframe (.hrm)* 或 *Plot3D as Wireframe (.p3d)*。文件中的每个组件都会变为一个线框，并归入新建的 Blank 组件下。
+2. 在 XForm 选项卡放置 Blank，线框会随其一起移动。
+3. 检查各线框的 *Type（类型）* 和法向，并通过 *Patch（封补）* 选项封闭开口边缘。
 
-## Importing a Grid
+<a id="importing-a-grid"></a>
+## 导入点阵
 
-### XSec files
+<a id="xsec-files"></a>
+### XSec 文件
 
-The XSec (.hrm) format is OpenVSP's own cross section format, also written by *File > Export > XSec*.  Each component
-is a set of cross sections with the same number of points in each:
+XSec (.hrm) 是 OpenVSP 自身的截面格式，也可由 *File > Export > XSec* 导出。每个组件包含一组截面，各截面的点数相同：
 
 ```
  HERMITE INPUT FILE
@@ -50,119 +48,87 @@ WingGeom
   ...
 ```
 
-The name line names the wireframe, with its spaces turned to underscores, and *TYPE* sets its
-[Type](#type-and-normals): 0 for lifting, 1 for non-lifting.  The cross sections are the grid's rows in I and the
-points of each section its columns in J.  The same file imported as *XSec as Tri Mesh* becomes one [Mesh](Mesh.md)
-of all its components instead.
+名称行指定线框名称，其中的空格会转换为下划线；*TYPE* 指定[类型](#type-and-normals)：0 为升力类，1 为非升力类。各截面对应点阵的 I 向行，各截面中的点对应 J 向列。如果将同一文件以 *XSec as Tri Mesh* 导入，则所有组件会合为一个 [Mesh](Mesh.md)。
 
-### Plot3D files
+<a id="plot3d-files"></a>
+### Plot3D 文件
 
-A Plot3D (.p3d) grid file holds one or more blocks, each a grid of $n_i \times n_j \times n_k$ points.  The file
-may be formatted (text) or unformatted (Fortran records), in single or double precision, with or without the
-iblank array, and with $x$ and $y$ only (a planar grid, at $z = 0$) or $x$, $y$ and $z$; all of these are told
-apart by the file's content.  Each block becomes a wireframe with I along the block's first index and J along its
-second.  Only the first $k$ plane of each block is kept, so a block should be a surface grid, $n_k = 1$.
+Plot3D (.p3d) 网格文件包含一个或多个块，每块是 $n_i \times n_j \times n_k$ 个点构成的点阵。文件可以是格式化文本或非格式化的 Fortran 记录，使用单精度或双精度，可包含或不包含 iblank 数组；坐标可以只有 $x$ 和 $y$（位于 $z = 0$ 的平面网格），也可以包含 $x$、$y$ 和 $z$。这些情况均根据文件内容识别。每个块生成一个线框，I 对应块的第一索引，J 对应第二索引。每块只保留第一个 $k$ 平面，因此块应为曲面网格，即 $n_k = 1$。
 
-A block with only one row or column of points is a curve, not a surface: it is drawn as a line and takes no part in
-the analyses.
+仅有一行或一列点的块是曲线而非曲面：它显示为线，不参与分析。
 
-### Orientation on import
+<a id="orientation-on-import"></a>
+### 导入时的方向
 
-On import each wireframe checks which way its grid faces, from the sign of the volume it encloses, and sets
-*Invert* so that its normals point outward.  For a closed body this is right; for an open grid such as a thin wing
-it is a guess.
+导入时，各线框根据所包围体积的正负判断点阵朝向，并设置 *Invert（反转）*，使法向朝外。对于封闭物体，这种判断是正确的；对于薄机翼等开放点阵，则只是估计。
 
-## The Grid: I and J
+<a id="the-grid-i-and-j"></a>
+## 点阵的 I 与 J
 
-The grid is a set of rows: I counts the rows and J the points along each row.  Each cell of four neighboring points
-is a quadrilateral of the surface, and analyses split each into two triangles.  With the feature lines on (*Feature*
-in the Geom Browser), a red line runs from the grid's first point in the direction of I and a green one in the
-direction of J, each half way across the grid.  Figure 1 marks I and J in the same colors.
+点阵由多行组成：I 对行计数，J 对每行中的点计数。四个相邻点构成曲面的一个四边形单元，分析时每个单元分为两个三角形。开启特征线（Geom Browser 中的 *Feature*）后，从点阵第一个点出发，红线沿 I 方向，绿线沿 J 方向，各延伸到点阵相应方向的一半。图 1 用相同颜色标示 I 和 J。
 
-## Type and Normals
+<a id="type-and-normals"></a>
+## 类型与法向
 
-*Type* says what the grid represents: *Lifting* a wing and *Non-Lifting* a body.  It decides how the degenerate
-geometry is built from the grid, and so how the analyses built on it see the wireframe: in VSPAERO's thin set, a
-lifting wireframe becomes a camber surface and a non-lifting one a set of plates.  The type is also written to an
-XSec export.
+*Type* 指定点阵代表什么：*Lifting（升力类）* 表示机翼，*Non-Lifting（非升力类）* 表示体部。它决定如何从点阵生成退化几何，进而影响基于退化几何的分析如何处理线框：在 VSPAERO 的 thin set 中，升力类线框变为中弧面，非升力类线框变为一组平板。类型也会写入导出的 XSec 文件。
 
-*Invert* reverses the normals, the side of the surface that counts as outside.  The analyses that intersect the
-model, such as CompGeom and Mass Properties, depend on it.  CompGeom's report is a quick check: a closed wireframe
-whose normals point in has a negative volume.
+*Invert* 反转法向，即改变曲面的哪一侧被视为外侧。CompGeom、Mass Properties 等对模型进行相交处理的分析依赖法向。CompGeom 报告可用于快速检查：法向朝内的封闭线框会得到负体积。
 
-## Rearranging the Grid
+<a id="rearranging-the-grid"></a>
+## 重排点阵
 
-The controls act in this order, each on the result of the one before.
+以下控件按表中顺序作用，每一步都使用前一步的结果。
 
-| Control                    | Parm                     | Effect                                                         |
-|:---------------------------|:-------------------------|:---------------------------------------------------------------|
-| Swap I/J                   | `FlipIJFlag`             | Exchanges rows and columns: I becomes J and J becomes I.       |
-| Reverse I                  | `RevIFlag`               | Reverses the order of the rows.                                |
-| Reverse J                  | `RevJFlag`               | Reverses the order of the points in every row.                 |
-| I Start Skip, I End Skip   | `ISkipStart`, `ISkipEnd` | Drop that many rows from the start or the end.                 |
-| J Start Skip, J End Skip   | `JSkipStart`, `JSkipEnd` | Drop that many points from the start or the end of every row.  |
-| I Stride, J Stride         | `IStride`, `JStride`     | Keep every nth row, or every nth point, and always the last.   |
-| I Start, I End, J Start, J End | `IStartPatchType` ... | Add a row at that edge; see [Closing Open Edges](#closing-open-edges). |
+| 控件 | 参数 | 作用 |
+|:-----|:-----|:-----|
+| Swap I/J | `FlipIJFlag` | 交换行和列：I 变为 J，J 变为 I。 |
+| Reverse I | `RevIFlag` | 反转行的排列顺序。 |
+| Reverse J | `RevJFlag` | 反转每行中各点的排列顺序。 |
+| I Start Skip, I End Skip | `ISkipStart`, `ISkipEnd` | 从起端或末端删除指定数量的行。 |
+| J Start Skip, J End Skip | `JSkipStart`, `JSkipEnd` | 从每行的起端或末端删除指定数量的点。 |
+| I Stride, J Stride | `IStride`, `JStride` | 以 n 为步长抽取行或每行中的点，并始终保留最后一行或最后一个点。 |
+| I Start, I End, J Start, J End | `IStartPatchType` ... | 在对应边缘增加一行点，参见[封闭开口边缘](#closing-open-edges)。 |
 
-Swapping and reversing turn the grid over, so each also reverses the normals internally to keep the outside where it
-was; *Invert* does not change.  Skips trim rows of points that are not wanted, such as a duplicated section or the
-wake rows of a CFD grid.  A skip that leaves no rows leaves no grid.  Strides thin a dense grid to keep the
-analyses fast; a stride of 1 keeps every row.
+交换和反序会改变点阵的朝向，因此软件也会在内部反转法向，以保持原来的外侧不变；*Invert* 的值不变。Skip 用于删除不需要的点行，例如重复截面或 CFD 网格中的尾迹行。如果删除后没有剩余行，则不再有点阵。Stride 用于抽稀过密的点阵，以加快分析；步长为 1 时保留每一行。
 
-## Closing Open Edges
+<a id="closing-open-edges"></a>
+## 封闭开口边缘
 
-A grid made for another tool often has open edges: a wing whose tip is not closed, a blunt trailing edge, a body of
-revolution whose sections stop short of repeating their first point.  Each *Patch* choice adds one row of points at
-its edge of the grid, built from the edge row itself or from the opposite edge:
+为其他工具建立的点阵常有开口边缘，例如未封闭的翼尖、钝后缘，或截面绕一周但未重复首点的旋转体。每种 *Patch* 选项在对应边缘增加一行点，新行由该边缘行本身或对侧边缘构成：
 
-| Patch            | The new row                                                                 | Use                                       |
-|:-----------------|:----------------------------------------------------------------------------|:------------------------------------------|
-| None             | No row is added.                                                            |                                           |
-| Point            | Every point at the centroid of the edge row.                                | Close the open end of a body, or a wing tip, with a flat cap. |
-| Line             | The edge row folded on itself: its first and last points meet at their midpoint, its second and second-to-last, and so on. | Close a wing tip onto its camber line. |
-| Copy Opposite    | A copy of the opposite edge row.                                            | Close the seam of sections that go all the way round but do not repeat their first point. |
-| Halfway Opposite | The midpoints between the edge row and the opposite edge row.               | At the start edge, with Copy Opposite at the end edge, close a gap on its midline, such as a blunt trailing edge. |
+| 封补类型 | 新增行 | 用途 |
+|:---------|:-------|:-----|
+| None | 不添加行。 | |
+| Point | 所有点均位于该边缘行的形心。 | 用平面端盖封闭体部开口端或翼尖。 |
+| Line | 将边缘行对折：首点和末点合于两者中点，第二点与倒数第二点同理，依此类推。 | 将翼尖封闭到其中弧线。 |
+| Copy Opposite | 复制对侧边缘行。 | 封闭已绕一周但未重复首点的截面接缝。 |
+| Halfway Opposite | 当前边缘行与对侧边缘行各对应点的中点。 | 在起端使用此项、末端使用 Copy Opposite，可沿间隙中线封闭间隙，例如钝后缘。 |
 
-The patches act in the order I Start, I End, J Start, J End, each on the grid the one before made, so a patch can
-build on another.  Halfway Opposite at J Start and Copy Opposite at J End close a blunt trailing edge to a sharp one:
-the first adds a row on the trailing edge's midline, the second a copy of that row at the other end.  Halfway Opposite
-at both edges does not close the gap, since the second midpoint is taken to the first (Figure 2).  Figure 1 shows the
-tip of a wing closed with Point and with Line.
+封补按 I Start、I End、J Start、J End 的顺序进行，每一步使用前一步生成的点阵，因此后续封补可利用先前封补的结果。在 J Start 选择 Halfway Opposite、J End 选择 Copy Opposite，可将钝后缘封闭为尖后缘：第一步在后缘中线添加一行，第二步在另一端复制该行。两端都用 Halfway Opposite 不能封闭间隙，因为第二次取中点时参照的是第一次新增的行（图 2）。图 1 展示 Point 和 Line 封闭翼尖的区别。
 
-![Figure 1. Patches](images/Wire_patch.png "Figure 1. Patches")
+![图 1. 封补](images/Wire_patch.png "图 1. 封补")
 
-*Figure 1. A wing grid imported from an XSec file.  I runs root to tip and J round each section from the lower
-trailing edge, both from the grid's first point.  I End Point closes the tip with a flat cap to its centroid; I End
-Line closes it onto the camber line.*
+*图 1. 从 XSec 文件导入的机翼点阵。I 从翼根指向翼尖，J 从下后缘绕各截面一周，两者都从点阵首点出发。I End Point 将翼尖连接到其形心，形成平面端盖；I End Line 将翼尖封闭到中弧线。*
 
-![Figure 2. A blunt trailing edge](images/Wire_blunt_te.png "Figure 2. A blunt trailing edge")
+![图 2. 钝后缘](images/Wire_blunt_te.png "图 2. 钝后缘")
 
-*Figure 2. The root section of the wing grid of Figure 1, with its blunt trailing edge open, closed on its midline,
-and left open by Halfway Opposite at both edges, whose J End point lies three quarters of the way up the trailing
-edge.*
+*图 2. 图 1 机翼点阵的翼根截面：钝后缘保持开口、沿中线封闭，以及两端均使用 Halfway Opposite 后仍留有开口的情况。最后一种情况的 J End 点位于后缘自下向上的四分之三处。*
 
-## Using a Wireframe
+<a id="using-a-wireframe"></a>
+## 使用线框
 
-A wireframe is placed like any component, with the XForm tab, including *Scale* and *Flip*.  Its grid takes part in
-the analyses as a surface of quadrilaterals:
+线框与其他组件一样通过 XForm 选项卡放置，包括 *Scale（缩放）* 和 *Flip（翻转）*。其点阵作为四边形曲面参与分析：
 
-- CompGeom, Mass Properties, the slicing analyses and the mesh exports take its triangles, two per cell.  For these
-  the grid should be closed and its normals should point out.
-- Degenerate geometry and the analyses built on it take the grid as a wing or a body, by its *Type*.
-- An XSec export writes the grid as it has been rearranged and placed, so a wireframe cleaned up here can be written
-  out for another tool.
+- CompGeom、Mass Properties、切片分析和网格导出使用其三角形，每个单元分为两个三角形。用于这些功能时，点阵应封闭，法向应朝外。
+- 退化几何及基于它的分析，根据 *Type* 将点阵作为机翼或体部处理。
+- XSec 导出会写入经过重排和定位后的点阵，因此可将此处整理好的线框导出，供其他工具使用。
 
-It is not a smooth surface: it has no sub-surfaces and takes no part in CFD Mesh, FEA Mesh, Fit Model or
-projections.  The model file keeps the points as they were imported, and the controls are applied again each
-time it is opened, so any of them can be changed later.
+线框不是光滑曲面：没有子曲面，也不参与 CFD Mesh、FEA Mesh、Fit Model 或投影。模型文件保存的是原始导入点，每次打开模型时都会重新应用控件设置，因此之后仍可修改这些设置。
 
-## Scripting
+<a id="scripting"></a>
+## 脚本
 
-A wireframe has no functions of its own in the API: import it with `ImportFile` and `IMPORT_XSEC_WIRE` or
-`IMPORT_P3D_WIRE`, which returns the ID of the Blank holding the wireframes, and set the Parms in the table above.
-They are in the group `WireFrame`, except `FlipIJFlag`, `RevIFlag`, `RevJFlag` and `InvertFlag`, which are in the
-group `Wireframe`.  *Type* is `WireType`, 0 for lifting and 1 for non-lifting, and the patch types are `PATCH_NONE`,
-`PATCH_POINT`, `PATCH_LINE`, `PATCH_COPY` and `PATCH_HALFWAY`.
+线框在 API 中没有专用函数。通过 `ImportFile` 配合 `IMPORT_XSEC_WIRE` 或 `IMPORT_P3D_WIRE` 导入，返回包含这些线框的 Blank 的 ID，然后设置上表参数。参数位于 `WireFrame` 组，但 `FlipIJFlag`、`RevIFlag`、`RevJFlag` 和 `InvertFlag` 位于 `Wireframe` 组，注意大小写区别。*Type* 对应 `WireType`，0 表示升力类，1 表示非升力类；封补类型为 `PATCH_NONE`、`PATCH_POINT`、`PATCH_LINE`、`PATCH_COPY` 和 `PATCH_HALFWAY`。
 
 ```python
 import openvsp as vsp
