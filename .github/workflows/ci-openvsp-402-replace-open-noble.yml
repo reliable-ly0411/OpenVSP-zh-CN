@@ -1,0 +1,103 @@
+name: "OpenVSP upstream #402 exact ReplaceModelOpen (Ubuntu x64)"
+on:
+  push:
+    branches: [ci/openvsp-402-replace-open-noble]
+    paths: ['.github/workflows/ci-openvsp-402-replace-open-noble.yml']
+permissions:
+  contents: read
+jobs:
+  replace-model-open:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      SOURCE_SHA: a39d782024d3bfc48e45e026de8b4c221d6ffdd0
+      SOURCE_TREE: c7db307b6097ef41d5ea7f53a2e81f90b3ec6e7a
+      SOURCE_PARENT: ca4958f2cf98d5e787a2a3fa37efb497e4903902
+      CC: gcc-13
+      CXX: g++-13
+      LANG: C.UTF-8
+    steps:
+      - name: Checkout exact upstream PR head from its contributor repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: reliable-ly0411/OpenVSP
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 2
+          path: source
+          persist-credentials: false
+      - name: Verify exact PR head, tree, parent and path roster
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir evidence
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git -C source rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          test "$(git -C source show -s --format='%P' HEAD)" = "$SOURCE_PARENT"
+          test -z "$(git -C source status --porcelain)"
+          git -C source diff-tree -r --no-commit-id --name-only HEAD > evidence/paths.txt
+          cat <<'EOF' | diff -u - evidence/paths.txt
+          src/geom_core/GeomCoreTestSuite.cpp
+          src/geom_core/GeomCoreTestSuite.h
+          src/geom_core/Vehicle.cpp
+          src/geom_core/Vehicle.h
+          src/gui_and_draw/MainVSPScreen.cpp
+          src/test/CMakeLists.txt
+          src/vsp/apitest_main.cpp
+          EOF
+          git -C source show --no-patch --format='commit=%H%ntree=%T%nparent=%P' HEAD > evidence/source.txt
+      - name: Install Noble compile prerequisites only
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes build-essential gcc-13 g++-13 libxml2-dev libjpeg-dev
+          test "$(uname -m)" = x86_64
+          { uname -m; cat /etc/os-release; gcc-13 --version; cmake --version; } > evidence/environment.txt
+          grep -q '^VERSION_ID="24.04"$' evidence/environment.txt
+      - name: Configure bundled native dependency closure and build headless apitest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S source/Libraries -B buildlibs -DCMAKE_BUILD_TYPE=Release \
+            -DVSP_NO_GRAPHICS=ON -DVSP_NO_VSPAERO=ON -DVSP_USE_SYSTEM_LIBXML2=ON 2>&1 | tee evidence/libraries-configure.log
+          cmake --build buildlibs --parallel 2 2>&1 | tee evidence/libraries-build.log
+          cmake -S source/src -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
+            -DVSP_NO_GRAPHICS=ON -DVSP_NO_VSPAERO=ON -DVSP_NO_HELP=ON -DVSP_NO_DOC=ON \
+            -DVSP_NO_PYDOC=ON -DVSP_NO_API_WRAPPERS=ON \
+            -DVSP_LIBRARY_PATH="$GITHUB_WORKSPACE/buildlibs" 2>&1 | tee evidence/configure.log
+          cmake --build build --target apitest --parallel 2 2>&1 | tee evidence/compile.log
+          test -x build/vsp/apitest
+          sha256sum build/vsp/apitest > evidence/apitest.sha256
+      - name: Run only the registered ReplaceModelOpen native CTest
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir build --show-only=json-v1 -R '^ReplaceModelOpen$' > evidence/discovery.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          x = json.loads(Path('evidence/discovery.json').read_text())['tests']
+          assert len(x) == 1 and x[0]['name'] == 'ReplaceModelOpen', x
+          assert x[0]['command'] == [str(Path('build/vsp/apitest').resolve()), '--replace-model-open'], x
+          PY
+          env -u DISPLAY ctest --test-dir build --no-tests=error -R '^ReplaceModelOpen$' -V \
+            --output-junit "$GITHUB_WORKSPACE/evidence/ctest.xml" 2>&1 | tee evidence/ctest.log
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          root = ET.parse('evidence/ctest.xml')
+          cases = root.findall('.//testcase')
+          assert len(cases) == 1 and cases[0].get('name') == 'ReplaceModelOpen', cases
+          assert cases[0].get('status') == 'run'
+          assert all(cases[0].find(k) is None for k in ('skipped', 'failure', 'error'))
+          assert 'ReplaceModelOpenTest' in Path('evidence/ctest.log').read_text()
+          print('PASS: exactly one native ReplaceModelOpen CTest, selected test body executed')
+          PY
+      - name: Preserve CI-only identity, build and targeted test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openvsp-upstream-402-replace-open-noble-evidence
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 14
