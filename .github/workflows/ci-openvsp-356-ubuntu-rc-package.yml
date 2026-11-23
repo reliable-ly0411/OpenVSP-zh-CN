@@ -16,7 +16,8 @@ jobs:
       NATIVE_RELEASE: 'true'
       BACKFILL_VERSION: '3.56.0'
       BACKFILL_TAG: '3.56.0-zh-CN.rc.2'
-      BACKFILL_SHA: 3b7b072036943bc4b608537e0b1356bc404b569d
+      BACKFILL_SHA: 454057aa1dea72644dc7b6b135cc32769f8cd39e
+      VALIDATED_TOOLING_SHA: 8c1a1b4e4dccf50185f68a33af18d22cf1b748b0
       BACKFILL_PLATFORM: Ubuntu-24.04_amd64
       BACKFILL_ARCH: x86_64
       BACKFILL_LLVM: ''
@@ -27,8 +28,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
+          path: controller
+          fetch-depth: 4
+          persist-credentials: false
+      - name: Checkout exact original 3.56 packaging tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.VALIDATED_TOOLING_SHA }}
           path: tooling
-          fetch-depth: 3
           persist-credentials: false
       - name: Checkout sealed product and complete tag history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -41,16 +48,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C tooling rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git -C tooling rev-parse HEAD^)" = "08b921f7ff4e013fe5cbd02926b2cd9891ed5783"
-          test "$(git -C tooling rev-parse HEAD^^)" = "$BACKFILL_SHA"
+          test "$(git -C controller rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C controller rev-parse HEAD^1)" = "1fddb8ba34da015729a4d09f4abe90b20120a753"
+          test "$(git -C controller rev-parse HEAD^1^)" = "08b921f7ff4e013fe5cbd02926b2cd9891ed5783"
+          test "$(git -C controller rev-parse HEAD^1^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
+          test "$(git -C controller rev-parse HEAD^2)" = "$BACKFILL_SHA"
+          test "$(git -C tooling rev-parse HEAD)" = "$VALIDATED_TOOLING_SHA"
+          test "$(git -C source rev-parse HEAD^)" = "c741cb2443af3c27a3d2a109b4a904f75abf8923"
+          test "$(git -C source rev-parse HEAD^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
           test "$(git -C source rev-parse HEAD)" = "$BACKFILL_SHA"
-          test "$(git -C source rev-parse HEAD^{tree})" = "303f028c4ef5cc45f8adccb6042e7a54658d11a3"
+          test "$(git -C source rev-parse HEAD^{tree})" = "669fd46c942f98b2f6e0f0da1dba0a97f4128b8e"
           . /etc/os-release
           test "$ID" = ubuntu && test "$VERSION_ID" = 24.04
           test "$(uname -m)" = x86_64
           env -u GITHUB_OUTPUT SOURCE_SHA="$BACKFILL_SHA" NEW_TAG="$BACKFILL_TAG" python3 tooling/scripts/native_plan.py --source source
+          cmp tooling/scripts/check_localization_release.py source/scripts/check_localization_release.py
           python3 -X utf8 tooling/scripts/check_localization_release.py --source source --expected-tag "$BACKFILL_TAG"
+          python3 -m unittest discover -s source/scripts -p test_airshow_356_models.py -v
       - name: Build and verify only the Ubuntu amd64 native ZIP
         shell: bash
         run: bash tooling/scripts/backfill_build.sh
@@ -64,7 +78,7 @@ jobs:
           test "$(find . -maxdepth 1 -name '*.zip' -type f | wc -l)" -eq 1
           sha256sum "$zip" > SHA256SUMS.txt
           {
-            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "303f028c4ef5cc45f8adccb6042e7a54658d11a3" "$GITHUB_RUN_ID"
+            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "669fd46c942f98b2f6e0f0da1dba0a97f4128b8e" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
             stat -c 'bytes=%s' "$zip"
             cat SHA256SUMS.txt
           } > single-candidate-identity.txt
