@@ -800,6 +800,26 @@ void Vehicle::SetVSP3FileName( const string & f_name )
 // Make fname into a path relative to m_VSP3ileName.
 void Vehicle::MakeRelativePath( string & fname )
 {
+    if ( m_SaveAsEncodeTarget )
+    {
+        if ( fname.empty() )
+        {
+            return;
+        }
+
+        std::error_code error;
+        const auto input_path = std::filesystem::absolute( std::filesystem::u8path( fname ), error );
+        if ( error )
+        {
+            throw std::filesystem::filesystem_error( "Could not resolve asset path for Save As", error );
+        }
+        const auto target_dir = std::filesystem::u8path( *m_SaveAsEncodeTarget ).parent_path();
+        const auto relative_path = std::filesystem::relative( input_path, target_dir, error );
+        // For example, no relative path connects different Windows drive roots.
+        fname = ( error || relative_path.empty() ? input_path : relative_path ).generic_u8string();
+        return;
+    }
+
     if ( m_VSP3FileName != "Unnamed.vsp3" )
     {
         std::filesystem::path vsppath( m_VSP3FileName );
@@ -3524,7 +3544,19 @@ bool Vehicle::WriteXMLFile( const string & file_name, int set )
     xmlDocSetRootElement( doc, root );
     XmlUtil::AddIntNode( root, "Version", CURRENT_FILE_VER );
 
-    EncodeXml( root, set );
+    try
+    {
+        EncodeXml( root, set );
+    }
+    catch ( const std::filesystem::filesystem_error & )
+    {
+        xmlFreeDoc( doc );
+        if ( m_SaveAsEncodeTarget )
+        {
+            return false;
+        }
+        throw;
+    }
 
     //===== Save XML Tree and Free Doc =====//
     int err = xmlSaveFormatFile( file_name.c_str(), doc, 1 );
@@ -3535,6 +3567,50 @@ bool Vehicle::WriteXMLFile( const string & file_name, int set )
         return false;
     }
 
+    return true;
+}
+
+bool Vehicle::SaveAsXMLFile( const string & file_name, int set )
+{
+    if ( file_name.empty() )
+    {
+        return false;
+    }
+
+    string target_name;
+    try
+    {
+        std::error_code error;
+        const auto target_path = std::filesystem::absolute( std::filesystem::u8path( file_name ), error );
+        if ( error )
+        {
+            return false;
+        }
+        target_name = target_path.generic_u8string();
+    }
+    catch ( const std::filesystem::filesystem_error & )
+    {
+        return false;
+    }
+
+    {
+        // Use the target directory during encode without touching the live filename or export paths.
+        struct RestoreSaveAsPath
+        {
+            const string * & slot;
+            const string * original;
+            ~RestoreSaveAsPath() { slot = original; }
+        };
+        const RestoreSaveAsPath restore{ m_SaveAsEncodeTarget, m_SaveAsEncodeTarget };
+        m_SaveAsEncodeTarget = &target_name;
+        if ( !WriteXMLFile( target_name, set ) )
+        {
+            return false;
+        }
+    }
+
+    // Preserve the existing successful Save As policy, including export defaults based on the new filename.
+    SetVSP3FileName( target_name );
     return true;
 }
 

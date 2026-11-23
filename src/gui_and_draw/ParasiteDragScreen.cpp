@@ -1577,7 +1577,7 @@ void ParasiteDragScreen::RebuildBuildUpTableLabels()
 
     m_ConstantTableLabelsLayout.AddButton( m_PercTotalLabel, "% Total" );
     m_PercTotalLabel.GetFlButton()->labelcolor( FL_BLACK );
-    m_PercTotalLabel.GetFlButton()->copy_tooltip( "Percentage Total Contributed to Final Cd0" );
+    m_PercTotalLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Percentage Total Contributed to Final Cd0" ).c_str() );
 
     InitSortToggleGroup();
 }
