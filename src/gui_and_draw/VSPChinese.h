@@ -15,6 +15,9 @@ std::string VSPTranslateMessage( const std::string &text );
 // Translate a known label, then append an opaque user value without interpreting it.
 std::string VSPTranslateLabelAndValue( const std::string &label, const std::string &value );
 
+// Translate a static label in a compact table header without changing its general translation.
+std::string VSPTranslateCompactTableHeader( const std::string &text );
+
 // Translate every component of an FLTK menu path while preserving '/'.
 std::string VSPTranslateMenuPath( const std::string &path );
 
