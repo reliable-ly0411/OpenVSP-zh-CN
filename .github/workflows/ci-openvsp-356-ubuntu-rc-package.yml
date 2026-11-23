@@ -1,0 +1,76 @@
+name: OpenVSP 3.56 RC2 Ubuntu x64 candidate package (no publish)
+on:
+  push:
+    branches: [ci/openvsp-356-ubuntu-rc-package]
+    paths: ['.github/workflows/ci-openvsp-356-ubuntu-rc-package.yml']
+permissions:
+  contents: read
+concurrency:
+  group: openvsp-356-ubuntu-rc-package
+  cancel-in-progress: false
+jobs:
+  ubuntu-x64-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      NATIVE_RELEASE: 'true'
+      BACKFILL_VERSION: '3.56.0'
+      BACKFILL_TAG: '3.56.0-zh-CN.rc.2'
+      BACKFILL_SHA: 3b7b072036943bc4b608537e0b1356bc404b569d
+      BACKFILL_PLATFORM: Ubuntu-24.04_amd64
+      BACKFILL_ARCH: x86_64
+      BACKFILL_LLVM: ''
+      BACKFILL_PYTHON: '3.12'
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout exact controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          persist-credentials: false
+      - name: Checkout sealed product and complete tag history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.BACKFILL_SHA }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact product and existing release guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C tooling rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C tooling rev-parse HEAD^)" = "$BACKFILL_SHA"
+          test "$(git -C source rev-parse HEAD)" = "$BACKFILL_SHA"
+          test "$(git -C source rev-parse HEAD^{tree})" = "303f028c4ef5cc45f8adccb6042e7a54658d11a3"
+          . /etc/os-release
+          test "$ID" = ubuntu && test "$VERSION_ID" = 24.04
+          test "$(uname -m)" = x86_64
+          env -u GITHUB_OUTPUT SOURCE_SHA="$BACKFILL_SHA" NEW_TAG="$BACKFILL_TAG" python3 tooling/scripts/native_plan.py --source source
+          python3 -X utf8 tooling/scripts/check_localization_release.py --source source --expected-tag "$BACKFILL_TAG"
+      - name: Build and verify only the Ubuntu amd64 native ZIP
+        shell: bash
+        run: bash tooling/scripts/backfill_build.sh
+      - name: Record candidate identity and exact ZIP hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd deliverables
+          zip=OpenVSP-3.56.0-Ubuntu-24.04_amd64-zh-CN.zip
+          test -s "$zip"
+          test "$(find . -maxdepth 1 -name '*.zip' -type f | wc -l)" -eq 1
+          sha256sum "$zip" > SHA256SUMS.txt
+          {
+            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "303f028c4ef5cc45f8adccb6042e7a54658d11a3" "$GITHUB_RUN_ID"
+            stat -c 'bytes=%s' "$zip"
+            cat SHA256SUMS.txt
+          } > single-candidate-identity.txt
+      - name: Retain the exact candidate ZIP, checksum and native receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: openvsp-356-rc2-Ubuntu-24.04_amd64-qa
+          path: deliverables/*
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
