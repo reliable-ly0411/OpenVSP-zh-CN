@@ -28,6 +28,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: tooling
+          fetch-depth: 3
           persist-credentials: false
       - name: Checkout sealed product and complete tag history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -41,7 +42,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C tooling rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git -C tooling rev-parse HEAD^)" = "$BACKFILL_SHA"
+          test "$(git -C tooling rev-parse HEAD^)" = "08b921f7ff4e013fe5cbd02926b2cd9891ed5783"
+          test "$(git -C tooling rev-parse HEAD^^)" = "$BACKFILL_SHA"
           test "$(git -C source rev-parse HEAD)" = "$BACKFILL_SHA"
           test "$(git -C source rev-parse HEAD^{tree})" = "303f028c4ef5cc45f8adccb6042e7a54658d11a3"
           . /etc/os-release
