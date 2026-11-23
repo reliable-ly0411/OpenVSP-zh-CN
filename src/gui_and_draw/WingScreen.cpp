@@ -8,6 +8,7 @@
 #include "WingScreen.h"
 #include "ScreenMgr.h"
 #include "ParmMgr.h"
+#include "VSPChinese.h"
 
 using namespace vsp;
 
@@ -196,6 +197,20 @@ WingScreen::WingScreen( ScreenMgr* mgr ) : BlendScreen( mgr, 460, 800, "Wing", "
 
     m_WingDriverGroupBank.SetDriverGroup( &m_DefaultWingDriverGroup );
     m_SectionLayout.AddDriverGroupBank( m_WingDriverGroupBank, wsect_driver_labels, 10, "%6.5f" );
+
+    const struct { size_t index; const char *tooltip; } compact_drivers[] = {
+        { vsp::TAPER_WSECT_DRIVER, "Taper Ratio (Tip Chord / Root Chord)" },
+        { vsp::AVEC_WSECT_DRIVER, "Mean Geometric Chord (Ave C)" },
+        { vsp::SECSWEEP_WSECT_DRIVER, "Sweep Angle at the Secondary Chord Location (Sec SW)" },
+    };
+    for ( const auto &driver : compact_drivers )
+    {
+        if ( VspButton *label = m_WingDriverGroupBank.GetLabelButton( driver.index ) )
+        {
+            label->copy_label( VSPTranslateCompactWingLabel( wsect_driver_labels[driver.index] ).c_str() );
+            label->copy_tooltip( VSPTranslate( driver.tooltip ).c_str() );
+        }
+    }
 
     m_SectionLayout.SetButtonWidth( 4*m_SectionLayout.GetRemainX()/5 );
 

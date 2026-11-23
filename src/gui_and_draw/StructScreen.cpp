@@ -26,6 +26,26 @@
 
 using namespace vsp;
 
+namespace
+{
+string FeaMaterialDisplayName( FeaMaterial *material )
+{
+    string name = material->GetName();
+    const string &id = material->GetID();
+    // The bundled FLTK browser and menu fonts do not render U+2082 here.
+    // Use the existing ASCII stack notation for these seven built-in records only.
+    const bool keep_ascii = !material->m_UserFeaMaterial &&
+        ( id == "_AS4-1" || id == "_AS4-2" || id == "_AS4-4" || id == "_AS4-5" ||
+          id == "_AS4-6" || id == "_S2-1" || id == "_S2-2" );
+    if ( !keep_ascii )
+    {
+        fltk_unicode_subscripts( name );
+    }
+    fltk_unicode_plusminus( name );
+    return name;
+}
+}
+
 //////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
@@ -2566,9 +2586,7 @@ void StructScreen::UpdateFeaMaterialBrowser()
 
     for ( int i = 0; i < (int)material_vec.size(); i++ )
     {
-        string mat_name = material_vec[i]->GetName();
-        fltk_unicode_subscripts( mat_name );
-        fltk_unicode_plusminus( mat_name );
+        const string mat_name = FeaMaterialDisplayName( material_vec[i] );
         m_FeaMaterialSelectBrowser->add( mat_name.c_str() );
     }
 
@@ -2604,9 +2622,7 @@ void StructScreen::UpdateFeaMaterialChoice()
 
         for ( int i = 0; i < material_vec.size(); ++i )
         {
-            string mat_name = material_vec[i]->GetName();
-            fltk_unicode_subscripts( mat_name );
-            fltk_unicode_plusminus( mat_name );
+            const string mat_name = FeaMaterialDisplayName( material_vec[i] );
 
             m_FeaShellMaterialChoice.AddItemRaw( mat_name, i );
             m_FeaMaterialIDVec.push_back( material_vec[i]->GetID() );

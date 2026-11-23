@@ -7,6 +7,10 @@
 #include "PSliceScreen.h"
 #include "ScreenMgr.h"
 #include "ModeMgr.h"
+#include "VSPChinese.h"
+
+#include <cstdlib>
+#include <memory>
 
 PSliceScreen::PSliceScreen( ScreenMgr *mgr ) : BasicScreen( mgr, 300, 510, "Planar Slicing" )
 {
@@ -18,7 +22,6 @@ PSliceScreen::PSliceScreen( ScreenMgr *mgr ) : BasicScreen( mgr, 300, 510, "Plan
     int smallButtonWidth = 100;
     int smallGap = 25;
 
-    m_Norm = vec3d( 1, 0, 0 );
 
     m_SelectedSetIndex = DEFAULT_SET;
 
@@ -175,9 +178,6 @@ bool PSliceScreen::Update()
         m_SetChoice.Activate();
     }
 
-    m_Norm.set_xyz( 0, 0, 0 );
-    m_Norm[veh->m_PlanarAxisType.Get()] = 1;
-
     if ( veh->m_AutoBoundsFlag() )
     {
         vector< Geom* > geom_vec = veh->FindGeomVec( veh->GetGeomVec() );
@@ -263,13 +263,24 @@ void PSliceScreen::GuiDeviceCallBack( GuiDevice* device )
         bool useMode = veh->m_UseModePlanarSlicesFlag();
         string modeID = veh->m_PlanarSlicesModeID;
 
-        string id = veh->PSliceAndFlatten( m_SelectedSetIndex, veh->m_NumPlanerSlices.Get(), m_Norm,
+        // The device updates the model parameter before the deferred screen refresh.
+        vec3d normal( 0, 0, 0 );
+        normal[veh->m_PlanarAxisType.Get()] = 1;
+        string id = veh->PSliceAndFlatten( m_SelectedSetIndex, veh->m_NumPlanerSlices.Get(), normal,
                                            !!veh->m_AutoBoundsFlag.Get(),
                                            veh->m_PlanarStartLocation.Get(), veh->m_PlanarEndLocation.Get(),
                                            veh->m_PlanarMeasureDuct.Get(), useMode, modeID );
         if ( id.compare( "NONE" ) != 0 )
         {
-            m_TextBuffer->loadfile( veh->getExportFileName( vsp::SLICE_TXT_TYPE ).c_str() );
+            if ( m_TextBuffer->loadfile( veh->getExportFileName( vsp::SLICE_TXT_TYPE ).c_str() ) == 0 )
+            {
+                // FLTK allocates text() with malloc; translate the display copy only.
+                const std::unique_ptr<char, decltype( &std::free )> raw( m_TextBuffer->text(), &std::free );
+                if ( raw )
+                {
+                    m_TextBuffer->text( VSPTranslatePlanarSliceReport( raw.get() ).c_str() );
+                }
+            }
         }
     }
     else if ( device == &m_SetChoice )

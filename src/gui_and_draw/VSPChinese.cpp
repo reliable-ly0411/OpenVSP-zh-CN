@@ -1335,6 +1335,10 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
 
         // Frequently repeated geometry, meshing, FEA, and VSPAERO controls.
         { "Fit CST", "拟合 CST" }, { "Ideal CL", "理想升力系数 CL" },
+        { "Ideal Lift Coefficient (CL)", "理想升力系数 CL（翼型设计升力系数）" },
+        { "Taper Ratio (Tip Chord / Root Chord)", "梢根比（尖部弦长 ÷ 根部弦长）" },
+        { "Mean Geometric Chord (Ave C)", "平均几何弦长（Ave C）" },
+        { "Sweep Angle at the Secondary Chord Location (Sec SW)", "第二弦向位置对应的后掠角（Sec SW）" },
         { "Sharpen TE", "锐化后缘" }, { "I Symm", "I 对称" },
         { "Suspension Mode", "悬架模式" }, { "Tire Mode", "轮胎模式" },
         { "Sweep Stretch", "后掠拉伸" }, { "Demote Surfs to Cubic", "将曲面降为三次" },
@@ -2084,6 +2088,16 @@ std::string VSPTranslateMessage( const std::string &text )
     return found == exact.end() ? text : found->second;
 }
 
+std::string VSPTranslateCompactWingLabel( const std::string &text )
+{
+    // These control buttons are only 50–75 px wide.
+    if ( text == "Ideal CL" ) return "理想 CL";
+    if ( text == "Taper" ) return "梢根比";
+    if ( text == "Ave C" ) return "平均弦";
+    if ( text == "Sec SW" ) return "次后掠";
+    return VSPTranslate( text );
+}
+
 std::string VSPTranslateCompactTableHeader( const std::string &text )
 {
     // The Parasite Drag sort header has only 60 px; keep the ordinary label unchanged.
@@ -2128,6 +2142,132 @@ std::string VSPTranslateMenuPath( const std::string &path )
         start = slash + 1;
     }
     return result;
+}
+
+std::string VSPTranslateCompGeomReport( const std::string &report )
+{
+    const std::size_t title_end = report.find_first_of( "\r\n" );
+    if ( report.substr( 0, title_end ) != "...Comp Geom..." )
+    {
+        return report;
+    }
+
+    // Only fixed report grammar is localized. Keep every numeric/data row and raw table header.
+    const Entry metadata[] = {
+        { " Num Comps", " 组件数" },
+        { " Total Num Meshes", " 网格总数" },
+        { " Total Num Tris", " 三角形总数" }
+    };
+    std::string out;
+    std::size_t start = 0;
+    std::size_t index = 0;
+    while ( start < report.size() )
+    {
+        const std::size_t lf = report.find( '\n', start );
+        const std::size_t end = lf == std::string::npos ? report.size() : lf;
+        const bool cr = end > start && report[end - 1] == '\r';
+        std::string line = report.substr( start, end - start - ( cr ? 1 : 0 ) );
+        const std::string newline = cr ? "\r\n" : "\n";
+        if ( index == 0 )
+        {
+            line = "…组合几何…";
+        }
+        else if ( index <= 3 )
+        {
+            const Entry &entry = metadata[index - 1];
+            const std::string suffix = entry.first;
+            if ( line.size() > suffix.size() && line.compare( line.size() - suffix.size(), suffix.size(), suffix ) == 0 )
+            {
+                const std::string prefix = line.substr( 0, line.size() - suffix.size() );
+                if ( prefix.find_first_not_of( "0123456789" ) == std::string::npos )
+                {
+                    line = prefix + entry.second;
+                }
+            }
+        }
+        if ( line == "Theo_Area   Wet_Area   Theo_Vol    Wet_Vol  Name" )
+        {
+            out += "列：理论面积、浸润面积；" + newline + "理论体积、浸润体积、名称" + newline;
+        }
+        else if ( line == "Tag_Theo_Area   Tag_Wet_Area    Tag_Name" )
+        {
+            out += "标签：理论面积、浸润面积、名称" + newline;
+        }
+        else if ( line == " SS_Theo_Area    SS_Wet_Area    SS_Name" )
+        {
+            out += "子曲面：理论面积、浸润面积、名称" + newline;
+        }
+        out += line;
+        if ( lf == std::string::npos )
+        {
+            if ( cr ) out += '\r';
+            break;
+        }
+        out += newline;
+        start = lf + 1;
+        ++index;
+    }
+    return out;
+}
+
+std::string VSPTranslatePlanarSliceReport( const std::string &report )
+{
+    // Only the fixed report grammar is translated. Numeric rows stay aligned.
+    const std::size_t title_end = report.find_first_of( "\r\n" );
+    if ( report.substr( 0, title_end ) != "...Slice..." )
+    {
+        return report;
+    }
+    const Entry suffixes[] = {
+        { " Num Comps", " 组件数" },
+        { " Total Num Meshes", " 网格总数" },
+        { " Total Num Tris", " 三角形总数" },
+        { " Axis Vector", " 法向量 (X, Y, Z)" }
+    };
+    std::string out;
+    std::size_t start = 0;
+    while ( start < report.size() )
+    {
+        const std::size_t lf = report.find( '\n', start );
+        const std::size_t end = lf == std::string::npos ? report.size() : lf;
+        const bool cr = end > start && report[end - 1] == '\r';
+        std::string line = report.substr( start, end - start - ( cr ? 1 : 0 ) );
+        const std::string newline = cr ? "\r\n" : "\n";
+        if ( start == 0 )
+        {
+            line = "…平面切片…";
+        }
+        else if ( line == "    Loc    XCenter  YCenter  ZCenter         Area" )
+        {
+            out += "列：位置；X/Y/Z 中心；面积" + newline;
+        }
+        else
+        {
+            for ( const Entry &entry : suffixes )
+            {
+                const std::string key = entry.first;
+                if ( line.size() > key.size() && line.compare( line.size() - key.size(), key.size(), key ) == 0 )
+                {
+                    const std::string numbers = line.substr( 0, line.size() - key.size() );
+                    if ( numbers.find_first_not_of( " \t+-0123456789.eE" ) == std::string::npos &&
+                         numbers.find_first_of( "0123456789" ) != std::string::npos )
+                    {
+                        line = numbers + entry.second;
+                    }
+                    break;
+                }
+            }
+        }
+        out += line;
+        if ( lf == std::string::npos )
+        {
+            if ( cr ) out += '\r';
+            break;
+        }
+        out += newline;
+        start = lf + 1;
+    }
+    return out;
 }
 
 std::string VSPTranslateBrowserHeader( const std::string &header )
