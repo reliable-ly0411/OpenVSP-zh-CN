@@ -16,6 +16,10 @@
 
 ## 模型清单
 
+从 3.56.0 汉化预发布起，仅随源码和安装包分发五个记录为 CC0 的模型；
+F/A-18C Hornet、Joby S4 和 Kitty Hawk Heaviside 不再随该版本分发。
+保留下方原站链接、署名和历史校验记录，不改变 OpenVSP 上游自带的示例。
+
 ### NASA X-57 Maxwell 简化 CRM v4.4.1
 
 - 文件：`NASA_X-57_Maxwell_Simplified_CRM_v4.4.1.vsp3`

@@ -3,7 +3,7 @@
   "branch": "main",
   "base_commit": "ca4958f2cf98d5e787a2a3fa37efb497e4903902",
   "version": "3.56.0",
-  "source_ref": "main",
-  "source_kind": "development-snapshot",
-  "upstream_publication_verified": false
+  "source_ref": "OpenVSP_3.56.0",
+  "source_kind": "version-tag",
+  "upstream_publication_verified": true
 }

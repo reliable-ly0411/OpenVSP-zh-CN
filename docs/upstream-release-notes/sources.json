@@ -1,9 +1,24 @@
 {
   "schema": 1,
-  "github_releases_checked_at": "2026-10-20",
+  "github_releases_checked_at": "2026-11-17",
   "github_releases_url": "https://api.github.com/repos/OpenVSP/OpenVSP/releases",
   "github_release_count": 0,
   "versions": {
+    "3.56.0": {
+      "upstream_tag": "OpenVSP_3.56.0",
+      "upstream_sha": "ca4958f2cf98d5e787a2a3fa37efb497e4903902",
+      "changelog_git_blob": "62e3c086ab330ca1736b742819855d04ed8f399c",
+      "changelog_sha256": "25f9a9de60542dc31d745545c68b340e0d38cf201a579a19e73cf527377f277a",
+      "section_sha256": "6254ba8d17ab91056e15b83c1e159aa37d4afe7af5d44be7fffa406fb544586f",
+      "section_bytes": 9966,
+      "source_url": "https://github.com/OpenVSP/OpenVSP/blob/ca4958f2cf98d5e787a2a3fa37efb497e4903902/CHANGELOG.md",
+      "announcement_url": "https://openvsp.org/blogs/announcements/2026/11/05/openvsp-3-56-0-released",
+      "license_url": "https://github.com/OpenVSP/OpenVSP/blob/ca4958f2cf98d5e787a2a3fa37efb497e4903902/LICENSE",
+      "publication_date": "2026-11-05",
+      "publication_verified_at": "2026-11-17",
+      "tag_ref_url": "https://api.github.com/repos/OpenVSP/OpenVSP/git/ref/tags/OpenVSP_3.56.0",
+      "section_extraction": "Exact bytes through the next version header, including separator whitespace"
+    },
     "3.55.0": {
       "upstream_tag": "OpenVSP_3.55.0",
       "upstream_sha": "5240ef210f41c5d6aeed0ba7687f6fab0ca0cafb",
