@@ -79,8 +79,13 @@ int main()
          "@b@.常规集合:@b@.退化几何集合" ) return 5;
     if ( VSPTranslate( "@b@.DEGEN SET" ) != "@b@.DEGEN SET" ) return 6;
     if ( VSPTranslateBrowserHeader( "User:DEGEN SET" ) != "User:DEGEN SET" ) return 7;
+    if ( VSPTranslate( "% Total" ) != "占总量 (%)" ) return 8;
+    if ( VSPTranslateCompactTableHeader( "% Total" ) != "占比(%)" ) return 9;
+    if ( VSPTranslateCompactTableHeader( "% of CD_Geom" ) !=
+         VSPTranslate( "% of CD_Geom" ) ) return 10;
+    if ( VSPTranslateMenuPath( "Window/Vector Screenshot..." ) != "窗口/矢量截图..." ) return 11;
     std::cout << "Engineering terminology passed: " << labels.size() << " labels, "
               << identifiers.size() << " identifiers, " << values.size()
-              << " opaque values, 4 menu/header boundaries.\n";
+              << " opaque values, 8 menu/header boundaries.\n";
     return 0;
 }

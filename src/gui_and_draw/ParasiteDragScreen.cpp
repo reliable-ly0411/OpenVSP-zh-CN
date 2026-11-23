@@ -1576,6 +1576,7 @@ void ParasiteDragScreen::RebuildBuildUpTableLabels()
     m_CdLabel.GetFlButton()->copy_tooltip( "Coefficient of Parasite Drag Per Component" );
 
     m_ConstantTableLabelsLayout.AddButton( m_PercTotalLabel, "% Total" );
+    m_PercTotalLabel.GetFlButton()->copy_label( VSPTranslateCompactTableHeader( "% Total" ).c_str() );
     m_PercTotalLabel.GetFlButton()->labelcolor( FL_BLACK );
     m_PercTotalLabel.GetFlButton()->copy_tooltip( VSPTranslate( "Percentage Total Contributed to Final Cd0" ).c_str() );
 

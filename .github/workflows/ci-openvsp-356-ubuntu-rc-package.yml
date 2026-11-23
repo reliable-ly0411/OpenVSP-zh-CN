@@ -1,4 +1,4 @@
-name: OpenVSP 3.56 RC3 Ubuntu x64 candidate package (no publish)
+name: OpenVSP 3.56 RC4 Ubuntu x64 candidate package (no publish)
 on:
   push:
     branches: [ci/openvsp-356-ubuntu-rc-package]
@@ -15,8 +15,8 @@ jobs:
     env:
       NATIVE_RELEASE: 'true'
       BACKFILL_VERSION: '3.56.0'
-      BACKFILL_TAG: '3.56.0-zh-CN.rc.3'
-      BACKFILL_SHA: 380775680ce73c2d033a44a934c7cb1bc6bf76fe
+      BACKFILL_TAG: '3.56.0-zh-CN.rc.4'
+      BACKFILL_SHA: 07b8046fbac20763a7fbab7f289e2a809d57778c
       VALIDATED_TOOLING_SHA: 8c1a1b4e4dccf50185f68a33af18d22cf1b748b0
       BACKFILL_PLATFORM: Ubuntu-24.04_amd64
       BACKFILL_ARCH: x86_64
@@ -29,7 +29,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: controller
-          fetch-depth: 5
+          fetch-depth: 6
           persist-credentials: false
       - name: Checkout exact original 3.56 packaging tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -49,18 +49,21 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C controller rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git -C controller rev-parse HEAD^1)" = "110b0c6e92ab442c1e8acce3fe036c92c36b4707"
-          test "$(git -C controller rev-parse HEAD^1^2)" = "454057aa1dea72644dc7b6b135cc32769f8cd39e"
-          test "$(git -C controller rev-parse HEAD^1^1)" = "1fddb8ba34da015729a4d09f4abe90b20120a753"
-          test "$(git -C controller rev-parse HEAD^1^1^)" = "08b921f7ff4e013fe5cbd02926b2cd9891ed5783"
-          test "$(git -C controller rev-parse HEAD^1^1^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
+          test "$(git -C controller rev-parse HEAD^1)" = "516449f89d23736088127376f0271b2c5bd6bf15"
+          test "$(git -C controller rev-parse HEAD^1^2)" = "380775680ce73c2d033a44a934c7cb1bc6bf76fe"
+          test "$(git -C controller rev-parse HEAD^1^1)" = "110b0c6e92ab442c1e8acce3fe036c92c36b4707"
+          test "$(git -C controller rev-parse HEAD^1^1^2)" = "454057aa1dea72644dc7b6b135cc32769f8cd39e"
+          test "$(git -C controller rev-parse HEAD^1^1^1)" = "1fddb8ba34da015729a4d09f4abe90b20120a753"
+          test "$(git -C controller rev-parse HEAD^1^1^1^)" = "08b921f7ff4e013fe5cbd02926b2cd9891ed5783"
+          test "$(git -C controller rev-parse HEAD^1^1^1^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
           test "$(git -C controller rev-parse HEAD^2)" = "$BACKFILL_SHA"
           test "$(git -C tooling rev-parse HEAD)" = "$VALIDATED_TOOLING_SHA"
-          test "$(git -C source rev-parse HEAD^)" = "454057aa1dea72644dc7b6b135cc32769f8cd39e"
-          test "$(git -C source rev-parse HEAD^^)" = "c741cb2443af3c27a3d2a109b4a904f75abf8923"
-          test "$(git -C source rev-parse HEAD^^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
+          test "$(git -C source rev-parse HEAD^)" = "380775680ce73c2d033a44a934c7cb1bc6bf76fe"
+          test "$(git -C source rev-parse HEAD^^)" = "454057aa1dea72644dc7b6b135cc32769f8cd39e"
+          test "$(git -C source rev-parse HEAD^^^)" = "c741cb2443af3c27a3d2a109b4a904f75abf8923"
+          test "$(git -C source rev-parse HEAD^^^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
           test "$(git -C source rev-parse HEAD)" = "$BACKFILL_SHA"
-          test "$(git -C source rev-parse HEAD^{tree})" = "0bb49e7d768434c69a4e7b9de7f8db6ee96752b2"
+          test "$(git -C source rev-parse HEAD^{tree})" = "eb423528896cc157186f9b84b088481c2a56ef75"
           . /etc/os-release
           test "$ID" = ubuntu && test "$VERSION_ID" = 24.04
           test "$(uname -m)" = x86_64
@@ -81,14 +84,14 @@ jobs:
           test "$(find . -maxdepth 1 -name '*.zip' -type f | wc -l)" -eq 1
           sha256sum "$zip" > SHA256SUMS.txt
           {
-            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "0bb49e7d768434c69a4e7b9de7f8db6ee96752b2" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
+            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "eb423528896cc157186f9b84b088481c2a56ef75" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
             stat -c 'bytes=%s' "$zip"
             cat SHA256SUMS.txt
           } > single-candidate-identity.txt
       - name: Retain the exact candidate ZIP, checksum and native receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: openvsp-356-rc3-Ubuntu-24.04_amd64-qa
+          name: openvsp-356-rc4-Ubuntu-24.04_amd64-qa
           path: deliverables/*
           compression-level: 0
           if-no-files-found: error

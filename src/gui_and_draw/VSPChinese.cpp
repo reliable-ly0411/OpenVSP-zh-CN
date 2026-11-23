@@ -974,7 +974,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Rotate Tip Foil To Match Dihedral", "旋转梢部翼型以匹配上反角" },
         { "Twist Tip Foil In XZ Plane", "在 XZ 平面内扭转梢部翼型" },
         { "Start/End Skip", "起点/终点跳过数" },
-        { "% Total", "占比(%)" },
+        { "% Total", "占总量 (%)" },
         { "Percentage Total Contributed to Final Cd0", "占总寄生阻力系数 Cd0 的百分比" },
         { "% Lam", "层流比例 (%)" },
         { "% of CD_Geom", "占 CD_Geom (%)" },
@@ -2082,6 +2082,16 @@ std::string VSPTranslateMessage( const std::string &text )
     const auto &exact = ExactTranslations();
     const auto found = exact.find( text );
     return found == exact.end() ? text : found->second;
+}
+
+std::string VSPTranslateCompactTableHeader( const std::string &text )
+{
+    // The Parasite Drag sort header has only 60 px; keep the ordinary label unchanged.
+    if ( text == "% Total" )
+    {
+        return "占比(%)";
+    }
+    return VSPTranslate( text );
 }
 
 std::string VSPTranslateLabelAndValue( const std::string &label, const std::string &value )
