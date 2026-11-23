@@ -8,6 +8,7 @@
 #include "ProjectionMgr.h"
 #include "ProjectionScreen.h"
 #include "ModeMgr.h"
+#include "VSPChinese.h"
 
 ProjectionScreen::ProjectionScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 300, 397+20+40+20, "Projected Area Analysis" )
 {
@@ -213,6 +214,7 @@ ProjectionScreen::ProjectionScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 300, 39
     m_BorderLayout.AddDividerBox("Execute Projected Area");
 
     m_BorderLayout.AddButton(m_Execute, "START");
+    m_Execute.GetFlButton()->copy_label( VSPTranslate( "Calculate" ).c_str() );
 
     m_BorderLayout.AddYGap();
 

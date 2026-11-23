@@ -201,6 +201,7 @@ public:
     virtual void Init( VspScreen* screen, VspButton* button );
     virtual void Update( const string& parm_id );
     virtual void UpdateButtonName( const string & name );
+    VspButton* GetLabelButton() const { return m_Button; }
     virtual void DeviceCB( Fl_Widget* w );
     virtual void SetButtonNameUpdate( bool flag )   { m_ButtonNameUpdate = flag; }
 
@@ -659,6 +660,7 @@ class SliderAdjRangeInput : public GuiDevice
 {
 public:
     SliderAdjRangeInput();
+    VspButton* GetLabelButton() const { return m_ParmButtonFlag ? m_ParmButton.GetLabelButton() : nullptr; }
     virtual void Init( VspScreen* screen, VspSlider* slider, Fl_Button* lbutton,
                        Fl_Button* rbutton, Fl_Input* input, double range, const char* format,
                        VspButton* parm_button = nullptr, bool log_slider = false );
@@ -1212,6 +1214,11 @@ public:
     DriverGroup* GetDriverGroup()
     {
         return m_DriverGroup;
+    }
+
+    VspButton* GetLabelButton( size_t index ) const
+    {
+        return index < m_Sliders.size() ? m_Sliders[index]->GetLabelButton() : nullptr;
     }
 
     void EnforceXSecGeomType( int geom_type ); // Called from CurveEditScreen to disable drivers for Wing and Prop

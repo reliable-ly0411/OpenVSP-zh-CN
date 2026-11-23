@@ -8,6 +8,10 @@
 #include "CompGeomScreen.h"
 
 #include "ModeMgr.h"
+#include "VSPChinese.h"
+
+#include <cstdlib>
+#include <memory>
 
 CompGeomScreen::CompGeomScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 375, 470, "Comp Geom - Mesh, Intersect, Trim" )
 {
@@ -258,7 +262,15 @@ void CompGeomScreen::GuiDeviceCallBack( GuiDevice* device )
                       m_Subsurfs.GetFlButton()->value(), m_DegenSelectedSetIndex, hideset, suppressdisks, useMode, modeID );
         if ( geom.compare( "NONE" ) != 0 )
         {
-            m_TextDisplay->buffer()->loadfile( vehiclePtr->getExportFileName( vsp::COMP_GEOM_TXT_TYPE ).c_str() );
+            Fl_Text_Buffer *buffer = m_TextDisplay->buffer();
+            if ( buffer->loadfile( vehiclePtr->getExportFileName( vsp::COMP_GEOM_TXT_TYPE ).c_str() ) == 0 )
+            {
+                const std::unique_ptr<char, decltype( &std::free )> raw( buffer->text(), &std::free );
+                if ( raw )
+                {
+                    buffer->text( VSPTranslateCompGeomReport( raw.get() ).c_str() );
+                }
+            }
         }
     }
 

@@ -84,6 +84,28 @@ int main()
     if ( VSPTranslateCompactTableHeader( "% of CD_Geom" ) !=
          VSPTranslate( "% of CD_Geom" ) ) return 10;
     if ( VSPTranslateMenuPath( "Window/Vector Screenshot..." ) != "窗口/矢量截图..." ) return 11;
+    const std::string comp_lf =
+        "...Comp Geom...\n1 Num Comps\n1 Total Num Meshes\n272 Total Num Tris\n"
+        "Theo_Area   Wet_Area   Theo_Vol    Wet_Vol  Name\n"
+        "29.924  29.924  7.647  7.647  Totals\n"
+        "UNKNOWN WARNING\nTag_Theo_Area   Tag_Wet_Area    Tag_Name\n"
+        "100  100  Name Num Comps\n SS_Theo_Area    SS_Wet_Area    SS_Name";
+    const std::string comp_lf_expected =
+        "…组合几何…\n1 组件数\n1 网格总数\n272 三角形总数\n"
+        "列：理论面积、浸润面积；\n理论体积、浸润体积、名称\n"
+        "Theo_Area   Wet_Area   Theo_Vol    Wet_Vol  Name\n"
+        "29.924  29.924  7.647  7.647  Totals\n"
+        "UNKNOWN WARNING\n标签：理论面积、浸润面积、名称\n"
+        "Tag_Theo_Area   Tag_Wet_Area    Tag_Name\n"
+        "100  100  Name Num Comps\n子曲面：理论面积、浸润面积、名称\n"
+        " SS_Theo_Area    SS_Wet_Area    SS_Name";
+    if ( VSPTranslateCompGeomReport( comp_lf ) != comp_lf_expected ) return 12;
+    if ( VSPTranslateCompGeomReport( "...Comp Geom...\r\n2 Num Comps\r\n" ) !=
+         "…组合几何…\r\n2 组件数\r\n" ) return 13;
+    if ( VSPTranslateCompGeomReport( "Other\n1 Num Comps\n" ) != "Other\n1 Num Comps\n" ) return 14;
+    if ( VSPTranslateCompGeomReport( "...Comp Geom...\nuser Num Comps\n" ) !=
+         "…组合几何…\nuser Num Comps\n" ) return 15;
+    if ( !VSPTranslateCompGeomReport( "" ).empty() ) return 16;
     std::cout << "Engineering terminology passed: " << labels.size() << " labels, "
               << identifiers.size() << " identifiers, " << values.size()
               << " opaque values, 8 menu/header boundaries.\n";

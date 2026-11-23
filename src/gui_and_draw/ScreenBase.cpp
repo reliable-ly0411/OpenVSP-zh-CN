@@ -36,6 +36,18 @@
 #include "FL/Fl_Image_Surface.H"
 #include "FL/Fl_PostScript.H"
 
+namespace
+{
+void LocalizeNarrowAirfoilClLabel( SliderAdjRangeInput &slider )
+{
+    if ( VspButton *label = slider.GetLabelButton() )
+    {
+        label->copy_label( VSPTranslateCompactWingLabel( "Ideal CL" ).c_str() );
+        label->copy_tooltip( VSPTranslate( "Ideal Lift Coefficient (CL)" ).c_str() );
+    }
+}
+}
+
 using namespace vsp;
 
 
@@ -1392,6 +1404,7 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SSXSCFourSeriesGroup.SetButtonWidth( actionSliderButtonWidth );
     m_SSXSCFourSeriesGroup.SetFitWidthFlag( true );
     m_SSXSCFourSeriesGroup.AddSlider( m_SSXSCFourCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_SSXSCFourCLiSlider );
 
     m_SSXSCFourSeriesGroup.ForceNewLine();
 
@@ -1443,6 +1456,7 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SSXSCSixSeriesGroup.AddSlider( m_SSXSCSixThickChordSlider, "T/C", 1, "%7.5f" );
     m_SSXSCSixSeriesGroup.AddYGap();
     m_SSXSCSixSeriesGroup.AddSlider( m_SSXSCSixIdealClSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_SSXSCSixIdealClSlider );
     m_SSXSCSixSeriesGroup.AddSlider( m_SSXSCSixASlider, "a", 1, "%7.5f" );
     m_SSXSCSixSeriesGroup.AddYGap();
     m_SSXSCSixSeriesGroup.AddButton( m_SSXSCSixInvertButton, "Invert Airfoil" );
@@ -1613,6 +1627,7 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SSXSCFourDigitModGroup.SetButtonWidth( actionSliderButtonWidth );
     m_SSXSCFourDigitModGroup.SetFitWidthFlag( true );
     m_SSXSCFourDigitModGroup.AddSlider( m_SSXSCFourModCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_SSXSCFourModCLiSlider );
 
     m_SSXSCFourDigitModGroup.ForceNewLine();
 
@@ -1650,6 +1665,7 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SSXSCFiveDigitGroup.AddSlider( m_SSXSCFiveThickChordSlider, "T/C", 1, "%7.5f" );
     m_SSXSCFiveDigitGroup.AddYGap();
     m_SSXSCFiveDigitGroup.AddSlider( m_SSXSCFiveCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_SSXSCFiveCLiSlider );
     m_SSXSCFiveDigitGroup.AddSlider( m_SSXSCFiveCamberLocSlider, "CamberLoc", 1, "%7.5f" );
     m_SSXSCFiveDigitGroup.AddYGap();
     m_SSXSCFiveDigitGroup.AddButton( m_SSXSCFiveInvertButton, "Invert Airfoil" );
@@ -1672,6 +1688,7 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SSXSCFiveDigitModGroup.AddSlider( m_SSXSCFiveModThickChordSlider, "T/C", 1, "%7.5f" );
     m_SSXSCFiveDigitModGroup.AddYGap();
     m_SSXSCFiveDigitModGroup.AddSlider( m_SSXSCFiveModCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_SSXSCFiveModCLiSlider );
     m_SSXSCFiveDigitModGroup.AddSlider( m_SSXSCFiveModCamberLocSlider, "CamberLoc", 1, "%7.5f" );
     m_SSXSCFiveDigitModGroup.AddYGap();
     m_SSXSCFiveDigitModGroup.AddSlider( m_SSXSCFiveModThicknessLocSlider, "T/CLoc", 0.5, "%7.5f" );
@@ -1697,6 +1714,7 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SSXSCOneSixSeriesGroup.AddSlider( m_SSXSCOneSixSeriesThickChordSlider, "T/C", 1, "%7.5f" );
     m_SSXSCOneSixSeriesGroup.AddYGap();
     m_SSXSCOneSixSeriesGroup.AddSlider( m_SSXSCOneSixSeriesCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_SSXSCOneSixSeriesCLiSlider );
     m_SSXSCOneSixSeriesGroup.AddYGap();
     m_SSXSCOneSixSeriesGroup.AddButton( m_SSXSCOneSixSeriesInvertButton, "Invert Airfoil" );
     m_SSXSCOneSixSeriesGroup.AddYGap();
@@ -4044,6 +4062,7 @@ void XSecScreen::AddXSecLayout(bool include_point_type)
     m_FourSeriesGroup.SetButtonWidth( actionSliderButtonWidth );
     m_FourSeriesGroup.SetFitWidthFlag( true );
     m_FourSeriesGroup.AddSlider( m_FourCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_FourCLiSlider );
 
     m_FourSeriesGroup.ForceNewLine();
 
@@ -4094,6 +4113,7 @@ void XSecScreen::AddXSecLayout(bool include_point_type)
     m_SixSeriesGroup.AddSlider( m_SixThickChordSlider, "T/C", 1, "%7.5f" );
     m_SixSeriesGroup.AddYGap();
     m_SixSeriesGroup.AddSlider( m_SixIdealClSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_SixIdealClSlider );
     m_SixSeriesGroup.AddSlider( m_SixASlider, "a", 1, "%7.5f" );
     m_SixSeriesGroup.AddYGap();
     m_SixSeriesGroup.AddButton( m_SixInvertButton, "Invert Airfoil" );
@@ -4273,6 +4293,7 @@ void XSecScreen::AddXSecLayout(bool include_point_type)
     m_FourDigitModGroup.SetButtonWidth( actionSliderButtonWidth );
     m_FourDigitModGroup.SetFitWidthFlag( true );
     m_FourDigitModGroup.AddSlider( m_FourModCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_FourModCLiSlider );
 
     m_FourDigitModGroup.ForceNewLine();
 
@@ -4310,6 +4331,7 @@ void XSecScreen::AddXSecLayout(bool include_point_type)
     m_FiveDigitGroup.AddSlider( m_FiveThickChordSlider, "T/C", 1, "%7.5f" );
     m_FiveDigitGroup.AddYGap();
     m_FiveDigitGroup.AddSlider( m_FiveCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_FiveCLiSlider );
     m_FiveDigitGroup.AddSlider( m_FiveCamberLocSlider, "CamberLoc", 1, "%7.5f" );
     m_FiveDigitGroup.AddYGap();
     m_FiveDigitGroup.AddButton( m_FiveInvertButton, "Invert Airfoil" );
@@ -4332,6 +4354,7 @@ void XSecScreen::AddXSecLayout(bool include_point_type)
     m_FiveDigitModGroup.AddSlider( m_FiveModThickChordSlider, "T/C", 1, "%7.5f" );
     m_FiveDigitModGroup.AddYGap();
     m_FiveDigitModGroup.AddSlider( m_FiveModCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_FiveModCLiSlider );
     m_FiveDigitModGroup.AddSlider( m_FiveModCamberLocSlider, "CamberLoc", 1, "%7.5f" );
     m_FiveDigitModGroup.AddYGap();
     m_FiveDigitModGroup.AddSlider( m_FiveModThicknessLocSlider, "T/CLoc", 0.5, "%7.5f" );
@@ -4357,6 +4380,7 @@ void XSecScreen::AddXSecLayout(bool include_point_type)
     m_OneSixSeriesGroup.AddSlider( m_OneSixSeriesThickChordSlider, "T/C", 1, "%7.5f" );
     m_OneSixSeriesGroup.AddYGap();
     m_OneSixSeriesGroup.AddSlider( m_OneSixSeriesCLiSlider, "Ideal CL", 1, "%7.5f" );
+    LocalizeNarrowAirfoilClLabel( m_OneSixSeriesCLiSlider );
     m_OneSixSeriesGroup.AddYGap();
     m_OneSixSeriesGroup.AddButton( m_OneSixSeriesInvertButton, "Invert Airfoil" );
     m_OneSixSeriesGroup.AddYGap();
