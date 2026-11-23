@@ -21,13 +21,41 @@ jobs:
         with:
           ref: ${{ inputs.source_ref || github.sha }}
           persist-credentials: false
+          fetch-depth: 2
+      - name: Select checks for known development PR changes
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.repo.full_name == github.repository }}
+          REUSABLE_SOURCE: ${{ inputs.source_ref }}
+        run: |
+          mode=full
+          if [ -z "$REUSABLE_SOURCE" ]; then
+            mode=$(python3 scripts/dev_pr_checks.py "$EVENT_NAME" "$BASE_REF" "$BASE_SHA" "$HEAD_REF" "$SAME_REPO" || echo full)
+          fi
+          case "$mode" in docs|display|full) ;; *) mode=full ;; esac
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Source check scope: $mode" >> "$GITHUB_STEP_SUMMARY"
+      - name: Validate scoped source and documentation
+        if: steps.scope.outputs.mode != 'full'
+        run: |
+          python3 scripts/check_localization_release.py
+          (cd scripts && python3 -m unittest -v test_localization_release_guard test_localized_release_identity test_release_notes test_packaged_documentation test_dev_pr_checks)
+          git diff --check "$BASE_SHA" HEAD
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
       - name: Source localization and Python maintenance regressions
+        if: steps.scope.outputs.mode == 'full'
         run: |
           python3 scripts/check_localization_release.py
           python3 -m unittest discover -s scripts -p 'test_*.py' -v
           python3 -m unittest discover -s scripts -p backfill_test.py -v
           git diff --check
       - name: Lightweight C++ localization and model-name regressions
+        if: steps.scope.outputs.mode != 'docs'
         run: |
           sudo apt-get update
           sudo apt-get install --yes build-essential libxml2-dev
