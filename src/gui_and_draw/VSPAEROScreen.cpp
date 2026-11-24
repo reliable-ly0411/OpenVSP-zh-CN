@@ -827,12 +827,12 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
     prop_driver_labels[vsp::RPM_PROP_DRIVER] = "RPM";
     prop_driver_labels[vsp::CT_PROP_DRIVER] = "C_T";
     prop_driver_labels[vsp::CP_PROP_DRIVER] = "C_P";
-    prop_driver_labels[vsp::T_PROP_DRIVER] = "Thrust";
+    prop_driver_labels[vsp::T_PROP_DRIVER] = "推力";
     prop_driver_labels[vsp::ETA_PROP_DRIVER] = "Efficiency";
-    prop_driver_labels[vsp::J_PROP_DRIVER] = "Advance Ratio";
+    prop_driver_labels[vsp::J_PROP_DRIVER] = "前进比";
     prop_driver_labels[vsp::P_PROP_DRIVER] = "Power";
     prop_driver_labels[vsp::CQ_PROP_DRIVER] = "C_Q";
-    prop_driver_labels[vsp::Q_PROP_DRIVER] = "Torque";
+    prop_driver_labels[vsp::Q_PROP_DRIVER] = "扭矩";
 
     m_PropElemDriverGroupBank.SetDriverGroup( &m_DefaultPropDriverGroup );
     m_PropElemLayout.AddDriverGroupBank( m_PropElemDriverGroupBank, prop_driver_labels, 10, "%6.4f" );

@@ -14,6 +14,19 @@ int main()
         "C:\\Users\\Example\\Fuselage Test\\Model Final.vsp3",
         "/模型/Left Wing 100%/#main.vsp3", "*.vsp3", ""
     };
+    const std::string raw_type[] = { "Control_Surf", "Finite_Line", "XSec_Curve" };
+    const std::string shown_type[] = { "操纵面", "有限线段", "截面曲线" };
+    for (int i = 0; i < 3; ++i)
+    {
+        if (VSPTranslateSubsurfaceType(raw_type[i]) != shown_type[i]) return 10;
+        if (VSPTranslate(raw_type[i]) != raw_type[i]) return 11;
+        if (VSPTranslateLabelAndValue("Parm: ", raw_type[i]) != "参数：" + raw_type[i]) return 12;
+    }
+    for (const std::string &raw : {std::string("SS_CONT_0"), std::string("WingGeom_Surf0_SS_CONT_0"),
+                                  std::string("Line"), std::string("Control_Surf custom")})
+    {
+        if (VSPTranslateSubsurfaceType(raw) != raw) return 13;
+    }
     const std::string export_template = VSPTranslateMessage("%s, %s not written");
     if (export_template != "%s，未写入 %s") return 5;
     // Check the exact formatter used by ExportScreen, including '%' in values.

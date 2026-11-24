@@ -13,6 +13,7 @@ std::string VSPTranslate( const char *text );
 std::string VSPTranslateMessage( const std::string &text );
 
 // Translate a known label, then append an opaque user value without interpreting it.
+std::string VSPTranslateSubsurfaceType( const std::string &type_name );
 std::string VSPTranslateLabelAndValue( const std::string &label, const std::string &value );
 
 // Translate a static label in a compact table header without changing its general translation.

@@ -2112,6 +2112,15 @@ std::string VSPTranslateCompactTableHeader( const std::string &text )
     return VSPTranslate( text );
 }
 
+// Fixed subsurface type display only; never translate the model's name or enum.
+std::string VSPTranslateSubsurfaceType( const std::string &type_name )
+{
+    if ( type_name == "Control_Surf" ) return "操纵面";
+    if ( type_name == "Finite_Line" ) return "有限线段";
+    if ( type_name == "XSec_Curve" ) return "截面曲线";
+    return type_name;
+}
+
 std::string VSPTranslateLabelAndValue( const std::string &label, const std::string &value )
 {
     return VSPTranslate( label ) + value;

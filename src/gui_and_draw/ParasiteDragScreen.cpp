@@ -22,6 +22,18 @@
 #include <numeric>
 using namespace std;
 
+namespace
+{
+string ExcrescenceTypeDisplayName( const ExcrescenceTableRow &row )
+{
+    if ( row.Type == vsp::EXCRESCENCE_COUNT && row.TypeString == "Count (10000*CD)" )
+    {
+        return "阻力计数";
+    }
+    return row.TypeString;
+}
+}
+
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
@@ -504,28 +516,28 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_TextDisplay->textfont( 4 );
     m_TextDisplay->textsize( 12 );
     m_TextBuffer = new Fl_Text_Buffer;
-    m_TextBuffer->append( "-- Component Table Quantities -- \n" );
-    m_TextBuffer->append( "S_wet \t\t : \t Wetted Area of Geometry, Calculated through DegenGeom \n" );
-    m_TextBuffer->append( "L_ref \t\t : \t Reference Length of Geometry, Calculated through Length of Bounding Box in X direction or Chord on a Wing\n" );
-    m_TextBuffer->append( "t/c or l/d \t : \t Thickness to Chord Ratio or Fineness Ratio, respectively \n" );
-    m_TextBuffer->append( "FF Equation \t : \t Chosen Form Factor Equation for Internal Calculations \n" );
-    m_TextBuffer->append( "FF \t\t : \t Form Factor of Specific Geometry \n" );
-    m_TextBuffer->append( "Re \t\t : \t Reynolds Number for the component \n" );
-    m_TextBuffer->append( "% Lam \t\t : \t % Laminar of Flow over Specific Geometry \n" );
-    m_TextBuffer->append( "C_f \t\t : \t Friction Coefficient Calculated Using Specified Laminar and Turbulent Equation Choices \n" );
-    m_TextBuffer->append( "Q \t\t : \t Interference Factor for Specific Geometry \n" );
-    m_TextBuffer->append( "f \t\t : \t Flat Plat Drag \n" );
-    m_TextBuffer->append( "C_D \t\t : \t Drag Coefficient for Specific Geometry \n" );
-    m_TextBuffer->append( "% Total \t : \t Total Percentage of the Drag Contribution of Specific Geometry \n" );
+    m_TextBuffer->append( "-- 组件表参数 --\n" );
+    m_TextBuffer->append( "S_wet：由退化几何计算的湿面积\n" );
+    m_TextBuffer->append( "L_ref：参考长度（包围盒 X 向长度或机翼弦长）\n" );
+    m_TextBuffer->append( "t/c 或 l/d：相对厚度或长细比\n" );
+    m_TextBuffer->append( "FF 公式：计算所选用的形状因子公式\n" );
+    m_TextBuffer->append( "FF：组件的形状因子\n" );
+    m_TextBuffer->append( "Re：组件的雷诺数\n" );
+    m_TextBuffer->append( "% Lam：组件的层流比例\n" );
+    m_TextBuffer->append( "C_f：按所选层流和湍流公式计算的摩擦系数\n" );
+    m_TextBuffer->append( "Q：组件的干扰因子\n" );
+    m_TextBuffer->append( "f：等效平板阻力面积\n" );
+    m_TextBuffer->append( "C_D：组件的阻力系数\n" );
+    m_TextBuffer->append( "% Total：组件阻力占总阻力的比例\n" );
     m_TextBuffer->append( "\n" );
-    m_TextBuffer->append( "-- Excrescence Table Quantities -- \n" );
-    m_TextBuffer->append( "Excres. Type \t : \t Chosen type of excrescence (Drag Counts, CD, % of C_D Geom, Drag Area ) \n" );
-    m_TextBuffer->append( "Excres. Input \t : \t User Input Value for Excrescence of Described Type \n" );
+    m_TextBuffer->append( "-- 附加阻力表参数 --\n" );
+    m_TextBuffer->append( "附加阻力类型：阻力计数、C_D、几何阻力百分比等\n" );
+    m_TextBuffer->append( "附加阻力输入：按所选类型输入数值\n" );
     m_TextBuffer->append( "\n" );
-    m_TextBuffer->append( "-- User Input Options -- \n" );
-    m_TextBuffer->append( "Lam. Cf Eqn \t : \t Chosen Laminar Equation from Documented List at Link Below \n" );
-    m_TextBuffer->append( "Turb. Cf Eqn \t : \t Chosen Turbulent Equation from Documented List at Link Below \n" );
-    m_TextBuffer->append( "Spec. Method \t : \t Which Inputs Are to be Used to Determine Re/L and Mach \n" );
+    m_TextBuffer->append( "-- 用户输入选项 --\n" );
+    m_TextBuffer->append( "层流 C_f 公式：从下方文档所列公式中选择\n" );
+    m_TextBuffer->append( "湍流 C_f 公式：从下方文档所列公式中选择\n" );
+    m_TextBuffer->append( "大气输入方式：指定用于计算 Re/L 和 Mach 的输入\n" );
     snprintf( str, sizeof( str ),  "Vinf \t\t : \t %s \n", ParasiteDragMgr.m_Vinf.GetDescript().c_str() );
     m_TextBuffer->append( str );
     snprintf( str, sizeof( str ),  "Altitude \t : \t %s \n", ParasiteDragMgr.m_Hinf.GetDescript().c_str() );
@@ -547,7 +559,7 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     snprintf( str, sizeof( str ),  "Mach \t\t : \t %s \n", ParasiteDragMgr.m_Mach.GetDescript().c_str() );
     m_TextBuffer->append( str );
     m_TextBuffer->append( "\n" );
-    m_TextBuffer->append( "-- Input Unit Types -- \n" );
+    m_TextBuffer->append( "-- 输入单位类型 --\n" );
 
     temp = "";
     for ( size_t i = 0; i < m_AltUnitChoice.GetItems().size(); i++ )
@@ -971,7 +983,7 @@ void ParasiteDragScreen::UpdateExcresTab()
     for ( size_t i = 0; i < excresVec.size(); ++i )
     {
         excres_name = excresVec[i].Label;
-        excres_type = excresVec[i].TypeString;
+        excres_type = ExcrescenceTypeDisplayName( excresVec[i] );
         excres_val = excresVec[i].Input;
 
         if ( excresVec[i].Type == vsp::EXCRESCENCE_CD )
@@ -2411,7 +2423,7 @@ void ParasiteDragScreen::AddSimpleExcresToTable()
             m_TableCompNamesLayout.AddLabelRaw( excresRowVec[i].Label.c_str(), TYPICAL_INPUT_WIDTH * 2 - 15 );
         }
 
-        SetupExcresType( i, excresRowVec[i].TypeString );
+        SetupExcresType( i, ExcrescenceTypeDisplayName( excresRowVec[i] ) );
         SetupExcresInput( i, excresRowVec[i].Input );
 
         Setupf( ioff + i, excresRowVec[i].f );

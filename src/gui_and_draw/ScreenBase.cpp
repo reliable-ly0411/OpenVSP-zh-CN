@@ -1050,8 +1050,8 @@ GeomScreen::GeomScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_ELLIPSE ), vsp::SS_ELLIPSE );
 // Only add control surface in WingScreen.
 //    m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_CONTROL ), vsp::SS_CONTROL );
-    m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_FINITE_LINE ), vsp::SS_FINITE_LINE );
-    m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_XSEC_CURVE ), vsp::SS_XSEC_CURVE );
+    m_SubSurfChoice.AddItem( VSPTranslateSubsurfaceType( SubSurface::GetTypeName( vsp::SS_FINITE_LINE ) ), vsp::SS_FINITE_LINE );
+    m_SubSurfChoice.AddItem( VSPTranslateSubsurfaceType( SubSurface::GetTypeName( vsp::SS_XSEC_CURVE ) ), vsp::SS_XSEC_CURVE );
     m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_INTERSECT ), vsp::SS_INTERSECT );
 
     m_SubSurfLayout.SetChoiceButtonWidth( 60 );
@@ -2906,7 +2906,7 @@ bool GeomScreen::Update()
     {
 
         ss_name = subsurf_vec[i]->GetName();
-        ss_type = SubSurface::GetTypeName( subsurf_vec[i]->GetType() );
+        ss_type = VSPTranslateSubsurfaceType( SubSurface::GetTypeName( subsurf_vec[i]->GetType() ) );
 
         if ( subsurf_vec[i]->GetType() == vsp::SS_LINE )
         {
