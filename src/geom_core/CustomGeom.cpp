@@ -22,6 +22,26 @@ CustomGeomMgrSingleton::CustomGeomMgrSingleton()
 {
 }
 
+// Identify the shipped Disk for display without exposing ScriptMgr to the GUI target.
+bool CustomGeomMgrSingleton::IsBundledDiskModule( const string &module, const string &exe_path ) const
+{
+    if ( module.compare( 0, 4, "Disk" ) != 0 )
+    {
+        return false;
+    }
+    // A custom script using the same name may give the bundled module a numeric suffix.
+    for ( size_t i = 4; i < module.size(); ++i )
+    {
+        if ( module[i] < '0' || module[i] > '9' )
+        {
+            return false;
+        }
+    }
+    static const string bundled_disk_script =
+        ScriptMgr.ExtractContent( exe_path + "/CustomScripts/Disk.vsppart" );
+    return !bundled_disk_script.empty() && ScriptMgr.FindModuleContent( module ) == bundled_disk_script;
+}
+
 //==== Scan Custom Directory And Return All Possible Types ====//
 void CustomGeomMgrSingleton::ReadCustomScripts( Vehicle* veh )
 {

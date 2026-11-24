@@ -84,6 +84,7 @@ public:
     string GetCurrCustomGeom()                            { return m_CurrGeom; }
 
     void ReadCustomScripts( Vehicle* veh );
+    bool IsBundledDiskModule( const string &module, const string &exe_path ) const;
     vector< GeomType > GetCustomTypes()                    { return m_CustomTypeVec; }
 
     //==== Adds A Parm To The Current Custom Geom - Return Index of The Added Parm ====//
