@@ -1,4 +1,4 @@
-name: OpenVSP 3.56 RC7 Ubuntu x64 candidate package (no publish)
+name: OpenVSP 3.56 RC8 Ubuntu x64 candidate package (no publish)
 on:
   push:
     branches: [ci/openvsp-356-ubuntu-rc-package]
@@ -15,8 +15,8 @@ jobs:
     env:
       NATIVE_RELEASE: 'true'
       BACKFILL_VERSION: '3.56.0'
-      BACKFILL_TAG: '3.56.0-zh-CN.rc.7'
-      BACKFILL_SHA: 1e5190f91222a636b5c2958c3339c41c377ec77f
+      BACKFILL_TAG: '3.56.0-zh-CN.rc.8'
+      BACKFILL_SHA: 43ddcafa3c0f71a4a5d88b2142b131c4075a4d2b
       VALIDATED_TOOLING_SHA: 8c1a1b4e4dccf50185f68a33af18d22cf1b748b0
       BACKFILL_PLATFORM: Ubuntu-24.04_amd64
       BACKFILL_ARCH: x86_64
@@ -49,33 +49,36 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C controller rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git -C controller rev-parse HEAD^1)" = "917abca6c5cf0104655bcadca8394bac32872a85"
-          test "$(git -C controller rev-parse HEAD^1^2)" = "4680a57d90bd250bcedb96d1d45fb25b3332c348"
-          test "$(git -C controller rev-parse HEAD^1^1)" = "036672510df2e692e13ebd5d4a83e4a385835d97"
-          test "$(git -C controller rev-parse HEAD^1^1^2)" = "039cac0fd95234a519591d5cd9e10f8f5e5a1811"
-          test "$(git -C controller rev-parse HEAD^1^1^1)" = "469eaf1733db2f07271e75d3f64577241bf2958d"
-          test "$(git -C controller rev-parse HEAD^1^1^1^2)" = "2a176f1cb92e9c26a7ca2a8c79369e886194a2a5"
-          test "$(git -C controller rev-parse HEAD^1^1^1^1)" = "01d656e9c274f49ef60e5d6b0df7d91d34727c4c"
-          test "$(git -C controller rev-parse HEAD^1^1^1^1^2)" = "07b8046fbac20763a7fbab7f289e2a809d57778c"
-          test "$(git -C controller rev-parse HEAD^1^1^1^1^1)" = "516449f89d23736088127376f0271b2c5bd6bf15"
-          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^2)" = "380775680ce73c2d033a44a934c7cb1bc6bf76fe"
-          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1)" = "110b0c6e92ab442c1e8acce3fe036c92c36b4707"
-          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^2)" = "454057aa1dea72644dc7b6b135cc32769f8cd39e"
-          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^1)" = "1fddb8ba34da015729a4d09f4abe90b20120a753"
-          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^1^)" = "08b921f7ff4e013fe5cbd02926b2cd9891ed5783"
-          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^1^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
+          test "$(git -C controller rev-parse HEAD^1)" = "1a8c79a2c9f1c7e6f60b936581e602788882d940"
+          test "$(git -C controller rev-parse HEAD^1^2)" = "1e5190f91222a636b5c2958c3339c41c377ec77f"
+          test "$(git -C source rev-parse HEAD^)" = "1e5190f91222a636b5c2958c3339c41c377ec77f"
+          test "$(git -C controller rev-parse HEAD^1^1)" = "917abca6c5cf0104655bcadca8394bac32872a85"
+          test "$(git -C controller rev-parse HEAD^1^1^2)" = "4680a57d90bd250bcedb96d1d45fb25b3332c348"
+          test "$(git -C controller rev-parse HEAD^1^1^1)" = "036672510df2e692e13ebd5d4a83e4a385835d97"
+          test "$(git -C controller rev-parse HEAD^1^1^1^2)" = "039cac0fd95234a519591d5cd9e10f8f5e5a1811"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1)" = "469eaf1733db2f07271e75d3f64577241bf2958d"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^2)" = "2a176f1cb92e9c26a7ca2a8c79369e886194a2a5"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^1)" = "01d656e9c274f49ef60e5d6b0df7d91d34727c4c"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^2)" = "07b8046fbac20763a7fbab7f289e2a809d57778c"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1)" = "516449f89d23736088127376f0271b2c5bd6bf15"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^2)" = "380775680ce73c2d033a44a934c7cb1bc6bf76fe"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^1)" = "110b0c6e92ab442c1e8acce3fe036c92c36b4707"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^1^2)" = "454057aa1dea72644dc7b6b135cc32769f8cd39e"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^1^1)" = "1fddb8ba34da015729a4d09f4abe90b20120a753"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^1^1^)" = "08b921f7ff4e013fe5cbd02926b2cd9891ed5783"
+          test "$(git -C controller rev-parse HEAD^1^1^1^1^1^1^1^1^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
           test "$(git -C controller rev-parse HEAD^2)" = "$BACKFILL_SHA"
           test "$(git -C tooling rev-parse HEAD)" = "$VALIDATED_TOOLING_SHA"
-          test "$(git -C source rev-parse HEAD^)" = "4680a57d90bd250bcedb96d1d45fb25b3332c348"
-          test "$(git -C source rev-parse HEAD^^)" = "039cac0fd95234a519591d5cd9e10f8f5e5a1811"
-          test "$(git -C source rev-parse HEAD^^^)" = "2a176f1cb92e9c26a7ca2a8c79369e886194a2a5"
-          test "$(git -C source rev-parse HEAD^^^^)" = "07b8046fbac20763a7fbab7f289e2a809d57778c"
-          test "$(git -C source rev-parse HEAD^^^^^)" = "380775680ce73c2d033a44a934c7cb1bc6bf76fe"
-          test "$(git -C source rev-parse HEAD^^^^^^)" = "454057aa1dea72644dc7b6b135cc32769f8cd39e"
-          test "$(git -C source rev-parse HEAD^^^^^^^)" = "c741cb2443af3c27a3d2a109b4a904f75abf8923"
-          test "$(git -C source rev-parse HEAD^^^^^^^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
+          test "$(git -C source rev-parse HEAD^^)" = "4680a57d90bd250bcedb96d1d45fb25b3332c348"
+          test "$(git -C source rev-parse HEAD^^^)" = "039cac0fd95234a519591d5cd9e10f8f5e5a1811"
+          test "$(git -C source rev-parse HEAD^^^^)" = "2a176f1cb92e9c26a7ca2a8c79369e886194a2a5"
+          test "$(git -C source rev-parse HEAD^^^^^)" = "07b8046fbac20763a7fbab7f289e2a809d57778c"
+          test "$(git -C source rev-parse HEAD^^^^^^)" = "380775680ce73c2d033a44a934c7cb1bc6bf76fe"
+          test "$(git -C source rev-parse HEAD^^^^^^^)" = "454057aa1dea72644dc7b6b135cc32769f8cd39e"
+          test "$(git -C source rev-parse HEAD^^^^^^^^)" = "c741cb2443af3c27a3d2a109b4a904f75abf8923"
+          test "$(git -C source rev-parse HEAD^^^^^^^^^)" = "3b7b072036943bc4b608537e0b1356bc404b569d"
           test "$(git -C source rev-parse HEAD)" = "$BACKFILL_SHA"
-          test "$(git -C source rev-parse HEAD^{tree})" = "1f41208f5c62c55dbd52e88e5b9454347ce9eaa4"
+          test "$(git -C source rev-parse HEAD^{tree})" = "c87663bd472296d65298af483875aa0faeb215e2"
           . /etc/os-release
           test "$ID" = ubuntu && test "$VERSION_ID" = 24.04
           test "$(uname -m)" = x86_64
@@ -96,14 +99,14 @@ jobs:
           test "$(find . -maxdepth 1 -name '*.zip' -type f | wc -l)" -eq 1
           sha256sum "$zip" > SHA256SUMS.txt
           {
-            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "1f41208f5c62c55dbd52e88e5b9454347ce9eaa4" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
+            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "c87663bd472296d65298af483875aa0faeb215e2" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
             stat -c 'bytes=%s' "$zip"
             cat SHA256SUMS.txt
           } > single-candidate-identity.txt
       - name: Retain the exact candidate ZIP, checksum and native receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: openvsp-356-rc7-Ubuntu-24.04_amd64-qa
+          name: openvsp-356-rc8-Ubuntu-24.04_amd64-qa
           path: deliverables/*
           compression-level: 0
           if-no-files-found: error
