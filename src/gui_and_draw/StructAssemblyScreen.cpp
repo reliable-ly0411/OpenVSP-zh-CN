@@ -1044,7 +1044,7 @@ void StructAssemblyScreen::GuiDeviceCallBack( GuiDevice* device )
     {
         if ( curr_assy )
         {
-            string newfile = m_ScreenMgr->FileChooser( "Select Calculix .dat file.", "*.dat", vsp::SAVE );
+            string newfile = m_ScreenMgr->FileChooser( "Select CalculiX .inp file.", "*.inp", vsp::SAVE );
             if ( newfile.compare( "" ) != 0 )
             {
                 curr_assy->m_AssemblySettings.SetExportFileName( newfile, vsp::FEA_CALCULIX_FILE_NAME );

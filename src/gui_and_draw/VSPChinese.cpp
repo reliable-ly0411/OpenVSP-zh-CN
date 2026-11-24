@@ -108,6 +108,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Select .vspgeom file.", "选择 .vspgeom 文件" },
         { "Select CSV File", "选择 CSV 文件" },
         { "Select Calculix .dat file.", "选择 Calculix .dat 文件" },
+        { "Select CalculiX .inp file.", "选择 CalculiX .inp 文件" },
         { "Select Code File", "选择代码文件" },
         { "Select IGES .igs file.", "选择 IGES .igs 文件" },
         { "Select Image File", "选择图像文件" },

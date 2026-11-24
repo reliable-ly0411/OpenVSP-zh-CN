@@ -6,6 +6,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "SetEditorScreen.h"
+#include "VSPChinese.h"
 
 using namespace vsp;
 
@@ -161,11 +162,18 @@ bool SetEditorScreen::Update()
 
     //This is a vector that has all the names of the sets
     vector< string > set_name_vec = vehiclePtr->GetSetNameVec();
+    // Translate display text only for the built-in sets. User set names are model data.
+    const auto display_set_name = [&set_name_vec]( int set_index ) -> string
+    {
+        const string &name = set_name_vec[set_index];
+        return ( set_index == SET_SHOWN || set_index == SET_NOT_SHOWN ) ?
+            VSPTranslateMessage( name ) : name;
+    };
     //We iterate thru sets to be checked using ENUM
     for ( int i = SET_SHOWN ; i < ( int )set_name_vec.size() ; i++ )
     {
-        //Adds the name to browser list after casting string to char* 
-        m_SetBrowser->add( set_name_vec[i].c_str() );
+        const string name = display_set_name( i );
+        m_SetBrowser->add( name.c_str() );
     }
 
     if ( m_SelectedSetIndex >= set_name_vec.size() )
@@ -179,7 +187,7 @@ bool SetEditorScreen::Update()
 
 
     //Updating the text in the input field by utilizing m_SelectedSetIndex
-    m_SetNameInput.Update( set_name_vec[m_SelectedSetIndex] );
+    m_SetNameInput.Update( display_set_name( m_SelectedSetIndex ) );
 
     //Update the Attribute Editor
     string ac_id = vehiclePtr->GetGeomSetAttrColl( m_SelectedSetIndex - SET_FIRST_USER );
