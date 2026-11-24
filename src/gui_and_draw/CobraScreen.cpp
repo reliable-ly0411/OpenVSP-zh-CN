@@ -8,6 +8,23 @@
 #include "CobraScreen.h"
 #include "ScreenMgr.h"
 #include "CobraGeom.h"
+#include "VSPChinese.h"
+
+namespace
+{
+void LocalizeCobraExponent( SliderAdjRangeInput &slider, const char *caption, const char *meaning, const char *key )
+{
+    if ( VspButton *label = slider.GetLabelButton() )
+    {
+        const std::string translated = VSPTranslateMessage( caption );
+        if ( translated != caption )
+        {
+            label->copy_label( translated.c_str() );
+        }
+        label->copy_tooltip( ( VSPTranslateMessage( meaning ) + " (" + key + ")" ).c_str() );
+    }
+}
+}
 
 //==== Constructor ====//
 CobraScreen::CobraScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Cobra", "Cobra.html" )
@@ -24,12 +41,15 @@ CobraScreen::CobraScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Cobra",
     m_DesignLayout.AddSlider( m_XradNSlider, "Length", 10, "%7.3f" );
     m_DesignLayout.AddSlider( m_YradNSlider, "Width", 10, "%7.3f" );
     m_DesignLayout.AddSlider( m_PowXSlider, "PowX", 5, "%7.3f" );
+    LocalizeCobraExponent( m_PowXSlider, "Cobra profile exponent", "Nose exponent for the top and side profiles", "PowX" );
 
     m_DesignLayout.AddSlider( m_ZradNUSlider, "Upper Height", 10, "%7.3f" );
     m_DesignLayout.AddSlider( m_PowNUSlider, "PowNU", 5, "%7.3f" );
+    LocalizeCobraExponent( m_PowNUSlider, "Cobra upper section exponent", "Nose upper cross-section exponent", "PowNU" );
     m_DesignLayout.AddButton( m_NoseULSymmToggle, "Nose ULSymm" );
     m_DesignLayout.AddSlider( m_ZradNLSlider, "Lower Height", 10, "%7.3f" );
     m_DesignLayout.AddSlider( m_PowNLSlider, "PowNL", 5, "%7.3f" );
+    LocalizeCobraExponent( m_PowNLSlider, "Cobra lower section exponent", "Nose lower cross-section exponent", "PowNL" );
 
     m_DesignLayout.AddYGap();
     m_DesignLayout.AddDividerBox( "Aft" );
@@ -39,9 +59,11 @@ CobraScreen::CobraScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Cobra",
 
     m_DesignLayout.AddSlider( m_ZradAUSlider, "Upper Height", 10, "%7.3f" );
     m_DesignLayout.AddSlider( m_PowAUSlider, "PowAU", 5, "%7.3f" );
+    LocalizeCobraExponent( m_PowAUSlider, "Cobra upper section exponent", "Aft base upper cross-section exponent", "PowAU" );
     m_DesignLayout.AddButton( m_AftULSymmToggle, "Aft ULSymm" );
     m_DesignLayout.AddSlider( m_ZradALSlider, "Lower Height", 10, "%7.3f" );
     m_DesignLayout.AddSlider( m_PowALSlider, "PowAL", 5, "%7.3f" );
+    LocalizeCobraExponent( m_PowALSlider, "Cobra lower section exponent", "Aft base lower cross-section exponent", "PowAL" );
 
     m_DesignLayout.AddYGap();
 
