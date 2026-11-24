@@ -1239,6 +1239,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Merge Points", "合并点" }, { "Re-Attach", "重新附着" },
         { "Convert", "转换" }, { "Split", "拆分" }, { "Promote", "提升" }, { "Demote", "降低" },
         { "Start Location", "起始位置" }, { "End Location", "结束位置" },
+        { "Npts", "点数" }, { "ReCref Start", "ReCref 起点" },
         { "Start", "开始" }, { "End", "结束" }, { "Minimum", "最小值" }, { "Maximum", "最大值" },
         { "Min", "最小" }, { "Max", "最大" }, { "Number", "数量" }, { "Count", "数量" },
         { "Actions:", "操作：" }, { "Choose Type:", "选择类型：" },
