@@ -2,6 +2,7 @@
 
 #include "VSPChinese.h"
 
+#include <algorithm>
 #include <cctype>
 #include <regex>
 #include <unordered_map>
@@ -2157,6 +2158,42 @@ std::string VSPTranslateFeaConsoleLog( const std::string &text )
     if ( text == "Finished\n" ) return "已完成\n";
     if ( text == "Remove Subsurf FEA Tris\n" ) return "移除子曲面有限元三角单元\n";
     if ( text == "Tag Fea Nodes\n" ) return "标记有限元节点\n";
+    // Normal status phrases from the FEA and inherited meshing stages. Exact
+    // matching keeps warnings, filenames and arbitrary console data opaque.
+    static const std::unordered_map<std::string, std::string> statuses = {
+        { "Transfer Mesh Settings\n", "传递网格设置\n" },
+        { "Transfer FEA Data\n", "传递有限元数据\n" },
+        { "Transfer Subsurf Data\n", "传递子曲面数据\n" },
+        { "Merge Co-Planar Parts\n", "合并共面部件\n" },
+        { "Clean Merge Surfs\n", "清理合并曲面\n" },
+        { "Add Structure Fix Points\n", "添加结构固定点\n" },
+        { "Add Structure Trim Planes\n", "添加结构修剪平面\n" },
+        { "Identify CompID Names\n", "识别组件 ID 名称\n" },
+        { "Build Slice Planes\n", "构建切片平面\n" },
+        { "Build Target Map\n", "构建目标尺寸图\n" },
+        { "Sub Tag Tris\n", "标记子曲面三角单元\n" },
+        { "Set Fixed Points\n", "设置固定点\n" },
+        { "ConvertToQuads\n", "转换为四边形单元\n" },
+        { "Build Single Tag Map\n", "构建单标签映射\n" },
+        { "Check Subsurf Border Intersect\n", "检查子曲面边界交点\n" },
+        { "Check Duplicate Subsurface Intersects\n", "检查重复的子曲面交点\n" },
+        { "Build Fea Mesh\n", "生成有限元网格\n" },
+        { "SetFixPointBorderNodes\n", "设置固定点边界节点\n" },
+        { "CheckFixPointIntersects\n", "检查固定点相交情况\n" },
+        { "Exporting Assembly Mesh.\n", "正在导出装配体网格。\n" },
+        { "MatchWakes\n", "匹配尾迹\n" },
+        { "TessellateChains\n", "离散化边链\n" },
+        { "MergeBorderEndPoints\n", "合并边界端点\n" },
+        { "RemoveInteriorTris\n", "移除内部三角单元\n" },
+        { "RemoveTrimTris\n", "移除裁切区域三角单元\n" },
+        { "LoadBorderCurves\n", "载入边界曲线\n" },
+        { "SplitBorderCurves\n", "拆分边界曲线\n" },
+        { "IntersectSplitChains\n", "求拆分边链的交点\n" },
+        { "SplitNearlyTouchingChains\n", "拆分近接触边链\n" },
+    };
+    const auto status = statuses.find( text );
+    if ( status != statuses.end() ) return status->second;
+
     static const std::regex mass( R"(^Total Mass = +[+-]?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)? [^\r\n]+\n$)" );
     if ( std::regex_match( text, mass ) )
     {
@@ -2164,18 +2201,74 @@ std::string VSPTranslateFeaConsoleLog( const std::string &text )
         return "总质量" + text.substr( 10 );
     }
 
-    static const std::regex stage(
-        R"(^(Build FEA Elements|Write NASTRAN|Write Calculix|Write GMSH)[ ]+\[[= ]{24}\] [0-9]+/[0-9]+[\r\n]$)" );
-    if ( !std::regex_match( text, stage ) ) return text;
+    static const std::regex tris( R"(^Total Num Tris = [0-9]+\n$)" );
+    if ( std::regex_match( text, tris ) ) return "三角单元总数" + text.substr( 14 );
 
+    static const std::unordered_map<std::string, std::pair<const char *, std::size_t>> stages = {
+        { "Load Surfaces", { "载入曲面", 8 } },
+        { "Structure Parts", { "结构部件", 8 } },
+        { "Intersect scan", { "扫描相交", 8 } },
+        { "Intersect", { "求交", 4 } },
+        { "Build Chains", { "构建边链", 8 } },
+        { "Clean Chains", { "清理边链", 8 } },
+        { "Refine Chains", { "细化边链", 8 } },
+        { "Build Curves", { "构建曲线", 8 } },
+        { "Classify Curves", { "分类曲线", 8 } },
+        { "Delete IPnts", { "删除交点", 8 } },
+        { "Merge Chain Pnts", { "合并边链点", 10 } },
+        { "Coplanar Fit", { "共面拟合", 8 } },
+        { "Record Curves", { "记录曲线", 8 } },
+        { "Surface Maps", { "曲面尺寸图", 10 } },
+        { "Chain Density", { "计算边链密度", 12 } },
+        { "Rigorous Limit", { "严格限制尺寸", 12 } },
+        { "Chain Distance", { "计算边链距离", 12 } },
+        { "Crossing Segs 1", { "相交线段 1", 10 } },
+        { "InitMesh", { "初始化网格", 10 } },
+        { "Remove Interior", { "移除内部单元", 12 } },
+        { "Inside/outside", { "判断内外", 8 } },
+        { "Half Mesh", { "裁切半模型", 10 } },
+        { "Remesh", { "重新划分网格", 12 } },
+        { "Merge Points", { "合并节点", 8 } },
+        { "Topology Walk", { "遍历拓扑", 8 } },
+        { "Topology Audit", { "检查拓扑", 8 } },
+        { "Border Nodes", { "连接边界节点", 12 } },
+        { "Wake Nodes", { "连接尾迹节点", 12 } },
+        { "Post Mesh", { "网格后处理", 10 } },
+        { "Trim Face Centers", { "计算待修剪面中心", 16 } },
+        { "Build FEA Elements", { "生成有限元单元", 14 } },
+        { "Write NASTRAN", { "写入 NASTRAN", 12 } },
+        { "Write Calculix", { "写入 CalculiX", 13 } },
+        { "Write GMSH", { "写入 GMSH", 9 } },
+        { "Write STL", { "写入 STL", 8 } },
+        { "Trim Surfaces", { "修剪曲面", 8 } },
+        { "Adapt Curves", { "调整曲线", 8 } },
+        { "Adapt CAD Curves", { "调整 CAD 曲线", 13 } },
+        { "Write IGES/STEP", { "写入 IGES/STEP", 14 } },
+    };
     const auto bar = text.find( '[' );
+    if ( bar == std::string::npos || bar == 0 || text[bar - 1] != ' ' ) return text;
     const auto title_end = text.find_last_not_of( ' ', bar - 1 );
-    const std::string title = text.substr( 0, title_end + 1 );
-    // Match the original formatter's terminal cells, including padding.
-    if ( title == "Build FEA Elements" ) return "生成有限元单元" + std::string( 5, ' ' ) + text.substr( bar );
-    if ( title == "Write NASTRAN" ) return "写入 NASTRAN" + std::string( 5, ' ' ) + text.substr( bar );
-    if ( title == "Write Calculix" ) return "写入 CalculiX" + std::string( 4, ' ' ) + text.substr( bar );
-    return "写入 GMSH" + std::string( 8, ' ' ) + text.substr( bar );
+    if ( title_end == std::string::npos ) return text;
+    const auto title = text.substr( 0, title_end + 1 );
+    const auto stage = stages.find( title );
+    if ( stage == stages.end() ) return text;
+    // Only the 24-cell native formatter, including both redraw and final rows.
+    static const std::regex counter( R"(^\[[= ]{24}\] [0-9]+/[0-9]+[\r\n]$)" );
+    const std::string tail = text.substr( bar );
+    if ( !std::regex_match( tail, counter ) ) return text;
+    if ( bar != std::max<std::size_t>( 16, title.size() ) + 1 )
+    {
+        // These four messages also accepted generic padding before the
+        // native formatter table was introduced. Preserve that contract.
+        if ( title == "Build FEA Elements" || title == "Write NASTRAN" ||
+             title == "Write Calculix" || title == "Write GMSH" )
+        {
+            std::size_t spacing = title == "Write Calculix" ? 4 : title == "Write GMSH" ? 8 : 5;
+            return stage->second.first + std::string( spacing, ' ' ) + tail;
+        }
+        return text;
+    }
+    return stage->second.first + std::string( bar - stage->second.second, ' ' ) + tail;
 }
 
 std::string VSPTranslateCfdMeshConsoleLog( const std::string &text )
