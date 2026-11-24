@@ -10,12 +10,47 @@
 #include "CloneGeom.h"
 #include "CloneNameSuffixScreen.h"
 #include "ScreenMgr.h"
+#include "ScriptMgr.h"
 #include "StlHelper.h"
 #include "HingeGeom.h"
 #include "VSPChinese.h"
 
 using namespace vsp;
 
+
+namespace
+{
+// Keep creation captions separate from GeomType names and script identifiers.
+string GeometryCreationTypeLabel( const GeomType &type, const string &bundled_disk_script )
+{
+    if ( type.m_FixedFlag && type.m_Type == CLONE_GEOM_TYPE && type.m_Name == "CLONE" )
+    {
+        return "克隆";
+    }
+
+    const string &module = type.m_ModuleName;
+    if ( !type.m_FixedFlag && type.m_Type == CUSTOM_GEOM_TYPE && type.m_Name == module &&
+         !bundled_disk_script.empty() && module.compare( 0, 4, "Disk" ) == 0 )
+    {
+        // The loader may append digits when a custom script uses the same name.
+        // Match the installed script content so a user's unrelated Disk is unchanged.
+        bool numbered_disk = true;
+        for ( size_t i = 4; i < module.size(); ++i )
+        {
+            if ( module[i] < '0' || module[i] > '9' )
+            {
+                numbered_disk = false;
+                break;
+            }
+        }
+        if ( numbered_disk && ScriptMgr.FindModuleContent( module ) == bundled_disk_script )
+        {
+            return "圆盘";
+        }
+    }
+    return type.m_Name;
+}
+}
 
 //==== Constructor ====//
 ManageGeomScreen::ManageGeomScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 275, 671, "Geom Browser" )
@@ -560,12 +595,14 @@ void ManageGeomScreen::LoadTypeChoice()
     int num_type  = veh->GetNumGeomTypes();
     int num_fixed = veh->GetNumFixedGeomTypes();
     int cnt = 1;
+    static const string bundled_disk_script =
+        ScriptMgr.ExtractContent( veh->GetExePath() + "/CustomScripts/Disk.vsppart" );
 
     for ( int i = 0 ; i < num_type ; i++ )
     {
         GeomType type = veh->GetGeomType( i );
 
-        string item = type.m_Name.c_str();
+        string item = GeometryCreationTypeLabel( type, bundled_disk_script );
 
         if ( !type.m_FixedFlag )
         {
