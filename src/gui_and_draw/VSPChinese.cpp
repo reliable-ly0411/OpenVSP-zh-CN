@@ -393,8 +393,9 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Outlet Mode:", "出口模式：" },
         { "Outlet Type:", "出口类型：" },
         { "P Analysis", "P 分析" },
-        { "Pan X:", "X 向平移视图：" },
-        { "Pan Y:", "Y 向平移视图：" },
+        { "Propeller Activity Factor", "桨叶面积因子 AF" }, { "r/R Split", "r/R 分割" },
+        { "Pan X:", "X 平移" },
+        { "Pan Y:", "Y 平移" },
         { "Parent Part", "父级部件" },
         { "Parm A", "参数 A" },
         { "Parm B", "参数 B" },
@@ -2158,6 +2159,7 @@ std::string VSPTranslateFeaConsoleLog( const std::string &text )
     if ( text == "Finished\n" ) return "已完成\n";
     if ( text == "Remove Subsurf FEA Tris\n" ) return "移除子曲面有限元三角单元\n";
     if ( text == "Tag Fea Nodes\n" ) return "标记有限元节点\n";
+    if ( text == "Exporting Mesh Files\n" ) return VSPTranslateMessage( text );
     // Normal status phrases from the FEA and inherited meshing stages. Exact
     // matching keeps warnings, filenames and arbitrary console data opaque.
     static const std::unordered_map<std::string, std::string> statuses = {
@@ -2194,11 +2196,13 @@ std::string VSPTranslateFeaConsoleLog( const std::string &text )
     const auto status = statuses.find( text );
     if ( status != statuses.end() ) return status->second;
 
-    static const std::regex mass( R"(^Total Mass = +[+-]?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)? [^\r\n]+\n$)" );
-    if ( std::regex_match( text, mass ) )
+    static const std::regex mass( R"(^(Total Mass|Total Assembly Mass) = +[+-]?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)? [^\r\n]+\n$)" );
+    std::smatch mass_match;
+    if ( std::regex_match( text, mass_match, mass ) )
     {
         // Preserve the full displayed numeric value, spacing and unit.
-        return "总质量" + text.substr( 10 );
+        const char *label = mass_match[1] == "Total Assembly Mass" ? "装配体总质量" : "总质量";
+        return label + text.substr( mass_match.length( 1 ) );
     }
 
     static const std::regex tris( R"(^Total Num Tris = [0-9]+\n$)" );
@@ -2329,9 +2333,14 @@ std::string VSPTranslateCompactTableHeader( const std::string &text )
 // Fixed subsurface type display only; never translate the model's name or enum.
 std::string VSPTranslateSubsurfaceType( const std::string &type_name )
 {
+    if ( type_name == "Line" ) return "线";
+    if ( type_name == "Rectangle" ) return "矩形";
+    if ( type_name == "Ellipse" ) return "椭圆";
     if ( type_name == "Control_Surf" ) return "操纵面";
+    if ( type_name == "Line_Array" ) return "线阵列";
     if ( type_name == "Finite_Line" ) return "有限线段";
     if ( type_name == "XSec_Curve" ) return "截面曲线";
+    if ( type_name == "Intersect" ) return "求交";
     return type_name;
 }
 

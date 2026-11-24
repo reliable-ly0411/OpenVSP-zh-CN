@@ -14,19 +14,24 @@ int main()
         "C:\\Users\\Example\\Fuselage Test\\Model Final.vsp3",
         "/模型/Left Wing 100%/#main.vsp3", "*.vsp3", ""
     };
-    const std::string raw_type[] = { "Control_Surf", "Finite_Line", "XSec_Curve" };
-    const std::string shown_type[] = { "操纵面", "有限线段", "截面曲线" };
-    for (int i = 0; i < 3; ++i)
+    const std::string raw_type[] = { "Line", "Rectangle", "Ellipse", "Control_Surf", "Line_Array", "Finite_Line", "XSec_Curve", "Intersect" };
+    const std::string shown_type[] = { "线", "矩形", "椭圆", "操纵面", "线阵列", "有限线段", "截面曲线", "求交" };
+    for (std::size_t i = 0; i < sizeof(raw_type) / sizeof(raw_type[0]); ++i)
     {
         if (VSPTranslateSubsurfaceType(raw_type[i]) != shown_type[i]) return 10;
-        if (VSPTranslate(raw_type[i]) != raw_type[i]) return 11;
+        if ((raw_type[i] == "Control_Surf" || raw_type[i] == "Finite_Line" || raw_type[i] == "XSec_Curve")
+            && VSPTranslate(raw_type[i]) != raw_type[i]) return 11;
         if (VSPTranslateLabelAndValue("Parm: ", raw_type[i]) != "参数：" + raw_type[i]) return 12;
     }
     for (const std::string &raw : {std::string("SS_CONT_0"), std::string("WingGeom_Surf0_SS_CONT_0"),
-                                  std::string("Line"), std::string("Control_Surf custom")})
+                                  std::string("Rectangle_1"), std::string("Control_Surf custom")})
     {
         if (VSPTranslateSubsurfaceType(raw) != raw) return 13;
     }
+    if (VSPTranslateMessage("ALL") != "全部") return 14;
+    if (VSPTranslate("Surf_0") != "曲面 0" || VSPTranslate("Surf_17") != "曲面 17") return 16;
+    if (VSPTranslateLabelAndValue("Parm: ", "Surf_0") != "参数：Surf_0") return 17;
+    if (VSPTranslateLabelAndValue("Parm: ", "ALL") != "参数：ALL") return 15;
     const std::string export_template = VSPTranslateMessage("%s, %s not written");
     if (export_template != "%s，未写入 %s") return 5;
     // Check the exact formatter used by ExportScreen, including '%' in values.

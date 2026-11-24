@@ -126,7 +126,9 @@ PropScreen::PropScreen( ScreenMgr* mgr ) : XSecScreen( mgr, 510, 800, "Propeller
     m_DesignLayout.AddDividerBox( "Prop / Rotor Metrics" );
 
     m_DesignLayout.SetSameLineFlag( true );
-    m_DesignLayout.AddOutput( m_AFOutput, "Activity Factor", "%6.2f", m_DesignLayout.GetW() / 2 );
+    // Descriptive Prop-screen caption; the global technical term remains unchanged.
+    const string af_caption = VSPTranslateMessage( "Propeller Activity Factor" );
+    m_DesignLayout.AddOutput( m_AFOutput, af_caption == "Propeller Activity Factor" ? "Activity Factor" : af_caption.c_str(), "%6.2f", m_DesignLayout.GetW() / 2 );
     m_DesignLayout.SetButtonWidth( 50 );
     m_DesignLayout.AddSlider( m_AFLimitSlider, "r_0", 1, "%6.5f" );
     m_DesignLayout.SetButtonWidth( 100 );

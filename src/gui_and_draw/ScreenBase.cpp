@@ -2940,11 +2940,13 @@ bool GeomScreen::Update()
         ss_surf_ind = subsurf_vec[i]->m_MainSurfIndx.Get();
         if ( ss_surf_ind == -1 )
         {
-            snprintf( str, sizeof( str ),  "%s:%s:ALL", ss_name.c_str(), ss_type.c_str() );
+            snprintf( str, sizeof( str ),  "%s:%s:%s", ss_name.c_str(), ss_type.c_str(), VSPTranslateMessage( "ALL" ).c_str() );
         }
         else
         {
-            snprintf( str, sizeof( str ),  "%s:%s:Surf_%d", ss_name.c_str(), ss_type.c_str(), ss_surf_ind );
+            // Match the selector display; the model stores only the numeric surface index.
+            const string surface_label = VSPTranslate( "Surf_" + std::to_string( ss_surf_ind ) );
+            snprintf( str, sizeof( str ),  "%s:%s:%s", ss_name.c_str(), ss_type.c_str(), surface_label.c_str() );
         }
         m_SubSurfBrowser->add( str );
     }
