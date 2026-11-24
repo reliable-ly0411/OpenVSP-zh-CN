@@ -249,7 +249,7 @@ WaveDragScreen::WaveDragScreen( ScreenMgr* mgr ) : TabScreen( mgr, 310 + 470, 45
     m_ExecuteLayout.SetGroupAndScreen( execute_group, this );
 
     m_ExecuteLayout.AddDividerBox( "Execute Wave Drag" );
-    m_ExecuteLayout.AddButton( m_StartSlicingTrigger, "START" );
+    m_ExecuteLayout.AddButton( m_StartSlicingTrigger, "Calculate" );
 
     // Drag Results
     m_ExecuteLayout.AddYGap();
