@@ -2977,17 +2977,28 @@ bool GeomScreen::Update()
     return true;
 }
 
+void PopulateRenderingMaterialChoice( Choice& choice )
+{
+    const auto names = MaterialMgr.GetNames();
+    choice.ClearItems();
+    choice.AddItem( "DEFAULT" );
+    for ( int i = 0; i < (int) names.size(); ++i )
+    {
+        Material mat;
+        if ( MaterialMgr.FindMaterial( i, mat ) && !mat.m_UserMaterial )
+        {
+            choice.AddItemWithDisplayLabel( names[i], VSPTranslateMaterialPreset( names[i] ) );
+        }
+        else
+        {
+            choice.AddItemRaw( names[i] );
+        }
+    }
+}
+
 void GeomScreen::UpdateMaterialNames()
 {
-    std::vector<std::string> matNames;
-    matNames = MaterialMgr.GetNames();
-
-    m_MaterialChoice.ClearItems();
-    m_MaterialChoice.AddItem( "DEFAULT" );
-    for( int i = 0; i < (int) matNames.size(); i++ )
-    {
-        m_MaterialChoice.AddItemRaw( matNames[i] );
-    }
+    PopulateRenderingMaterialChoice( m_MaterialChoice );
 }
 
 void GeomScreen::GuiDeviceCallBack( GuiDevice* device )

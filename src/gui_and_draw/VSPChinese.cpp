@@ -2126,6 +2126,50 @@ std::string VSPTranslateLabelAndValue( const std::string &label, const std::stri
     return VSPTranslate( label ) + value;
 }
 
+std::string VSPTranslateMaterialPreset( const std::string &name )
+{
+    static const std::unordered_map<std::string, std::string> labels = {
+        { "Emerald", "祖母绿" },
+        { "Jade", "翡翠" },
+        { "Obsidian", "黑曜石" },
+        { "Pearl", "珍珠" },
+        { "Ruby", "红宝石" },
+        { "Turquoise", "绿松石" },
+        { "Brass", "黄铜" },
+        { "Bronze", "青铜" },
+        { "Chrome", "镀铬" },
+        { "Copper", "铜" },
+        { "Gold", "金" },
+        { "Silver", "银" },
+        { "Aluminum", "铝" },
+        { "Shiny Gold", "亮金" },
+        { "Black Plastic", "黑色塑料" },
+        { "Cyan Plastic", "青色塑料" },
+        { "Green Plastic", "绿色塑料" },
+        { "Red Plastic", "红色塑料" },
+        { "Blue Plastic", "蓝色塑料" },
+        { "Yellow Plastic", "黄色塑料" },
+        { "White", "白色" },
+        { "Black Rubber", "黑色橡胶" },
+        { "Cyan Rubber", "青色橡胶" },
+        { "Green Rubber", "绿色橡胶" },
+        { "Red Rubber", "红色橡胶" },
+        { "Blue Rubber", "蓝色橡胶" },
+        { "White Rubber", "白色橡胶" },
+        { "Yellow Rubber", "黄色橡胶" },
+        { "Glass Light", "浅色玻璃" },
+        { "Glass Med", "中色玻璃" },
+        { "Glass Dark", "深色玻璃" },
+        { "Glass Golden", "金色玻璃" },
+        { "Blank", "空白材质" },
+        { "Red Default", "默认红色" },
+        { "Green Default", "默认绿色" },
+        { "Blue Default", "默认蓝色" },
+    };
+    const auto found = labels.find( name );
+    return found == labels.end() ? name : found->second;
+}
+
 std::string VSPTranslateMenuPath( const std::string &path )
 {
     static const std::unordered_map<std::string, std::string> view_labels = {

@@ -2046,7 +2046,8 @@ void Choice::UpdateItems( bool keepsetting )
             // short circuits that.
             m_Choice->add( dummymenuentry.c_str(), 0, 0, 0, m_Flags[i] );
             const string label = m_RawItems[i] ? m_Items[i] : VSPTranslate( m_Items[i] );
-            m_Choice->replace( i, label.c_str() );
+            const auto display = m_DisplayLabels.find( i );
+            m_Choice->replace( i, display == m_DisplayLabels.end() ? label.c_str() : display->second.c_str() );
         }
 
         if( keepsetting )

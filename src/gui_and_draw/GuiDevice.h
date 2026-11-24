@@ -545,6 +545,7 @@ public:
         m_Items.clear();
         m_Vals.clear();
         m_RawItems.clear();
+        m_DisplayLabels.clear();
     }
     virtual void AddItem( const string& item )
     {
@@ -570,6 +571,13 @@ public:
     {
         AddItem( item, val );
         m_RawItems.back() = true;
+    }
+
+    // Set an already-localized caption without changing the raw item or its value.
+    void AddItemWithDisplayLabel( const string& item, const string& label )
+    {
+        AddItemRaw( item );
+        m_DisplayLabels[m_Items.size() - 1] = label;
     }
 
     virtual void SetFlagByVal( int val, int flag );
@@ -608,6 +616,7 @@ protected:
 
     vector< string > m_Items;
     vector< bool > m_RawItems;
+    map< size_t, string > m_DisplayLabels;
     vector< int > m_Flags;
     vector< int > m_Vals;
 };

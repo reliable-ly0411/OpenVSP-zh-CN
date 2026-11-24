@@ -260,6 +260,9 @@ public:
 };
 
 //==== Geom Screen ====//
+// Populate both rendering material pickers with raw IDs and scoped captions.
+void PopulateRenderingMaterialChoice( Choice& choice );
+
 class GeomScreen : public TabScreen
 {
 public:

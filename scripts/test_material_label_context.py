@@ -24,13 +24,28 @@ class MaterialLabelContextTests(unittest.TestCase):
         self.assertEqual(labels, ['Customize Material'])
         self.assertRegex(self.custom, r'CustomScreen::CustomScreen\([^\n]+GeomScreen\([^\n]+"Custom"\s*,\s*"Custom\.html"\s*\)')
 
-    def test_material_names_are_passed_raw_without_translation(self):
-        body = self.screen.split('void GeomScreen::UpdateMaterialNames()', 1)[1].split(
-            'void GeomScreen::GuiDeviceCallBack(', 1)[0]
-        self.assertIn('matNames = MaterialMgr.GetNames();', body)
-        self.assertRegex(body, r'm_MaterialChoice\.AddItemRaw\(\s*matNames\[i\]\s*\)')
-        self.assertNotRegex(body, r'\bVSPTranslate\w*\s*\(')
-        self.assertNotRegex(body, r'AddItem\(\s*matNames\[i\]')
+    def test_both_pickers_keep_raw_names_and_gate_localization_on_provenance(self):
+        mult = (GUI / 'MultTransScreen.cpp').read_text(encoding='utf-8')
+        for screen, cls in [(self.screen, 'GeomScreen'), (mult, 'MultTransScreen')]:
+            self.assertRegex(screen, rf'void {cls}::UpdateMaterialNames\(\)\s*{{\s*'
+                             r'PopulateRenderingMaterialChoice\( m_MaterialChoice \);')
+            self.assertIn('m_MaterialChoice.GetItems()', screen)
+        body = self.screen.split('void PopulateRenderingMaterialChoice(', 1)[1].split(
+            'void GeomScreen::UpdateMaterialNames()', 1)[0]
+        self.assertIn('const auto names = MaterialMgr.GetNames();', body)
+        self.assertRegex(body, r'FindMaterial\( i, mat \) && !mat\.m_UserMaterial')
+        self.assertIn('choice.AddItemWithDisplayLabel( names[i], VSPTranslateMaterialPreset( names[i] ) );', body)
+        self.assertIn('choice.AddItemRaw( names[i] );', body)
+
+    def test_rendering_caption_catalog_matches_every_registered_preset(self):
+        mgr = (ROOT / 'src/geom_core/MaterialMgr.cpp').read_text(encoding='utf-8')
+        ctor = mgr.split('MaterialMgrSingleton::MaterialMgrSingleton()', 1)[1].split(
+            'MaterialMgrSingleton::~MaterialMgrSingleton()', 1)[0]
+        existing = re.findall(r'^    mat\.m_Name = +"([^"]+)";', ctor, re.M)
+        labels = (GUI / 'VSPChinese.cpp').read_text(encoding='utf-8').split(
+            'std::string VSPTranslateMaterialPreset(', 1)[1].split('};', 1)[0]
+        self.assertEqual(re.findall(r'{ "([^"]+)",', labels), existing)
+        self.assertEqual(len(existing), 36)
 
     def test_original_custom_material_name_and_selection_are_unchanged(self):
         callback = self.screen.split('void GeomScreen::GuiDeviceCallBack(', 1)[1]
@@ -54,7 +69,10 @@ class MaterialLabelContextTests(unittest.TestCase):
             self.assertIn('m_Items.push_back( item );', body)
         update = self.device.split('void Choice::UpdateItems(', 1)[1].split('//==== CallBack ====', 1)[0]
         self.assertIn('const string label = m_RawItems[i] ? m_Items[i] : VSPTranslate( m_Items[i] );', update)
-        self.assertIn('m_Choice->replace( i, label.c_str() );', update)
+        self.assertIn('display == m_DisplayLabels.end() ? label.c_str() : display->second.c_str()', update)
+        self.assertIn('m_DisplayLabels.clear();', choice)
+        self.assertIn('AddItemRaw( item );', choice)
+        self.assertIn('m_DisplayLabels[m_Items.size() - 1] = label;', choice)
 
 
 if __name__ == '__main__':

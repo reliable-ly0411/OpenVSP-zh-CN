@@ -179,13 +179,5 @@ void MultTransScreen::GuiDeviceCallBack( GuiDevice* device )
 // ==== Updates the list of material choices ==== //
 void MultTransScreen::UpdateMaterialNames()
 {
-    std::vector<std::string> matNames;
-    matNames = MaterialMgr.GetNames();
-
-    m_MaterialChoice.ClearItems();
-    m_MaterialChoice.AddItem( "DEFAULT" );
-    for ( int i = 0; i < (int)matNames.size(); i++ )
-    {
-        m_MaterialChoice.AddItemRaw( matNames[i] );
-    }
+    PopulateRenderingMaterialChoice( m_MaterialChoice );
 }

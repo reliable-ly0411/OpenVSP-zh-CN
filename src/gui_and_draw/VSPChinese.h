@@ -22,6 +22,9 @@ std::string VSPTranslateCompactTableHeader( const std::string &text );
 // Translate static labels in narrow airfoil/wing-section controls.
 std::string VSPTranslateCompactWingLabel( const std::string &text );
 
+// Translate a known built-in rendering preset only. Never pass an authored name.
+std::string VSPTranslateMaterialPreset( const std::string &name );
+
 // Translate every component of an FLTK menu path while preserving '/'.
 std::string VSPTranslateMenuPath( const std::string &path );
 
