@@ -326,7 +326,7 @@ void ScreenMgr::MessageCallback( const MessageBase* from, const MessageData& dat
         {
             for ( int i = 0; i < (int)data.m_StringVec.size(); i++ )
             {
-                scr->AddOutputText( data.m_StringVec[i] );
+                scr->AddOutputText( VSPTranslateCfdMeshConsoleLog( data.m_StringVec[i] ) );
             }
         }
     }

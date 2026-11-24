@@ -538,7 +538,7 @@ ParasiteDragScreen::ParasiteDragScreen( ScreenMgr* mgr ) : TabScreen( mgr,
     m_TextBuffer->append( "层流 C_f 公式：从下方文档所列公式中选择\n" );
     m_TextBuffer->append( "湍流 C_f 公式：从下方文档所列公式中选择\n" );
     m_TextBuffer->append( "大气输入方式：指定用于计算 Re/L 和 Mach 的输入\n" );
-    snprintf( str, sizeof( str ),  "Vinf \t\t : \t %s \n", ParasiteDragMgr.m_Vinf.GetDescript().c_str() );
+    snprintf( str, sizeof( str ),  "Vinf \t\t : \t %s \n", VSPTranslateMessage( ParasiteDragMgr.m_Vinf.GetDescript() ).c_str() );
     m_TextBuffer->append( str );
     snprintf( str, sizeof( str ),  "Altitude \t : \t %s \n", ParasiteDragMgr.m_Hinf.GetDescript().c_str() );
     m_TextBuffer->append( str );

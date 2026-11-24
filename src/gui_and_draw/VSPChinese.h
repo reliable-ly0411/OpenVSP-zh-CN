@@ -18,6 +18,7 @@ std::string VSPTranslateResultType( const std::string &type );
 // Translate fixed Trimmed Surfaces progress text without changing counters or arbitrary logs.
 std::string VSPTranslateTrimmedSurfaceLog( const std::string &text );
 std::string VSPTranslateFeaConsoleLog( const std::string &text );
+std::string VSPTranslateCfdMeshConsoleLog( const std::string &text );
 
 // Translate a known label, then append an opaque user value without interpreting it.
 std::string VSPTranslateSubsurfaceType( const std::string &type_name );

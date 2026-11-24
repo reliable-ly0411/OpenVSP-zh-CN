@@ -815,6 +815,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Axis Marker Size", "坐标轴标记大小" },
         { "Text Label Size", "文字标签大小" },
         { "Total Mass", "总质量" },
+        { "Free Stream Velocity", "自由来流速度" },
         { "Draw Cg", "绘制重心" },
         { "Please enter a unique name for your material.", "请输入不重复的材料名称。" },
         { "Convert to NGon Mesh", "转换为多边形网格" },
@@ -2154,6 +2155,8 @@ std::string VSPTranslateResultType( const std::string &type )
 std::string VSPTranslateFeaConsoleLog( const std::string &text )
 {
     if ( text == "Finished\n" ) return "已完成\n";
+    if ( text == "Remove Subsurf FEA Tris\n" ) return "移除子曲面有限元三角单元\n";
+    if ( text == "Tag Fea Nodes\n" ) return "标记有限元节点\n";
     static const std::regex mass( R"(^Total Mass = +[+-]?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)? [^\r\n]+\n$)" );
     if ( std::regex_match( text, mass ) )
     {
@@ -2173,6 +2176,23 @@ std::string VSPTranslateFeaConsoleLog( const std::string &text )
     if ( title == "Write NASTRAN" ) return "写入 NASTRAN" + std::string( 5, ' ' ) + text.substr( bar );
     if ( title == "Write Calculix" ) return "写入 CalculiX" + std::string( 4, ' ' ) + text.substr( bar );
     return "写入 GMSH" + std::string( 8, ' ' ) + text.substr( bar );
+}
+
+std::string VSPTranslateCfdMeshConsoleLog( const std::string &text )
+{
+    if ( text == "Is Water Tight\n" ) return "网格闭合（水密）\n";
+    static const std::regex stage(
+        R"(^(Write VSPGEOM|Tag Files|Write FACET|Water Tight)[ ]+\[[= ]{24}\] [0-9]+/[0-9]+[\r\n]$)" );
+    if ( !std::regex_match( text, stage ) ) return text;
+
+    const auto bar = text.find( '[' );
+    const auto title_end = text.find_last_not_of( ' ', bar - 1 );
+    const std::string title = text.substr( 0, title_end + 1 );
+    // Preserve the formatted progress bar's original terminal column.
+    if ( title == "Write VSPGEOM" ) return "写入 VSPGEOM" + std::string( 5, ' ' ) + text.substr( bar );
+    if ( title == "Tag Files" ) return "标签文件" + std::string( 9, ' ' ) + text.substr( bar );
+    if ( title == "Write FACET" ) return "写入 FACET" + std::string( 7, ' ' ) + text.substr( bar );
+    return "水密性检查" + std::string( 7, ' ' ) + text.substr( bar );
 }
 
 std::string VSPTranslateTrimmedSurfaceLog( const std::string &text )
