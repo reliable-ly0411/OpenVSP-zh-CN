@@ -16,7 +16,7 @@ PtCloudScreen::PtCloudScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Poi
 
     RemoveTab( GetTab( m_MassPropTab_ind ) );
 
-    Fl_Group* project_tab = AddTab( "Project" );
+    Fl_Group* project_tab = AddTab( "Point Cloud Projection" );
     Fl_Group* project_group = AddSubGroup( project_tab, 5 );
 
     m_ProjectLayout.SetGroupAndScreen( project_group, this );
@@ -42,7 +42,7 @@ PtCloudScreen::PtCloudScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Poi
     m_DirChoice.UpdateItems();
 
     m_ProjectLayout.AddYGap();
-    m_ProjectLayout.AddButton( m_ProjectButton, "Project" );
+    m_ProjectLayout.AddButton( m_ProjectButton, "Point Cloud Projection" );
 
     m_ProjectLayout.AddYGap();
 

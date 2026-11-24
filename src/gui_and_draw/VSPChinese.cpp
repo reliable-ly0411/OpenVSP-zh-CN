@@ -1695,6 +1695,7 @@ const std::vector<Entry> &PhraseTranslations()
         { "Intersect Subsurfaces", "对子曲面求交" }, { "Convert to Quads", "转换为四边形" },
         { "Add Variable", "添加变量" }, { "Delete Variable", "删除变量" },
         { "Add Structure", "添加结构" }, { "Copy Set Members", "复制集合成员" },
+        { "Point Cloud Projection", "投影" },
         { "Create Convex Hull Mesh", "创建凸包网格" }, { "Project Points to Geom", "将点投影到几何体" },
         { "Start Slicing", "开始切片" }, { "Engine Representation", "发动机表示" },
         { "Release Point", "释放点" }, { "Release Angle", "释放角" },
