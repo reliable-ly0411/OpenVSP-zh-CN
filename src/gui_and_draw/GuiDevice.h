@@ -580,6 +580,12 @@ public:
         m_DisplayLabels[m_Items.size() - 1] = label;
     }
 
+    void AddItemWithDisplayLabel( const string& item, const string& label, int val )
+    {
+        AddItemRaw( item, val );
+        m_DisplayLabels[m_Items.size() - 1] = label;
+    }
+
     virtual void SetFlagByVal( int val, int flag );
     virtual int GetFlagByVal( int val );
 

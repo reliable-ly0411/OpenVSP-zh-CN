@@ -4526,13 +4526,13 @@ void PCurveEditor::Update()
         switch( m_Curve->m_CurveType() )
         {
         case vsp::LINEAR:
-            m_CurveType.Update( "Linear" );
+            m_CurveType.Update( VSPTranslateMessage( "Linear" ).c_str() );
             break;
         case vsp::PCHIP:
-            m_CurveType.Update( "Spline (PCHIP)" );
+            m_CurveType.Update( VSPTranslateMessage( "Spline (PCHIP)" ).c_str() );
             break;
         case vsp::CEDIT:
-            m_CurveType.Update( "Cubic Bezier" );
+            m_CurveType.Update( VSPTranslateMessage( "Cubic Bezier" ).c_str() );
             break;
         }
 

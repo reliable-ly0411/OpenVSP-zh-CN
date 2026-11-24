@@ -3,6 +3,7 @@
 #include "VSPChinese.h"
 
 #include <cctype>
+#include <regex>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -15,6 +16,26 @@ using Entry = std::pair<const char *, const char *>;
 const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
     static const std::unordered_map<std::string, std::string> table = {
+
+        // Result metadata shown in Results Viewer; raw keys and values are not translated.
+        { "Calculate wetted area and volume of geometry.", "计算几何体的湿润面积和体积。" },
+        { "Component names.", "部件名称。" },
+        { "Names of merged meshes.", "已合并的网格名称。" },
+        { "Names of removed meshes.", "已移除的网格名称。" },
+        { "Number of starting components.", "初始部件数。" },
+        { "Number of degenerate triangles removed during process.", "处理中移除的退化三角形数。" },
+        { "Number of components.", "部件数。" },
+        { "Number of open meshes merged at start of process.", "开始处理时已合并的开放网格数。" },
+        { "Number of open meshes removed at start of process.", "开始处理时已移除的开放网格数。" },
+        { "Number of SubSurfs.", "子曲面数。" },
+        { "Number of tags.", "标签数。" },
+        { "I Start Skip", "I 起端跳过" },
+        { "I End Skip", "I 末端跳过" },
+        { "I Stride", "I 步长" },
+        { "J Start Skip", "J 起端跳过" },
+        { "J End Skip", "J 末端跳过" },
+        { "J Stride", "J 步长" },
+        { "Y Location Relative to Parent", "相对于父级几何体的 Y 向位置" },
 
         // OpenVSP 3.56.0 display labels. Collective applies to flap, lag and
         // feather together; it is not exclusively collective pitch. Keep rotor
@@ -2116,6 +2137,36 @@ std::string VSPTranslateMessage( const std::string &text )
     const auto &exact = ExactTranslations();
     const auto found = exact.find( text );
     return found == exact.end() ? text : found->second;
+}
+
+std::string VSPTranslateResultType( const std::string &type )
+{
+    static const std::unordered_map<std::string, std::string> labels = {
+        { "invalid", "无效" }, { "boolean", "布尔值" }, { "integer", "整数" },
+        { "double", "双精度" }, { "string", "字符串" }, { "parm", "参数引用" },
+        { "vec3d", "三维向量" }, { "int matrix", "整数矩阵" },
+        { "double matrix", "双精度矩阵" }, { "attribute group", "属性组" }
+    };
+    const auto found = labels.find( type );
+    return found == labels.end() ? type : found->second;
+}
+
+std::string VSPTranslateTrimmedSurfaceLog( const std::string &text )
+{
+    if ( text == "Done\n" ) return "完成\n";
+
+    // DrawProgress emits "%-16s [%s] %d/%d%c"; only translate the two known stage
+    // names when the complete shape matches. Keep the progress bar and terminator.
+    static const std::regex stage(
+        R"(^(Trim Surfaces|Write IGES/STEP)[ ]+\[[= ]{24}\] [0-9]+/[0-9]+[\r\n]$)" );
+    if ( !std::regex_match( text, stage ) ) return text;
+
+    const auto bar = text.find( '[' );
+    const bool trim = text.compare( 0, 13, "Trim Surfaces" ) == 0;
+    const std::string title = trim ? "修剪曲面" : "写入 IGES/STEP";
+    // FLTK's console uses a monospace font; count the CJK ideographs as two cells.
+    const std::size_t cells = trim ? 8 : 14;
+    return title + std::string( 17 - cells, ' ' ) + text.substr( bar );
 }
 
 std::string VSPTranslateCompactWingLabel( const std::string &text )

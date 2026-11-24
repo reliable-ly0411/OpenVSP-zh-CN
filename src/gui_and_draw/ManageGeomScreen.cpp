@@ -562,7 +562,7 @@ void ManageGeomScreen::LoadActiveGeomOutput()
     }
     else if ( activeVec.size() > 1 )
     {
-        m_ActiveGeomInput.Update( "<multiple>" );
+        m_ActiveGeomInput.Update( VSPTranslateMessage( "<multiple>" ).c_str() );
     }
     else
     {

@@ -12,6 +12,7 @@
 #endif
 
 #include "CurveEditScreen.h"
+#include "VSPChinese.h"
 #include "BORGeom.h"
 #include "WingGeom.h"
 #include "ManageGeomScreen.h"
@@ -481,13 +482,13 @@ bool CurveEditScreen::Update()
         switch( edit_curve_xs->m_CurveType() )
         {
         case vsp::LINEAR:
-            m_CurveType.Update( "Linear" );
+            m_CurveType.Update( VSPTranslateMessage( "Linear" ).c_str() );
             break;
         case vsp::PCHIP:
-            m_CurveType.Update( "Spline (PCHIP)" );
+            m_CurveType.Update( VSPTranslateMessage( "Spline (PCHIP)" ).c_str() );
             break;
         case vsp::CEDIT:
-            m_CurveType.Update( "Cubic Bezier" );
+            m_CurveType.Update( VSPTranslateMessage( "Cubic Bezier" ).c_str() );
             break;
         }
 

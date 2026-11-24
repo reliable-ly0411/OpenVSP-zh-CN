@@ -13,6 +13,7 @@
 #endif
 
 #include "SurfaceIntersectionScreen.h"
+#include "VSPChinese.h"
 #include "SurfaceIntersectionMgr.h"
 #include "ModeMgr.h"
 
@@ -536,7 +537,7 @@ void SurfaceIntersectionScreen::AddOutputText( const string &text )
     }
     else
     {
-        m_ConsoleDisplay->append( text.c_str() );
+        m_ConsoleDisplay->append( VSPTranslateTrimmedSurfaceLog( text ).c_str() );
     }
     Fl::unlock();
 }

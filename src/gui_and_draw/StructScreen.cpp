@@ -2468,11 +2468,11 @@ void StructScreen::UpdateFeaPartChoice()
                     m_FeaPartChoice.AddItem( FeaPart::GetTypeName( vsp::FEA_SLICE ), vsp::FEA_SLICE );
                     m_FeaPartChoice.AddItem( FeaPart::GetTypeName( vsp::FEA_RIB ), vsp::FEA_RIB );
                     m_FeaPartChoice.AddItem( FeaPart::GetTypeName( vsp::FEA_SPAR ), vsp::FEA_SPAR );
-                    m_FeaPartChoice.AddItem( FeaPart::GetTypeName( vsp::FEA_POLY_SPAR ), vsp::FEA_POLY_SPAR );
-                    m_FeaPartChoice.AddItem( FeaPart::GetTypeName( vsp::FEA_FIX_POINT ), vsp::FEA_FIX_POINT );
+                    m_FeaPartChoice.AddItemWithDisplayLabel( FeaPart::GetTypeName( vsp::FEA_POLY_SPAR ), "多段翼梁", vsp::FEA_POLY_SPAR );
+                    m_FeaPartChoice.AddItemWithDisplayLabel( FeaPart::GetTypeName( vsp::FEA_FIX_POINT ), "固定点", vsp::FEA_FIX_POINT );
                     m_FeaPartChoice.AddItem( FeaPart::GetTypeName( vsp::FEA_DOME ), vsp::FEA_DOME );
-                    m_FeaPartChoice.AddItem( FeaPart::GetTypeName( vsp::FEA_RIB_ARRAY ), vsp::FEA_RIB_ARRAY );
-                    m_FeaPartChoice.AddItem( FeaPart::GetTypeName( vsp::FEA_SLICE_ARRAY ), vsp::FEA_SLICE_ARRAY );
+                    m_FeaPartChoice.AddItemWithDisplayLabel( FeaPart::GetTypeName( vsp::FEA_RIB_ARRAY ), "翼肋阵列", vsp::FEA_RIB_ARRAY );
+                    m_FeaPartChoice.AddItemWithDisplayLabel( FeaPart::GetTypeName( vsp::FEA_SLICE_ARRAY ), "切片阵列", vsp::FEA_SLICE_ARRAY );
                     m_FeaPartChoice.AddItem( FeaPart::GetTypeName( vsp::FEA_TRIM ), vsp::FEA_TRIM );
 
                     // Number of non-subsurface types.  Used as an offset when indexing m_FeaPartChoice, but needing
@@ -2482,10 +2482,10 @@ void StructScreen::UpdateFeaPartChoice()
                     m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_LINE ), vsp::SS_LINE + m_FeaPartChoiceSubSurfOffset );
                     m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_RECTANGLE ), vsp::SS_RECTANGLE + m_FeaPartChoiceSubSurfOffset  );
                     m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_ELLIPSE ), vsp::SS_ELLIPSE + m_FeaPartChoiceSubSurfOffset  );
-                    m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_CONTROL ), vsp::SS_CONTROL + m_FeaPartChoiceSubSurfOffset  );
-                    m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_LINE_ARRAY ), vsp::SS_LINE_ARRAY + m_FeaPartChoiceSubSurfOffset  );
-                    m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_FINITE_LINE ), vsp::SS_FINITE_LINE + m_FeaPartChoiceSubSurfOffset  );
-                    m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_XSEC_CURVE ), vsp::SS_XSEC_CURVE + m_FeaPartChoiceSubSurfOffset  );
+                    m_FeaPartChoice.AddItemWithDisplayLabel( SubSurface::GetTypeName( vsp::SS_CONTROL ), "操纵面", vsp::SS_CONTROL + m_FeaPartChoiceSubSurfOffset );
+                    m_FeaPartChoice.AddItemWithDisplayLabel( SubSurface::GetTypeName( vsp::SS_LINE_ARRAY ), "线阵列", vsp::SS_LINE_ARRAY + m_FeaPartChoiceSubSurfOffset );
+                    m_FeaPartChoice.AddItemWithDisplayLabel( SubSurface::GetTypeName( vsp::SS_FINITE_LINE ), "有限线段", vsp::SS_FINITE_LINE + m_FeaPartChoiceSubSurfOffset );
+                    m_FeaPartChoice.AddItemWithDisplayLabel( SubSurface::GetTypeName( vsp::SS_XSEC_CURVE ), "截面曲线", vsp::SS_XSEC_CURVE + m_FeaPartChoiceSubSurfOffset );
                     m_FeaPartChoice.AddItem( SubSurface::GetTypeName( vsp::SS_INTERSECT ), vsp::SS_INTERSECT + m_FeaPartChoiceSubSurfOffset  );
 
                     if ( currgeom->GetBehaviorType() == MS_WING_GEOM_TYPE )

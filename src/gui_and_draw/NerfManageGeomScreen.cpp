@@ -6,6 +6,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "NerfManageGeomScreen.h"
+#include "VSPChinese.h"
 #include "ManageGeomScreen.h"
 #include "ScreenMgr.h"
 #include "StlHelper.h"
@@ -475,7 +476,7 @@ void NerfManageGeomScreen::LoadActiveGeomOutput()
     }
     else if ( activeVec.size() > 1 )
     {
-        m_ActiveGeomOutput.Update( "<multiple>" );
+        m_ActiveGeomOutput.Update( VSPTranslateMessage( "<multiple>" ).c_str() );
     }
     else
     {

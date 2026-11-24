@@ -12,6 +12,12 @@ std::string VSPTranslate( const char *text );
 // Unknown messages remain byte-for-byte unchanged; never translate embedded values.
 std::string VSPTranslateMessage( const std::string &text );
 
+// Translate fixed Results Viewer type names, not the result key, type schema, or value.
+std::string VSPTranslateResultType( const std::string &type );
+
+// Translate fixed Trimmed Surfaces progress text without changing counters or arbitrary logs.
+std::string VSPTranslateTrimmedSurfaceLog( const std::string &text );
+
 // Translate a known label, then append an opaque user value without interpreting it.
 std::string VSPTranslateSubsurfaceType( const std::string &type_name );
 std::string VSPTranslateLabelAndValue( const std::string &label, const std::string &value );

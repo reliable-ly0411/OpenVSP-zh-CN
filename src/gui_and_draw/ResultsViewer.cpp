@@ -50,7 +50,7 @@ ResultsViewer::ResultsViewer( ScreenMgr* mgr ) : BasicScreen( mgr, 800, 700, "Re
 
     // Pointer for the widths of each column in the browser to support resizing
     // Last column width must be 0
-    static int data_col_widths[] = { 150, 100, 200, 0 }; // widths for each column
+    static int data_col_widths[] = { 225, 85, 390, 0 }; // widths for each column
 
     m_DataBrowser = m_BorderLayout.AddColResizeBrowser( data_col_widths, 3, 200 );
     m_DataBrowser->callback( staticScreenCB, this );
@@ -218,7 +218,6 @@ bool ResultsViewer::Update()
 
 void ResultsViewer::UpdateResultsChoice()
 {
-    char str[2048];
     char timestr[512];
 
     m_ResultsChoice.ClearItems();
@@ -250,15 +249,14 @@ void ResultsViewer::UpdateResultsChoice()
         if ( res )
         {
             string r_name = res->GetName();
-            string r_doc = res->GetDoc();
+            const string r_doc = r_name == "WetArea_Volume" ? VSPTranslateMessage( res->GetDoc() ) : res->GetDoc();
             time_t r_time = res->GetTimestamp();
             struct tm *r_tp = localtime( &r_time );
 
             strftime( timestr, sizeof( timestr ), "%r %D", r_tp );
 
 
-            snprintf( str, sizeof( str ), "%s - %s - %s\n", r_name.c_str(), timestr, r_doc.c_str());
-            m_ResultsChoice.AddItem( str, i );
+            m_ResultsChoice.AddItemRaw( r_name + " - " + timestr + " - " + r_doc + "\n", i );
         }
     }
     m_ResultsChoice.UpdateItems();
@@ -272,9 +270,6 @@ void ResultsViewer::UpdateResultsChoice()
 
 void ResultsViewer::UpdateDataBrowser()
 {
-    char str[2048];
-    char timestr[512];
-
     //==== Input and Output Browsers ====//
     int input_h_pos = m_DataBrowser->hposition();
     int input_v_pos = m_DataBrowser->vposition();
@@ -312,12 +307,12 @@ void ResultsViewer::UpdateDataBrowser()
                         m_DataNameIndexVec.emplace_back( std::make_pair( dname, j ) );
 
                         string d_name = nvd->GetName();
-                        string d_type = nvd->GetTypeName();
+                        const string d_type = VSPTranslateResultType( nvd->GetTypeName() );
                         // string d_val = nvd->GetAsString();
-                        string d_doc = nvd->GetDoc();
+                        const string d_doc = res->GetName() == "WetArea_Volume" ? VSPTranslateMessage( nvd->GetDoc() ) : nvd->GetDoc();
 
-                        snprintf( str, sizeof( str ), "%s|%s|%s\n", d_name.c_str(), d_type.c_str(), d_doc.c_str() ); // |%s  d_val.c_str(),
-                        m_DataBrowser->add( str );
+                        const string row = d_name + "|" + d_type + "|" + d_doc + "\n";
+                        m_DataBrowser->add( row.c_str() );
                     }
                 }
             }
