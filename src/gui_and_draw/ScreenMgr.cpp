@@ -286,7 +286,7 @@ void ScreenMgr::MessageCallback( const MessageBase* from, const MessageData& dat
         {
             for ( int i = 0; i < (int)data.m_StringVec.size(); i++ )
             {
-                scr->AddOutputText( data.m_StringVec[i] );
+                scr->AddOutputText( VSPTranslateFeaConsoleLog( data.m_StringVec[i] ) );
             }
         }
         // Also dump to aero-structure console.
@@ -295,7 +295,7 @@ void ScreenMgr::MessageCallback( const MessageBase* from, const MessageData& dat
         {
             for ( int i = 0; i < (int)data.m_StringVec.size(); i++ )
             {
-                asscr->AddOutputText( data.m_StringVec[i] );
+                asscr->AddOutputText( VSPTranslateFeaConsoleLog( data.m_StringVec[i] ) );
             }
         }
         // And to structures assembly console.
@@ -304,7 +304,7 @@ void ScreenMgr::MessageCallback( const MessageBase* from, const MessageData& dat
         {
             for ( int i = 0; i < (int)data.m_StringVec.size(); i++ )
             {
-                assyscr->AddOutputText( data.m_StringVec[i] );
+                assyscr->AddOutputText( VSPTranslateFeaConsoleLog( data.m_StringVec[i] ) );
             }
         }
     }

@@ -2151,6 +2151,30 @@ std::string VSPTranslateResultType( const std::string &type )
     return found == labels.end() ? type : found->second;
 }
 
+std::string VSPTranslateFeaConsoleLog( const std::string &text )
+{
+    if ( text == "Finished\n" ) return "已完成\n";
+    static const std::regex mass( R"(^Total Mass = +[+-]?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)? [^\r\n]+\n$)" );
+    if ( std::regex_match( text, mass ) )
+    {
+        // Preserve the full displayed numeric value, spacing and unit.
+        return "总质量" + text.substr( 10 );
+    }
+
+    static const std::regex stage(
+        R"(^(Build FEA Elements|Write NASTRAN|Write Calculix|Write GMSH)[ ]+\[[= ]{24}\] [0-9]+/[0-9]+[\r\n]$)" );
+    if ( !std::regex_match( text, stage ) ) return text;
+
+    const auto bar = text.find( '[' );
+    const auto title_end = text.find_last_not_of( ' ', bar - 1 );
+    const std::string title = text.substr( 0, title_end + 1 );
+    // Match the original formatter's terminal cells, including padding.
+    if ( title == "Build FEA Elements" ) return "生成有限元单元" + std::string( 5, ' ' ) + text.substr( bar );
+    if ( title == "Write NASTRAN" ) return "写入 NASTRAN" + std::string( 5, ' ' ) + text.substr( bar );
+    if ( title == "Write Calculix" ) return "写入 CalculiX" + std::string( 4, ' ' ) + text.substr( bar );
+    return "写入 GMSH" + std::string( 8, ' ' ) + text.substr( bar );
+}
+
 std::string VSPTranslateTrimmedSurfaceLog( const std::string &text )
 {
     if ( text == "Done\n" ) return "完成\n";
