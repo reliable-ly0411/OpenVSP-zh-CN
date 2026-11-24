@@ -74,7 +74,18 @@ class EngineeringTermContextTests(unittest.TestCase):
 
     def test_activity_factor_is_the_single_blade_geometry_integral(self):
         source = (GUI / "PropScreen.cpp").read_text(encoding="utf-8")
-        self.assertRegex(source, r'AddOutput\(\s*m_AFOutput,\s*"Activity Factor"')
+        self.assertIn('const string af_caption = VSPTranslateMessage( "Propeller Activity Factor" );', source)
+        self.assertRegex(source, r'AddOutput\(\s*m_AFOutput,\s*af_caption == "Propeller Activity Factor"'
+                                 r'\s*\? "Activity Factor" : af_caption\.c_str\(\),\s*"%6\.2f",'
+                                 r'\s*m_DesignLayout\.GetW\(\) / 2\s*\);')
+        self.assertIn("m_AFOutput.Update( propeller_ptr->m_AF.GetID() );", source)
+        captions = (GUI / "VSPChinese.cpp").read_text(encoding="utf-8")
+        self.assertIn('{ "Propeller Activity Factor", "桨叶面积因子 AF" }', captions)
+        self.assertEqual(re.findall(r'\{\s*"Activity Factor"\s*,\s*"([^"]+)"', captions), ["Activity Factor"])
+        self.assertNotRegex(captions, r'\{\s*"AF"\s*,')
+        self.assertIn('{ "r/R Split", "r/R 分割" }', captions)
+        split = (GUI / "GroupLayout.cpp").read_text(encoding="utf-8")
+        self.assertIn('"r/R Split"', split)
         prop = (ROOT / "src/geom_core/PropGeom.cpp").read_text(encoding="utf-8")
         self.assertIn('m_AF.Init( "AF", "Design",', prop)
         self.assertIn('m_AF.Set( ( 100000.0 / 16.0 ) * 0.5 * m_ChordCurve.IntegrateCrv_rcub( m_AFLimit() ) );', prop)
