@@ -286,7 +286,7 @@ bool ManageBackground3DScreen::Update()
         // Add probes to browser.
         for( int i = 0; i < ( int )bg3Ds.size(); i++ )
         {
-            string dir = bg3Ds[i]->GetDirectionName();
+            string dir = VSPTranslateMessage( bg3Ds[i]->GetDirectionName() );
             string vis;
             if ( bg3Ds[i]->m_Visible() )
             {

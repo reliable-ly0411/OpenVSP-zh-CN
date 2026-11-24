@@ -923,6 +923,9 @@ void AttributeExplorer::AttrTypeDispGroup( int attr_type, GroupLayout * group )
         data_name = "No Attributes Selected";
     }
 
+    // Localize only the fixed data-state caption, before adding matrix dimensions.
+    data_name = VSPTranslateMessage( data_name );
+
     NameValData* attr_ptr = nullptr;
     AttributeCollection* ac_ptr = nullptr;
     if ( m_AttrIDs.size() == 1 && m_CollIDs.size() == 1 )

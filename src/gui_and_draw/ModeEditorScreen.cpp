@@ -214,6 +214,14 @@ void ModeEditorScreen::UpdateModeBrowser()
     m_ModeBrowser->add( VSPTranslateBrowserHeader( "@b@.NAME:@b@.NORMAL SET:@b@.DEGEN SET:@b@.SETTINGS" ).c_str() );
 
 
+    const auto set_names = veh->GetSetNameVec( true );
+    // Built-in set captions are fixed UI strings; user set names are model data.
+    const auto display_set = [&set_names]( int set_index ) -> string
+    {
+        const string &name = set_names[ set_index + 1 ];
+        return set_index < SET_FIRST_USER ? VSPTranslateMessage( name ) : name;
+    };
+
     int nmode = ModeMgr.GetNumModes();
 
     for ( int i = 0 ; i < nmode; i++ )
@@ -222,8 +230,8 @@ void ModeEditorScreen::UpdateModeBrowser()
         if ( mod )
         {
             string mname = mod->GetName();
-            string sname = veh->GetSetNameVec( true )[ mod->m_NormalSet() + 1 ];
-            string dname = veh->GetSetNameVec( true )[ mod->m_DegenSet() + 1 ];
+            string sname = display_set( mod->m_NormalSet() );
+            string dname = display_set( mod->m_DegenSet() );
 
             string settingstr;
 
