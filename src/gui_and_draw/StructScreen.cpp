@@ -5021,7 +5021,7 @@ void StructScreen::GuiDeviceCallBack( GuiDevice* device )
         {
             vector < FeaStructure* > structvec = StructureMgr.GetAllFeaStructs();
 
-            string newfile = m_ScreenMgr->FileChooser( "Select Calculix .dat file.", "*.dat", vsp::SAVE );
+            string newfile = m_ScreenMgr->FileChooser( "Select CalculiX .inp file.", "*.inp", vsp::SAVE );
             if ( newfile.compare( "" ) != 0 )
             {
                 structvec[StructureMgr.m_CurrStructIndex()]->GetStructSettingsPtr()->SetExportFileName( newfile, vsp::FEA_CALCULIX_FILE_NAME );
