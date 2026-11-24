@@ -19,6 +19,21 @@
 #include <FL/fl_ask.H>
 #include "ModeMgr.h"
 
+namespace
+{
+void LocalizeVSPAEROSlider( SliderAdjRangeInput &slider, const char *symbol,
+                            const char *caption, const char *description )
+{
+    if ( VspButton *label = slider.GetLabelButton() )
+    {
+        const string translated = VSPTranslateMessage( caption );
+        label->copy_label( translated == caption ? symbol : translated.c_str() );
+        const string tooltip = string( symbol ) + ": " + VSPTranslateMessage( description );
+        label->copy_tooltip( tooltip.c_str() );
+    }
+}
+}
+
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
@@ -335,8 +350,14 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
     m_RefLengthLayout.AddChoice( m_RefWingChoice, "Ref. Wing" );
 
     m_RefLengthLayout.AddSlider( m_SrefSlider, "Sref", 1000.0, "%7.3f" );
+    LocalizeVSPAEROSlider( m_SrefSlider, "Sref", "Reference Wing Area",
+                          "Area used to normalize aerodynamic coefficients." );
     m_RefLengthLayout.AddSlider( m_brefSlider, "bref", 100.0, "%7.3f" );
+    LocalizeVSPAEROSlider( m_brefSlider, "bref", "Reference Wingspan",
+                          "Span used to normalize roll and yaw moment coefficients." );
     m_RefLengthLayout.AddSlider( m_crefSlider, "cref", 100.0, "%7.3f" );
+    LocalizeVSPAEROSlider( m_crefSlider, "cref", "Reference Chord Length",
+                          "Chord used to normalize the pitching moment coefficient." );
 
     m_RefToggle.Init( this );
     m_RefToggle.AddButton( m_RefManualToggle.GetFlButton() );
@@ -419,8 +440,14 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
     m_MomentRefLayout.SetFitWidthFlag( true );
 
     m_MomentRefLayout.AddSlider( m_XcgSlider, "Xref", 100.0, "%7.3f" );
+    LocalizeVSPAEROSlider( m_XcgSlider, "Xref", "Moment Reference X",
+                          "X coordinate of the moment reference point." );
     m_MomentRefLayout.AddSlider( m_YcgSlider, "Yref", 100.0, "%7.3f" );
+    LocalizeVSPAEROSlider( m_YcgSlider, "Yref", "Moment Reference Y",
+                          "Y coordinate of the moment reference point." );
     m_MomentRefLayout.AddSlider( m_ZcgSlider, "Zref", 100.0, "%7.3f" );
+    LocalizeVSPAEROSlider( m_ZcgSlider, "Zref", "Moment Reference Z",
+                          "Z coordinate of the moment reference point." );
 
     //==== Advanced Controls Tab ====//
     Fl_Group* advanced_tab = AddTab( "Advanced" );
@@ -459,7 +486,11 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
     m_StallChoice.UpdateItems();
 
     m_OtherParmsLayout.AddSlider( m_CLMax2DSlider, "CLMax2D", 10, "%7.2f" );
+    LocalizeVSPAEROSlider( m_CLMax2DSlider, "CLMax2D", "Maximum 2D Lift Coefficient",
+                          "Maximum two-dimensional section lift coefficient for the stall model." );
     m_OtherParmsLayout.AddSlider( m_Clo2DSlider, "Clo2D", 10, "%2.3f" );
+    LocalizeVSPAEROSlider( m_Clo2DSlider, "Clo2D", "Minimum-Drag Lift Coefficient",
+                          "Section lift coefficient at minimum modeled profile drag, not at zero angle of attack." );
 
     m_OtherParmsLayout.SetSameLineFlag( true );
     m_OtherParmsLayout.SetFitWidthFlag( false );
