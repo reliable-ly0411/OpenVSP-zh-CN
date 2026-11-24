@@ -1966,7 +1966,14 @@ bool GeomScreen::Update()
     //==== Name ===//
     const string display_name = geom_ptr->GetName();
     m_NameInput.Update( display_name );
-    SetTitleRaw( VSPTranslate( m_GeomTypeName ) + "：" + geom_ptr->GetName() );
+    // Keep editor titles aligned with their built-in creation choices.
+    string title_key = m_GeomTypeName;
+    if ( title_key == "Stack" ) { title_key = "STACK"; }
+    else if ( title_key == "Conformal" ) { title_key = "CONFORMAL"; }
+    else if ( title_key == "Auxiliary" ) { title_key = "AUXILIARY"; }
+    string title_prefix = VSPTranslate( title_key );
+    if ( title_prefix == title_key ) { title_prefix = m_GeomTypeName; }
+    SetTitleRaw( title_prefix + "：" + display_name );
 
     //==== Color ====//
     m_ColorPicker.Update( geom_ptr->GetColor() );

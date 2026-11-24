@@ -1478,6 +1478,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "VSP is exiting. Save or discard your changes.", "VSP 即将退出。请选择保存或放弃更改。" },
         { "Error: Identical Parms or Already Linked", "错误：参数相同或已经链接" },
         { "Error: Identical Comps", "错误：组件相同" }, { "Error: Identical Group", "错误：组相同" },
+        { "Error:  Conformal component not supported for this parent type.", "错误：所选父级不支持创建共形几何体。" },
         { "Disable and clear all skinning values from stack?", "是否禁用并清除堆栈中的全部蒙皮参数？" },
         { "Some features may be disabled due to a lower version of OpenGL.\nUpgrade to OpenGL 2.1 or higher.", "由于 OpenGL 版本过低，部分功能可能被禁用。\n请升级到 OpenGL 2.1 或更高版本。" },
         { "Clear all XSECs and init to preset?", "是否清除全部截面并初始化为预设？" },
