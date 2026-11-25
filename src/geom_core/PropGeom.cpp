@@ -3351,19 +3351,6 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid, const string &name, const stri
         return;
     }
 
-    // The two airfoil formats share this metadata path. Check the surface and
-    // divisors before allocating section locations or changing tessellation.
-    VspSurf* foil_surf = m_MainSurfVec[0].GetFoilSurf();
-    if ( !foil_surf || m_TessU() < 2 || m_MainSurfVec[0].GetUMax() <= 0.0 || GetMainWMax( 0 ) <= 0.0 )
-    {
-        return;
-    }
-    const unsigned int numUsec = foil_surf->GetNumSectU();
-    if ( numUsec == 0 )
-    {
-        return;
-    }
-
     // File names come from name and id, so a Clone names the files after itself.
     string geom_name = name;
     string geom_id = id;
@@ -3394,15 +3381,20 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid, const string &name, const stri
         }
     }
 
+    // Get the untwisted wing surface
+    VspSurf* foil_surf = m_MainSurfVec[0].GetFoilSurf();
+
+    unsigned int numUsec = foil_surf->GetNumSectU();
+
     // Identify starting and ending U values from end cap options
     double Umin = 0;
-    if ( m_CapUMinOption() != NO_END_CAP && !m_CapUMinSuccess.empty() && m_CapUMinSuccess[0] )
+    if ( m_CapUMinOption() != NO_END_CAP && m_CapUMinSuccess[0] )
     {
         Umin = 1.0;
     }
 
     double Umax = m_MainSurfVec[0].GetUMax();
-    if ( m_CapUMaxOption() != NO_END_CAP && !m_CapUMaxSuccess.empty() && m_CapUMaxSuccess[0] )
+    if ( m_CapUMaxOption() != NO_END_CAP && m_CapUMaxSuccess[0] )
     {
         Umax -= 1.0;
     }
@@ -3424,7 +3416,7 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid, const string &name, const stri
         XSec_u_vec[i - 1] = umin + ( i * ustep );
     }
 
-    size_t XSec_index = 0;
+    int XSec_index = 0;
     int foil_cnt = 0;
     int xsec_count = 0;
 
@@ -3451,9 +3443,8 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid, const string &name, const stri
         double u = (double)j / ( m_TessU() - 1 );
         double u_global = umin + ( ( umax - umin ) * ( (double)j / ( m_TessU() - 1.0 ) ) ); // Get u value on main surface
 
-        const bool have_xsec = XSec_index < XSec_u_vec.size();
         bool xsec_flag = false;
-        if ( j == 0 || j == m_TessU() - 1 || ( have_xsec && u_global == XSec_u_vec[XSec_index] ) )
+        if ( j == 0 || j == m_TessU() - 1 || u_global == XSec_u_vec[XSec_index] )
         {
             xsec_flag = true;
         }
@@ -3499,7 +3490,7 @@ void PropGeom::WriteAirfoilFiles( FILE* meta_fid, const string &name, const stri
         }
 
         // Add XSec airfoils between tessellated interpolated airfoils
-        if ( have_xsec )
+        if ( XSec_u_vec.size() > 0 )
         {
             double u_main = u_global;
             double u_next = umin + ( (double)( j + 1 ) * ( ustep * numUsec ) / ( m_TessU() - 1 ) );

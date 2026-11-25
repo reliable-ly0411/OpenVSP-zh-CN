@@ -52,14 +52,13 @@ xmlNodePtr Texture::EncodeXml( xmlNodePtr &node )
     xmlNodePtr container_node = ParmContainer::EncodeXml( node );
     if ( container_node )
     {
-        string relative_file_name = m_FileName;
         Vehicle *veh = VehicleMgr.GetVehicle();
         if ( veh )
         {
-            veh->MakeRelativePath( relative_file_name );
+            veh->MakeRelativePath( m_FileName );
         }
 
-        XmlUtil::AddStringNode( container_node, "File_Name", relative_file_name );
+        XmlUtil::AddStringNode( container_node, "File_Name", m_FileName );
     }
     return container_node;
 }
