@@ -16,8 +16,8 @@ jobs:
       NATIVE_RELEASE: 'true'
       BACKFILL_VERSION: '3.56.0'
       BACKFILL_TAG: '3.56.0-zh-CN.rc.23'
-      BACKFILL_SHA: b8bc8fdcdb7682438204f056b595bfc1dd15eaf1
-      VALIDATED_TOOLING_SHA: d26c28e85e9ead867d9b4064bfeb4f1b9c967455
+      BACKFILL_SHA: cae9e45f4ac752722d3e11d500ea9570e4a7bde4
+      VALIDATED_TOOLING_SHA: a10eddbf4d52ef34c7c8a235c5f68d64dc452998
       BACKFILL_PLATFORM: Ubuntu-24.04_amd64
       BACKFILL_ARCH: x86_64
       BACKFILL_LLVM: ''
@@ -36,7 +36,7 @@ jobs:
         with:
           ref: ${{ env.VALIDATED_TOOLING_SHA }}
           path: tooling
-          fetch-depth: 10
+          fetch-depth: 11
           persist-credentials: false
       - name: Checkout untouched historical 3.56 packaging tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -74,7 +74,7 @@ jobs:
           done
           sha256sum "$zip" > SHA256SUMS.txt
           {
-            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "8355dc4c1637de1c424dc1225dfed1bdbbe45d30" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
+            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "44a1b05e223a17793c42b7ebd120b36e295ec6b4" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
             stat -c 'bytes=%s' "$zip"
             cat SHA256SUMS.txt
           } > single-candidate-identity.txt
