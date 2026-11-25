@@ -800,26 +800,6 @@ void Vehicle::SetVSP3FileName( const string & f_name )
 // Make fname into a path relative to m_VSP3ileName.
 void Vehicle::MakeRelativePath( string & fname )
 {
-    if ( m_SaveAsEncodeTarget )
-    {
-        if ( fname.empty() )
-        {
-            return;
-        }
-
-        std::error_code error;
-        const auto input_path = std::filesystem::absolute( std::filesystem::u8path( fname ), error );
-        if ( error )
-        {
-            throw std::filesystem::filesystem_error( "Could not resolve asset path for Save As", error );
-        }
-        const auto target_dir = std::filesystem::u8path( *m_SaveAsEncodeTarget ).parent_path();
-        const auto relative_path = std::filesystem::relative( input_path, target_dir, error );
-        // For example, no relative path connects different Windows drive roots.
-        fname = ( error || relative_path.empty() ? input_path : relative_path ).generic_u8string();
-        return;
-    }
-
     if ( m_VSP3FileName != "Unnamed.vsp3" )
     {
         std::filesystem::path vsppath( m_VSP3FileName );
@@ -3544,19 +3524,7 @@ bool Vehicle::WriteXMLFile( const string & file_name, int set )
     xmlDocSetRootElement( doc, root );
     XmlUtil::AddIntNode( root, "Version", CURRENT_FILE_VER );
 
-    try
-    {
-        EncodeXml( root, set );
-    }
-    catch ( const std::filesystem::filesystem_error & )
-    {
-        xmlFreeDoc( doc );
-        if ( m_SaveAsEncodeTarget )
-        {
-            return false;
-        }
-        throw;
-    }
+    EncodeXml( root, set );
 
     //===== Save XML Tree and Free Doc =====//
     int err = xmlSaveFormatFile( file_name.c_str(), doc, 1 );
@@ -3567,50 +3535,6 @@ bool Vehicle::WriteXMLFile( const string & file_name, int set )
         return false;
     }
 
-    return true;
-}
-
-bool Vehicle::SaveAsXMLFile( const string & file_name, int set )
-{
-    if ( file_name.empty() )
-    {
-        return false;
-    }
-
-    string target_name;
-    try
-    {
-        std::error_code error;
-        const auto target_path = std::filesystem::absolute( std::filesystem::u8path( file_name ), error );
-        if ( error )
-        {
-            return false;
-        }
-        target_name = target_path.generic_u8string();
-    }
-    catch ( const std::filesystem::filesystem_error & )
-    {
-        return false;
-    }
-
-    {
-        // Use the target directory during encode without touching the live filename or export paths.
-        struct RestoreSaveAsPath
-        {
-            const string * & slot;
-            const string * original;
-            ~RestoreSaveAsPath() { slot = original; }
-        };
-        const RestoreSaveAsPath restore{ m_SaveAsEncodeTarget, m_SaveAsEncodeTarget };
-        m_SaveAsEncodeTarget = &target_name;
-        if ( !WriteXMLFile( target_name, set ) )
-        {
-            return false;
-        }
-    }
-
-    // Preserve the existing successful Save As policy, including export defaults based on the new filename.
-    SetVSP3FileName( target_name );
     return true;
 }
 
@@ -3637,8 +3561,13 @@ static void PreRegisterNewObjectIDs( xmlNodePtr node )
 }
 
 //==== Read File ====//
-int Vehicle::ReadXMLFile( const string & file_name, bool replace_model )
+int Vehicle::ReadXMLFile( const string & file_name )
 {
+    string lastreset = IDMgr.ResetRemapID();
+
+    // Disable link updates when until all geoms are loaded
+    LinkMgr.SetFreezeUpdateFlag( true );
+
     //==== Read Xml File ====//
     xmlDocPtr doc;
 
@@ -3647,19 +3576,17 @@ int Vehicle::ReadXMLFile( const string & file_name, bool replace_model )
 
     //==== Build an XML tree from a the file ====//
     doc = xmlReadFile( file_name.c_str(), nullptr, XML_PARSE_HUGE );
-    if ( doc == nullptr && !replace_model )
+    if ( doc == nullptr )
     {
-        // Preserve recovery for non-replacing callers. File > Open must not
-        // replace an in-memory project with a partially recovered document.
         fprintf( stderr, "could not parse XML document, trying again with more permissive parser\n" );
 
         doc = xmlReadFile( file_name.c_str(), nullptr, XML_PARSE_HUGE | XML_PARSE_RECOVER );
-    }
 
-    if ( doc == nullptr )
-    {
-        fprintf( stderr, "could not parse XML document\n" );
-        return 1;
+        if ( doc == nullptr )
+        {
+            fprintf( stderr, "could not parse XML document\n" );
+            return 1;
+        }
     }
 
     xmlNodePtr root = xmlDocGetRootElement( doc );
@@ -3678,34 +3605,15 @@ int Vehicle::ReadXMLFile( const string & file_name, bool replace_model )
     }
 
     //==== Find Version Number ====//
-    const int file_version = XmlUtil::FindInt( root, "Version", 0 );
+    m_FileOpenVersion = XmlUtil::FindInt( root, "Version", 0 );
 
-    if ( file_version < MIN_FILE_VER )
+    if ( m_FileOpenVersion < MIN_FILE_VER )
     {
         fprintf( stderr, "document version not supported \n");
         xmlFreeDoc( doc );
+        m_FileOpenVersion = -1;
         return 4;
     }
-
-    if ( replace_model )
-    {
-        if ( !XmlUtil::GetNode( root, "Vehicle", 0 ) )
-        {
-            fprintf( stderr, "document does not contain a Vehicle\n" );
-            xmlFreeDoc( doc );
-            return 5;
-        }
-
-        // Use this already-validated tree rather than opening the path again.
-        Renew();
-        // Set the path before decoding so relative references work as before.
-        SetVSP3FileName( file_name );
-    }
-
-    m_FileOpenVersion = file_version;
-    string lastreset = IDMgr.ResetRemapID();
-    // Disable link updates until all geoms are loaded.
-    LinkMgr.SetFreezeUpdateFlag( true );
 
     // Register the Geoms before reading any of them, so a reference into one resolves whichever
     // order the file lists it and the thing it names.

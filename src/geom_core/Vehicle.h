@@ -226,8 +226,7 @@ public:
 
     vector < string > GetPtCloudGeoms();
 
-    // In replace mode, validate the project before resetting the current model.
-    int ReadXMLFile( const string & file_name, bool replace_model = false );
+    int ReadXMLFile( const string & file_name );
     int ReadXMLFileGeomsOnly( const string & file_name );
 
     void SetVSP3FileName( const string & f_name );
@@ -265,7 +264,6 @@ public:
     // empty string. This facilitates deleting the generated mesh from the API.
     string ExportFile( const string & file_name, int write_set, int degen_set, int subsFlag, int file_type, bool useMode, const string &modeID );
     bool WriteXMLFile( const string & file_name, int set );
-    bool SaveAsXMLFile( const string & file_name, int set );
     void WriteXSecFile( const string & file_name, int write_set, bool useMode, const string& modeID );
     void WritePLOT3DFile( const string & file_name, int write_set, bool useMode, const string &modeID );
     string WriteSTLFile( const string & file_name, int write_set, int subsFlag, bool useMode, const string &modeID );
@@ -708,7 +706,6 @@ protected:
 
     //==== Primary file name ====//
     string m_VSP3FileName;
-    const string * m_SaveAsEncodeTarget = nullptr;
 
     //==== Export Files ====//
     unordered_map< int, string > m_ExportFileNames;

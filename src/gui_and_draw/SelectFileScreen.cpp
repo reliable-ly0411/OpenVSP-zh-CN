@@ -11,7 +11,6 @@
 #include "VSPChinese.h"
 #include "FileUtil.h"
 
-#include <filesystem>
 
 #ifdef WIN32
 #include <direct.h>
@@ -352,12 +351,10 @@ string SelectFileScreen::FileChooser( const string &title, const string &filter,
         Fl::wait();
     }
 
-    if ( m_AcceptFlag && !m_FileName.empty() )
+    if ( m_AcceptFlag )
     {
-        const auto typed_file = std::filesystem::u8path( m_FileName );
-        const auto selected_file = typed_file.is_absolute() ?
-                                   typed_file : std::filesystem::u8path( m_DirString ) / typed_file;
-        m_FullPathName = selected_file.generic_u8string();
+        m_FullPathName = m_DirString;
+        m_FullPathName.append( m_FileName );
 
         if ( forceext )
         {

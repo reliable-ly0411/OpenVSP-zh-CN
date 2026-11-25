@@ -470,11 +470,9 @@ void MainVSPScreen::ActionCB( void * data )
         string openfile = m_ScreenMgr->FileChooser( "Open VSP File", "*.vsp3" );
         if ( openfile.compare( "" ) != 0 )
         {
-            if ( VehicleMgr.GetVehicle()->ReadXMLFile( openfile, true ) != 0 )
-            {
-                m_ScreenMgr->Alert( VSPTranslate( "Could not open VSP file. The current model was not changed:" ) + "\n" + openfile );
-                return;
-            }
+            VehicleMgr.GetVehicle()->Renew();
+            VehicleMgr.GetVehicle()->SetVSP3FileName( openfile );
+            VehicleMgr.GetVehicle()->ReadXMLFile( openfile );
 
             if ( VehicleMgr.GetVehicle()->m_ShowNotesScreenParm.Get() )
             {
@@ -505,9 +503,10 @@ void MainVSPScreen::ActionCB( void * data )
     {
         string preset_fname = GetFilename( VehicleMgr.GetVehicle()->GetVSP3FileName() );
         string savefile = m_ScreenMgr->FileChooser( "Save VSP File As", "*.vsp3", vsp::SAVE, preset_fname );
-        if ( !savefile.empty() && !VehicleMgr.GetVehicle()->SaveAsXMLFile( savefile, vsp::SET_ALL ) )
+        if ( savefile.compare( "" ) != 0 )
         {
-            m_ScreenMgr->Alert( VSPTranslate( "Could not save VSP file. The current model was not changed:" ) + "\n" + savefile );
+            VehicleMgr.GetVehicle()->SetVSP3FileName( savefile );
+            VehicleMgr.GetVehicle()->WriteXMLFile( savefile, vsp::SET_ALL );
         }
     }
     else if ( data == &m_SaveSetMenuItem )
