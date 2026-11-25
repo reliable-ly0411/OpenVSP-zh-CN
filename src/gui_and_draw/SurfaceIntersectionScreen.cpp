@@ -473,7 +473,7 @@ void SurfaceIntersectionScreen::UpdateWakesTab()
             snprintf( str, sizeof( str ), "%d_%s", i, g->GetName().c_str() );
             if ( g->HasWingTypeSurfs() )
             {
-                m_Comp.AddItem( str );
+                m_Comp.AddItemRaw( str );
                 wingCompIDMap[m_GeomVec[i]] = iwing++;
                 m_WingGeomVec.push_back( m_GeomVec[i] );
             }

@@ -895,14 +895,14 @@ bool CfdMeshScreen::Update()
         if ( g )
         {
             snprintf( str, sizeof( str ),  "%d_%s", i, g->GetName().c_str() );
-            m_SourcesSelectComp.AddItem( str );
+            m_SourcesSelectComp.AddItemRaw( str );
             if( g->HasWingTypeSurfs() )
             {
-                m_Comp.AddItem( str );
+                m_Comp.AddItemRaw( str );
                 wingCompIDMap[ m_GeomVec[i] ] = iwing++;
                 m_WingGeomVec.push_back( m_GeomVec[i] );
             }
-            m_ComponentChoice.AddItem( str );
+            m_ComponentChoice.AddItemRaw( str );
             compIDMap[ m_GeomVec[i] ] = i;
         }
     }
