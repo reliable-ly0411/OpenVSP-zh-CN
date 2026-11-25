@@ -175,6 +175,17 @@ void AttributeTree::RebuildTree()
                     ac = AttributeMgr.GetCollectionPtr( coll_id );
                     nvd = AttributeMgr.GetAttributePtr( id );
 
+                    // Translate grouping markers only when followed by the corresponding typed child.
+                    if ( !nvd && row_str == id &&
+                         ( id == "Sections" || id == "XSecs" ) &&
+                         j + 1 < tree_id_vecs[i].size() &&
+                         AttributeMgr.GetObjectType( id ) == vsp::ATTROBJ_FREE )
+                    {
+                        const int child_type = AttributeMgr.GetObjectType( tree_id_vecs[i][j + 1] );
+                        if ( id == "Sections" && child_type == vsp::ATTROBJ_SEC ) row_str = "翼段";
+                        if ( id == "XSecs" && child_type == vsp::ATTROBJ_XSEC ) row_str = "截面";
+                    }
+
                     if ( nvd )
                     {
                         row_str += '\t' + nvd->GetAsString( true ) + '\t' + nvd->GetTypeName( nvd->GetType(), true , true );

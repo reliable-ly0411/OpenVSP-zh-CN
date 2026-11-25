@@ -1919,7 +1919,7 @@ StructScreen::StructScreen( ScreenMgr* mgr ) : TabScreen( mgr, 550, 554 + STRUCT
 
     m_FemTabLayout.AddButton( m_ColorElementsButton, "Color By:" );
     m_FemTabLayout.AddButton( m_ColorByTag, "Tag" );
-    m_FemTabLayout.AddButton( m_ColorByReason, "Reason" );
+    m_FemTabLayout.AddButton( m_ColorByReason, "约束依据" );
     m_FemTabLayout.ForceNewLine();
 
     m_ColorByToggleGroup.Init( this );
@@ -2272,7 +2272,21 @@ void StructScreen::UpdateFeaPartBrowser()
         for ( int i = 0; i < (int)feaprt_vec.size(); i++ )
         {
             fea_name = feaprt_vec[i]->GetName();
-            fea_type = FeaPart::GetTypeName( feaprt_vec[i]->GetType() );
+            const int type = feaprt_vec[i]->GetType();
+            switch ( type )
+            {
+            case vsp::FEA_SKIN: fea_type = "蒙皮"; break;
+            case vsp::FEA_SLICE: fea_type = "切片"; break;
+            case vsp::FEA_RIB: fea_type = "肋"; break;
+            case vsp::FEA_SPAR: fea_type = "翼梁"; break;
+            case vsp::FEA_POLY_SPAR: fea_type = "多段翼梁"; break;
+            case vsp::FEA_FIX_POINT: fea_type = "固定点"; break;
+            case vsp::FEA_DOME: fea_type = "穹顶"; break;
+            case vsp::FEA_RIB_ARRAY: fea_type = "翼肋阵列"; break;
+            case vsp::FEA_SLICE_ARRAY: fea_type = "切片阵列"; break;
+            case vsp::FEA_TRIM: fea_type = "修剪"; break;
+            default: fea_type = FeaPart::GetTypeName( type ); break;
+            }
 
             if ( feaprt_vec[i]->m_KeepDelShellElements() == vsp::FEA_KEEP )
             {
@@ -2334,7 +2348,7 @@ void StructScreen::UpdateFeaPartBrowser()
         for ( int i = 0; i < (int)subsurf_vec.size(); i++ )
         {
             fea_name = subsurf_vec[i]->GetName();
-            fea_type = SubSurface::GetTypeName( subsurf_vec[i]->GetType() );
+            fea_type = VSPTranslateSubsurfaceType( SubSurface::GetTypeName( subsurf_vec[i]->GetType() ) );
 
             if ( subsurf_vec[i]->m_KeepDelShellElements() == vsp::FEA_KEEP )
             {
