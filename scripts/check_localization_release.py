@@ -117,6 +117,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, default=ROOT, help="Source tree to inspect with trusted tooling")
     parser.add_argument("--expected-tag")
+    parser.add_argument("--packaging-target", choices=("windows", "ubuntu-24.04-amd64"),
+                        help="Explicit package target; omission keeps all original checks")
     parser.add_argument("--print-version", action="store_true")
     args = parser.parse_args()
     ROOT = args.source.resolve()
@@ -136,10 +138,12 @@ def main() -> None:
         "README_zh-CN.md",
         "src/gui_and_draw/VSPChinese.cpp",
         "src/gui_and_draw/VSPChinese.h",
-        "src/vsp/vsp.rc.in",
         "vspIcon.ico",
         "vspIcon.png",
     ]
+    windows_resource_required = args.packaging_target != "ubuntu-24.04-amd64"
+    if windows_resource_required:
+        required.append("src/vsp/vsp.rc.in")
     missing = [path for path in required if not (ROOT / path).is_file()]
     if missing:
         raise SystemExit("本地化守卫失败，缺少文件：" + ", ".join(missing))
@@ -154,7 +158,8 @@ def main() -> None:
         "https://github.com/reliable-ly0411/OpenVSP-zh-CN",
     )
     require_text("src/gui_and_draw/VSPChinese.cpp", "VSPTranslate")
-    require_text("src/vsp/CMakeLists.txt", "vsp.rc.in")
+    if windows_resource_required:
+        require_text("src/vsp/CMakeLists.txt", "vsp.rc.in")
     about = (ROOT / "src/gui_and_draw/MainVSPScreen.cpp").read_text(encoding="utf-8")
     if "【显著声明】" in about:
         raise SystemExit("本地化守卫失败：关于窗口仍包含旧的【显著声明】")

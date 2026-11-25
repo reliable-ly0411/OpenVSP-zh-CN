@@ -44,14 +44,50 @@ class LocalizedReleaseIdentityTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
 
-    def check(self):
+    def check(self, *extra):
         with patch.object(guard, 'ROOT', self.root), \
              patch.object(guard, 'VERSION_FILE', self.root / 'src/cmake/VSP_Version.cmake'), \
              patch.object(guard, 'RELEASE_NOTES_FILE', self.root / 'README_zh-CN.md'), \
              patch.object(guard, 'read_version', return_value='3.55.0'), \
-             patch('sys.argv', ['check_localization_release.py', '--expected-tag', self.tag]), \
+             patch('sys.argv', ['check_localization_release.py', '--expected-tag', self.tag, *extra]), \
              contextlib.redirect_stdout(io.StringIO()):
             guard.main()
+
+    def make_unbranded(self):
+        (self.root / 'src/vsp/vsp.rc.in').unlink()
+        (self.root / 'src/vsp/CMakeLists.txt').write_text('add_executable(vsp)')
+
+    def test_explicit_ubuntu_accepts_unbranded_upstream_app(self):
+        self.make_unbranded()
+        self.check('--packaging-target', 'ubuntu-24.04-amd64')
+
+    def test_windows_and_default_still_require_windows_resource(self):
+        self.make_unbranded()
+        for extra in [(), ('--packaging-target', 'windows')]:
+            with self.subTest(extra=extra), self.assertRaisesRegex(SystemExit, 'vsp.rc.in'):
+                self.check(*extra)
+
+    def test_windows_still_checks_cmake_integration_even_with_resource(self):
+        (self.root / 'src/vsp/CMakeLists.txt').write_text('add_executable(vsp)')
+        with self.assertRaisesRegex(SystemExit, 'src/vsp/CMakeLists.txt'):
+            self.check('--packaging-target', 'windows')
+
+    def test_unsupported_platform_cannot_waive_checks(self):
+        self.make_unbranded()
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            self.check('--packaging-target', 'ubuntu-arm')
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_ubuntu_still_checks_assets_and_version(self):
+        self.make_unbranded()
+        asset = self.root / 'vspIcon.png'
+        asset.unlink()
+        with self.assertRaisesRegex(SystemExit, 'vspIcon.png'):
+            self.check('--packaging-target', 'ubuntu-24.04-amd64')
+        asset.touch()
+        with self.assertRaisesRegex(SystemExit, '与源码版本'):
+            self.check('--packaging-target', 'ubuntu-24.04-amd64',
+                       '--expected-tag', '3.54.0-zh-CN.rc.2')
 
     def test_matching_marker_heading_and_about_are_accepted(self):
         self.check()
