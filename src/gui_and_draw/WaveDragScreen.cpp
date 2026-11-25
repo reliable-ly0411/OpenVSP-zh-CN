@@ -298,7 +298,7 @@ bool WaveDragScreen::Update()
 
                     if (g->GetBehaviorType() == MS_WING_GEOM_TYPE)
                     {
-                        m_RefWingChoice.AddItem(str);
+                        m_RefWingChoice.AddItemRaw(str);
                         WingCompIDMap[geomVec[i]] = iwing;
                         m_WingGeomVec.push_back(geomVec[i]);
                         iwing++;
