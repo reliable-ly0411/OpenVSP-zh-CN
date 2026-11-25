@@ -716,7 +716,7 @@ void MainVSPScreen::ActionCB( void * data )
         const string localization_about =
             string( "OpenVSP 简体中文汉化版\n" ) +
             "软件版本：" + VSPVERSION4 + "\n"
-            "汉化版本：3.56.0-zh-CN.rc.29\n"
+            "汉化版本：3.56.0-zh-CN.rc.30\n"
             "汉化仓库：https://github.com/reliable-ly0411/OpenVSP-zh-CN\n\n"
             "汉化内容包括界面、动态标签、命令行帮助及离线帮助文档。\n\n"
             "OpenVSP 原始软件、算法及英文源码的版权和作者归属不变，\n"

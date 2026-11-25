@@ -188,9 +188,11 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
             'is_default_collection = owner && owner->GetID() == ac->GetAttachID() && '
             'owner->GetAttrCollection() == ac; }',
             'else if ( ac->GetAttachType() == vsp::ATTROBJ_ADVLINK ) { '
-            'AdvLink *owner = AdvLinkMgr.GetLink( AdvLinkMgr.GetLinkIndex( ac->GetAttachID() ) ); '
-            'is_default_collection = owner && owner->GetName() == ac->GetAttachID() && '
-            'owner->GetAttrCollection() == ac; }',
+            '// A loaded link can still have its temporary attach name. '
+            '// Identify its built-in collection by ownership, not by that name. '
+            'for ( AdvLink *owner : AdvLinkMgr.GetLinks() ) { '
+            'if ( owner && owner->GetAttrCollection() == ac ) { '
+            'is_default_collection = true; break; } } }',
             'else if ( ac->GetAttachType() == vsp::ATTROBJ_MODE ) { '
             'Mode *owner = ModeMgr.GetMode( ac->GetAttachID() ); '
             'is_default_collection = owner && owner->GetID() == ac->GetAttachID() && '
