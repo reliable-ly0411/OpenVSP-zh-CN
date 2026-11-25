@@ -175,6 +175,22 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
         self.assertFalse(attribute_title_is_safe(body.replace('SetTitleRaw', 'SetTitle')))
         self.assertFalse(attribute_title_is_safe(body.replace('VSPTranslateLabelAndValue', 'VSPTranslate')))
 
+    def test_only_actual_default_collections_get_the_fixed_label(self):
+        source = (GUI / 'AttributeEditor.cpp').read_text(encoding='utf-8')
+        flat = ' '.join(source.split())
+        gate = (
+            'if ( !nvd && ac && id == coll_id && row_str == "Attributes" ) { '
+            'const string owner_id = AttributeMgr.GetObjectParent( id ); '
+            'const int owner_type = AttributeMgr.GetObjectType( owner_id ); '
+            'if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC || '
+            'owner_type == vsp::ATTROBJ_SEC || owner_type == vsp::ATTROBJ_SUBSURF ) { '
+            'ParmContainer *owner = ParmMgr.FindParmContainer( owner_id ); '
+            'if ( owner && owner->GetAttrCollection() == ac ) { '
+            'row_str = VSPTranslateMessage( "Attributes" ); } } }'
+        )
+        self.assertEqual(flat.count(gate), 1)
+        self.assertEqual(flat.count('VSPTranslateMessage( "Attributes" )'), 1)
+
     def test_user_description_is_opaque_and_builtin_description_remains_translatable(self):
         source = (GUI / 'ParmScreen.cpp').read_text(encoding='utf-8')
         self.assertTrue(parm_description_is_safe(source))

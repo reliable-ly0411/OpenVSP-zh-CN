@@ -189,11 +189,13 @@ void AttributeTree::RebuildTree()
                     ac = AttributeMgr.GetCollectionPtr( coll_id );
                     nvd = AttributeMgr.GetAttributePtr( id );
 
-                    // Translate only the geometry's own default collection row, not a named attribute.
+                    // Translate only the registered owners' actual default collection, not a named attribute.
                     if ( !nvd && ac && id == coll_id && row_str == "Attributes" )
                     {
                         const string owner_id = AttributeMgr.GetObjectParent( id );
-                        if ( AttributeMgr.GetObjectType( owner_id ) == vsp::ATTROBJ_GEOM )
+                        const int owner_type = AttributeMgr.GetObjectType( owner_id );
+                        if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC ||
+                             owner_type == vsp::ATTROBJ_SEC || owner_type == vsp::ATTROBJ_SUBSURF )
                         {
                             ParmContainer *owner = ParmMgr.FindParmContainer( owner_id );
                             if ( owner && owner->GetAttrCollection() == ac )
