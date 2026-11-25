@@ -12,19 +12,21 @@ historical_path=.github/workflows/ci-openvsp-356-ubuntu-rc-package.yml
 test "$BACKFILL_SHA" = "$qa_product"
 test "$BACKFILL_TAG" = "$qa_tag"
 test "$(git -C controller rev-parse HEAD)" = "$GITHUB_SHA"
-test "$(git -C controller rev-parse HEAD^1)" = "72b970d0c1527670253576d0a9329c8f3a4c1351"
-test "$(git -C controller rev-parse HEAD^1^1)" = "e478a6451eb83e29ef82673f820afd7c30d33d39"
-test "$(git -C controller rev-parse HEAD^1^1^1)" = "$old_controller"
-test "$(git -C controller rev-parse HEAD^3)" = "98f4cf781f4afcbfb176d83a8cade7c5fcea8b31"
+test "$(git -C controller rev-parse HEAD^1)" = "b157ced51daa14c510c49a70b7ee992a72caeba4"
+test "$(git -C controller rev-parse HEAD^1^1)" = "72b970d0c1527670253576d0a9329c8f3a4c1351"
+test "$(git -C controller rev-parse HEAD^1^1^1)" = "e478a6451eb83e29ef82673f820afd7c30d33d39"
+test "$(git -C controller rev-parse HEAD^1^1^1^1)" = "$old_controller"
+test "$(git -C controller rev-parse HEAD^3)" = "0464597251ad1c167834d05a1ac1d25146909a2c"
 test "$(git -C controller rev-parse HEAD^2)" = "$qa_product"
 test "$(git -C tooling rev-parse HEAD)" = "$VALIDATED_TOOLING_SHA"
-test "$VALIDATED_TOOLING_SHA" = "98f4cf781f4afcbfb176d83a8cade7c5fcea8b31"
+test "$VALIDATED_TOOLING_SHA" = "0464597251ad1c167834d05a1ac1d25146909a2c"
 test "$(git -C tooling-history rev-parse HEAD)" = "8c1a1b4e4dccf50185f68a33af18d22cf1b748b0"
-test "$(git -C tooling rev-parse HEAD^1)" = "e6901ba03da11677802a837c734bf2d812005b3d"
-test "$(git -C tooling rev-parse HEAD^1^1)" = "84a52891c1226de03d5bc38a10259e6b142f834d"
-test "$(git -C tooling rev-parse HEAD^1^1^1)" = "8c1a1b4e4dccf50185f68a33af18d22cf1b748b0"
-test "$(git -C tooling diff --name-only HEAD^1 HEAD)" = scripts/native_verify.py
-test "$(git -C tooling diff --name-only 8c1a1b4e4dccf50185f68a33af18d22cf1b748b0 HEAD)" = scripts/native_verify.py
+test "$(git -C tooling rev-parse HEAD^1)" = "98f4cf781f4afcbfb176d83a8cade7c5fcea8b31"
+test "$(git -C tooling rev-parse HEAD^1^1)" = "e6901ba03da11677802a837c734bf2d812005b3d"
+test "$(git -C tooling rev-parse HEAD^1^1^1)" = "84a52891c1226de03d5bc38a10259e6b142f834d"
+test "$(git -C tooling rev-parse HEAD^1^1^1^1)" = "8c1a1b4e4dccf50185f68a33af18d22cf1b748b0"
+test "$(git -C tooling diff --name-only HEAD^1 HEAD)" = "$(printf '%s\n' scripts/backfill_build.sh scripts/native_verify.py)"
+test "$(git -C tooling diff --name-only 8c1a1b4e4dccf50185f68a33af18d22cf1b748b0 HEAD)" = "$(printf '%s\n' scripts/backfill_build.sh scripts/native_verify.py)"
 
 # Replay every exact RC17 historical assertion on its own pinned checkout,
 # never reducing the old guard to 'is a descendant'.
