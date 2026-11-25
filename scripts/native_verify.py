@@ -408,6 +408,11 @@ def main():
     parity = ubuntu_parity_requested(profile, source_sha, version, native_platform, arch, platform.machine(),
                                      platform.freedesktop_os_release() if profile is not None else {})
     official = (source / 'src/python_api/packages/requirements.txt').read_bytes() if parity else None
+    if parity:
+        import numpy
+        build_numpy = os.environ.get('OPENVSP_QA_NUMPY_BUILD_VERSION', '')
+        if build_numpy != numpy.__version__ or not re.fullmatch(r'[0-9][0-9A-Za-z.+!-]*', build_numpy):
+            raise ValueError('Recorded build NumPy must match the native build interpreter')
     target = platform_for(version, native_platform)
     if (arch, expected_python) != (target['arch'], target['python']):
         raise ValueError('Build architecture/Python does not match the versioned package target')
@@ -487,6 +492,12 @@ def main():
                   source_worktree_clean=worktree_clean,
                   gui_review='pending visual review; screenshots alone do not establish acceptance',
                   macos_signing='ad-hoc only; not Developer ID signed or notarized' if mac else None)
+    if parity:
+        runtime_numpy = installed['numpy']
+        if not re.fullmatch(r'[0-9][0-9A-Za-z.+!-]*', runtime_numpy):
+            raise ValueError('Invalid NumPy version from the import-verified stock runtime')
+        report['numpy_abi'] = {'build': build_numpy, 'runtime': runtime_numpy}
+        print(f'OpenVSP parity NumPy: CMake build {build_numpy}; stock runtime {runtime_numpy}')
     (output / 'verification.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(f'Native checks passed for {archive_name}; SHA-256 {report["sha256"]}; GUI review remains pending')
 

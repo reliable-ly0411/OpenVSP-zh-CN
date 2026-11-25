@@ -28,7 +28,25 @@ else
   python3 -m venv "$ROOT/venv"
 fi
 source "$ROOT/venv/bin/activate"
-python -m pip install 'cmake==3.31.6' 'numpy==1.26.4' 'setuptools<76' wheel
+numpy_spec=numpy==1.26.4
+if [[ -v OPENVSP_QA_PARITY_PROFILE ]]; then
+  test "$OPENVSP_QA_PARITY_PROFILE" = ubuntu-24.04-amd64-upstream-3.56.0
+  test "$BACKFILL_PLATFORM" = Ubuntu-24.04_amd64
+  test "$BACKFILL_ARCH" = x86_64
+  test "$BACKFILL_VERSION" = 3.56.0
+  test "$BACKFILL_SHA" = ffb15eeda6233b7fd8ac224709073c4eb57e92df
+  test "$(git rev-parse HEAD)" = "$BACKFILL_SHA"
+  . /etc/os-release
+  test "$ID" = ubuntu
+  test "$VERSION_ID" = 24.04
+  # The official 3.56 workflow resolves unpinned NumPy for native compilation.
+  numpy_spec=numpy
+fi
+python -m pip install 'cmake==3.31.6' "$numpy_spec" 'setuptools<76' wheel
+if [[ -v OPENVSP_QA_PARITY_PROFILE ]]; then
+  export OPENVSP_QA_NUMPY_BUILD_VERSION="$(python -c 'import numpy; print(numpy.__version__)')"
+  printf 'OpenVSP parity build NumPy: %s\n' "$OPENVSP_QA_NUMPY_BUILD_VERSION"
+fi
 python -c 'import os,sys; assert ".".join(map(str,sys.version_info[:2])) == os.environ["BACKFILL_PYTHON"]'
 # ExternalProject children inherit these flags. Do not claim a lower macOS deployment target.
 export CFLAGS="-O2 -fPIC -ffile-prefix-map=$ROOT=/usr/src/openvsp -fdebug-prefix-map=$ROOT=/usr/src/openvsp"
@@ -63,10 +81,18 @@ if [[ ${BACKFILL_LIBXML_SYSCONFDIR:-} == /etc ]]; then
   # Fail if a child ignored the scoped toolchain setting; never patch binary bytes.
   grep -Fx '#define XML_SYSCONFDIR "/etc"' buildlibs/LIBXML2-prefix/src/LIBXML2-build/config.h
 fi
-cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DVSP_CPACK_GEN=ZIP -DVSP_NO_PYDOC=ON -DPANDOC_EXECUTABLE=/nonexistent/pandoc \
+configure_source() {
+  cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DVSP_CPACK_GEN=ZIP -DVSP_NO_PYDOC=ON -DPANDOC_EXECUTABLE=/nonexistent/pandoc \
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_PREFIX=/opt/OpenVSP \
   "-DVSP_LIBRARY_PATH=$SOURCE/buildlibs" "-DPython3_EXECUTABLE=$(command -v python)" \
   "-DPYTHON_EXECUTABLE=$(command -v python)" "${args[@]}"
+}
+if [[ -v OPENVSP_QA_PARITY_PROFILE ]]; then
+  configure_source | tee "$ROOT/rc18-source-configure.log"
+  grep -Fx -- "--   Numpy version: $OPENVSP_QA_NUMPY_BUILD_VERSION" "$ROOT/rc18-source-configure.log"
+else
+  configure_source
+fi
 cmake --build build --target package --parallel 2
 # Build options must not rewrite the immutable historical source.
 git diff --quiet --exit-code
