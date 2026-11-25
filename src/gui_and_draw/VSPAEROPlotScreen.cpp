@@ -16,6 +16,7 @@
 #include <cfloat>
 
 #include "VspUtil.h"
+#include "VSPChinese.h"
 
 
 //////////////////////////////////////////////////////////////////////
@@ -1827,7 +1828,7 @@ void VSPAEROPlotScreen::ConstructCpSliceCaseString( char *strbuf, size_t strsiz,
             mach = dataVector[dataVector.size() - 1];
         }
 
-        snprintf( strbuf, strsiz, "Case %d: a=%.2g, b=%.2g, M=%.2g", case_num, alpha, beta, mach );
+        snprintf( strbuf, strsiz, VSPTranslateMessage( "Case %d: a=%.2g, b=%.2g, M=%.2g" ).c_str(), case_num, alpha, beta, mach );
     }
 }
 
@@ -2111,7 +2112,7 @@ void VSPAEROPlotScreen::UpdateCpSliceCutBrowser()
             m_CpSlicePosTypeChoiceVec[type]->Activate();
 
             char strbuf[1024];
-            snprintf( strbuf, sizeof( strbuf ),  "Cut %d: %c= %4.2f", cut_num, type_char, location );
+            snprintf( strbuf, sizeof( strbuf ),  VSPTranslateMessage( "Cut %d: %c= %4.2f" ).c_str(), cut_num, type_char, location );
 
             m_CpSliceCutBrowser->add( strbuf );
 
@@ -2557,7 +2558,7 @@ void VSPAEROPlotScreen::RedrawCpSlicePlot()
                     }
 
                     char strbuf[1024];
-                    snprintf( strbuf, sizeof( strbuf ),  "Cut %d, Case %d", cut_num, case_num );
+                    snprintf( strbuf, sizeof( strbuf ),  VSPTranslateMessage( "Cut %d, Case %d" ).c_str(), cut_num, case_num );
                     m_CpSliceLegendLayout.AddLegendEntry( strbuf, c );
                     iplot++;
 
@@ -2572,7 +2573,7 @@ void VSPAEROPlotScreen::RedrawCpSlicePlot()
         if ( std::adjacent_find( pos_type_vec.begin(), pos_type_vec.end(), std::not_equal_to<int>() ) == pos_type_vec.end() )
         {
             char strbuf[1024];
-            snprintf( strbuf, sizeof( strbuf ),  "Position: %c", ( 88 + pos_type_vec[0] ) ); // ASCII X: 88; Y: 89; Z: 90
+            snprintf( strbuf, sizeof( strbuf ),  VSPTranslateMessage( "Position: %c" ).c_str(), ( 88 + pos_type_vec[0] ) ); // ASCII X: 88; Y: 89; Z: 90
 
             m_CpSlicePlotCanvas->current_x()->copy_label( strbuf );
         }

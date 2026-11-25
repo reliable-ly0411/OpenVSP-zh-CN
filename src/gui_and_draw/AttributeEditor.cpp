@@ -12,6 +12,7 @@
 #include "VSPChinese.h"
 #include "AttributeScreen.h"
 #include "ParmMgr.h"
+#include "ParmContainer.h"
 #include "ScreenMgr.h"
 
 #define MIN_ATTR_EDITOR_PX_HEIGHT 60
@@ -187,6 +188,21 @@ void AttributeTree::RebuildTree()
                 {
                     ac = AttributeMgr.GetCollectionPtr( coll_id );
                     nvd = AttributeMgr.GetAttributePtr( id );
+
+                    // Translate only the geometry's own default collection row, not a named attribute.
+                    if ( !nvd && ac && id == coll_id && row_str == "Attributes" )
+                    {
+                        const string owner_id = AttributeMgr.GetObjectParent( id );
+                        if ( AttributeMgr.GetObjectType( owner_id ) == vsp::ATTROBJ_GEOM )
+                        {
+                            ParmContainer *owner = ParmMgr.FindParmContainer( owner_id );
+                            if ( owner && owner->GetAttrCollection() == ac )
+                            {
+                                row_str = VSPTranslateMessage( "Attributes" );
+                            }
+                        }
+                    }
+
 
                     // Translate grouping markers only when followed by the corresponding typed child.
                     if ( !nvd && row_str == id &&
