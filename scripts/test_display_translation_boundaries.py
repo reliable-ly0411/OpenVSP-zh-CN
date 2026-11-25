@@ -15,12 +15,19 @@ GUI = ROOT / 'src/gui_and_draw'
 
 
 def export_alert_is_safe(source):
-    """The format is translated before opaque values reach FLTK's formatter."""
-    return bool(re.search(
+    """Translate only a fixed format and optionally the exact reason whitelist."""
+    code = strip_comments(source)
+    format_prefix = (
         r'\bfl_alert\s*\(\s*VSPTranslateMessage\s*\(\s*"%s, %s not written"\s*\)'
-        r'\s*\.c_str\(\s*\)\s*,\s*err\.c_str\(\s*\)\s*,\s*newfile\.c_str\(\s*\)\s*\)',
-        strip_comments(source)))
-
+        r'\s*\.c_str\(\s*\)\s*,\s*'
+    )
+    path_arg = r'\.c_str\(\s*\)\s*,\s*newfile\.c_str\(\s*\)\s*\)'
+    legacy = format_prefix + r'err' + path_arg
+    reviewed = (
+        r'\bconst\s+string\s+display_err\s*=\s*VSPTranslateSplitStitchReason\s*\(\s*err\s*\)\s*;\s*'
+        + format_prefix + r'display_err' + path_arg
+    )
+    return bool(re.search(legacy, code) or re.search(reviewed, code))
 
 def parm_title_is_safe(source):
     return bool(re.search(
@@ -104,6 +111,20 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
         self.assertTrue(export_alert_is_safe(safe))
         self.assertFalse(export_alert_is_safe('// ' + safe))
         self.assertFalse(export_alert_is_safe(safe.replace('VSPTranslateMessage', 'VSPTranslate')))
+
+    def test_export_alert_guard_requires_the_scoped_reason_and_preserves_the_path(self):
+        safe = ('const string display_err = VSPTranslateSplitStitchReason(err); '
+                'fl_alert(VSPTranslateMessage("%s, %s not written").c_str(), '
+                'display_err.c_str(), newfile.c_str());')
+        self.assertTrue(export_alert_is_safe(safe))
+        self.assertFalse(export_alert_is_safe(safe.replace('VSPTranslateSplitStitchReason', 'VSPTranslateMessage')))
+        self.assertFalse(export_alert_is_safe(safe.replace('VSPTranslateSplitStitchReason(err)', 'err')))
+        self.assertFalse(export_alert_is_safe(safe.replace('VSPTranslateSplitStitchReason(err)', 'VSPTranslateSplitStitchReason(newfile)')))
+        self.assertFalse(export_alert_is_safe(safe.replace('newfile.c_str()', 'VSPTranslateMessage(newfile).c_str()')))
+        self.assertFalse(export_alert_is_safe(safe.replace('const string display_err', 'string display_err')))
+        self.assertFalse(export_alert_is_safe(safe.replace('; fl_alert', '; display_err = newfile; fl_alert')))
+        self.assertFalse(export_alert_is_safe(
+            'fl_alert("%s", VSPTranslateMessage(formatted_error_and_path).c_str());'))
 
     def test_parameter_title_preserves_names_without_a_second_translation(self):
         source = (GUI / 'ParmScreen.cpp').read_text(encoding='utf-8')
