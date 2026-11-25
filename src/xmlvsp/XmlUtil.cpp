@@ -305,10 +305,11 @@ xmlNodePtr XmlUtil::AddDoubleNode( xmlNodePtr root, const char * name, double va
 //==== Add String Val With Name To Node ====//
 xmlNodePtr XmlUtil::AddStringNode( xmlNodePtr root, const char * name, const string & val )
 {
-    // User names and paths are raw text, not XML entity expressions.
-    // xmlNodeSetContent interprets '&' and can silently discard model data.
-    return xmlNewTextChild( root, nullptr, ( const xmlChar * )name,
-                            ( const xmlChar * )val.c_str() );
+    xmlNodePtr node = xmlNewChild( root, nullptr, ( const xmlChar * )name, nullptr );
+
+    xmlNodeSetContent( node, ( const xmlChar * )val.c_str() );
+
+    return node;
 }
 
 void XmlUtil::SetIntProp( xmlNodePtr root, const char * name, int val )
