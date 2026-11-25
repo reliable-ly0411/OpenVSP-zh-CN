@@ -63,7 +63,6 @@
 
 #define DEFAULT_SET vsp::SET_TYPE::SET_SHOWN // Default set index
 
-
 //==== Vehicle ====//
 class Vehicle : public ParmContainer
 {
