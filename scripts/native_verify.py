@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test newly built native releases; technical evidence remains in CI artifacts."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -33,6 +34,44 @@ BOUNDARY_MODEL_NAMES = (
     # ParmContainer::SetName removes '/' by default, before any persistence occurs.
     'Wing  Fuselage: Export_100%', '@b@.Wing|Left:Right', 'Wing&Body_1',
 )
+def ubuntu_parity_requested(profile, sha, version, target, arch, machine, os_release):
+    if profile is None:
+        return False
+    if (profile, sha, version, target, arch, machine) != (
+            'ubuntu-24.04-amd64-upstream-3.56.0',
+            '7d4182333d4e9b57b5061d4bc22ef552a33160f4',
+            '3.56.0', 'Ubuntu-24.04_amd64', 'x86_64', 'x86_64') or (
+            os_release.get('ID'), os_release.get('VERSION_ID')) != ('ubuntu', '24.04'):
+        raise ValueError('Parity verification is limited to the sealed native Ubuntu QA candidate')
+    return True
+
+
+def verify_requirements_input(packaged, official=None):
+    if official is None:
+        if 'numpy==1.26.4' not in packaged.decode('utf-8'):
+            raise ValueError('Packaged requirements do not pin the build NumPy ABI')
+        return
+    prefix = b'blob ' + str(len(official)).encode('ascii') + b'\0'
+    if hashlib.sha1(prefix + official).hexdigest() != '2572555874f9fb1aeb913cc08997a3f2e5b5d065':
+        raise ValueError('Wrong official requirements source')
+    if packaged != official:
+        raise ValueError('Packaged requirements differ from stock OpenVSP 3.56.0')
+
+
+BOUNDARY_PARITY_REPLACEMENTS = {'Wing &amp; Body': 'Wing + Body', 'Wing&Body_1': 'Wing-Body_1'}
+
+
+def parity_boundary_fixture(script, scratch):
+    text = script.read_text(encoding='utf-8')
+    for old, new in BOUNDARY_PARITY_REPLACEMENTS.items():
+        if text.count('"' + old + '"') != 1:
+            raise ValueError('Source-bound fixture is not recognized')
+        text = text.replace('"' + old + '"', '"' + new + '"')
+    output = Path(scratch) / script.name
+    output.write_text(text, encoding='utf-8')
+    return output
+
+
 SMOKE_SCRIPTS = {
     'backfill_smoke.as': ('LOCALIZATION_SMOKE_PASS', 'LOCALIZATION_SMOKE_FAIL'),
     'localization_boundary_smoke.as': ('LOCALIZATION_BOUNDARIES_PASS', 'LOCALIZATION_BOUNDARIES_FAIL'),
@@ -216,7 +255,7 @@ def run_functional_smoke(executable, script, scratch, env, diagnostics):
     return result
 
 
-def verify_boundary_output(directory):
+def verify_boundary_output(directory, expected_names=BOUNDARY_MODEL_NAMES):
     model = Path(directory) / BOUNDARY_MODEL_FILENAME
     if not model.is_file() or model.is_symlink():
         raise ValueError('Native model did not preserve the exact Unicode filename')
@@ -225,7 +264,7 @@ def verify_boundary_output(directory):
     except ET.ParseError as error:
         raise ValueError('Native boundary model is not valid XML') from error
     names = [node.text or '' for node in root.findall('Vehicle/Geom/ParmContainer/Name')]
-    if sorted(names) != sorted(BOUNDARY_MODEL_NAMES):
+    if sorted(names) != sorted(expected_names):
         raise ValueError('Persisted model names differ from the boundary smoke contract')
     return dict(unicode_filename='verified', persisted_names=len(names), xml='verified')
 
@@ -281,13 +320,17 @@ def installed_module_directory(module, venv):
     return installed
 
 
-def fresh_requirements(root, version, scratch, env):
+def fresh_requirements(root, version, scratch, env, official=None):
     # Building wheels is allowed to create metadata only in this disposable copy.
     installation = Path(scratch) / 'install-source'
     shutil.copytree(root / 'python', installation)
     requirements = installation / 'requirements.txt'
-    if 'numpy==1.26.4' not in requirements.read_text(encoding='utf-8'):
-        raise ValueError('Packaged requirements do not pin the build NumPy ABI')
+    verify_requirements_input(requirements.read_bytes(), official)
+    if official is not None:
+        env = dict(env)
+        for key in ('PIP_CONSTRAINT', 'PIP_BUILD_CONSTRAINT', 'PIP_REQUIREMENT'):
+            env.pop(key, None)
+        env['PIP_CONFIG_FILE'] = os.devnull
     venv = Path(scratch) / 'runtime-venv'
     subprocess.run([sys.executable, '-m', 'venv', str(venv)], check=True, env=env, timeout=180)
     interpreter = venv / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
@@ -298,7 +341,7 @@ def fresh_requirements(root, version, scratch, env):
             'print(json.dumps(dict(version=openvsp.GetVSPVersion(),numpy=numpy.__version__, '
             'python=sys.version.split()[0],module=openvsp.__file__)))')
     checked = json.loads(run(interpreter, '-c', code, cwd=scratch, env=env).strip().splitlines()[-1])
-    if version not in checked['version'] or checked['numpy'] != '1.26.4':
+    if version not in checked['version'] or (official is None and checked['numpy'] != '1.26.4'):
         raise ValueError('Fresh requirements installation imports the wrong ABI/version')
     installed = installed_module_directory(checked.pop('module'), venv)
     extensions = python_smoke(installed, version, scratch, env, interpreter=interpreter)
@@ -326,6 +369,10 @@ def main():
     mac, windows = sys.platform == 'darwin', os.name == 'nt'
     native_platform, arch = os.environ['BACKFILL_PLATFORM'], os.environ['BACKFILL_ARCH']
     expected_python = os.environ['BACKFILL_PYTHON']
+    profile = os.environ.get('OPENVSP_QA_PARITY_PROFILE')
+    parity = ubuntu_parity_requested(profile, source_sha, version, native_platform, arch, platform.machine(),
+                                     platform.freedesktop_os_release() if profile is not None else {})
+    official = (source / 'src/python_api/packages/requirements.txt').read_bytes() if parity else None
     target = platform_for(version, native_platform)
     if (arch, expected_python) != (target['arch'], target['python']):
         raise ValueError('Build architecture/Python does not match the versioned package target')
@@ -362,12 +409,17 @@ def main():
             if name == FUNCTIONAL_SCRIPT:
                 continue
             script = smoke_script_path(name, source, Path(__file__).parent)
+            if parity and name == 'localization_boundary_smoke.as':
+                script = parity_boundary_fixture(script, scratch)
             run_script_smoke(root / ('vspscript' + suffix), script, scratch, env, diagnostics)
-        boundary_file = verify_boundary_output(scratch)
+        expected = tuple(BOUNDARY_PARITY_REPLACEMENTS.get(name, name) for name in BOUNDARY_MODEL_NAMES)
+        boundary_file = verify_boundary_output(scratch, expected if parity else BOUNDARY_MODEL_NAMES)
+        if parity:
+            boundary_file['xml_entity_cases'] = 'not exercised; official upstream code retained'
         functional = run_functional_smoke(root / ('vspscript' + suffix),
             smoke_script_path(FUNCTIONAL_SCRIPT, source, Path(__file__).parent), scratch, env, diagnostics)
         extensions = python_smoke(root, version, scratch, env)
-        installed = fresh_requirements(root, version, scratch, env)
+        installed = fresh_requirements(root, version, scratch, env, official)
         if not (mac or windows):
             gui = Path(os.environ['GITHUB_WORKSPACE']) / 'gui-input'; gui.mkdir(exist_ok=True)
             shutil.copyfile(scratch / 'localization-smoke.vsp3', gui / 'localization-smoke.vsp3')
