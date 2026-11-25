@@ -14,6 +14,11 @@
 #include "ParmMgr.h"
 #include "ParmContainer.h"
 #include "ScreenMgr.h"
+#include "AdvLinkMgr.h"
+#include "ModeMgr.h"
+#include "VarPresetMgr.h"
+#include "Vehicle.h"
+#include "VehicleMgr.h"
 
 #define MIN_ATTR_EDITOR_PX_HEIGHT 60
 
@@ -194,14 +199,47 @@ void AttributeTree::RebuildTree()
                     {
                         const string owner_id = AttributeMgr.GetObjectParent( id );
                         const int owner_type = AttributeMgr.GetObjectType( owner_id );
-                        if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC ||
+                        bool is_default_collection = false;
+                        if ( ac->GetAttachType() == vsp::ATTROBJ_VEH )
+                        {
+                            Vehicle *owner = VehicleMgr.GetVehicle();
+                            is_default_collection = owner && owner->GetID() == ac->GetAttachID() &&
+                                                    owner->GetAttrCollection() == ac;
+                        }
+                        else if ( ac->GetAttachType() == vsp::ATTROBJ_ADVLINK )
+                        {
+                            AdvLink *owner = AdvLinkMgr.GetLink( AdvLinkMgr.GetLinkIndex( ac->GetAttachID() ) );
+                            is_default_collection = owner && owner->GetName() == ac->GetAttachID() &&
+                                                    owner->GetAttrCollection() == ac;
+                        }
+                        else if ( ac->GetAttachType() == vsp::ATTROBJ_MODE )
+                        {
+                            Mode *owner = ModeMgr.GetMode( ac->GetAttachID() );
+                            is_default_collection = owner && owner->GetID() == ac->GetAttachID() &&
+                                                    owner->GetAttrCollection() == ac;
+                        }
+                        else if ( ac->GetAttachType() == vsp::ATTROBJ_VARGROUP )
+                        {
+                            SettingGroup *owner = VarPresetMgr.FindSettingGroup( ac->GetAttachID() );
+                            is_default_collection = owner && owner->GetID() == ac->GetAttachID() &&
+                                                    owner->GetAttributeCollection() == ac;
+                        }
+                        else if ( ac->GetAttachType() == vsp::ATTROBJ_VARSETTING )
+                        {
+                            Setting *owner = VarPresetMgr.FindSetting( ac->GetAttachID() );
+                            is_default_collection = owner && owner->GetID() == ac->GetAttachID() &&
+                                                    owner->GetAttributeCollection() == ac;
+                        }
+                        else if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC ||
                              owner_type == vsp::ATTROBJ_SEC || owner_type == vsp::ATTROBJ_SUBSURF )
                         {
                             ParmContainer *owner = ParmMgr.FindParmContainer( owner_id );
-                            if ( owner && owner->GetAttrCollection() == ac )
-                            {
-                                row_str = VSPTranslateMessage( "Attributes" );
-                            }
+                            is_default_collection = owner && owner->GetAttrCollection() == ac;
+                        }
+
+                        if ( is_default_collection )
+                        {
+                            row_str = VSPTranslateMessage( "Attributes" );
                         }
                     }
 

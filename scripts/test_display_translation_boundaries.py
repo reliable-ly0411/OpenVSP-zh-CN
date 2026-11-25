@@ -178,17 +178,38 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
     def test_only_actual_default_collections_get_the_fixed_label(self):
         source = (GUI / 'AttributeEditor.cpp').read_text(encoding='utf-8')
         flat = ' '.join(source.split())
-        gate = (
+        gates = (
             'if ( !nvd && ac && id == coll_id && row_str == "Attributes" ) { '
             'const string owner_id = AttributeMgr.GetObjectParent( id ); '
             'const int owner_type = AttributeMgr.GetObjectType( owner_id ); '
-            'if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC || '
+            'bool is_default_collection = false;',
+            'if ( ac->GetAttachType() == vsp::ATTROBJ_VEH ) { '
+            'Vehicle *owner = VehicleMgr.GetVehicle(); '
+            'is_default_collection = owner && owner->GetID() == ac->GetAttachID() && '
+            'owner->GetAttrCollection() == ac; }',
+            'else if ( ac->GetAttachType() == vsp::ATTROBJ_ADVLINK ) { '
+            'AdvLink *owner = AdvLinkMgr.GetLink( AdvLinkMgr.GetLinkIndex( ac->GetAttachID() ) ); '
+            'is_default_collection = owner && owner->GetName() == ac->GetAttachID() && '
+            'owner->GetAttrCollection() == ac; }',
+            'else if ( ac->GetAttachType() == vsp::ATTROBJ_MODE ) { '
+            'Mode *owner = ModeMgr.GetMode( ac->GetAttachID() ); '
+            'is_default_collection = owner && owner->GetID() == ac->GetAttachID() && '
+            'owner->GetAttrCollection() == ac; }',
+            'else if ( ac->GetAttachType() == vsp::ATTROBJ_VARGROUP ) { '
+            'SettingGroup *owner = VarPresetMgr.FindSettingGroup( ac->GetAttachID() ); '
+            'is_default_collection = owner && owner->GetID() == ac->GetAttachID() && '
+            'owner->GetAttributeCollection() == ac; }',
+            'else if ( ac->GetAttachType() == vsp::ATTROBJ_VARSETTING ) { '
+            'Setting *owner = VarPresetMgr.FindSetting( ac->GetAttachID() ); '
+            'is_default_collection = owner && owner->GetID() == ac->GetAttachID() && '
+            'owner->GetAttributeCollection() == ac; }',
+            'else if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC || '
             'owner_type == vsp::ATTROBJ_SEC || owner_type == vsp::ATTROBJ_SUBSURF ) { '
             'ParmContainer *owner = ParmMgr.FindParmContainer( owner_id ); '
-            'if ( owner && owner->GetAttrCollection() == ac ) { '
-            'row_str = VSPTranslateMessage( "Attributes" ); } } }'
+            'is_default_collection = owner && owner->GetAttrCollection() == ac; }',
+            'if ( is_default_collection ) { row_str = VSPTranslateMessage( "Attributes" ); } }',
         )
-        self.assertEqual(flat.count(gate), 1)
+        self.assertEqual(flat.count(' '.join(gates)), 1)
         self.assertEqual(flat.count('VSPTranslateMessage( "Attributes" )'), 1)
 
     def test_user_description_is_opaque_and_builtin_description_remains_translatable(self):
