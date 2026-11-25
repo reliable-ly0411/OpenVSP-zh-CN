@@ -39,7 +39,7 @@ def ubuntu_parity_requested(profile, sha, version, target, arch, machine, os_rel
         return False
     if (profile, sha, version, target, arch, machine) != (
             'ubuntu-24.04-amd64-upstream-3.56.0',
-            'dc8e4648c614a64a47655eb9965050959543bfb5',
+            'de90c33d7149397a415f6c8dd181194df3933c3b',
             '3.56.0', 'Ubuntu-24.04_amd64', 'x86_64', 'x86_64') or (
             os_release.get('ID'), os_release.get('VERSION_ID')) != ('ubuntu', '24.04'):
         raise ValueError('Parity verification is limited to the sealed native Ubuntu QA candidate')
