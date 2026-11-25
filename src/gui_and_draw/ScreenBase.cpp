@@ -116,6 +116,42 @@ std::string VspScreen::getFeedbackGroupName()
     return "";
 }
 
+namespace
+{
+class LocalizedSnapshotTab : public Vsp_Group
+{
+public:
+    LocalizedSnapshotTab( int x, int y, int w, int h, const std::string &title )
+        : Vsp_Group( x, y, w, h ), m_RawTitle( title )
+    {
+        copy_label( VSPTranslate( title ).c_str() );
+    }
+    const std::string &RawTitle() const { return m_RawTitle; }
+
+private:
+    const std::string m_RawTitle;
+};
+
+const char *SnapshotTabCaption( const Fl_Widget *widget )
+{
+    const auto *tab = dynamic_cast< const LocalizedSnapshotTab* >( widget );
+    return tab ? tab->RawTitle().c_str() : widget->label();
+}
+}
+
+static string DumpFileName( const string &title )
+{
+    string name = title;
+    for ( size_t i = 0; i < name.size(); i++ )
+    {
+        if ( !isalnum( ( unsigned char )name[i] ) )
+        {
+            name[i] = '_';
+        }
+    }
+    return name;
+}
+
 // Every tab set in a group, outer ones first
 static void FindTabs( Fl_Group* g, vector< Fl_Tabs* > &tabs )
 {
@@ -194,7 +230,7 @@ void VspScreen::ScreenDump( ScreenDumpLog &log )
                 {
                     if ( dynamic_cast< Fl_Tabs* >( c->parent() ) && c->label() )
                     {
-                        path = string( " " ) + c->label() + path;
+                        path = string( " " ) + SnapshotTabCaption( c ) + path;
                     }
                 }
 
@@ -220,9 +256,7 @@ void VspScreen::ScreenDump( ScreenDumpLog &log )
 // Writes a PNG and an EPS of the window's contents, without the frame the system draws around it
 void VspScreen::DumpWindow( const string &name, ScreenDumpLog &log )
 {
-    // Reserve once before either write, even if one format fails.  Translated
-    // tab labels can otherwise collapse to identical underscore-only suffixes.
-    string fname = log.m_FileNames.Next( name );
+    string fname = DumpFileName( name );
     string base = log.m_Dir + "/" + fname;
     int w = m_FLTK_Window->w();
     int h = m_FLTK_Window->h();
@@ -428,8 +462,7 @@ Fl_Group* TabScreen::MakeTab( const string& title )
     int rx, ry, rw, rh;
     m_MenuTabs->client_area( rx, ry, rw, rh, TAB_H );
 
-    Fl_Group* grp = new Vsp_Group( rx, ry, rw, rh );
-    grp->copy_label( VSPTranslate( title ).c_str() );
+    Fl_Group* grp = new LocalizedSnapshotTab( rx, ry, rw, rh, title );
     grp->selection_color( FL_GRAY );
     grp->labelfont( 1 );
     grp->labelcolor( FL_BLACK );
@@ -5453,8 +5486,7 @@ SkinScreen::SkinScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     int sgw = sw - 2 * sborder;
     int sgh = sh - 2 * sborder;
 
-    Fl_Group* sides_grp = new Vsp_Group( sx, sy, sw, sh );
-    sides_grp->copy_label( VSPTranslate( "Sides" ).c_str() );
+    Fl_Group* sides_grp = new LocalizedSnapshotTab( sx, sy, sw, sh, "Sides" );
     sides_grp->selection_color( FL_GRAY );
     sides_grp->labelfont( 1 );
     sides_grp->labelcolor( FL_BLACK );
@@ -5463,8 +5495,7 @@ SkinScreen::SkinScreen( ScreenMgr* mgr, int w, int h, const string & title, cons
     Fl_Group* sides_sub = new Fl_Group( sgx, sgy, sgw, sgh );
     sides_grp->add( sides_sub );
 
-    Fl_Group* spine_grp = new Vsp_Group( sx, sy, sw, sh );
-    spine_grp->copy_label( VSPTranslate( "Spines" ).c_str() );
+    Fl_Group* spine_grp = new LocalizedSnapshotTab( sx, sy, sw, sh, "Spines" );
     spine_grp->selection_color( FL_GRAY );
     spine_grp->labelfont( 1 );
     spine_grp->labelcolor( FL_BLACK );

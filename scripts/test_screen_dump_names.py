@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Execute dump naming and the real PNG/EPS write/manifest method with doubles.
 
-The production ScreenDumpNames header, ScreenDumpLog definition and DumpWindow
+The production DumpFileName, ScreenDumpLog definition and DumpWindow
 body are compiled unchanged. Small image/window/file doubles make the result
 observable without FLTK, a display, or a native OpenVSP build. Written files are
 test markers, not screenshots; this is not graphical acceptance evidence.
@@ -42,7 +42,9 @@ class ScreenDumpNameTests(unittest.TestCase):
                          'struct ScreenDumpLog', struct=True)
         dump = definition((GUI / 'ScreenBase.cpp').read_text(encoding='utf-8'),
                           'void VspScreen::DumpWindow(')
-        driver = r'''#include "ScreenDumpNames.h"
+        naming = definition((GUI / 'ScreenBase.cpp').read_text(encoding='utf-8'),
+                            'static string DumpFileName(')
+        driver = r'''#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <iostream>
@@ -84,7 +86,7 @@ struct Fl_EPS_File_Surface {
     int close() { return std::fclose(out); }
 };
 '''
-        driver += log + r'''
+        driver += naming + '\n' + log + r'''
 struct VspScreen {
     TestWindow window;
     TestWindow* m_FLTK_Window = &window;
@@ -98,15 +100,8 @@ int main(int argc, char** argv) {
     ScreenDumpLog log;
     if (mode == "names") {
         for (int i = 3; i < argc; ++i) {
-            std::cout << "NAME\t" << log.m_FileNames.Next(argv[i]) << "\n";
+            std::cout << "NAME\t" << DumpFileName(argv[i]) << "\n";
         }
-        return 0;
-    }
-    if (mode == "reset") {
-        log.m_FileNames.Next("Wing 常规");
-        log.m_FileNames.Next("Wing 变换");
-        log = ScreenDumpLog();
-        std::cout << "NAME\t" << log.m_FileNames.Next("Wing 质量") << "\n";
         return 0;
     }
     log.m_Dir = argv[2];
@@ -145,55 +140,22 @@ int main(int argc, char** argv) {
         self.assertEqual(self.names('Wing Gen', 'Wing XForm', 'Wing Mass', 'A0-B_2'),
                          ['Wing_Gen', 'Wing_XForm', 'Wing_Mass', 'A0_B_2'])
 
-    def test_same_length_chinese_labels_do_not_collide(self):
-        self.assertEqual(self.names('Wing 常规', 'Wing 变换', 'Wing 质量'),
-                         ['Wing_______', 'Wing________2', 'Wing________3'])
+    def test_original_case_and_collisions_are_preserved(self):
+        self.assertEqual(self.names('Wing Gen', 'wing gen', 'A/B', 'A B', 'A_2'),
+                         ['Wing_Gen', 'wing_gen', 'A_B', 'A_B', 'A_2'])
 
-    def test_punctuation_and_repeated_titles_are_disambiguated(self):
-        self.assertEqual(self.names('A B', 'A/B', 'A_B', 'A B'),
-                         ['A_B', 'A_B_2', 'A_B_3', 'A_B_4'])
-
-    def test_nested_tab_paths_and_duplicate_flattened_paths_are_unique(self):
-        self.assertEqual(self.names('Wing 常规 高级', 'Wing 变换 网格',
-                                    'Wing A B', 'Wing A B'),
-                         ['Wing______________', 'Wing_______________2',
-                          'Wing_A_B', 'Wing_A_B_2'])
-
-    def test_case_only_collisions_are_safe_on_windows(self):
-        self.assertEqual(self.names('Wing Gen', 'wing gen', 'WING GEN'),
-                         ['Wing_Gen', 'wing_gen_2', 'WING_GEN_3'])
-
-    def test_preexisting_numeric_suffix_is_reserved(self):
-        self.assertEqual(self.names('A_2', 'A', 'A', 'a_3', 'a'),
-                         ['A_2', 'A', 'A_3', 'a_3_2', 'a_4'])
-
-    def test_later_natural_suffix_cannot_overwrite_allocated_suffix(self):
-        self.assertEqual(self.names('A', 'A', 'A_2', 'a_2'),
-                         ['A', 'A_2', 'A_2_2', 'a_2_3'])
-
-    def test_non_ascii_bytes_and_path_separators_remain_ascii(self):
-        names = self.names('Wing ψ', 'Wing β', 'Wing é', 'Wing 中文',
-                           'Wing 🛩', r'Wing ../x\y:z')
-        self.assertEqual(len(names), len(set(name.lower() for name in names)))
-        for name in names:
-            self.assertRegex(name, r'\A[A-Za-z0-9_]+\Z')
-
-    def test_large_batch_is_unique_and_deterministic(self):
-        titles = ['Wing 常规', 'Wing 变换', 'wing 质量', 'Wing_______2'] * 100
-        first = self.names(*titles)
-        self.assertEqual(len(first), 400)
-        self.assertEqual(len({name.lower() for name in first}), 400)
-        self.assertEqual(first, self.names(*titles))
-
-    def test_reset_restores_first_name_for_a_new_batch(self):
-        self.assertEqual(self.run_fixture('reset', self.root), ['NAME\tWing_______'])
+    def test_actual_duplicate_writes_use_same_upstream_basename(self):
+        with tempfile.TemporaryDirectory(dir=self.root) as directory:
+            self.run_fixture('dump', directory, 'Wing Gen', 'Wing/Gen')
+            self.assertEqual((Path(directory) / 'Wing_Gen.png').read_text(), 'png fixture 1\n')
+            self.assertEqual((Path(directory) / 'Wing_Gen.eps').read_text(), 'eps fixture 1\n')
 
     def assert_dump(self, mode, missing):
         with tempfile.TemporaryDirectory(dir=self.root) as directory:
-            lines = self.run_fixture(mode, directory, 'Wing 常规', 'Wing 变换', 'Wing 质量')
+            lines = self.run_fixture(mode, directory, 'Wing Gen', 'Wing XForm', 'Wing Mass')
             entries = [line.split('\t')[1:] for line in lines if line.startswith('FILE\t')]
             self.assertIn(f'FAILED\t{len(missing)}', lines)
-            stems = ['Wing_______', 'Wing________2', 'Wing________3']
+            stems = ['Wing_Gen', 'Wing_XForm', 'Wing_Mass']
             expected = {f'{stem}.{ext}': f'{ext} fixture {i}\n'
                         for i, stem in enumerate(stems) for ext in ('png', 'eps')
                         if (i, ext) not in missing}
@@ -207,13 +169,13 @@ int main(int argc, char** argv) {
     def test_real_writer_pairs_formats_and_manifest_without_overwrites(self):
         self.assert_dump('dump', set())
 
-    def test_failed_png_does_not_release_the_shared_basename(self):
+    def test_failed_png_preserves_other_exports(self):
         self.assert_dump('png-fail', {(0, 'png')})
 
-    def test_failed_eps_does_not_release_the_shared_basename(self):
+    def test_failed_eps_preserves_other_exports(self):
         self.assert_dump('eps-fail', {(0, 'eps')})
 
-    def test_both_failed_formats_still_reserve_the_basename(self):
+    def test_both_failed_formats_preserve_other_exports(self):
         self.assert_dump('both-fail', {(0, 'png'), (0, 'eps')})
 
 
@@ -228,6 +190,11 @@ class ScreenDumpNameSourceTests(unittest.TestCase):
         base = strip_comments((GUI / 'ScreenBase.cpp').read_text(encoding='utf-8'))
         screen = definition(base, 'void VspScreen::ScreenDump(')
         self.assertRegex(screen, r'DumpWindow\(\s*GetDumpName\(\)\s*\+\s*path,\s*log\s*\)')
+        self.assertIn('SnapshotTabCaption( c )', screen)
+        self.assertIn('const std::string m_RawTitle;', base)
+        self.assertIn('copy_label( VSPTranslate( title ).c_str() );', base)
+        self.assertIn('return tab ? tab->RawTitle().c_str() : widget->label();', base)
+        self.assertEqual(base.count('new LocalizedSnapshotTab('), 3)
         self.assertNotIn('ScreenDumpNames', screen)
         self.assertNotIn('m_FileNames', screen)
 
