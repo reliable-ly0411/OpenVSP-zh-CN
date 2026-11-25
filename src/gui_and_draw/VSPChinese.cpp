@@ -2146,6 +2146,24 @@ std::string VSPTranslateMessage( const std::string &text )
     return found == exact.end() ? text : found->second;
 }
 
+std::string VSPTranslateSplitStitchReason( const std::string &reason )
+{
+    if ( reason == "No surfaces to export" ) return "没有可导出的曲面";
+    if ( reason == "Surface Intersection is running" ) return "正在进行曲面求交";
+    return reason;
+}
+
+std::string VSPTranslateGeometrySetOverlapWarning( const std::string &message, bool is_overlap_warning )
+{
+    static const std::string prefix = "Warning: In both the thick and the thin geometry set, so meshed twice: ";
+    if ( is_overlap_warning && message.size() > prefix.size() && message.compare( 0, prefix.size(), prefix ) == 0 )
+    {
+        return "警告：以下几何体同时属于厚曲面集合和薄曲面集合，因此被划分网格两次：" +
+               message.substr( prefix.size() );
+    }
+    return message;
+}
+
 std::string VSPTranslateResultType( const std::string &type )
 {
     static const std::unordered_map<std::string, std::string> labels = {

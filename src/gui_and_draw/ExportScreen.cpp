@@ -324,8 +324,9 @@ void ExportScreen::ExportFile( string &newfile, int write_set, int degen_set, in
                                                                      useMode, modeID );
             if ( !err.empty() )
             {
-                // Translate the fixed printf template before inserting opaque error/path values.
-                fl_alert( VSPTranslateMessage( "%s, %s not written" ).c_str(), err.c_str(), newfile.c_str() );
+                // The two known reasons and the format are UI text; the destination is opaque.
+                const string display_err = VSPTranslateSplitStitchReason( err );
+                fl_alert( VSPTranslateMessage( "%s, %s not written" ).c_str(), display_err.c_str(), newfile.c_str() );
             }
         }
         else

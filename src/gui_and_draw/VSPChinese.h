@@ -12,6 +12,12 @@ std::string VSPTranslate( const char *text );
 // Unknown messages remain byte-for-byte unchanged; never translate embedded values.
 std::string VSPTranslateMessage( const std::string &text );
 
+// Translate only the built-in Split/Stitch export failure reasons at the alert boundary.
+std::string VSPTranslateSplitStitchReason( const std::string &reason );
+
+// Translate the fixed VSPAERO geometry overlap warning prefix, preserving the raw names.
+std::string VSPTranslateGeometrySetOverlapWarning( const std::string &message, bool is_overlap_warning );
+
 // Translate fixed Results Viewer type names, not the result key, type schema, or value.
 std::string VSPTranslateResultType( const std::string &type );
 

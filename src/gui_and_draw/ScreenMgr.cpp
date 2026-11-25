@@ -284,7 +284,11 @@ void ScreenMgr::MessageCallback( const MessageBase* from, const MessageData& dat
             message.append( data.m_StringVec[i] );
         }
 
-        const string translated_message = VSPTranslateMessage( message );
+        const bool geometry_set_overlap =
+            data.m_IntVec.size() == 1 && data.m_IntVec.front() == vsp::VSP_GEOM_IN_BOTH_SETS &&
+            data.m_StringVec.size() == 1;
+        const string translated_message = VSPTranslateMessage(
+            VSPTranslateGeometrySetOverlapWarning( message, geometry_set_overlap ) );
         const char* msg = translated_message.c_str();
         fl_message( "%s", ( char* )msg );
     }
