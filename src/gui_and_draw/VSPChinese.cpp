@@ -2332,6 +2332,13 @@ std::string VSPTranslateTrimmedSurfaceLog( const std::string &text )
     return title + std::string( 17 - cells, ' ' ) + text.substr( bar );
 }
 
+std::string VSPTranslateFuselageStackLabel( const std::string &text )
+{
+    if ( text == "Tip Treatment" ) return "端盖处理";
+    if ( text == "Sect Alias" ) return "截面别名";
+    return text;
+}
+
 std::string VSPTranslateCompactWingLabel( const std::string &text )
 {
     // These control buttons are only 50–75 px wide.

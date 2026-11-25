@@ -5426,7 +5426,7 @@ Fl_Color DrawObjKeyColor( int drawobjcolor )
 }
 
 SkinScreen::SkinScreen( ScreenMgr* mgr, int w, int h, const string & title, const string & helpfile ) :
-    XSecScreen( mgr, w, h, title, helpfile, "Sect Alias", "Curve Alias" ) // do not combine xs and xsc
+    XSecScreen( mgr, w, h, title, helpfile, VSPTranslateFuselageStackLabel( "Sect Alias" ), "Curve Alias" ) // do not combine xs and xsc
 {
     const char* angleFmt = "%5.2f";
     const char* strengthFmt = "%5.2f";

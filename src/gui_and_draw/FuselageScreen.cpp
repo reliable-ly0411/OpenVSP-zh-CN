@@ -39,7 +39,7 @@ FuselageScreen::FuselageScreen( ScreenMgr* mgr ) : ChevronScreen( mgr, 460, 800,
     m_DesignLayout.AddChoice( m_DesignPolicyChoice, "XSec Order: " );
 
     m_DesignLayout.AddYGap();
-    m_DesignLayout.AddDividerBox( "Tip Treatment" );
+    m_DesignLayout.AddDividerBoxRaw( VSPTranslateFuselageStackLabel( "Tip Treatment" ) );
 
     m_NoseCapTypeChoice.AddItem( "None", vsp::NO_END_CAP );
     m_NoseCapTypeChoice.AddItem( "Flat End Cap", vsp::FLAT_END_CAP );

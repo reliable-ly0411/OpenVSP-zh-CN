@@ -33,6 +33,9 @@ std::string VSPTranslateLabelAndValue( const std::string &label, const std::stri
 // Translate a static label in a compact table header without changing its general translation.
 std::string VSPTranslateCompactTableHeader( const std::string &text );
 
+// Translate fixed captions shared by the Fuselage and Stack editors.
+std::string VSPTranslateFuselageStackLabel( const std::string &text );
+
 // Translate static labels in narrow airfoil/wing-section controls.
 std::string VSPTranslateCompactWingLabel( const std::string &text );
 

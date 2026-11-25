@@ -279,7 +279,7 @@ StructAssemblyScreen::StructAssemblyScreen( ScreenMgr* mgr ) : TabScreen( mgr, 5
     m_FemTabLayout.AddButton( m_DrawMeshButton, "Draw Mesh" );
     m_FemTabLayout.AddButton( m_ColorElementsButton, "Color Elements" );
     m_FemTabLayout.AddButton( m_ColorByTag, "By Tag" );
-    m_FemTabLayout.AddButton( m_ColorByReason, "By Reason" );
+    m_FemTabLayout.AddButton( m_ColorByReason, "约束依据" );
     m_FemTabLayout.ForceNewLine();
 
     m_FemTabLayout.SetFitWidthFlag( true );
