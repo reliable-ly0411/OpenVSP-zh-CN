@@ -754,7 +754,7 @@ void CfdMeshScreen::CreateDomainTab()
 
     m_FarBoxLayout.SetButtonWidth(60.0);
     m_FarBoxLayout.AddButton(m_DomainCen, "Cen");
-    m_FarBoxLayout.AddButton(m_DomainMan, "Man");
+    m_FarBoxLayout.AddButton(m_DomainMan, "Manual");
     m_DomainCen.GetFlButton()->value( 1 );
 
     m_FarBoxLayout.ForceNewLine();
