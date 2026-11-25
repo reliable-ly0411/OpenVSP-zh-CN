@@ -41,6 +41,7 @@ std::string LocalizedAttributeType( int type )
     case vsp::VEC3D_DATA: return "三维向量";
     case vsp::INT_MATRIX_DATA: return "整数矩阵";
     case vsp::DOUBLE_MATRIX_DATA: return "双精度矩阵";
+    case vsp::ATTR_COLLECTION_DATA: return "属性组";
     default: return std::string();
     }
 }
