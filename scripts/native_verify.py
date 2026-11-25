@@ -320,6 +320,34 @@ def installed_module_directory(module, venv):
     return installed
 
 
+
+def fresh_import_diagnostic(output):
+    """Return fixed diagnostic tokens only; never include child text."""
+    if not isinstance(output, str):
+        return []
+    hints = (
+        ('A module that was compiled using NumPy 1.x', 'numpy-1x-build-warning'),
+        ('_ARRAY_API not found', 'numpy-array-api-missing'),
+        ('numpy.core.multiarray failed to import', 'numpy-multiarray-import-failed'),
+        ('numpy.dtype size changed', 'numpy-dtype-size-mismatch'),
+        ('cannot open shared object file', 'shared-library-open-failed'),
+        ('undefined symbol:', 'undefined-native-symbol'),
+        ('No module named ', 'python-module-missing'),
+        ('wrong ELF class', 'elf-class-mismatch'),
+    )
+    result = [label for needle, label in hints if needle in output]
+    kinds = ('ImportError', 'ModuleNotFoundError', 'AttributeError', 'OSError',
+             'RuntimeError', 'SystemError', 'ValueError')
+    terminal = None
+    for line in output.splitlines():
+        line = line.strip()
+        matches = (kind for kind in kinds if line.startswith(kind + ':'))
+        terminal = next(matches, terminal)
+    if terminal is not None:
+        result.append('exception:' + terminal)
+    return result
+
+
 def fresh_requirements(root, version, scratch, env, official=None):
     # Building wheels is allowed to create metadata only in this disposable copy.
     installation = Path(scratch) / 'install-source'
@@ -340,7 +368,14 @@ def fresh_requirements(root, version, scratch, env, official=None):
     code = ('import json,numpy,openvsp,sys; '
             'print(json.dumps(dict(version=openvsp.GetVSPVersion(),numpy=numpy.__version__, '
             'python=sys.version.split()[0],module=openvsp.__file__)))')
-    checked = json.loads(run(interpreter, '-c', code, cwd=scratch, env=env).strip().splitlines()[-1])
+    try:
+        checked = json.loads(run(interpreter, '-c', code, cwd=scratch, env=env).strip().splitlines()[-1])
+    except subprocess.CalledProcessError as error:
+        if official is not None:
+            lines = fresh_import_diagnostic(error.output)
+            print('Fresh stock Python import failed (sanitized): '
+                  + json.dumps(lines or ['No terminal exception line captured']), flush=True)
+        raise
     if version not in checked['version'] or (official is None and checked['numpy'] != '1.26.4'):
         raise ValueError('Fresh requirements installation imports the wrong ABI/version')
     installed = installed_module_directory(checked.pop('module'), venv)
