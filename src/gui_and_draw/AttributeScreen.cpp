@@ -14,6 +14,7 @@
 #include "AttributeManager.h"
 #include "LinkMgr.h"
 #include "ParmMgr.h"
+#include "Vehicle.h"
 #include "VehicleMgr.h"
 #include "ManageGeomScreen.h"
 #include "AdvLinkScreen.h"
@@ -550,6 +551,12 @@ void AttributeExplorer::UpdateAttrFields()
             attrDataStr = attr_ptr->GetString( 0 );
 
             attrDescStr = attr_ptr->GetDoc();
+            // Localize only the protected built-in default; keep authored docs and stored data raw.
+            if ( attr_ptr->IsProtected() && attr_ptr->GetID() == ATTR_VEH_NOTES &&
+                 attrDescStr == "Vehicle level notes for users" )
+            {
+                attrDescStr = "用于记录整机备注。";
+            }
 
             // check for row/col naming attributes
             if ( attr_type == vsp::VEC3D_DATA

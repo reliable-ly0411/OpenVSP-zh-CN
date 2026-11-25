@@ -669,7 +669,7 @@ PropScreen::PropScreen( ScreenMgr* mgr ) : XSecScreen( mgr, 510, 800, "Propeller
     m_MoreLayout.AddOutput(m_SmallPanelWOutput, "Minimum LE/TE Panel Width", "%6.4g" );
     m_MoreLayout.AddOutput(m_MaxGrowthOutput, "Maximum Growth Ratio", "%6.3f" );
 
-    m_SubSurfChoice.AddItem( SubSurface::GetTypeName( vsp::SS_CONTROL ), vsp::SS_CONTROL );
+    m_SubSurfChoice.AddItem( VSPTranslateSubsurfaceType( SubSurface::GetTypeName( vsp::SS_CONTROL ) ), vsp::SS_CONTROL );
     m_SubSurfChoice.UpdateItems();
 }
 
