@@ -63,7 +63,6 @@
 
 #define DEFAULT_SET vsp::SET_TYPE::SET_SHOWN // Default set index
 
-struct DegenGeomWriteReport;
 
 //==== Vehicle ====//
 class Vehicle : public ParmContainer
@@ -354,7 +353,6 @@ public:
     void CreateDegenGeom( int set, bool useMode, const string &modeID );
     vector< DegenGeom > GetDegenGeomVec()    { return m_DegenGeomVec; }
     string WriteDegenGeomFile();
-    string WriteDegenGeomFile( DegenGeomWriteReport *report );
     void ClearDegenGeom()   { m_DegenGeomVec.clear(); }
     string CreateDegenGeomMesh( int set );
 

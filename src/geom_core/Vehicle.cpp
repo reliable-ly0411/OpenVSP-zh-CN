@@ -21,7 +21,6 @@
 #include <filesystem>
 
 #include "Vehicle.h"
-#include "DegenGeomWriteReport.h"
 
 #include "AdvLinkMgr.h"
 #include "AeroStructMgr.h"
@@ -3905,7 +3904,7 @@ string Vehicle::WriteSTLFile( const string & file_name, int write_set, int subsF
     }
 
     // Open File
-    FILE* fid = FOpenUTF8( file_name.c_str(), "w" );
+    FILE* fid = fopen( file_name.c_str(), "w" );
     if ( !fid )
     {
         return mesh_id;
@@ -3985,7 +3984,7 @@ string Vehicle::WriteTaggedMSSTLFile( const string & file_name, int write_set, i
         }
     }
 
-    FILE* file_id = FOpenUTF8( file_name.c_str(), "w" );
+    FILE* file_id = fopen( file_name.c_str(), "w" );
     if ( file_id )
     {
         std::vector< int > tags = SubSurfaceMgr.GetAllTags();
@@ -8481,22 +8480,12 @@ void Vehicle::CreateDegenGeom( int set, bool useMode, const string &modeID )
 //==== Write Degen Geom File ====//
 string Vehicle::WriteDegenGeomFile()
 {
-    return WriteDegenGeomFile( nullptr );
-}
-
-string Vehicle::WriteDegenGeomFile( DegenGeomWriteReport *report )
-{
     int geomCnt = 0, blankCnt = 0;
     string outStr = "\n";
 
     geomCnt = m_DegenGeomVec.size();
 
     blankCnt = m_DegenPtMassVec.size();
-
-    if ( report )
-    {
-        *report = { geomCnt, blankCnt, {} };
-    }
 
     char geomCntStr[255];
     snprintf( geomCntStr, sizeof( geomCntStr ), "%d components and %d", geomCnt, blankCnt);
@@ -8511,10 +8500,6 @@ string Vehicle::WriteDegenGeomFile( DegenGeomWriteReport *report )
 
         if ( !file_id ) // Check if the file was successfully opened
         {
-            if ( report )
-            {
-                report->files.push_back( { file_name, DegenGeomWriteState::OpenFailed } );
-            }
             outStr += "\tFAILED TO OPEN: ";
             outStr += file_name;
             outStr += "\n";
@@ -8546,13 +8531,7 @@ string Vehicle::WriteDegenGeomFile( DegenGeomWriteReport *report )
                 m_DegenGeomVec[i].write_degenGeomCsv_file( file_id );
             }
 
-            const bool stream_ok = !report || !ferror( file_id );
-            const int close_result = fclose( file_id );
-            if ( report )
-            {
-                report->files.push_back( { file_name, stream_ok && close_result == 0
-                    ? DegenGeomWriteState::Written : DegenGeomWriteState::WriteFailed } );
-            }
+            fclose(file_id);
 
             outStr += "\t";
             outStr += file_name;
@@ -8566,10 +8545,6 @@ string Vehicle::WriteDegenGeomFile( DegenGeomWriteReport *report )
         FILE* file_id = fopen(file_name.c_str(), "w");
         if ( !file_id )
         {
-            if ( report )
-            {
-                report->files.push_back( { file_name, DegenGeomWriteState::OpenFailed } );
-            }
             outStr += "\tFAILED TO OPEN: ";
             outStr += file_name;
             outStr += "\n";
@@ -8605,13 +8580,7 @@ string Vehicle::WriteDegenGeomFile( DegenGeomWriteReport *report )
                 m_DegenGeomVec[i].write_degenGeomM_file(file_id);
             }
 
-            const bool stream_ok = !report || !ferror( file_id );
-            const int close_result = fclose( file_id );
-            if ( report )
-            {
-                report->files.push_back( { file_name, stream_ok && close_result == 0
-                    ? DegenGeomWriteState::Written : DegenGeomWriteState::WriteFailed } );
-            }
+            fclose(file_id);
 
             outStr += "\t";
             outStr += file_name;

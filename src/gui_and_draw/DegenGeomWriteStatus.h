@@ -4,24 +4,61 @@
 #ifndef DEGEN_GEOM_WRITE_STATUS_H
 #define DEGEN_GEOM_WRITE_STATUS_H
 
-#include "DegenGeomWriteReport.h"
 #include "VSPChinese.h"
+#include <string>
+#include <vector>
 
-inline std::string FormatDegenGeomWriteStatus( const DegenGeomWriteReport &report )
+// Localize only the fixed grammar in the existing writer report. Copy each
+// configured path exactly, even if it contains report-like text or newlines.
+inline std::string FormatDegenGeomWriteStatus( const std::string &raw, const std::vector<std::string> &paths )
 {
-    std::string output = "\n" + VSPTranslateMessage( "Wrote " ) + std::to_string( report.components )
-        + VSPTranslateMessage( " components and " ) + std::to_string( report.blank_geometries )
-        + VSPTranslateMessage( " blank geoms\nto the following files:" ) + "\n\n";
-    for ( const auto &entry : report.files )
+    std::size_t pos = 0;
+    auto take = [&]( const std::string &text )
     {
-        output += "\t";
-        if ( entry.state == DegenGeomWriteState::OpenFailed )
-            output += VSPTranslateMessage( "FAILED TO OPEN: " );
-        else if ( entry.state == DegenGeomWriteState::WriteFailed )
-            output += VSPTranslateMessage( "FAILED TO WRITE: " );
-        output += entry.path;
-        output += "\n";
+        if ( raw.compare( pos, text.size(), text ) != 0 )
+        {
+            return false;
+        }
+        pos += text.size();
+        return true;
+    };
+    auto count = [&]()
+    {
+        const std::size_t start = pos;
+        if ( pos < raw.size() && raw[pos] == '-' )
+            ++pos;
+        const std::size_t digits = pos;
+        while ( pos < raw.size() && raw[pos] >= '0' && raw[pos] <= '9' )
+            ++pos;
+        return pos == digits ? std::string() : raw.substr( start, pos - start );
+    };
+    if ( !take( "\nWrote " ) )
+        return raw;
+    const std::string components = count();
+    if ( components.empty() || !take( " components and " ) )
+        return raw;
+    const std::string blanks = count();
+    if ( blanks.empty() || !take( " blank geoms\nto the following files:\n\n" ) )
+        return raw;
+
+    std::string display = "\n" + VSPTranslateMessage( "Wrote " ) + components
+        + VSPTranslateMessage( " components and " ) + blanks
+        + VSPTranslateMessage( " blank geoms\nto the following files:" ) + "\n\n";
+    for ( const auto &path : paths )
+    {
+        if ( !take( "\t" ) )
+            return raw;
+        display += "\t";
+        if ( !take( path + "\n" ) )
+        {
+            if ( !take( "FAILED TO OPEN: " ) || !take( path + "\n" ) )
+                return raw;
+            display += VSPTranslateMessage( "FAILED TO OPEN: " );
+        }
+        display += path;
+        display += "\n";
     }
-    return output;
+    return pos == raw.size() ? display : raw;
 }
+
 #endif

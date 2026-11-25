@@ -257,9 +257,13 @@ void DegenGeomScreen::GuiDeviceCallBack( GuiDevice* device )
             m_TextDisplay->buffer()->append( ("\n" + VSPTranslateMessage( "Writing output..." ) + "\n").c_str() );
             Fl::flush();
 
-            DegenGeomWriteReport report;
-            vehiclePtr->WriteDegenGeomFile( &report );
-            m_TextDisplay->buffer()->append( FormatDegenGeomWriteStatus( report ).c_str() );
+            std::vector<std::string> paths;
+            if ( vehiclePtr->getExportDegenGeomCsvFile() )
+                paths.push_back( vehiclePtr->getExportFileName( vsp::DEGEN_GEOM_CSV_TYPE ) );
+            if ( vehiclePtr->getExportDegenGeomMFile() )
+                paths.push_back( vehiclePtr->getExportFileName( vsp::DEGEN_GEOM_M_TYPE ) );
+            const std::string report = vehiclePtr->WriteDegenGeomFile();
+            m_TextDisplay->buffer()->append( FormatDegenGeomWriteStatus( report, paths ).c_str() );
         }
     }
     else if ( device == & m_MakeDegenMeshGeom )
