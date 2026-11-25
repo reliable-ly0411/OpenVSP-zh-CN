@@ -32,7 +32,7 @@ setup(
         'pypubsub',
         'vtk >= 8.1.2',
         'wxpython >= 4.0.4',
-        'numpy>=1.26.4,<2',
+        'numpy >= 1.9.1',
     ],
     description='M4 demonstration application for Navy',
 )
