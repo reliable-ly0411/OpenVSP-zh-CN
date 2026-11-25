@@ -7564,23 +7564,23 @@ bool FeaXSecScreen::Update()
 
     if ( xsec_type == vsp::FEA_XSEC_CIRC )
     {
-        fileName += "VSPCircXSec.PNG";
+        fileName += "VSPCircXSec.png";
     }
     else if ( xsec_type == vsp::FEA_XSEC_PIPE )
     {
-        fileName += "VSPPipeXSec.PNG";
+        fileName += "VSPPipeXSec.png";
     }
     else if ( xsec_type == vsp::FEA_XSEC_I )
     {
-        fileName += "VSPIXSec.PNG";
+        fileName += "VSPIXSec.png";
     }
     else if ( xsec_type == vsp::FEA_XSEC_RECT )
     {
-        fileName += "VSPRectXSec.PNG";
+        fileName += "VSPRectXSec.png";
     }
     else if ( xsec_type == vsp::FEA_XSEC_BOX )
     {
-        fileName += "VSPBoxXSec.PNG";
+        fileName += "VSPBoxXSec.png";
     }
     else
     {

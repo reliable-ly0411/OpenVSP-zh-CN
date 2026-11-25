@@ -36,12 +36,10 @@ ManageMeasureScreen::ManageMeasureScreen( ScreenMgr * mgr ) : TabScreen( mgr, 90
     m_RulerLengthUnitChoice.AddItem( "yd" );
     m_RulerLengthUnitChoice.AddItem( "Unitless" );
 
-    // FLTK aligns the current unit with the choice row. Keep that row below
-    // the object list so choices above it remain visible near the screen top.
+    m_RulerLayout.AddChoice( m_RulerLengthUnitChoice, "Length Unit" );
+
     m_RulerBrowser = m_RulerLayout.AddVspBrowser( 75 );
     m_RulerBrowser->Init( this, m_RulerLayout.GetGroup() );
-
-    m_RulerLayout.AddChoice( m_RulerLengthUnitChoice, "Length Unit" );
 
     m_RulerLayout.AddYGap();
 
@@ -160,10 +158,10 @@ ManageMeasureScreen::ManageMeasureScreen( ScreenMgr * mgr ) : TabScreen( mgr, 90
     m_ProbeLengthUnitChoice.AddItem( "yd" );
     m_ProbeLengthUnitChoice.AddItem( "Unitless" );
 
+    m_ProbeLayout.AddChoice( m_ProbeLengthUnitChoice, "Length Unit" );
+
     m_ProbeBrowser = m_ProbeLayout.AddVspBrowser( 75 );
     m_ProbeBrowser->Init( this, m_ProbeLayout.GetGroup() );
-
-    m_ProbeLayout.AddChoice( m_ProbeLengthUnitChoice, "Length Unit" );
 
     m_ProbeLayout.AddYGap();
 
@@ -270,10 +268,10 @@ ManageMeasureScreen::ManageMeasureScreen( ScreenMgr * mgr ) : TabScreen( mgr, 90
     m_RSTProbeLengthUnitChoice.AddItem( "yd" );
     m_RSTProbeLengthUnitChoice.AddItem( "Unitless" );
 
+    m_RSTProbeLayout.AddChoice( m_RSTProbeLengthUnitChoice, "Length Unit" );
+
     m_RSTProbeBrowser = m_RSTProbeLayout.AddVspBrowser( 75 );
     m_RSTProbeBrowser->Init( this, m_RSTProbeLayout.GetGroup() );
-
-    m_RSTProbeLayout.AddChoice( m_RSTProbeLengthUnitChoice, "Length Unit" );
 
     m_RSTProbeLayout.AddYGap();
 
