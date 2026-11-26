@@ -17,7 +17,7 @@ jobs:
       BACKFILL_VERSION: '3.56.0'
       BACKFILL_TAG: '3.56.0-zh-CN.rc.40'
       BACKFILL_SHA: abd763fe3dfce1b5fd43dd09ae5bb31d4ea19930
-      VALIDATED_TOOLING_SHA: 096380696e4e442d3272688f4990ccb1f1784b96
+      VALIDATED_TOOLING_SHA: a0d4caae37c1b2e42cf7186d2a60db34a3d22531
       BACKFILL_PLATFORM: Ubuntu-24.04_amd64
       BACKFILL_ARCH: x86_64
       BACKFILL_LLVM: ''
@@ -36,7 +36,7 @@ jobs:
         with:
           ref: ${{ env.VALIDATED_TOOLING_SHA }}
           path: tooling
-          fetch-depth: 28
+          fetch-depth: 29
           persist-credentials: false
       - name: Checkout untouched historical 3.56 packaging tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
