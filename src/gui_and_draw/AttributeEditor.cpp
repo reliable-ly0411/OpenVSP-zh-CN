@@ -27,6 +27,22 @@
 
 namespace
 {
+bool IsPresetSettingsMarkerChild( const string &group_id, const string &setting_id, const string &collection_id )
+{
+    if ( AttributeMgr.GetObjectType( group_id ) != vsp::ATTROBJ_VARGROUP ||
+         AttributeMgr.GetObjectType( setting_id ) != vsp::ATTROBJ_VARSETTING )
+    {
+        return false;
+    }
+    SettingGroup *group = VarPresetMgr.FindSettingGroup( group_id );
+    Setting *setting = VarPresetMgr.FindSetting( setting_id );
+    AttributeCollection *collection = AttributeMgr.GetCollectionPtr( collection_id );
+    return group && group->GetID() == group_id && setting && setting->GetID() == setting_id &&
+           setting->GetGroupID() == group_id && collection && collection->GetID() == collection_id &&
+           collection->GetAttachID() == setting_id && collection->GetAttachType() == vsp::ATTROBJ_VARSETTING &&
+           setting->GetAttributeCollection() == collection;
+}
+
 bool IsParmDefaultCollection( const string &parm_id, AttributeCollection *collection )
 {
     Parm *parm = ParmMgr.FindParm( parm_id );
@@ -313,6 +329,16 @@ void AttributeTree::RebuildTree()
                          IsSubsurfaceDefaultCollection( tree_id_vecs[i][j + 1], tree_coll_vecs[i][j + 1] ) )
                     {
                         row_str = "子曲面";
+                    }
+
+                    // The preset tree emits a fixed marker between a registered group and its real setting.
+                    if ( !nvd && !AttributeMgr.GetCollectionPtr( id ) && id == "Settings" && row_str == id &&
+                         j > 0 && j + 1 < tree_id_vecs[i].size() && j + 1 < tree_coll_vecs[i].size() &&
+                         AttributeMgr.GetObjectType( id ) == vsp::ATTROBJ_FREE &&
+                         IsPresetSettingsMarkerChild( tree_id_vecs[i][j - 1], tree_id_vecs[i][j + 1],
+                                                      tree_coll_vecs[i][j + 1] ) )
+                    {
+                        row_str = VSPTranslateMessage( "Settings" );
                     }
 
                     // Translate grouping markers only when followed by the corresponding typed child.

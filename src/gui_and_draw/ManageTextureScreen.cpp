@@ -9,6 +9,7 @@
 #endif
 
 #include "ManageTextureScreen.h"
+#include "VSPChinese.h"
 #include "GraphicEngine.h"
 #include "Display.h"
 #include "Viewport.h"
@@ -74,6 +75,12 @@ ManageTextureScreen::ManageTextureScreen( ScreenMgr * mgr ) : BasicScreen( mgr, 
     m_ActiveTextureLayout.AddYGap();
 
     m_ActiveTextureLayout.AddSlider( m_TransparencySlider, "Transparency", 1, "%6.5f" );
+    if ( VspButton *label = m_TransparencySlider.GetLabelButton() )
+    {
+        const std::string opacity_label = VSPTranslateMessage( "Texture opacity control" );
+        label->copy_label( opacity_label == "Texture opacity control" ?
+                           "Transparency" : opacity_label.c_str() );
+    }
     m_ActiveTextureLayout.AddYGap();
 
     m_ActiveTextureLayout.AddDividerBox( "Texture Coords" );

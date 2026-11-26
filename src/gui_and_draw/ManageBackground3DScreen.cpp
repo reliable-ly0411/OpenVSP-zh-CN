@@ -240,8 +240,10 @@ ManageBackground3DScreen::ManageBackground3DScreen( ScreenMgr * mgr ) : BasicScr
     m_BorderLayout.AddDividerBox( "Placement" );
 
     m_BorderLayout.AddChoice( m_DepthChoice, "Depth" );
-    m_DepthChoice.AddItem( "Before", vsp::DEPTH_FRONT );
-    m_DepthChoice.AddItem( "After", vsp::DEPTH_REAR );
+    const std::string front_label = VSPTranslateMessage( "3D background in front of model" );
+    const std::string rear_label = VSPTranslateMessage( "3D background behind model" );
+    m_DepthChoice.AddItemRaw( front_label == "3D background in front of model" ? "Before" : front_label, vsp::DEPTH_FRONT );
+    m_DepthChoice.AddItemRaw( rear_label == "3D background behind model" ? "After" : rear_label, vsp::DEPTH_REAR );
     m_DepthChoice.AddItem( "Free", vsp::DEPTH_FREE );
     m_DepthChoice.UpdateItems();
 

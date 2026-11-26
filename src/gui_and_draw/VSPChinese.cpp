@@ -16,7 +16,11 @@ using Entry = std::pair<const char *, const char *>;
 
 const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
-    static const std::unordered_map<std::string, std::string> table = { { "Average reference chord (Cave)", "平均弦长" },
+    static const std::unordered_map<std::string, std::string> table = {
+        { "Texture opacity control", "不透明度" },
+        { "2D background image width scale", "宽度缩放" },
+        { "3D background in front of model", "模型前方" },
+        { "3D background behind model", "模型后方" }, { "Average reference chord (Cave)", "平均弦长" },
         { "Load design variables file", "加载" },
 
         // Result metadata shown in Results Viewer; raw keys and values are not translated.
