@@ -1,4 +1,4 @@
-name: OpenVSP 3.56 RC32 Ubuntu x64 candidate package (no publish)
+name: OpenVSP 3.56 RC33 Ubuntu x64 candidate package (no publish)
 on:
   push:
     branches: [ci/openvsp-356-ubuntu-rc-package]
@@ -15,9 +15,9 @@ jobs:
     env:
       NATIVE_RELEASE: 'true'
       BACKFILL_VERSION: '3.56.0'
-      BACKFILL_TAG: '3.56.0-zh-CN.rc.32'
-      BACKFILL_SHA: 13e94a0d8318b1b22a99ee1608628947853055dc
-      VALIDATED_TOOLING_SHA: fb069ede51f7911ee3b4ba4062fcd86108b51662
+      BACKFILL_TAG: '3.56.0-zh-CN.rc.33'
+      BACKFILL_SHA: 5cc5e48529f8d3a2eee6f1656865cf9112e15af4
+      VALIDATED_TOOLING_SHA: f93cbf3180c817ef5b0c516d452d1c057814a42b
       BACKFILL_PLATFORM: Ubuntu-24.04_amd64
       BACKFILL_ARCH: x86_64
       BACKFILL_LLVM: ''
@@ -36,7 +36,7 @@ jobs:
         with:
           ref: ${{ env.VALIDATED_TOOLING_SHA }}
           path: tooling
-          fetch-depth: 20
+          fetch-depth: 21
           persist-credentials: false
       - name: Checkout untouched historical 3.56 packaging tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -53,7 +53,7 @@ jobs:
           persist-credentials: false
       - name: Verify exact product, original release guards and localization-only scope
         shell: bash
-        run: bash controller/.github/openvsp-qa/verify-rc32-current.sh
+        run: bash controller/.github/openvsp-qa/verify-rc33-current.sh
       - name: Build and verify only the Ubuntu amd64 native ZIP
         shell: bash
         env:
@@ -74,14 +74,14 @@ jobs:
           done
           sha256sum "$zip" > SHA256SUMS.txt
           {
-            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "0c8674d4ecf9ce5a8fd7893d50ae60b6db3be93e" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
+            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "b60ae42ba0136b1579a299d5266387cc40b08fae" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
             stat -c 'bytes=%s' "$zip"
             cat SHA256SUMS.txt
           } > single-candidate-identity.txt
       - name: Retain the exact candidate ZIP, checksum and native receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: openvsp-356-rc32-Ubuntu-24.04_amd64-qa
+          name: openvsp-356-rc33-Ubuntu-24.04_amd64-qa
           path: deliverables/*
           compression-level: 0
           if-no-files-found: error
