@@ -32,6 +32,18 @@ bool IsParmDefaultCollection( const string &parm_id, AttributeCollection *collec
            collection->GetAttachID() == parm_id && parm->GetAttrCollection() == collection;
 }
 
+bool IsMeasureDefaultCollection( const string &owner_id, AttributeCollection *collection )
+{
+    if ( !collection || collection->GetAttachType() != vsp::ATTROBJ_MEASURE ||
+         collection->GetAttachID() != owner_id )
+    {
+        return false;
+    }
+    ParmContainer *owner = ParmMgr.FindParmContainer( owner_id );
+    return owner && owner->GetID() == owner_id && owner->GetParmContainerType() == vsp::ATTROBJ_MEASURE &&
+           owner->GetAttrCollection() == collection;
+}
+
 std::string AttributeTreeValue( NameValData &data )
 {
     if ( data.GetType() == vsp::ATTR_COLLECTION_DATA )
@@ -248,6 +260,10 @@ void AttributeTree::RebuildTree()
                         else if ( ac->GetAttachType() == vsp::ATTROBJ_PARM )
                         {
                             is_default_collection = IsParmDefaultCollection( ac->GetAttachID(), ac );
+                        }
+                        else if ( owner_type == vsp::ATTROBJ_MEASURE )
+                        {
+                            is_default_collection = IsMeasureDefaultCollection( owner_id, ac );
                         }
                         else if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC ||
                              owner_type == vsp::ATTROBJ_SEC || owner_type == vsp::ATTROBJ_SUBSURF )

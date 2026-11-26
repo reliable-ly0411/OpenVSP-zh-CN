@@ -211,6 +211,8 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
             'owner->GetAttributeCollection() == ac; }',
             'else if ( ac->GetAttachType() == vsp::ATTROBJ_PARM ) { '
             'is_default_collection = IsParmDefaultCollection( ac->GetAttachID(), ac ); }',
+            'else if ( owner_type == vsp::ATTROBJ_MEASURE ) { '
+            'is_default_collection = IsMeasureDefaultCollection( owner_id, ac ); }',
             'else if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC || '
             'owner_type == vsp::ATTROBJ_SEC || owner_type == vsp::ATTROBJ_SUBSURF ) { '
             'ParmContainer *owner = ParmMgr.FindParmContainer( owner_id ); '
@@ -219,6 +221,24 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(flat.count(' '.join(gates)), 1)
         self.assertEqual(flat.count('VSPTranslateMessage( "Attributes" )'), 1)
+
+    def test_measure_and_fea_fixed_labels_keep_raw_rows(self):
+        text = " ".join((GUI / "AttributeEditor.cpp").read_text(encoding="utf-8").split())
+        gate = ('if ( !collection || collection->GetAttachType() != vsp::ATTROBJ_MEASURE || '
+                'collection->GetAttachID() != owner_id ) { return false; } '
+                'ParmContainer *owner = ParmMgr.FindParmContainer( owner_id ); '
+                'return owner && owner->GetID() == owner_id && '
+                'owner->GetParmContainerType() == vsp::ATTROBJ_MEASURE && owner->GetAttrCollection() == collection;')
+        self.assertEqual(text.count(gate), 1)
+        self.assertNotIn(gate, text.replace("owner->GetAttrCollection() == collection", "owner->GetName() == owner_id"))
+        fea = (GUI / "StructScreen.cpp").read_text(encoding="utf-8").split("void StructScreen::UpdateFeaPropertyBrowser()", 1)[1]
+        fea = " ".join(fea.split("m_FeaPropertySelectBrowser->add( str );", 1)[0].split())
+        self.assertIn("prop_name = property_vec[i]->GetName();", fea)
+        self.assertIn("prop_mat = fea_mat->GetName();", fea)
+        self.assertIn("prop_name.c_str(), prop_type.c_str(), prop_xsec.c_str(), prop_mat.c_str()", fea)
+        self.assertEqual(fea.count('VSPTranslate( prop_xsec )'), 1)
+        self.assertIn('prop_xsec == "General" || prop_xsec == "Circle" || prop_xsec == "Pipe" || '
+                      'prop_xsec == "Rectangle" || prop_xsec == "Box" ) ) { prop_xsec = VSPTranslate( prop_xsec ); }', fea)
 
     def test_parameter_tree_labels_require_live_owned_collection_and_synthetic_marker(self):
         source = " ".join((GUI / "AttributeEditor.cpp").read_text(encoding="utf-8").split())

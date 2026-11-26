@@ -2570,6 +2570,21 @@ void StructScreen::UpdateFeaPropertyBrowser()
             prop_xsec = property_vec[i]->GetXSecName();
         }
 
+        // Translate only these application-owned table cells; names and enums remain raw.
+        if ( property_vec[i]->m_FeaPropertyType() == vsp::FEA_BEAM && prop_type == "Beam" )
+        {
+            prop_type = VSPTranslateMessage( "Beam Property" );
+        }
+        else if ( property_vec[i]->m_FeaPropertyType() == vsp::FEA_SHELL && prop_type == "Shell" )
+        {
+            prop_type = VSPTranslateMessage( "Shell Property" );
+        }
+
+        if ( property_vec[i]->m_FeaPropertyType() == vsp::FEA_BEAM && ( prop_xsec == "General" || prop_xsec == "Circle" || prop_xsec == "Pipe" || prop_xsec == "Rectangle" || prop_xsec == "Box" ) )
+        {
+            prop_xsec = VSPTranslate( prop_xsec );
+        }
+
         FeaMaterial* fea_mat = StructureMgr.GetFeaMaterial( property_vec[i]->m_FeaMaterialID );
         if ( fea_mat )
         {
