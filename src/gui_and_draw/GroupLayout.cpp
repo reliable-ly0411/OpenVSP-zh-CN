@@ -1792,9 +1792,12 @@ void GroupLayout::AddSkinHeader( SkinHeader & skin_header, bool addcontchoice )
 
     AddX( gw );
 
+    const std::string set_constraint_label = VSPTranslateMessage( "Skin constraint set action" );
     //==== Left Set Button ====//
     SetButtonWidth( setW );
     buttons.push_back( AddParmButton( "Set" ) );
+    buttons.back()->copy_label( set_constraint_label == "Skin constraint set action" ?
+                               "Set" : set_constraint_label.c_str() );
 
     AddX( oldBW );
 
@@ -1805,6 +1808,8 @@ void GroupLayout::AddSkinHeader( SkinHeader & skin_header, bool addcontchoice )
     //==== Right Set Button ====//
     SetButtonWidth( setW );
     buttons.push_back( AddParmButton( "Set" ) );
+    buttons.back()->copy_label( set_constraint_label == "Skin constraint set action" ?
+                               "Set" : set_constraint_label.c_str() );
 
     NewLineX();
 

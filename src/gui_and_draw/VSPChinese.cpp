@@ -17,6 +17,7 @@ using Entry = std::pair<const char *, const char *>;
 const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
     static const std::unordered_map<std::string, std::string> table = {
+        { "Skin constraint set action", "设定" },
         { "Texture opacity control", "不透明度" },
         { "2D background image width scale", "宽度缩放" },
         { "3D background in front of model", "模型前方" },

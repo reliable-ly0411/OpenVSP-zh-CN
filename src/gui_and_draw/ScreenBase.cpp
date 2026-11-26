@@ -7286,6 +7286,11 @@ XSecViewScreen::XSecViewScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 310, 600, "
     m_ImageLayout.SetButtonWidth( 60 );
     m_ImageLayout.SetInputWidth( 50 );
     m_ImageLayout.AddSlider( m_WScale, "W Scale", 1.0, "%7.3f" );
+    if ( VspButton *label = m_WScale.GetLabelButton() )
+    {
+        const std::string width_label = VSPTranslateMessage( "2D background image width scale" );
+        label->copy_label( width_label == "2D background image width scale" ? "W Scale" : width_label.c_str() );
+    }
     m_ImageLayout.AddSlider( m_HScale, "H Scale", 1.0, "%7.3f" );
     m_ImageLayout.AddYGap();
     m_ImageLayout.AddSlider( m_XOffset, "X Offset", 0.500, "%7.3f" );

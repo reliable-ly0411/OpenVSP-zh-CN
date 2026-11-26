@@ -332,11 +332,12 @@ void AttributeTree::RebuildTree()
                     }
 
                     // The preset tree emits a fixed marker between a registered group and its real setting.
+                    // Non-ParmContainer settings do not resolve to collections until that explicit next node.
                     if ( !nvd && !AttributeMgr.GetCollectionPtr( id ) && id == "Settings" && row_str == id &&
-                         j > 0 && j + 1 < tree_id_vecs[i].size() && j + 1 < tree_coll_vecs[i].size() &&
+                         j > 0 && j + 2 < tree_id_vecs[i].size() &&
                          AttributeMgr.GetObjectType( id ) == vsp::ATTROBJ_FREE &&
                          IsPresetSettingsMarkerChild( tree_id_vecs[i][j - 1], tree_id_vecs[i][j + 1],
-                                                      tree_coll_vecs[i][j + 1] ) )
+                                                      tree_id_vecs[i][j + 2] ) )
                     {
                         row_str = VSPTranslateMessage( "Settings" );
                     }
