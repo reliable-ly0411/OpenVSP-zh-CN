@@ -191,6 +191,11 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
             'Vehicle *owner = VehicleMgr.GetVehicle(); '
             'is_default_collection = owner && owner->GetID() == ac->GetAttachID() && '
             'owner->GetAttrCollection() == ac; }',
+            'else if ( ac->GetAttachType() == vsp::ATTROBJ_LINK ) { '
+            '// Translate only the ordinary link editor\'s own root collection. '
+            'Link *owner = LinkMgr.GetLink( ac->GetAttachID() ); '
+            'is_default_collection = id == m_AttrRootCollID && owner && '
+            'owner->GetAttrCollection() == ac; }',
             'else if ( ac->GetAttachType() == vsp::ATTROBJ_ADVLINK ) { '
             '// A loaded link can still have its temporary attach name. '
             '// Identify its built-in collection by ownership, not by that name. '
@@ -221,6 +226,28 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(flat.count(' '.join(gates)), 1)
         self.assertEqual(flat.count('VSPTranslateMessage( "Attributes" )'), 1)
+
+    def test_parm_link_default_label_rejects_authored_and_other_collection_rows(self):
+        source = (GUI / 'AttributeEditor.cpp').read_text(encoding='utf-8')
+        editor = (GUI / 'ParmLinkScreen.cpp').read_text(encoding='utf-8')
+
+        def guarded_link_label(code):
+            flat = ' '.join(strip_comments(code).split())
+            return (
+                'if ( !nvd && ac && id == coll_id && row_str == "Attributes" )' in flat
+                and 'else if ( ac->GetAttachType() == vsp::ATTROBJ_LINK ) { '
+                    'Link *owner = LinkMgr.GetLink( ac->GetAttachID() ); '
+                    'is_default_collection = id == m_AttrRootCollID && owner && '
+                    'owner->GetAttrCollection() == ac; }' in flat
+                and 'if ( is_default_collection ) { row_str = VSPTranslateMessage( "Attributes" ); }' in flat
+            )
+
+        self.assertIn('m_LinkAttrEditor.SetEditorCollID( currLink->m_AttrCollection.GetID() )', editor)
+        self.assertTrue(guarded_link_label(source))
+        for condition in ('!nvd && ', 'id == coll_id && ', 'id == m_AttrRootCollID && ',
+                          '&& owner &&', ' &&\n                                                    owner->GetAttrCollection() == ac'):
+            with self.subTest(condition=condition):
+                self.assertFalse(guarded_link_label(source.replace(condition, '')))
 
     def test_margin_and_bc_fallback_translate_only_typed_display_sites(self):
         pd = " ".join((GUI / "ParasiteDragScreen.cpp").read_text(encoding="utf-8").split())

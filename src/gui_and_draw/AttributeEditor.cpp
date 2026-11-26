@@ -16,6 +16,7 @@
 #include "ParmContainer.h"
 #include "ScreenMgr.h"
 #include "AdvLinkMgr.h"
+#include "LinkMgr.h"
 #include "ModeMgr.h"
 #include "VarPresetMgr.h"
 #include "Vehicle.h"
@@ -257,6 +258,13 @@ void AttributeTree::RebuildTree()
                         {
                             Vehicle *owner = VehicleMgr.GetVehicle();
                             is_default_collection = owner && owner->GetID() == ac->GetAttachID() &&
+                                                    owner->GetAttrCollection() == ac;
+                        }
+                        else if ( ac->GetAttachType() == vsp::ATTROBJ_LINK )
+                        {
+                            // Translate only the ordinary link editor's own root collection.
+                            Link *owner = LinkMgr.GetLink( ac->GetAttachID() );
+                            is_default_collection = id == m_AttrRootCollID && owner &&
                                                     owner->GetAttrCollection() == ac;
                         }
                         else if ( ac->GetAttachType() == vsp::ATTROBJ_ADVLINK )
