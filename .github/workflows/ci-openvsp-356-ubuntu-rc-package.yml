@@ -1,4 +1,4 @@
-name: OpenVSP 3.56 RC40 Ubuntu x64 candidate package (no publish)
+name: OpenVSP 3.56 RC40 ParmLink follow-up Ubuntu x64 candidate package (no publish)
 on:
   push:
     branches: [ci/openvsp-356-ubuntu-rc-package]
@@ -16,7 +16,7 @@ jobs:
       NATIVE_RELEASE: 'true'
       BACKFILL_VERSION: '3.56.0'
       BACKFILL_TAG: '3.56.0-zh-CN.rc.40'
-      BACKFILL_SHA: 96b635f8f0b60f3f7fe8fbf331d81ccc8de08892
+      BACKFILL_SHA: abd763fe3dfce1b5fd43dd09ae5bb31d4ea19930
       VALIDATED_TOOLING_SHA: 096380696e4e442d3272688f4990ccb1f1784b96
       BACKFILL_PLATFORM: Ubuntu-24.04_amd64
       BACKFILL_ARCH: x86_64
@@ -53,7 +53,7 @@ jobs:
           persist-credentials: false
       - name: Verify exact product, original release guards and localization-only scope
         shell: bash
-        run: bash controller/.github/openvsp-qa/verify-rc40-current.sh
+        run: bash controller/.github/openvsp-qa/verify-rc40-parmlink-current.sh
       - name: Build and verify only the Ubuntu amd64 native ZIP
         shell: bash
         env:
@@ -74,14 +74,14 @@ jobs:
           done
           sha256sum "$zip" > SHA256SUMS.txt
           {
-            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "5f2c0d0ce6a134ca59657e41cf70bb59da28053e" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
+            printf 'controller=%s\nproduct=%s\ntree=%s\nrun=%s\ntooling=%s\n' "$GITHUB_SHA" "$BACKFILL_SHA" "6ecb66006cc0794baca71c710cf38a232d07fa6a" "$GITHUB_RUN_ID" "$VALIDATED_TOOLING_SHA"
             stat -c 'bytes=%s' "$zip"
             cat SHA256SUMS.txt
           } > single-candidate-identity.txt
       - name: Retain the exact candidate ZIP, checksum and native receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: openvsp-356-rc40-Ubuntu-24.04_amd64-qa
+          name: openvsp-356-rc40-parmlink-Ubuntu-24.04_amd64-qa
           path: deliverables/*
           compression-level: 0
           if-no-files-found: error
