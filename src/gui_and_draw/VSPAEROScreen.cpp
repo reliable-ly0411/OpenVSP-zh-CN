@@ -334,6 +334,13 @@ VSPAEROScreen::VSPAEROScreen( ScreenMgr* mgr ) : TabScreen( mgr, VSPAERO_SCREEN_
     m_RefLengthLayout.SetButtonWidth( m_RefLengthLayout.GetW() / 4 );
 
     m_RefLengthLayout.AddButton( m_RefCaveToggle, "Cave" );
+    const string cave_label = VSPTranslateMessage( "Average reference chord (Cave)" );
+    const bool cave_is_translated = cave_label != "Average reference chord (Cave)";
+    m_RefCaveToggle.GetFlButton()->copy_label( cave_is_translated ? cave_label.c_str() : "Cave" );
+    if ( cave_is_translated )
+    {
+        m_RefCaveToggle.GetFlButton()->copy_tooltip( "Cave (C_ave)" );
+    }
     m_RefLengthLayout.AddButton( m_RefMACToggle, "MAC" );
     m_RefLengthLayout.AddButton( m_RefStotToggle, "Stot" );
     m_RefLengthLayout.AddButton( m_RefScurveToggle, "Scurve" );

@@ -98,6 +98,9 @@ DesignVarScreen::DesignVarScreen( ScreenMgr* mgr ) : TabScreen( mgr, 450, 463 + 
 
     m_PickLayout.AddButton( m_SaveButton, "Save" );
     m_PickLayout.AddButton( m_LoadButton, "Load" );
+    const string load_design_label = VSPTranslateMessage( "Load design variables file" );
+    m_LoadButton.GetFlButton()->copy_label( load_design_label == "Load design variables file" ?
+                                         "Load" : load_design_label.c_str() );
     m_PickLayout.ForceNewLine();
 
     pick_tab->show();

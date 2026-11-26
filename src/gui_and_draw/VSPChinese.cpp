@@ -16,7 +16,8 @@ using Entry = std::pair<const char *, const char *>;
 
 const std::unordered_map<std::string, std::string> &ExactTranslations()
 {
-    static const std::unordered_map<std::string, std::string> table = {
+    static const std::unordered_map<std::string, std::string> table = { { "Average reference chord (Cave)", "平均弦长" },
+        { "Load design variables file", "加载" },
 
         // Result metadata shown in Results Viewer; raw keys and values are not translated.
         { "Calculate wetted area and volume of geometry.", "计算几何体的湿润面积和体积。" },
