@@ -614,6 +614,9 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "On Body", "位于几何体表面" },
         { "Outlet Lip:", "出口唇口：" },
         { "Pitch Gap", "纵向轮间隙" },
+        { "Parameter link lower value bound", "下限" },
+        { "Parameter link upper value bound", "上限" },
+        { "Bogie longitudinal wheel spacing", "纵向轮距" },
         { "Plane 1pt Angle Contact", "平面单点角度接触" },
         { "Plane 2pt Angle Contact", "平面两点角度接触" },
         { "Plane Min/Max Distance", "平面最小/最大距离" },
@@ -1843,7 +1846,7 @@ const std::vector<Entry> &PhraseTranslations()
         { "Pan X", "X 向平移视图" }, { "Pan Y", "Y 向平移视图" },
         { "Pres + Temp Control", "压力和温度控制" },
         { "Re/L + Mach Control", "单位长度雷诺数和马赫数控制" },
-        { "Residual", "残差" }, { "Search UW", "搜索 UW" }, { "Refine UW", "加密 UW" },
+        { "Residual", "残差" }, { "Search UW", "搜索 UW" }, { "Refine UW", "细化 UW" },
         { "Individualize Rib Array", "展开肋阵列" },
         { "Individualize SSLine Array", "展开子曲面线阵列" },
         { "Implicit it", "隐式迭代" }, { "Implicit Karman-Schoenherr", "隐式卡门-舍恩赫尔" },
@@ -2347,10 +2350,27 @@ std::string VSPTranslateFuselageStackLabel( const std::string &text )
     return text;
 }
 
+std::string VSPTranslatePodLengthDescription( const std::string &text, bool is_pod_length )
+{
+    if ( is_pod_length && text == "Length of pod" ) return "吊舱长度";
+    return text;
+}
+
 std::string VSPTranslateEllipsoidBRadiusDescription( const std::string &text, bool is_ellipsoid_b_radius )
 {
     if ( is_ellipsoid_b_radius && text == "B (y) radius of ellipsoid" ) return "椭球沿 Y 轴的半径（B）";
     return VSPTranslate( text );
+}
+
+std::string VSPTranslateRotorTipPathNotes( const std::string &text, bool is_rotor_tip_path )
+{
+    if ( is_rotor_tip_path &&
+         text == "Rotor Tip Path and Thrown Blade Auxiliary Geoms must be children of a Prop Geom." )
+    {
+        return "桨尖轨迹和桨叶抛离辅助几何体\n"
+               "必须附属于螺旋桨几何体。";
+    }
+    return text;
 }
 
 std::string VSPTranslateSuperConeNotes( const std::string &text )

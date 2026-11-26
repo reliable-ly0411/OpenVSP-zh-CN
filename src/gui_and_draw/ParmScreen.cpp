@@ -13,6 +13,7 @@
 #include "LinkMgr.h"
 #include "AdvLinkMgr.h"
 #include "EllipsoidGeom.h"
+#include "PodGeom.h"
 
 #include <FL/Fl_File_Chooser.H>
 
@@ -104,10 +105,18 @@ bool ParmScreen::Update()
     m_NameString.Update( parm_ptr->GetName() );
     m_GroupString.Update( parm_ptr->GetDisplayGroupName() );
     // User-parameter descriptions are editable text, not application labels.
-    const auto *ellipsoid = dynamic_cast<const EllipsoidGeom *>( parm_ptr->GetContainer() );
-    const string description = LinkMgr.GetUserParmIndex( pid ) >= 0 ? parm_ptr->GetDescript() :
-        VSPTranslateEllipsoidBRadiusDescription( parm_ptr->GetDescript(), ellipsoid && parm_ptr == &ellipsoid->m_Bradius );
-    m_DescString.Update( description );
+    const auto *pod = dynamic_cast<const PodGeom *>( parm_ptr->GetContainer() );
+    if ( LinkMgr.GetUserParmIndex( pid ) < 0 && pod && parm_ptr == &pod->m_Length )
+    {
+        m_DescString.Update( VSPTranslatePodLengthDescription( parm_ptr->GetDescript(), true ) );
+    }
+    else
+    {
+        const auto *ellipsoid = dynamic_cast<const EllipsoidGeom *>( parm_ptr->GetContainer() );
+        const string description = LinkMgr.GetUserParmIndex( pid ) >= 0 ? parm_ptr->GetDescript() :
+            VSPTranslateEllipsoidBRadiusDescription( parm_ptr->GetDescript(), ellipsoid && parm_ptr == &ellipsoid->m_Bradius );
+        m_DescString.Update( description );
+    }
 
     m_MinValString.Update( StringUtil::double_to_string(parm_ptr->GetLowerLimit(), "%6.5f") );
     m_CurrValString.Update( StringUtil::double_to_string(parm_ptr->Get(), "%6.5f") );

@@ -38,7 +38,9 @@ std::string VSPTranslateFuselageStackLabel( const std::string &text );
 
 // Translate static labels in narrow airfoil/wing-section controls.
 std::string VSPTranslateCompactWingLabel( const std::string &text );
+std::string VSPTranslateRotorTipPathNotes( const std::string &text, bool is_rotor_tip_path );
 std::string VSPTranslateSuperConeNotes( const std::string &text );
+std::string VSPTranslatePodLengthDescription( const std::string &text, bool is_pod_length );
 std::string VSPTranslateEllipsoidBRadiusDescription( const std::string &text, bool is_ellipsoid_b_radius );
 
 // Translate a known built-in rendering preset only. Never pass an authored name.

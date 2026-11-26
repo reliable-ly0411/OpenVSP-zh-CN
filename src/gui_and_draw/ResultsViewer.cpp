@@ -15,6 +15,61 @@
 
 #include <ctime>
 
+namespace
+{
+std::string ResultPickerDescription( const std::string &name, const std::string &doc )
+{
+    if ( name == "WetArea_Volume" )
+    {
+        return VSPTranslateMessage( doc );
+    }
+    if ( name == "VSPAERO_Polar" && doc == "VSPAERO polar file results." )
+    {
+        return "VSPAERO 极曲线文件结果。";
+    }
+    if ( name == "VSPAERO_Load" && doc == "VSPAERO load distribution lod file results." )
+    {
+        return "VSPAERO 载荷分布文件（.lod）结果。";
+    }
+    if ( name == "VSPAERO_Wrapper" && doc == "VSPAERO read existing solution results." )
+    {
+        return "VSPAERO 读取已有求解结果。";
+    }
+    return doc;
+}
+
+std::string ResultColumnDescription( const std::string &result_name, const std::string &field_name, const std::string &doc )
+{
+    if ( result_name == "WetArea_Volume" )
+    {
+        return VSPTranslateMessage( doc );
+    }
+    if ( result_name == "VSPAERO_Polar" )
+    {
+        static constexpr const char *labels[][3] = {
+            { "Alpha", "Angle of attack.", "迎角。" },
+            { "Beta", "Angle of sideslip.", "侧滑角。" },
+            { "CDi", "Inviscid component of drag coefficient.", "阻力系数的无黏分量。" },
+            { "CDiw", "Inviscid component of drag coefficient using wake formulation.", "采用尾迹公式计算的阻力系数无黏分量。" },
+            { "CDo", "Viscous component of drag coefficient.", "阻力系数的黏性分量。" },
+            { "CDtot", "Total drag coefficient.", "总阻力系数。" },
+            { "CDwtot", "Total drag coefficient using wake formulation.", "采用尾迹公式计算的总阻力系数。" },
+            { "CFix", "Inviscid component of X force coefficient.", "X 向力系数的无黏分量。" },
+            { "CFiy", "Inviscid component of Y force coefficient.", "Y 向力系数的无黏分量。" },
+            { "CFiz", "Inviscid component of Z force coefficient.", "Z 向力系数的无黏分量。" },
+        };
+        for ( const auto &label : labels )
+        {
+            if ( field_name == label[0] && doc == label[1] )
+            {
+                return label[2];
+            }
+        }
+    }
+    return doc;
+}
+} // namespace
+
 ResultsViewer::ResultsViewer( ScreenMgr* mgr ) : BasicScreen( mgr, 800, 700, "Results" )
 {
     m_CurrDisplayGroup = NULL;
@@ -249,7 +304,7 @@ void ResultsViewer::UpdateResultsChoice()
         if ( res )
         {
             string r_name = res->GetName();
-            const string r_doc = r_name == "WetArea_Volume" ? VSPTranslateMessage( res->GetDoc() ) : res->GetDoc();
+            const string r_doc = ResultPickerDescription( r_name, res->GetDoc() );
             time_t r_time = res->GetTimestamp();
             struct tm *r_tp = localtime( &r_time );
 
@@ -309,7 +364,7 @@ void ResultsViewer::UpdateDataBrowser()
                         string d_name = nvd->GetName();
                         const string d_type = VSPTranslateResultType( nvd->GetTypeName() );
                         // string d_val = nvd->GetAsString();
-                        const string d_doc = res->GetName() == "WetArea_Volume" ? VSPTranslateMessage( nvd->GetDoc() ) : nvd->GetDoc();
+                        const string d_doc = ResultColumnDescription( res->GetName(), d_name, nvd->GetDoc() );
 
                         const string row = d_name + "|" + d_type + "|" + d_doc + "\n";
                         m_DataBrowser->add( row.c_str() );

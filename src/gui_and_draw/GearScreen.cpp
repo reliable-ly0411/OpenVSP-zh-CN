@@ -170,7 +170,10 @@ GearScreen::GearScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 450, 800, "Gear", "G
     m_PitchTypeChoice.AddItem( "Gap Fraction", vsp::BOGIE_GAP_FRAC );
     m_PitchTypeChoice.UpdateItems();
 
-    m_BogieLayout.AddSlider( m_PitchSlider, "Pitch", 10, "%6.5f" );
+    const std::string bogie_pitch = VSPTranslateMessage( "Bogie longitudinal wheel spacing" );
+    m_BogieLayout.AddSlider( m_PitchSlider,
+                             bogie_pitch == "Bogie longitudinal wheel spacing" ? "Pitch" : bogie_pitch.c_str(),
+                             10, "%6.5f" );
     m_BogieLayout.AddSlider( m_PitchGapSlider, "Pitch Gap", 10, "%6.5f" );
 
     m_BogieLayout.AddYGap();

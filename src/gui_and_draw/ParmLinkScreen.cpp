@@ -80,9 +80,11 @@ ParmLinkScreen::ParmLinkScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 600, 615 + 
     // Set 'Lower' On/Off toggle button and slider
     m_GenLayout.SetFitWidthFlag( false );
     m_GenLayout.SetSameLineFlag( true );
-    m_GenLayout.AddButton( m_LowerTog, "Lower" );
+    const std::string lower_bound_label = VSPTranslateMessage( "Parameter link lower value bound" );
+    const char* lower_bound_label_text = lower_bound_label == "Parameter link lower value bound" ? "Lower" : lower_bound_label.c_str();
+    m_GenLayout.AddButton( m_LowerTog, lower_bound_label_text );
     m_GenLayout.SetFitWidthFlag( true );
-    m_GenLayout.AddSlider( m_LowerLimitSlider, "Lower", 10.0, "%7.6f" );
+    m_GenLayout.AddSlider( m_LowerLimitSlider, lower_bound_label_text, 10.0, "%7.6f" );
     m_GenLayout.ForceNewLine();
     m_GenLayout.SetSameLineFlag( false );
 
@@ -91,9 +93,11 @@ ParmLinkScreen::ParmLinkScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 600, 615 + 
     // Set 'Upper' On/Off toggle button and slider
     m_GenLayout.SetFitWidthFlag( false );
     m_GenLayout.SetSameLineFlag( true );
-    m_GenLayout.AddButton( m_UpperTog, "Upper" );
+    const std::string upper_bound_label = VSPTranslateMessage( "Parameter link upper value bound" );
+    const char* upper_bound_label_text = upper_bound_label == "Parameter link upper value bound" ? "Upper" : upper_bound_label.c_str();
+    m_GenLayout.AddButton( m_UpperTog, upper_bound_label_text );
     m_GenLayout.SetFitWidthFlag( true );
-    m_GenLayout.AddSlider( m_UpperLimitSlider, "Upper", 10.0, "%7.6f" );
+    m_GenLayout.AddSlider( m_UpperLimitSlider, upper_bound_label_text, 10.0, "%7.6f" );
     m_GenLayout.ForceNewLine();
     m_GenLayout.SetSameLineFlag( false );
 

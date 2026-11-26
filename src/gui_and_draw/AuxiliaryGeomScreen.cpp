@@ -1100,8 +1100,15 @@ bool AuxiliaryGeomScreen::Update()
         m_AuxiliaryGeomModeChoice.Update( auxiliary_ptr->m_AuxuliaryGeomMode.GetID() );
 
         const string notes = auxiliary_ptr->GetNotes();
-        m_AuxiliaryGeomModeNotesOutput.Update( auxiliary_ptr->m_AuxuliaryGeomMode() == vsp::AUX_GEOM_SUPER_CONE
-                                               ? VSPTranslateSuperConeNotes( notes ) : notes );
+        if ( auxiliary_ptr->m_AuxuliaryGeomMode() == vsp::AUX_GEOM_ROTOR_TIP_PATH )
+        {
+            m_AuxiliaryGeomModeNotesOutput.Update( VSPTranslateRotorTipPathNotes( notes, true ) );
+        }
+        else
+        {
+            m_AuxiliaryGeomModeNotesOutput.Update( auxiliary_ptr->m_AuxuliaryGeomMode() == vsp::AUX_GEOM_SUPER_CONE
+                                                   ? VSPTranslateSuperConeNotes( notes ) : notes );
+        }
 
         if ( auxiliary_ptr->m_AuxuliaryGeomMode() == vsp::AUX_GEOM_ROTOR_TIP_PATH )
         {

@@ -75,12 +75,12 @@ HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge",
     m_VectorLayout.AddYGap();
     m_VectorLayout.AddDividerBox( "Axis" );
 
-    m_PrimTypeChoice.AddItem( "VECTOR3D" );
-    m_PrimTypeChoice.AddItem( "POINT3D" );
-    m_PrimTypeChoice.AddItem( "SURFPT" );
-    m_PrimTypeChoice.AddItem( "UDIR" );
-    m_PrimTypeChoice.AddItem( "WDIR" );
-    m_PrimTypeChoice.AddItem( "NDIR" );
+    m_PrimTypeChoice.AddItemWithDisplayLabel( "VECTOR3D", "三维向量 (VECTOR3D)" );
+    m_PrimTypeChoice.AddItemWithDisplayLabel( "POINT3D", "三维点 (POINT3D)" );
+    m_PrimTypeChoice.AddItemWithDisplayLabel( "SURFPT", "曲面点 (SURFPT)" );
+    m_PrimTypeChoice.AddItemWithDisplayLabel( "UDIR", "U 向 (UDIR)" );
+    m_PrimTypeChoice.AddItemWithDisplayLabel( "WDIR", "W 向 (WDIR)" );
+    m_PrimTypeChoice.AddItemWithDisplayLabel( "NDIR", "法向 (NDIR)" );
     m_VectorLayout.AddChoice( m_PrimTypeChoice, "Type" );
 
     m_VectorLayout.AddYGap();
