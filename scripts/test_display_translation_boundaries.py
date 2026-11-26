@@ -222,6 +222,23 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
         self.assertEqual(flat.count(' '.join(gates)), 1)
         self.assertEqual(flat.count('VSPTranslateMessage( "Attributes" )'), 1)
 
+    def test_subsurface_tree_marker_protects_authored_subsurfs(self):
+        flat = " ".join((GUI / "AttributeEditor.cpp").read_text(encoding="utf-8").split())
+        guard = ('if ( !nvd && !AttributeMgr.GetCollectionPtr( id ) && id == "SubSurfs" && row_str == id && '
+                 'j + 1 < tree_id_vecs[i].size() && j + 1 < tree_coll_vecs[i].size() && AttributeMgr.GetObjectType( id ) == vsp::ATTROBJ_FREE && '
+                 'IsSubsurfaceDefaultCollection( tree_id_vecs[i][j + 1], tree_coll_vecs[i][j + 1] ) ) '
+                 '{ row_str = "子曲面"; }')
+        self.assertEqual(flat.count(guard), 1)
+        for unsafe in ('!nvd && !AttributeMgr.GetCollectionPtr( id )', 'row_str == id', 'vsp::ATTROBJ_FREE'):
+            self.assertNotIn(guard, flat.replace(unsafe, "true"))
+        member = 'return geom && geom->GetSubSurf( owner_id ) == owner;'
+        ownership = ('!collection || owner->GetAttrCollection() != collection || '
+                     'collection->GetAttachType() != vsp::ATTROBJ_SUBSURF || collection->GetAttachID() != owner_id')
+        self.assertEqual(flat.count(member), 1)
+        self.assertEqual(flat.count(ownership), 1)
+        self.assertNotIn(ownership, flat.replace("owner->GetAttrCollection() != collection", "false"))
+        self.assertIn("child_item->SetRefVecID( id_vec );", flat)
+
     def test_measure_and_fea_fixed_labels_keep_raw_rows(self):
         text = " ".join((GUI / "AttributeEditor.cpp").read_text(encoding="utf-8").split())
         gate = ('if ( !collection || collection->GetAttachType() != vsp::ATTROBJ_MEASURE || '

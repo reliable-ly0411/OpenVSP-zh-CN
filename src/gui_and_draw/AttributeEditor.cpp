@@ -20,6 +20,8 @@
 #include "VarPresetMgr.h"
 #include "Vehicle.h"
 #include "VehicleMgr.h"
+#include "Geom.h"
+#include "SubSurface.h"
 
 #define MIN_ATTR_EDITOR_PX_HEIGHT 60
 
@@ -42,6 +44,21 @@ bool IsMeasureDefaultCollection( const string &owner_id, AttributeCollection *co
     ParmContainer *owner = ParmMgr.FindParmContainer( owner_id );
     return owner && owner->GetID() == owner_id && owner->GetParmContainerType() == vsp::ATTROBJ_MEASURE &&
            owner->GetAttrCollection() == collection;
+}
+
+bool IsSubsurfaceDefaultCollection( const string &owner_id, const string &collection_id )
+{
+    SubSurface *owner = dynamic_cast<SubSurface *>( ParmMgr.FindParmContainer( owner_id ) );
+    AttributeCollection *collection = AttributeMgr.GetCollectionPtr( collection_id );
+    if ( !owner || owner->GetID() != owner_id || owner->GetParmContainerType() != vsp::ATTROBJ_SUBSURF ||
+         !collection || owner->GetAttrCollection() != collection ||
+         collection->GetAttachType() != vsp::ATTROBJ_SUBSURF || collection->GetAttachID() != owner_id )
+    {
+        return false;
+    }
+    Vehicle *vehicle = VehicleMgr.GetVehicle();
+    Geom *geom = vehicle ? vehicle->FindGeom( owner->GetCompID() ) : nullptr;
+    return geom && geom->GetSubSurf( owner_id ) == owner;
 }
 
 std::string AttributeTreeValue( NameValData &data )
@@ -287,6 +304,15 @@ void AttributeTree::RebuildTree()
                                                   AttributeMgr.GetCollectionPtr( tree_id_vecs[i][j + 2] ) ) )
                     {
                         row_str = "参数";
+                    }
+
+                    // This grouping marker is inserted before the real subsurface and its own collection.
+                    if ( !nvd && !AttributeMgr.GetCollectionPtr( id ) && id == "SubSurfs" && row_str == id &&
+                         j + 1 < tree_id_vecs[i].size() && j + 1 < tree_coll_vecs[i].size() &&
+                         AttributeMgr.GetObjectType( id ) == vsp::ATTROBJ_FREE &&
+                         IsSubsurfaceDefaultCollection( tree_id_vecs[i][j + 1], tree_coll_vecs[i][j + 1] ) )
+                    {
+                        row_str = "子曲面";
                     }
 
                     // Translate grouping markers only when followed by the corresponding typed child.
