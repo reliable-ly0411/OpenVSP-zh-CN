@@ -38,6 +38,7 @@ std::string VSPTranslateFuselageStackLabel( const std::string &text );
 
 // Translate static labels in narrow airfoil/wing-section controls.
 std::string VSPTranslateCompactWingLabel( const std::string &text );
+std::string VSPTranslateSuperConeNotes( const std::string &text );
 
 // Translate a known built-in rendering preset only. Never pass an authored name.
 std::string VSPTranslateMaterialPreset( const std::string &name );

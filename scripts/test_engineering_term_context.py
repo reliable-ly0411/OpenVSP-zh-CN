@@ -98,6 +98,30 @@ class EngineeringTermContextTests(unittest.TestCase):
                            "m_G23 = m_E2() / ( 2.0 * (1.0 + m_nu23() ) );"):
             self.assertIn(constraint, fea)
 
+    def test_only_proven_narrow_modified_foil_sliders_use_short_cl(self):
+        for name, prefix in [('BORScreen', 'm_'), ('AuxiliaryGeomScreen', 'm_'),
+                             ('FeaPartEditScreen', 'm_FeaSSXSC')]:
+            text = (GUI / (name + '.cpp')).read_text(encoding="utf-8")
+            self.assertEqual(re.findall(r'(\w+), VSPTranslateCompactWingLabel\( "Ideal CL" \)',
+                                        text), [prefix + 'FourModCLiSlider', prefix + 'FiveModCLiSlider'])
+            self.assertGreaterEqual(text.count(', "Ideal CL", 1, "%7.5f"'), 1)
+
+    def test_super_cone_notes_exact_stock_text_only(self):
+        source = (GUI / "AuxiliaryGeomScreen.cpp").read_text(encoding="utf-8")
+        self.assertIn('m_DesignLayout.AddOutput( m_AuxiliaryGeomModeNotesOutput, 4 );', source)
+        self.assertIn('const string notes = auxiliary_ptr->GetNotes();', source)
+        self.assertRegex(source, r'NotesOutput\.Update\( auxiliary_ptr->m_AuxuliaryGeomMode\(\) '
+                                 r'== vsp::AUX_GEOM_SUPER_CONE\s+\? VSPTranslateSuperConeNotes\( notes \) : notes \)')
+        core = (ROOT / "src/geom_core/AuxiliaryGeom.cpp").read_text(encoding="utf-8")
+        loc = (GUI / "VSPChinese.cpp").read_text(encoding="utf-8")
+        stock = core.split('string AuxiliaryGeom::GetNotes()', 1)[1].split('case vsp::AUX_GEOM_SUPER_CONE:', 1)[1].split('break;', 1)[0]
+        helper = loc.split('VSPTranslateSuperConeNotes(', 1)[1].split('return text;', 1)[0]
+        self.assertEqual(len(re.findall(r'"([^"]+)"', stock)), 4)
+        self.assertEqual(re.findall(r'"([^"]+)"', stock), re.findall(r'"([^"]+)"', helper)[:4])
+        compact = re.findall(r'"([^"]+)"', helper)[4:]
+        self.assertEqual(len(compact), 4)
+        self.assertTrue(all(len(line.removesuffix(r'\n')) <= 18 for line in compact))
+
     def test_covert_remains_a_formula_name_in_both_dropdowns(self):
         source = (GUI / "ParasiteDragScreen.cpp").read_text(encoding="utf-8")
         self.assertEqual(len(re.findall(r'm_ffType\[index\]\.AddItem\(\s*"Covert"\s*\)', source)), 2)

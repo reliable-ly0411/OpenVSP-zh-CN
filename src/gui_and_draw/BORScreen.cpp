@@ -6,6 +6,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "BORScreen.h"
+#include "VSPChinese.h"
 #include "ScreenMgr.h"
 #include "BORGeom.h"
 #include "CurveEditScreen.h"
@@ -471,7 +472,7 @@ BORScreen::BORScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "BOR", "BOR.
     m_FourDigitModGroup.AddButton( m_FourModCLiButton, "" );
     m_FourDigitModGroup.SetButtonWidth( actionSliderButtonWidth );
     m_FourDigitModGroup.SetFitWidthFlag( true );
-    m_FourDigitModGroup.AddSlider( m_FourModCLiSlider, "Ideal CL", 1, "%7.5f" );
+    m_FourDigitModGroup.AddSlider( m_FourModCLiSlider, VSPTranslateCompactWingLabel( "Ideal CL" ).c_str(), 1, "%7.5f" );
 
     m_FourDigitModGroup.ForceNewLine();
 
@@ -530,7 +531,7 @@ BORScreen::BORScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "BOR", "BOR.
     m_FiveDigitModGroup.AddSlider( m_FiveModChordSlider, "Chord", 10, "%7.3f" );
     m_FiveDigitModGroup.AddSlider( m_FiveModThickChordSlider, "T/C", 1, "%7.5f" );
     m_FiveDigitModGroup.AddYGap();
-    m_FiveDigitModGroup.AddSlider( m_FiveModCLiSlider, "Ideal CL", 1, "%7.5f" );
+    m_FiveDigitModGroup.AddSlider( m_FiveModCLiSlider, VSPTranslateCompactWingLabel( "Ideal CL" ).c_str(), 1, "%7.5f" );
     m_FiveDigitModGroup.AddSlider( m_FiveModCamberLocSlider, "CamberLoc", 1, "%7.5f" );
     m_FiveDigitModGroup.AddYGap();
     m_FiveDigitModGroup.AddSlider( m_FiveModThicknessLocSlider, "T/CLoc", 0.5, "%7.5f" );

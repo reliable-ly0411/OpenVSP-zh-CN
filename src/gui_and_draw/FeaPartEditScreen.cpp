@@ -1473,7 +1473,7 @@ FeaPartEditScreen::FeaPartEditScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 400, 
     m_FeaSSXSCFourDigitModGroup.AddButton( m_FeaSSXSCFourModCLiButton, "" );
     m_FeaSSXSCFourDigitModGroup.SetButtonWidth( actionSliderButtonWidth );
     m_FeaSSXSCFourDigitModGroup.SetFitWidthFlag( true );
-    m_FeaSSXSCFourDigitModGroup.AddSlider( m_FeaSSXSCFourModCLiSlider, "Ideal CL", 1, "%7.5f" );
+    m_FeaSSXSCFourDigitModGroup.AddSlider( m_FeaSSXSCFourModCLiSlider, VSPTranslateCompactWingLabel( "Ideal CL" ).c_str(), 1, "%7.5f" );
 
     m_FeaSSXSCFourDigitModGroup.ForceNewLine();
 
@@ -1532,7 +1532,7 @@ FeaPartEditScreen::FeaPartEditScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 400, 
     m_FeaSSXSCFiveDigitModGroup.AddSlider( m_FeaSSXSCFiveModChordSlider, "Chord", 10, "%7.3f" );
     m_FeaSSXSCFiveDigitModGroup.AddSlider( m_FeaSSXSCFiveModThickChordSlider, "T/C", 1, "%7.5f" );
     m_FeaSSXSCFiveDigitModGroup.AddYGap();
-    m_FeaSSXSCFiveDigitModGroup.AddSlider( m_FeaSSXSCFiveModCLiSlider, "Ideal CL", 1, "%7.5f" );
+    m_FeaSSXSCFiveDigitModGroup.AddSlider( m_FeaSSXSCFiveModCLiSlider, VSPTranslateCompactWingLabel( "Ideal CL" ).c_str(), 1, "%7.5f" );
     m_FeaSSXSCFiveDigitModGroup.AddSlider( m_FeaSSXSCFiveModCamberLocSlider, "CamberLoc", 1, "%7.5f" );
     m_FeaSSXSCFiveDigitModGroup.AddYGap();
     m_FeaSSXSCFiveDigitModGroup.AddSlider( m_FeaSSXSCFiveModThicknessLocSlider, "T/CLoc", 0.5, "%7.5f" );

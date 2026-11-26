@@ -7,6 +7,28 @@
 
 int main()
 {
+    const std::string cone_notes =
+        "Super Cone Auxiliary Geoms can be children of any Geom type.  "
+        "When the Super Cone is a child of a Human Geom, it will attach to and align with the design eye point.  "
+        "For all other parent types, it will attach to and align with the component coordinate system.  "
+        "Use a Blank Geom if more flexible attachment is required.";
+    const std::string expected_notes =
+        "超锥体可附属于任意几何体。\n"
+        "人体：附着并对准设计眼点。\n"
+        "其他：附着并对准部件坐标系。\n"
+        "如需灵活定位，请使用空白几何体。";
+    if ( VSPTranslateSuperConeNotes( cone_notes ) != expected_notes ) return 41;
+    for ( const auto &value : { cone_notes + " Extra.", "User: " + cone_notes,
+                                std::string( "My Note: Super Cone 42%" ),
+                                std::string( "Rotor Tip Path and Thrown Blade Auxiliary Geoms must be children of a Prop Geom." ) } )
+    {
+        if ( VSPTranslateSuperConeNotes( value ) != value ) return 42;
+    }
+    if ( VSPTranslate( "Ideal CL" ) != "理想升力系数 CL" ||
+         VSPTranslateCompactWingLabel( "Ideal CL" ) != "理想 CL" ||
+         VSPTranslate( VSPTranslateCompactWingLabel( "Ideal CL" ) ) != "理想 CL" ) return 43;
+    if ( VSPTranslateLabelAndValue( "Name", "Ideal CL" ) != "名称Ideal CL" ) return 44;
+
     const std::vector<std::pair<std::string, std::string>> labels = {
         { "Covert", "Covert" },
         { "DegenGeom...", "退化几何..." },

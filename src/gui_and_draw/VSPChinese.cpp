@@ -2339,6 +2339,21 @@ std::string VSPTranslateFuselageStackLabel( const std::string &text )
     return text;
 }
 
+std::string VSPTranslateSuperConeNotes( const std::string &text )
+{
+    if ( text == "Super Cone Auxiliary Geoms can be children of any Geom type.  "
+                 "When the Super Cone is a child of a Human Geom, it will attach to and align with the design eye point.  "
+                 "For all other parent types, it will attach to and align with the component coordinate system.  "
+                 "Use a Blank Geom if more flexible attachment is required." )
+    {
+        return "超锥体可附属于任意几何体。\n"
+               "人体：附着并对准设计眼点。\n"
+               "其他：附着并对准部件坐标系。\n"
+               "如需灵活定位，请使用空白几何体。";
+    }
+    return text;
+}
+
 std::string VSPTranslateCompactWingLabel( const std::string &text )
 {
     // These control buttons are only 50–75 px wide.
