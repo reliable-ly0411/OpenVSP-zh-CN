@@ -34,7 +34,7 @@ if [[ -v OPENVSP_QA_PARITY_PROFILE ]]; then
   test "$BACKFILL_PLATFORM" = Ubuntu-24.04_amd64
   test "$BACKFILL_ARCH" = x86_64
   test "$BACKFILL_VERSION" = 3.56.0
-  test "$BACKFILL_SHA" = 13e94a0d8318b1b22a99ee1608628947853055dc
+  test "$BACKFILL_SHA" = 5cc5e48529f8d3a2eee6f1656865cf9112e15af4
   test "$(git rev-parse HEAD)" = "$BACKFILL_SHA"
   . /etc/os-release
   test "$ID" = ubuntu
