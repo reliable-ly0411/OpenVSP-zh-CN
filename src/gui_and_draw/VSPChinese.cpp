@@ -1249,6 +1249,7 @@ const std::unordered_map<std::string, std::string> &ExactTranslations()
         { "Deflection", "偏转角" }, { "Curvature", "曲率" }, { "Surface", "曲面" },
         { "Geometry", "几何体" }, { "Geom", "几何体" }, { "Comp", "组件" },
         { "Vehicle", "飞行器" }, { "Subsurf", "子曲面" }, { "Set", "集合" },
+        { "Copy Current to Limit", "取值" },
         { "Sets", "集合" }, { "Legend", "图例" },
         { "Flow Condition", "流动条件" }, { "Mach", "马赫数" }, { "Reynolds", "雷诺数" },
         { "Density", "密度" }, { "Temperature", "温度" }, { "Pressure", "压力" },
@@ -1779,6 +1780,7 @@ const std::vector<Entry> &PhraseTranslations()
         { "Constant", "常量" }, { "Execute", "执行" }, { "Compute", "计算" },
         { "Calculate", "计算" }, { "Positive", "正向" }, { "Spar", "翼梁" },
         { "Twist", "扭转" }, { "Adjust", "调整" }, { "Alpha", "迎角 α" },
+        { "Material Alpha", "不透明度 α" },
         { "Beta", "侧滑角 β" }, { "Azimuth", "方位角" }, { "Elevation", "仰角" },
         { "Chordwise", "弦向" }, { "Spanwise", "展向" }, { "Container", "容器" },
         { "Data", "数据" }, { "Depth", "深度" }, { "Elbow", "肘部" },
@@ -2337,6 +2339,12 @@ std::string VSPTranslateFuselageStackLabel( const std::string &text )
     if ( text == "Tip Treatment" ) return "端盖处理";
     if ( text == "Sect Alias" ) return "截面别名";
     return text;
+}
+
+std::string VSPTranslateEllipsoidBRadiusDescription( const std::string &text, bool is_ellipsoid_b_radius )
+{
+    if ( is_ellipsoid_b_radius && text == "B (y) radius of ellipsoid" ) return "椭球沿 Y 轴的半径（B）";
+    return VSPTranslate( text );
 }
 
 std::string VSPTranslateSuperConeNotes( const std::string &text )

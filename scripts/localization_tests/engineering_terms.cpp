@@ -7,6 +7,20 @@
 
 int main()
 {
+    if ( VSPTranslate( "Material Alpha" ) != "不透明度 α" ||
+         VSPTranslate( "Alpha" ) != "迎角 α" ||
+         VSPTranslateLabelAndValue( "Name", "Material Alpha" ) != "名称Material Alpha" ) return 45;
+
+    if ( VSPTranslate( "Copy Current to Limit" ) != "取值" || VSPTranslate( "Set" ) != "集合" ) return 47;
+
+    const std::string ellipse_stock = "B (y) radius of ellipsoid";
+    if ( VSPTranslateEllipsoidBRadiusDescription( ellipse_stock, true ) != "椭球沿 Y 轴的半径（B）" ||
+         VSPTranslateEllipsoidBRadiusDescription( ellipse_stock, false ) != ellipse_stock ||
+         VSPTranslateEllipsoidBRadiusDescription( ellipse_stock + ": user's note", true ) != ellipse_stock + ": user's note" ||
+         VSPTranslateLabelAndValue( "Name", "Parms" ) != "名称Parms" ||
+         VSPTranslateLabelAndValue( "Name", "Attributes" ) != "名称Attributes" ||
+         VSPTranslate( "Apply" ) != "应用" || VSPTranslate( "Set" ) != "集合" ) return 46;
+
     const std::string cone_notes =
         "Super Cone Auxiliary Geoms can be children of any Geom type.  "
         "When the Super Cone is a child of a Human Geom, it will attach to and align with the design eye point.  "

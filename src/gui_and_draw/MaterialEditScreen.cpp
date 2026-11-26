@@ -33,7 +33,7 @@ MaterialEditScreen::MaterialEditScreen( ScreenMgr* mgr ) : BasicScreen( mgr, 300
     m_GenLayout.AddColorPicker( m_EmissiveColorPicker );
     m_GenLayout.AddYGap();
 
-    m_GenLayout.AddSlider( m_AlphaSlider, "Alpha", 1.0, "%6.2f" );
+    m_GenLayout.AddSlider( m_AlphaSlider, "Material Alpha", 1.0, "%6.2f" );
     m_GenLayout.AddSlider( m_ShininessSlider, "Shininess", 128, "%3.0f" );
 
     m_GenLayout.AddYGap();

@@ -12,6 +12,7 @@
 #include "ParmMgr.h"
 #include "LinkMgr.h"
 #include "AdvLinkMgr.h"
+#include "EllipsoidGeom.h"
 
 #include <FL/Fl_File_Chooser.H>
 
@@ -103,7 +104,9 @@ bool ParmScreen::Update()
     m_NameString.Update( parm_ptr->GetName() );
     m_GroupString.Update( parm_ptr->GetDisplayGroupName() );
     // User-parameter descriptions are editable text, not application labels.
-    const string description = LinkMgr.GetUserParmIndex( pid ) >= 0 ? parm_ptr->GetDescript() : VSPTranslate( parm_ptr->GetDescript() );
+    const auto *ellipsoid = dynamic_cast<const EllipsoidGeom *>( parm_ptr->GetContainer() );
+    const string description = LinkMgr.GetUserParmIndex( pid ) >= 0 ? parm_ptr->GetDescript() :
+        VSPTranslateEllipsoidBRadiusDescription( parm_ptr->GetDescript(), ellipsoid && parm_ptr == &ellipsoid->m_Bradius );
     m_DescString.Update( description );
 
     m_MinValString.Update( StringUtil::double_to_string(parm_ptr->GetLowerLimit(), "%6.5f") );

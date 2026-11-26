@@ -207,7 +207,7 @@ HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge",
     m_MotionLayout.SetButtonWidth( tw );
     m_MotionLayout.AddButton( m_JointTransMinToggle, "" );
     m_MotionLayout.SetButtonWidth( sw );
-    m_MotionLayout.AddButton( m_JointTransMinSetButton, "Set" );
+    m_MotionLayout.AddButton( m_JointTransMinSetButton, "Copy Current to Limit" );
     m_MotionLayout.SetFitWidthFlag( true );
     m_MotionLayout.SetButtonWidth( bw - tw - sw );
     m_MotionLayout.AddSlider( m_JointTransMinSlider, "Min", 10, "%6.2f" );
@@ -228,7 +228,7 @@ HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge",
     m_MotionLayout.SetButtonWidth( tw );
     m_MotionLayout.AddButton( m_JointTransMaxToggle, "" );
     m_MotionLayout.SetButtonWidth( sw );
-    m_MotionLayout.AddButton( m_JointTransMaxSetButton, "Set" );
+    m_MotionLayout.AddButton( m_JointTransMaxSetButton, "Copy Current to Limit" );
     m_MotionLayout.SetFitWidthFlag( true );
     m_MotionLayout.SetButtonWidth( bw - tw - sw );
     m_MotionLayout.AddSlider( m_JointTransMaxSlider, "Max", 10, "%6.2f" );
@@ -244,7 +244,7 @@ HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge",
     m_MotionLayout.SetButtonWidth( tw );
     m_MotionLayout.AddButton( m_JointRotMinToggle, "" );
     m_MotionLayout.SetButtonWidth( sw );
-    m_MotionLayout.AddButton( m_JointRotMinSetButton, "Set" );
+    m_MotionLayout.AddButton( m_JointRotMinSetButton, "Copy Current to Limit" );
     m_MotionLayout.SetFitWidthFlag( true );
     m_MotionLayout.SetButtonWidth( bw - tw - sw );
     m_MotionLayout.AddSlider( m_JointRotMinSlider, "Min", 100, "%6.2f" );
@@ -265,7 +265,7 @@ HingeScreen::HingeScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, "Hinge",
     m_MotionLayout.SetButtonWidth( tw );
     m_MotionLayout.AddButton( m_JointRotMaxToggle, "" );
     m_MotionLayout.SetButtonWidth( sw );
-    m_MotionLayout.AddButton( m_JointRotMaxSetButton, "Set" );
+    m_MotionLayout.AddButton( m_JointRotMaxSetButton, "Copy Current to Limit" );
     m_MotionLayout.SetFitWidthFlag( true );
     m_MotionLayout.SetButtonWidth( bw - tw - sw );
     m_MotionLayout.AddSlider( m_JointRotMaxSlider, "Max", 100, "%6.2f" );

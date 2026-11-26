@@ -106,6 +106,31 @@ class EngineeringTermContextTests(unittest.TestCase):
                                         text), [prefix + 'FourModCLiSlider', prefix + 'FiveModCLiSlider'])
             self.assertGreaterEqual(text.count(', "Ideal CL", 1, "%7.5f"'), 1)
 
+    def test_hinge_limit_copy_caption_not_set_collection(self):
+        source = (GUI / "HingeScreen.cpp").read_text(encoding="utf-8")
+        for kind, source_var in [('Trans', 'Translate'), ('Rot', 'Rotate')]:
+            for end in ('Min', 'Max'):
+                self.assertIn(f'm_Joint{kind}{end}SetButton, "Copy Current to Limit"', source)
+                self.assertIn(f'hinge_geom_ptr->m_Joint{kind}{end} = hinge_geom_ptr->m_Joint{source_var}();', source)
+        self.assertEqual(source.count('"Copy Current to Limit"'), 4)
+
+    def test_human_pose_apply_caption_keeps_original_action(self):
+        source = (GUI / "HumanGeomScreen.cpp").read_text(encoding="utf-8")
+        self.assertIn('m_PoseLayout.AddButton( m_SetPose, "Apply" );', source)
+        self.assertRegex(source, r'if \(gui_device == &m_SetPose \)\s*\{\s*human_ptr->SetPreset\(\);')
+
+    def test_material_alpha_caption_does_not_change_aerodynamic_alpha_or_value(self):
+        usage = [p.name for p in GUI.glob("*.cpp") if p.name != "VSPChinese.cpp"
+                 and '"Material Alpha"' in p.read_text(encoding="utf-8")]
+        self.assertEqual(usage, ["MaterialEditScreen.cpp"])
+        mat = (GUI / "MaterialEditScreen.cpp").read_text(encoding="utf-8")
+        self.assertIn('m_GenLayout.AddSlider( m_AlphaSlider, "Material Alpha", 1.0, "%6.2f" );', mat)
+        self.assertIn('m_AlphaSlider.Update( MaterialMgr.m_Alpha.GetID() );', mat)
+        core = (ROOT / 'src/geom_core/MaterialMgr.cpp').read_text(encoding='utf-8')
+        self.assertIn('mat.SetAlpha( m_Alpha.Get() );', core)
+        aero = (GUI / "VSPAEROScreen.cpp").read_text(encoding="utf-8")
+        self.assertIn('"Alpha"', aero)
+
     def test_super_cone_notes_exact_stock_text_only(self):
         source = (GUI / "AuxiliaryGeomScreen.cpp").read_text(encoding="utf-8")
         self.assertIn('m_DesignLayout.AddOutput( m_AuxiliaryGeomModeNotesOutput, 4 );', source)

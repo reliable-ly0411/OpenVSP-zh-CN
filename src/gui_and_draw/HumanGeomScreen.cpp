@@ -93,7 +93,7 @@ HumanGeomScreen::HumanGeomScreen( ScreenMgr* mgr ) : GeomScreen( mgr, 400, 800, 
     m_PoseLayout.AddChoice( m_PresetPoseChoice, "Preset", m_PoseLayout.GetButtonWidth() );
 
     m_PoseLayout.SetFitWidthFlag( false );
-    m_PoseLayout.AddButton( m_SetPose, "Set" );
+    m_PoseLayout.AddButton( m_SetPose, "Apply" );
 
     m_PoseLayout.ForceNewLine();
     m_PoseLayout.SetSameLineFlag( false );

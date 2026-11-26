@@ -12,6 +12,7 @@
 #include "VSPChinese.h"
 #include "AttributeScreen.h"
 #include "ParmMgr.h"
+#include "Parm.h"
 #include "ParmContainer.h"
 #include "ScreenMgr.h"
 #include "AdvLinkMgr.h"
@@ -24,6 +25,13 @@
 
 namespace
 {
+bool IsParmDefaultCollection( const string &parm_id, AttributeCollection *collection )
+{
+    Parm *parm = ParmMgr.FindParm( parm_id );
+    return parm && parm->GetID() == parm_id && collection && collection->GetAttachType() == vsp::ATTROBJ_PARM &&
+           collection->GetAttachID() == parm_id && parm->GetAttrCollection() == collection;
+}
+
 std::string AttributeTreeValue( NameValData &data )
 {
     if ( data.GetType() == vsp::ATTR_COLLECTION_DATA )
@@ -237,6 +245,10 @@ void AttributeTree::RebuildTree()
                             is_default_collection = owner && owner->GetID() == ac->GetAttachID() &&
                                                     owner->GetAttributeCollection() == ac;
                         }
+                        else if ( ac->GetAttachType() == vsp::ATTROBJ_PARM )
+                        {
+                            is_default_collection = IsParmDefaultCollection( ac->GetAttachID(), ac );
+                        }
                         else if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC ||
                              owner_type == vsp::ATTROBJ_SEC || owner_type == vsp::ATTROBJ_SUBSURF )
                         {
@@ -250,6 +262,16 @@ void AttributeTree::RebuildTree()
                         }
                     }
 
+
+                    // AttributeManager inserts this synthetic node directly above a parameter and its own collection.
+                    if ( !nvd && row_str == id && id == "Parms" &&
+                         j + 2 < tree_id_vecs[i].size() &&
+                         AttributeMgr.GetObjectType( id ) == vsp::ATTROBJ_FREE &&
+                         IsParmDefaultCollection( tree_id_vecs[i][j + 1],
+                                                  AttributeMgr.GetCollectionPtr( tree_id_vecs[i][j + 2] ) ) )
+                    {
+                        row_str = "参数";
+                    }
 
                     // Translate grouping markers only when followed by the corresponding typed child.
                     if ( !nvd && row_str == id &&

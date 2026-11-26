@@ -57,10 +57,14 @@ def parm_description_is_safe(source):
     # translation or a newer distinction just to satisfy this regression test.
     if re.search(r'm_DescString\.Update\(\s*parm_ptr->GetDescript\(\s*\)\s*\)', code):
         return True
+    display = (r'(?:VSPTranslate\(\s*parm_ptr->GetDescript\(\s*\)\s*\)|'
+               r'VSPTranslateEllipsoidBRadiusDescription\(\s*parm_ptr->GetDescript\(\s*\),\s*'
+               r'ellipsoid\s*&&\s*parm_ptr\s*==\s*&ellipsoid->m_Bradius\s*\))')
     return bool(re.search(
         r'const string description\s*=\s*LinkMgr\.GetUserParmIndex\(\s*pid\s*\)\s*>=\s*0\s*\?\s*'
-        r'parm_ptr->GetDescript\(\s*\)\s*:\s*VSPTranslate\(\s*parm_ptr->GetDescript\(\s*\)\s*\)\s*;\s*'
-        r'm_DescString\.Update\(\s*description\s*\)', code))
+        r'parm_ptr->GetDescript\(\s*\)\s*:\s*' + display +
+        r'\s*;\s*m_DescString\.Update\(\s*description\s*\)', code))
+
 
 
 def vector_alert_is_safe(source):
@@ -205,6 +209,8 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
             'Setting *owner = VarPresetMgr.FindSetting( ac->GetAttachID() ); '
             'is_default_collection = owner && owner->GetID() == ac->GetAttachID() && '
             'owner->GetAttributeCollection() == ac; }',
+            'else if ( ac->GetAttachType() == vsp::ATTROBJ_PARM ) { '
+            'is_default_collection = IsParmDefaultCollection( ac->GetAttachID(), ac ); }',
             'else if ( owner_type == vsp::ATTROBJ_GEOM || owner_type == vsp::ATTROBJ_XSEC || '
             'owner_type == vsp::ATTROBJ_SEC || owner_type == vsp::ATTROBJ_SUBSURF ) { '
             'ParmContainer *owner = ParmMgr.FindParmContainer( owner_id ); '
@@ -214,10 +220,25 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
         self.assertEqual(flat.count(' '.join(gates)), 1)
         self.assertEqual(flat.count('VSPTranslateMessage( "Attributes" )'), 1)
 
+    def test_parameter_tree_labels_require_live_owned_collection_and_synthetic_marker(self):
+        source = " ".join((GUI / "AttributeEditor.cpp").read_text(encoding="utf-8").split())
+        self.assertIn('Parm *parm = ParmMgr.FindParm( parm_id ); return parm && parm->GetID() == parm_id && '
+                      'collection && collection->GetAttachType() == vsp::ATTROBJ_PARM && '
+                      'collection->GetAttachID() == parm_id && parm->GetAttrCollection() == collection;', source)
+        self.assertIn('if ( !nvd && row_str == id && id == "Parms" && j + 2 < tree_id_vecs[i].size() && '
+                      'AttributeMgr.GetObjectType( id ) == vsp::ATTROBJ_FREE && '
+                      'IsParmDefaultCollection( tree_id_vecs[i][j + 1], '
+                      'AttributeMgr.GetCollectionPtr( tree_id_vecs[i][j + 2] ) ) ) { row_str = "参数"; }', source)
+        self.assertIn("child_item->SetRefVecID( id_vec );", source)
+
     def test_user_description_is_opaque_and_builtin_description_remains_translatable(self):
         source = (GUI / 'ParmScreen.cpp').read_text(encoding='utf-8')
         self.assertTrue(parm_description_is_safe(source))
         self.assertFalse(parm_description_is_safe('m_DescString.Update(VSPTranslate(parm_ptr->GetDescript()));'))
+        self.assertIn('dynamic_cast<const EllipsoidGeom *>( parm_ptr->GetContainer() )', source)
+        self.assertFalse(parm_description_is_safe(source.replace('&ellipsoid->m_Bradius', '&ellipsoid->m_Aradius')))
+        core = (ROOT / 'src/geom_core/EllipsoidGeom.cpp').read_text(encoding='utf-8')
+        self.assertIn('m_Bradius.SetDescript( "B (y) radius of ellipsoid" );', core)
         self.assertTrue(parm_description_is_safe('m_DescString.Update(parm_ptr->GetDescript());'))
         unsafe = source.replace('GetUserParmIndex( pid ) >= 0', 'GetUserParmIndex( pid ) < 0')
         if 'const string description' in source:
