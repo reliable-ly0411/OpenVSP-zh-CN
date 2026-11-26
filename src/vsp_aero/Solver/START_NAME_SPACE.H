@@ -1,2 +1,0 @@
-namespace VSPAERO_SOLVER 
-{
