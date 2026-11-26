@@ -28,6 +28,25 @@ using namespace vsp;
 
 namespace
 {
+string FeaBcDescriptionForBrowser( FeaBC &bc )
+{
+    string desc = bc.GetDescription();
+    const bool missing_target =
+        ( bc.m_FeaBCType() == vsp::FEA_BC_PART && !StructureMgr.GetFeaPart( bc.GetPartID() ) ) ||
+        ( bc.m_FeaBCType() == vsp::FEA_BC_SUBSURF && !StructureMgr.GetFeaSubSurf( bc.GetSubSurfID() ) );
+    if ( missing_target )
+    {
+        const string dof = bc.GetDescriptionDOF();
+        const string missing = "Not Found ";
+        if ( desc.compare( 0, dof.size(), dof ) == 0 &&
+             desc.compare( dof.size(), missing.size(), missing ) == 0 )
+        {
+            desc.replace( dof.size(), missing.size(), "未找到 " );
+        }
+    }
+    return desc;
+}
+
 string FeaMaterialDisplayName( FeaMaterial *material )
 {
     string name = material->GetName();
@@ -2719,7 +2738,7 @@ void StructScreen::UpdateFeaBCBrowser()
 
             for ( int i = 0; i < (int)bc_vec.size(); i++ )
             {
-                string label = to_string(i) + ':' + bc_vec[i]->GetDescription();
+                string label = to_string(i) + ':' + FeaBcDescriptionForBrowser( *bc_vec[i] );
 
                 m_FeaBCSelectBrowser->add( label.c_str() );
             }

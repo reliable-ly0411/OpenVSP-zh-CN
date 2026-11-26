@@ -30,6 +30,10 @@ string ExcrescenceTypeDisplayName( const ExcrescenceTableRow &row )
     {
         return "阻力计数";
     }
+    if ( row.Type == vsp::EXCRESCENCE_MARGIN && row.TypeString == "Margin" )
+    {
+        return "裕量";
+    }
     return row.TypeString;
 }
 }

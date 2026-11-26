@@ -222,6 +222,24 @@ class DisplayTranslationBoundaryTests(unittest.TestCase):
         self.assertEqual(flat.count(' '.join(gates)), 1)
         self.assertEqual(flat.count('VSPTranslateMessage( "Attributes" )'), 1)
 
+    def test_margin_and_bc_fallback_translate_only_typed_display_sites(self):
+        pd = " ".join((GUI / "ParasiteDragScreen.cpp").read_text(encoding="utf-8").split())
+        self.assertEqual(pd.count('row.Type == vsp::EXCRESCENCE_MARGIN && row.TypeString == "Margin"'), 1)
+        self.assertEqual(pd.count('ExcrescenceTypeDisplayName( '), 3)
+        self.assertIn('key << excresVec[i].Label << " " << excresVec[i].TypeString', pd)
+        self.assertIn('m_TableCompNamesLayout.AddLabelRaw( excresRowVec[i].Label.c_str()', pd)
+        mgr = (ROOT / "src/geom_core/ParasiteDragMgr.cpp").read_text(encoding="utf-8")
+        self.assertIn('tempStruct.TypeString = "Margin";', mgr)
+        self.assertIn("m_excres_Type.push_back( m_ExcresRowVec[i].TypeString.c_str() );", mgr)
+        bc = " ".join((GUI / "StructScreen.cpp").read_text(encoding="utf-8").split())
+        self.assertIn('bc.m_FeaBCType() == vsp::FEA_BC_PART && !StructureMgr.GetFeaPart( bc.GetPartID() )', bc)
+        self.assertIn('bc.m_FeaBCType() == vsp::FEA_BC_SUBSURF && !StructureMgr.GetFeaSubSurf( bc.GetSubSurfID() )', bc)
+        self.assertIn('desc.compare( 0, dof.size(), dof ) == 0 && desc.compare( dof.size(), missing.size(), missing ) == 0', bc)
+        self.assertIn("FeaBcDescriptionForBrowser( *bc_vec[i] )", bc)
+        core = (ROOT / "src/geom_core/FeaStructure.cpp").read_text(encoding="utf-8")
+        self.assertEqual(core.count('desc += string( "Not Found " );'), 2)
+        self.assertNotIn('未找到', core)
+
     def test_subsurface_tree_marker_protects_authored_subsurfs(self):
         flat = " ".join((GUI / "AttributeEditor.cpp").read_text(encoding="utf-8").split())
         guard = ('if ( !nvd && !AttributeMgr.GetCollectionPtr( id ) && id == "SubSurfs" && row_str == id && '
